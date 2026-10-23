@@ -1,6 +1,6 @@
 'use strict';
 // Real Chromium mobile browser smoke tests without npm dependencies or GitHub tokens.
-// Run: node tools/expository/browser-smoke.cjs
+// Run: node tests/browser-smoke.cjs (EXPOSITORY_ATLAS=1 for expanded review captures)
 const {spawn,spawnSync}=require('node:child_process');
 const fs=require('node:fs');
 const os=require('node:os');
@@ -107,6 +107,7 @@ async function main(){
   const page=pathToFileURL(path.join(__dirname,'..','index.html')).href;
   await send('Page.navigate',{url:page});
   await until("document.querySelector('#status')?.textContent?.includes('items')",'initial listing');
+  if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-start-393.png');
   await evaluate("document.querySelector('#scope').value='images';document.querySelector('#scope').dispatchEvent(new Event('change'))");
   await until("document.querySelectorAll('#items .tile').length===2",'recursive image gallery');
   await evaluate("document.querySelector('#sortFiles').value='size';document.querySelector('#sortFiles').dispatchEvent(new Event('change'))");
@@ -120,6 +121,15 @@ async function main(){
   await until("document.querySelectorAll('#items .tile').length===2",'restored gallery after search');
   assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'393px overflow');
   await screenshot('expository-gallery-393.png');
+  if(process.env.EXPOSITORY_ATLAS==='1'){
+   await send('Emulation.setDeviceMetricsOverride',{width:412,height:892,deviceScaleFactor:1,mobile:true});
+   assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'412px gallery overflow');
+   await screenshot('expository-gallery-412.png');
+   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+   assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'1440px gallery overflow');
+   await screenshot('expository-gallery-1440.png');
+   await send('Emulation.setDeviceMetricsOverride',{width:393,height:852,deviceScaleFactor:1,mobile:true});
+  }
   await evaluate("document.querySelector('#items .tile').click()");
   await until("document.querySelector('#compareAction')?.hidden===false",'first image preview');
   assert.equal(await evaluate("Boolean(document.querySelector('.image-viewer .image-stage img'))"),true,'image inspector displayed');
@@ -160,6 +170,7 @@ async function main(){
   await until("document.querySelector('#structuredToggle')?.hidden===false",'JSON structure available');
   await evaluate("document.querySelector('#structuredToggle').click()");
   await until("Boolean(document.querySelector('.json-tree details'))",'JSON tree rendered');
+  if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-json-360.png');
   assert.equal(await evaluate("document.querySelector('.json-tree summary')?.textContent"),'Root {3 keys}','safe JSON hierarchy');
   await evaluate("document.querySelector('#closePreview').click()");
   assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'no overflow after inspector');
@@ -174,6 +185,7 @@ async function main(){
   await evaluate("document.querySelector('#structuredToggle').click()");
   await until("Boolean(document.querySelector('.data-table'))",'CSV table rendered');
   assert.equal(await evaluate("document.querySelectorAll('.data-table tbody tr').length"),2,'CSV rows shown');
+  if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-csv-360.png');
   await evaluate("document.querySelector('#closePreview').click()");
   await evaluate("document.querySelector('#filter').value='';document.querySelector('#filter').dispatchEvent(new Event('input'))");
   
