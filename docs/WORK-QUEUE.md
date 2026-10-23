@@ -6,7 +6,7 @@
 |---|---|---|
 | E01 | Complete (#1) | Public canonical agent router, lean CI, synthetic fixture suite and manual screenshot atlas with provenance |
 | E02 | Complete (#2) | Multi-select up to 12 images, in-tab sheet preview/PNG export, three concurrent fetches, explicit session cleanup; physical phone acceptance still pending |
-| E03 | In progress | GitHub primary/secondary cooldown, generic safe API errors, abort on repo/session switch, sanitized path validation and private-URL fragment isolation; outstanding: real-token network validation, SVG/Markdown cross-browser security audit and large-repo fault handling |
+| E03 | In progress | GitHub primary/secondary cooldown, generic safe API errors, abort on repo/session switch, sanitized path validation and private-URL fragment isolation; CSP request boundaries added; outstanding: real-token network validation, SVG/Markdown cross-browser security audit and large-repo fault handling |
 | E04 | In progress | In-file find/previous/next, matching-line highlight and bounded go-to-line implemented; richer language parsers, symbols and long-file virtualization pending |
 | E05 | Planned | Image inspection: pinch/drag zoom, selected comparisons and truly registered pixel diff for same dimensions |
 | E06 | Planned | Repository Story Mode: pagination/source-backed milestones (releases, PRs), evidence timestamps and explicit coverage |
