@@ -56,6 +56,7 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 <label for="repoSelect">Your repositories</label><select class="field" id="repoSelect"><option value="">Enter a repo below</option></select>
 <label for="repo">Owner / repository</label><input class="field" id="repo" value="gamesbyian/Glimpse" autocapitalize="off" spellcheck="false">
 <label for="branch">Branch</label><input class="field" id="branch" value="" placeholder="Default branch" autocapitalize="off" spellcheck="false">
+<button id="loadBranches" class="pill" disabled aria-controls="branchPicker">Browse branches</button><select id="branchPicker" class="field" hidden aria-label="Choose a repository branch"><option value="">Choose a branch…</option></select>
 <button class="pill active" id="openRepo">Open repository →</button><button id="bookmark" class="pill" disabled aria-label="Bookmark this public repository">☆ Star public repo</button>
 <hr><h2>Starred public repositories</h2><div id="favorites" class="stack"></div><hr><h2>Folders</h2><div id="tree" role="navigation" aria-label="Folder navigation"></div><hr>
 <div class="hint">Read-only by design. No editing, no analytics, no token persistence. Preview private assets locally in this tab.</div>
@@ -814,6 +815,21 @@ async function openPreview(item){
  }catch(e){if(state.preview===item)showContent(elem('div','message','Preview unavailable: '+e.message))}
 }
 
+async function loadBranches(){
+ const repo=state.repo,request=state.repoRequest,button=$('loadBranches'),select=$('branchPicker');
+ if(!repo||!state.branch)return;
+ button.disabled=true;button.textContent='Loading branches…';
+ try{
+  const data=await json('/repos/'+repo+'/branches?per_page=100');
+  if(request!==state.repoRequest||repo!==state.repo)return;
+  if(!Array.isArray(data))throw Error('Invalid branch list from GitHub');
+  select.replaceChildren(new Option('Choose a branch…',''));
+  for(const entry of data)if(typeof entry?.name==='string'&&entry.name&&entry.name.length<256)select.append(new Option(entry.name,entry.name));
+  select.value=state.branch;select.hidden=false;
+  status(data.length+' branches listed'+(data.length===100?' · first 100 only; type other names manually':'')+'. Select a branch to browse its files.');
+ }catch(e){if(request===state.repoRequest)status('Branch list unavailable: '+e.message+' · You can type a branch name manually.')}
+ finally{if(request===state.repoRequest){button.disabled=false;button.textContent='Browse branches'}}
+}
 async function openRepo(targetPath=''){
  const repo=$('repo').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\/$/,'');
  if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){status('Enter owner/repository.');return false}
@@ -821,13 +837,14 @@ async function openRepo(targetPath=''){
  // The repository's visibility is unknown until GitHub responds. Scrub any incoming
  // deep link now; public links are restored only after successful public access.
  history.replaceState(null,'',location.pathname+location.search);
+ $('branchPicker').hidden=true;$('branchPicker').replaceChildren(new Option('Choose a branch…',''));$('loadBranches').disabled=true;
  abortRequests();
  cancelContentScan();stopStory();state.storyData=null;const request=++state.repoRequest;state.repo=repo;state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;
  state.folderRecoveryKey='';clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
  clearObjects();clearPreview();++state.seq;status('Connecting to '+repo+'…');
  try{
   const info=await json('/repos/'+repo);if(request!==state.repoRequest)return;
-  const branch=$('branch').value.trim()||info.default_branch;state.branch=branch;state.repoIsPrivate=info.private!==false;paintBookmarks();
+  const branch=$('branch').value.trim()||info.default_branch;state.branch=branch;state.repoIsPrivate=info.private!==false;$('loadBranches').disabled=false;paintBookmarks();
   $('branch').placeholder=info.default_branch;$('githubLink').href='https://github.com/'+repo;
   indexTree(repo,branch,request);const loaded=await navigate(targetPath);return loaded&&request===state.repoRequest;
  }catch(e){if(request===state.repoRequest)status('Cannot open repository: '+e.message);return false}
@@ -836,7 +853,7 @@ function resetSession(){
  abortRequests();state.rateLimitedUntil=0;state.folderRecoveryKey='';cancelContentScan();stopStory();state.storyData=null;++state.repoRequest;++state.seq;state.token='';state.repo='';state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;state.cache.clear();state.items=[];state.visibleItems=[];
  state.tree.clear();state.expanded.clear();state.indexEntries=[];state.indexReady=false;state.indexError=false;state.indexTruncated=false;state.repoIsPrivate=true;
  clearSelection();state.renderEpoch++;if(state.thumbObserver){state.thumbObserver.disconnect();state.thumbObserver=null}thumbQueue.length=0;
- clearPreview();clearObjects();paintBookmarks();$('token').value='';$('branch').value='';
+ clearPreview();clearObjects();paintBookmarks();$('token').value='';$('branch').value='';$('loadBranches').disabled=true;$('loadBranches').textContent='Browse branches';$('branchPicker').hidden=true;$('branchPicker').replaceChildren(new Option('Choose a branch…',''));
  $('repoSelect').replaceChildren(new Option('Enter a repo below',''));$('tree').replaceChildren();$('items').replaceChildren();
  $('breadcrumbs').textContent='No repository selected';$('githubLink').href='https://github.com';history.replaceState(null,'',location.pathname+location.search);
 }
@@ -861,7 +878,7 @@ function currentShareUrl(){
  return base
 }
 async function copyCurrentLink(){try{await navigator.clipboard.writeText(currentShareUrl());status(state.repoIsPrivate?'GitHub link copied. Private paths stay out of Expository URLs.':'Shareable Expository link copied; credentials are never included.')}catch{status('Clipboard unavailable; use the GitHub file link or your browser address bar.')}}
-$('openRepo').onclick=()=>openRepo();$('disconnect').onclick=()=>{resetSession();status('Credentials and private browsing state cleared from this tab.')};$('copyFolder').onclick=copyCurrentLink;$('copyFile').onclick=copyCurrentLink;$('compareAction').onclick=compareAction;$('downloadRaw').onclick=downloadOriginal;$('copyRaw').onclick=copyText;$('fileHistory').onclick=toggleHistory;$('structuredToggle').onclick=toggleStructured;$('bookmark').onclick=toggleBookmark;$('contentSearch').onclick=scanContents;$('storyToggle').onclick=toggleStory;$('selectMode').onclick=()=>{state.selectionMode=!state.selectionMode;updateSelectionControls()};$('contactSheet').onclick=openContactSheet;$('clearSelection').onclick=clearSelection;$('connect').onclick=connect;$('repoSelect').onchange=()=>{if($('repoSelect').value){$('repo').value=$('repoSelect').value;$('branch').value='';openRepo()}};
+$('openRepo').onclick=()=>openRepo();$('disconnect').onclick=()=>{resetSession();status('Credentials and private browsing state cleared from this tab.')};$('copyFolder').onclick=copyCurrentLink;$('copyFile').onclick=copyCurrentLink;$('compareAction').onclick=compareAction;$('downloadRaw').onclick=downloadOriginal;$('copyRaw').onclick=copyText;$('fileHistory').onclick=toggleHistory;$('structuredToggle').onclick=toggleStructured;$('bookmark').onclick=toggleBookmark;$('contentSearch').onclick=scanContents;$('storyToggle').onclick=toggleStory;$('selectMode').onclick=()=>{state.selectionMode=!state.selectionMode;updateSelectionControls()};$('contactSheet').onclick=openContactSheet;$('clearSelection').onclick=clearSelection;$('connect').onclick=connect;$('loadBranches').onclick=loadBranches;$('branchPicker').onchange=()=>{const selected=$('branchPicker').value;if(!selected)return;$('branch').value=selected;openRepo()};$('repoSelect').onchange=()=>{if($('repoSelect').value){$('repo').value=$('repoSelect').value;$('branch').value='';openRepo()}};
 function syncRefineToViewport(){
  const mobile=typeof window!=='undefined'&&window.matchMedia('(max-width:760px)').matches;
  $('refineControls').hidden=mobile;$('refineToggle').setAttribute('aria-expanded',String(!mobile))

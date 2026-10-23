@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl
  );
@@ -492,4 +492,24 @@ test('touch zoom remains bounded, with deterministic two-digit precision',()=>{
  assert.equal(app.boundedZoom(1.376),1.38);
  assert.equal(app.boundedZoom(2.0001),2);
  assert.equal(app.boundedZoom(10),4);
+});
+
+test('branch picker fetches bounded names only on request and never persists them',async()=>{
+ const paths=[],fetched=async url=>{paths.push(url);return new Response(JSON.stringify([{name:'main'},{name:'feature/private-review'},{name:'fix/<script>'}]),{status:200})};
+ const {app,get}=boot(fetched);
+ app.state.repo='gamesbyian/secret';app.state.branch='main';app.state.repoRequest=4;app.state.repoIsPrivate=true;
+ assert.equal(paths.length,0,'no eager enumeration');
+ await app.loadBranches();
+ assert.equal(paths.length,1);assert.match(paths[0],/\/branches\?per_page=100$/);
+ assert.equal(get('branchPicker').hidden,false);assert.equal(get('branchPicker').children.length,4);
+ assert.equal(get('branchPicker').children[2].value,'feature/private-review');
+ assert.equal(get('branchPicker').children[3].name,'fix/<script>','branch displayed using inert Option data');
+ app.resetSession();assert.equal(get('branchPicker').hidden,true);
+ assert.equal(get('branchPicker').children.length,1);
+});
+test('a stale branch list cannot display after a new repository is selected',async()=>{
+ let release;const fetcher=()=>new Promise(resolve=>{release=()=>resolve(new Response(JSON.stringify([{name:'secret-branch'}]),{status:200}))});
+ const {app,get}=boot(fetcher);app.state.repo='o/private';app.state.branch='main';app.state.repoRequest=1;
+ const pending=app.loadBranches();app.state.repoRequest++;app.state.repo='o/public';release();await pending;
+ assert.notEqual(get('branchPicker').hidden,false);
 });

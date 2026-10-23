@@ -78,6 +78,7 @@ const fixtures=String.raw`
   if(u.hostname!=='api.github.com')return original(input,opts);
   const p=decodeURIComponent(u.pathname),json=obj=>new Response(JSON.stringify(obj),{status:200,headers:{'content-type':'application/json'}});
   if(p==='/repos/gamesbyian/Glimpse')return json({default_branch:'main',private:false});
+  if(p==='/repos/gamesbyian/Glimpse/branches')return json([{name:'main'},{name:'feature/mobile-inspection'}]);
   if(p==='/repos/gamesbyian/PrivateFixture')return json({default_branch:'main',private:true});
   if(p==='/repos/gamesbyian/DeniedPrivate')return new Response(JSON.stringify({message:'Not Found'}),{status:404,headers:{'content-type':'application/json'}});
   if(p==='/repos/gamesbyian/LargeFixture')return json({default_branch:'main',private:false});
@@ -127,6 +128,12 @@ async function main(){
   const page=pathToFileURL(path.join(__dirname,'..','index.html')).href;
   await send('Page.navigate',{url:page});
   await until("document.querySelector('#status')?.textContent?.includes('items')",'initial listing');
+  await evaluate("document.querySelector('#navToggle').click();document.querySelector('#loadBranches').click()");
+  await until("document.querySelector('#branchPicker').hidden===false",'on-demand branch selector appears');
+  assert.equal(await evaluate("document.querySelector('#branchPicker').options.length"),3,'two read-only branches listed');
+  assert.equal(await evaluate("document.querySelector('#branchPicker').value"),'main','current branch preselected');
+  await evaluate("document.querySelector('#scrim').click()");
+
   assert.equal(await evaluate("document.querySelector('#refineControls').hidden"),true,'phone opens with filters collapsed');
   if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-start-393.png');
   await evaluate("document.querySelector('#refineToggle').click()");
