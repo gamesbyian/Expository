@@ -5,8 +5,8 @@
 | Order | Status | Deliverable / acceptance |
 |---|---|---|
 | E01 | Complete (#1) | Public canonical agent router, lean CI, synthetic fixture suite and manual screenshot atlas with provenance |
-| E02 | Implemented in PR | Multi-select up to 12 images, in-tab sheet preview/PNG export, three concurrent fetches, explicit session cleanup; physical phone acceptance still pending |
-| E03 | Next | Tighten real-world repo access: GitHub API rate-limit handling, branch/path deep links, untrusted SVG/Markdown audit, avoid token leakage |
+| E02 | Complete (#2) | Multi-select up to 12 images, in-tab sheet preview/PNG export, three concurrent fetches, explicit session cleanup; physical phone acceptance still pending |
+| E03 | Active | Tighten real-world repo access: GitHub API rate-limit handling, branch/path deep links, untrusted SVG/Markdown audit, avoid token leakage |
 | E04 | Planned | Responsive code viewer improvements: selective file search, reliable highlighting/language labels, keyboard traversal, long-file virtualization |
 | E05 | Planned | Image inspection: pinch/drag zoom, selected comparisons and truly registered pixel diff for same dimensions |
 | E06 | Planned | Repository Story Mode: pagination/source-backed milestones (releases, PRs), evidence timestamps and explicit coverage |
