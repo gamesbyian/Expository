@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl
  );
@@ -463,4 +463,25 @@ test('direct folder recovery never paints responses after navigation changes',as
  app.state.items=Array.from({length:1000},(_,i)=>({type:'file',name:i+'.svg',path:i+'.svg',size:10}));
  const work=app.recoverTargetedFolder();app.state.seq++;release();await work;
  assert.equal(app.state.items.length,1000,'old directory unchanged');
+});
+
+test('bounded heuristic outlines identify source symbols without inventing a full parser',()=>{
+ const {app}=boot();
+ const ts=app.extractSourceSymbols(['// function decoy(){}','export async function openRepo(){}','const render = async (x) => x','class Panel {}'], 'app.ts');
+ assert.deepEqual(ts,[{kind:'function',name:'openRepo',line:2},{kind:'function',name:'render',line:3},{kind:'class',name:'Panel',line:4}]);
+ assert.deepEqual(app.extractSourceSymbols(['class Visitor:','    async def visit(self):','    # def fake():'], 'visitor.py'),[{kind:'class',name:'Visitor',line:1},{kind:'function',name:'visit',line:2}]);
+ assert.deepEqual(app.extractSourceSymbols(['pub struct Person {}','pub async fn read() {}'], 'lib.rs'),[{kind:'type',name:'Person',line:1},{kind:'function',name:'read',line:2}]);
+ assert.deepEqual(app.extractSourceSymbols(['func (p *Item) Read() {}','type Item struct {}'], 'item.go'),[{kind:'function',name:'Read',line:1},{kind:'type',name:'Item',line:2}]);
+ assert.deepEqual(app.extractSourceSymbols(['def test():'], 'notes.txt'),[],'unknown extension not guessed');
+});
+test('source outline buttons select the actual code line using inert DOM',()=>{
+ const {app}=boot();
+ const viewer=app.sourceViewer('export function alpha() {}\nclass Beta {}\n// unsafe <script>', 'code.js');
+ const details=viewer.children.find(node=>node.className==='outline-panel');
+ assert.equal(details.children[0].textContent,'Symbols (2) · heuristic, not full parsing');
+ const buttons=details.children[1].children;
+ assert.equal(buttons.length,2);buttons[1].onclick();
+ const code=viewer.children.at(-1);
+ assert.equal(code.children[1].className,'code-line code-find-current');
+ assert.equal(details.open,false);
 });
