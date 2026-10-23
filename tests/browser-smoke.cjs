@@ -95,17 +95,18 @@ const fixtures=String.raw`
    {path:'design',type:'tree'},{path:'design/proposals',type:'tree'},
    {path:'design/proposals/a.svg',type:'blob',size:250},
    {path:'design/proposals/b.svg',type:'blob',size:250},
-   {path:'docs',type:'tree'},{path:'docs/README.md',type:'blob',size:48},{path:'docs/data.json',type:'blob',size:120},{path:'docs/data.csv',type:'blob',size:100}
+   {path:'docs',type:'tree'},{path:'docs/README.md',type:'blob',size:48},{path:'docs/data.json',type:'blob',size:120},{path:'docs/data.csv',type:'blob',size:100},{path:'docs/example.ts',type:'blob',size:140}
   ]});
   if(p.endsWith('/contents/'))return json(dirs(['design','design'],['docs','docs']));
   if(p.endsWith('/contents/design'))return json(dirs(['proposals','design/proposals']));
-  if(p.endsWith('/contents/docs'))return json(files(['README.md','docs/README.md'],['data.json','docs/data.json'],['data.csv','docs/data.csv']));
+  if(p.endsWith('/contents/docs'))return json(files(['README.md','docs/README.md'],['data.json','docs/data.json'],['data.csv','docs/data.csv'],['example.ts','docs/example.ts']));
   if(p.endsWith('/contents/design/proposals'))return json(files(['a.svg','design/proposals/a.svg'],['b.svg','design/proposals/b.svg']));
   if(p.endsWith('/contents/design/proposals/a.svg'))return new Response(dataA,{status:200,headers:{'content-type':'image/svg+xml'}});
   if(p.endsWith('/contents/design/proposals/b.svg'))return new Response(dataB,{status:200,headers:{'content-type':'image/svg+xml'}});
   if(p.endsWith('/contents/docs/README.md'))return new Response('# Hello from fixture\n[Open data](data.csv) [unsafe](javascript:alert(1))',{status:200,headers:{'content-type':'text/plain'}});
   if(p.endsWith('/contents/docs/data.json'))return new Response(JSON.stringify({status:'ready',items:[1,2,3],active:true}),{status:200,headers:{'content-type':'application/json'}});
   if(p.endsWith('/contents/docs/data.csv'))return new Response('name,value\nAlpha,17\nBeta,23',{status:200,headers:{'content-type':'text/csv'}});
+  if(p.endsWith('/contents/docs/example.ts'))return new Response('export function hello() {}\nclass MyTool {}',{status:200,headers:{'content-type':'text/plain'}});
   if(p.endsWith('/commits')){
    const fixtureCommit=n=>({sha:n.toString(16).padStart(40,'0'),commit:{message:'Fixture commit '+n,author:{date:'2026-10-22T12:00:00Z'}}});
    if(u.searchParams.get('path'))return json([{sha:'1111111111111111111111111111111111111111',commit:{message:'First fixture change',author:{date:'2026-10-22T12:00:00Z'}}}]);
@@ -249,6 +250,15 @@ async function main(){
   await screenshot('expository-story-360.png');
   await evaluate("document.querySelector('#storyToggle').click()");
   assert.equal(await evaluate("document.querySelector('#items').hidden"),false,'returns to files');
+  await evaluate("document.querySelector('#scope').value='repo';document.querySelector('#scope').dispatchEvent(new Event('change'));document.querySelector('#filter').value='example.ts';document.querySelector('#filter').dispatchEvent(new Event('input'))");
+  await until("document.querySelectorAll('#items .tile').length===1",'source outline fixture listed');
+  await evaluate("document.querySelector('#items .tile').click()");
+  await until("document.querySelectorAll('.outline-list button').length===2",'two source symbols listed');
+  await evaluate("document.querySelectorAll('.outline-list button')[1].click()");
+  assert.equal(await evaluate("document.querySelectorAll('.code-find-current').length"),1,'symbol jump highlights one source line');
+  await evaluate("document.querySelector('#closePreview').click()");
+  await evaluate("document.querySelector('#filter').value='';document.querySelector('#filter').dispatchEvent(new Event('input'))");
+
   await evaluate("document.querySelector('#repo').value='gamesbyian/PrivateFixture';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
   await until("document.querySelector('#status')?.textContent?.includes('items')",'private fixture loaded');
   assert.equal(await evaluate("location.hash"),'','private repo does not leak into fragment');
