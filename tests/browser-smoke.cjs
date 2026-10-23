@@ -81,6 +81,14 @@ const fixtures=String.raw`
   if(p==='/repos/gamesbyian/PrivateFixture')return json({default_branch:'main',private:true});
   if(p==='/repos/gamesbyian/DeniedPrivate')return new Response(JSON.stringify({message:'Not Found'}),{status:404,headers:{'content-type':'application/json'}});
   if(p==='/repos/gamesbyian/LargeFixture')return json({default_branch:'main',private:false});
+  if(p==='/repos/gamesbyian/DeepLarge')return json({default_branch:'main',private:false});
+  if(p==='/repos/gamesbyian/DeepLarge/git/trees/main'){
+   if(u.searchParams.get('recursive')==='1')return json({truncated:true,tree:[{type:'tree',path:'gallery'}]});
+   return json({truncated:false,tree:[{type:'tree',path:'gallery',sha:'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'}]})
+  }
+  if(p==='/repos/gamesbyian/DeepLarge/git/trees/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')return json({truncated:false,tree:largePaths.map(path=>({type:'blob',path,size:200}))});
+  if(p==='/repos/gamesbyian/DeepLarge/contents/')return json(dirs(['gallery','gallery']));
+  if(p==='/repos/gamesbyian/DeepLarge/contents/gallery')return json(files(...largePaths.slice(0,1000).map(name=>[name,'gallery/'+name])));
   if(p==='/repos/gamesbyian/LargeFixture/git/trees/main')return json({truncated:false,tree:largePaths.map(path=>({type:'blob',path,size:200}))});
   if(p==='/repos/gamesbyian/LargeFixture/contents/')return json(files(...largePaths.slice(0,1000).map(path=>[path,path])));
   if(p.endsWith('/git/trees/main'))return json({truncated:false,tree:[
@@ -251,6 +259,13 @@ async function main(){
   await evaluate("document.querySelector('#repo').value='gamesbyian/LargeFixture';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
   await until("document.querySelector('#status')?.textContent?.includes('1012 items')",'large directory repaired from Git tree');
   assert.equal(await evaluate("document.querySelector('#status').textContent.includes('recovered from complete Git tree index')"),true,'complete tree recovery is explicitly labeled');
+  await evaluate("document.querySelector('#repo').value='gamesbyian/DeepLarge';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
+  await until("document.querySelector('#status')?.textContent?.includes('1 items')",'truncated large repo root loaded');
+  await evaluate("document.querySelector('#scope').value='folder';document.querySelector('#scope').dispatchEvent(new Event('change'))");
+  await until("Boolean(document.querySelector('#items .tile'))",'large nested folder tile visible');
+  await evaluate("document.querySelector('#items .tile').click()");
+  await until("document.querySelector('#status')?.textContent?.includes('1012 items')",'capped nested directory repaired from direct trees');
+  assert.equal(await evaluate("document.querySelector('#status').textContent.includes('Folder verified without relying on truncated repository index')"),true,'folder-scoped recovery reports complete coverage');
   await evaluate("history.replaceState(null,'','#gamesbyian/DeniedPrivate/main/secret?file=private%2Fnotes.md');document.querySelector('#repo').value='gamesbyian/DeniedPrivate';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
   await until("document.querySelector('#status')?.textContent?.includes('Cannot open repository')",'denied private fixture');
   assert.equal(await evaluate("location.hash"),'','denied private repo link scrubbed');
