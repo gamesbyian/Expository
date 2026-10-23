@@ -100,7 +100,7 @@ const fixtures=String.raw`
   if(p.endsWith('/contents/docs/data.csv'))return new Response('name,value\nAlpha,17\nBeta,23',{status:200,headers:{'content-type':'text/csv'}});
   if(p.endsWith('/commits')){
    const fixtureCommit=n=>({sha:n.toString(16).padStart(40,'0'),commit:{message:'Fixture commit '+n,author:{date:'2026-10-22T12:00:00Z'}}});
-   if(u.searchParams.get('path'))return json([fixtureCommit(1)]);
+   if(u.searchParams.get('path'))return json([{sha:'1111111111111111111111111111111111111111',commit:{message:'First fixture change',author:{date:'2026-10-22T12:00:00Z'}}}]);
    return json(u.searchParams.get('page')==='2'?[fixtureCommit(51),fixtureCommit(52)]:Array.from({length:50},(_,i)=>fixtureCommit(i+1)));
   }
   if(p.endsWith('/pulls'))return json([{number:12,title:'Merged repo work',merged_at:'2026-10-22T15:00:00Z'},{number:13,title:'Closed but never merged',merged_at:null,closed_at:'2026-10-22T17:00:00Z'}]);
