@@ -231,6 +231,8 @@ async function main(){
   await evaluate("document.querySelector('#repo').value='gamesbyian/Glimpse';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
   await until("document.querySelector('#status')?.textContent?.includes('items')",'public fixture restored');
   assert.equal(await evaluate("location.hash.includes('gamesbyian/Glimpse')"),true,'public deep links still work');
+  await evaluate("window.__cspChecks=[];document.addEventListener('securitypolicyviolation',e=>window.__cspChecks.push(e.effectiveDirective));window.fetch('https://expository-test.invalid/egress-check').catch(()=>{})");
+  await until("window.__cspChecks.includes('connect-src')",'CSP blocks network egress outside GitHub API');
   assert.equal(runtimeErrors.length,0,'browser runtime exceptions: '+runtimeErrors.join(' | '));
   console.log('PASS: real Chromium mobile gallery, sorting, bounded search, zoom, file history, JSON tree, modal isolation, reveal, pixel difference, side-by-side, 360/393px overflow checks.');
   console.log('Evidence: '+screenshots);
