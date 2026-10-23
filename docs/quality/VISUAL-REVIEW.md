@@ -19,6 +19,7 @@
 | X11 | Accessibility | reduced motion, keyboard focus, text-scale and contrast; compare to DOM/ARIA evidence |
 | X12 | Production security | public/private switch, token purge and untrusted Markdown/SVG; use only synthetic credentials in captures |
 | X13 | File-size treemap | 393×852 and 1440×900; size-weighted regions, safe labels, accessible 44px list and explicit partial-index disclosure |
+| X14 | Long source preview | 393×852; 500-line DOM window, 1,200+-line navigation, match highlighting, honest 500k-character preview cap, keyboard focus |
 
 ## Evidence receipt
 
