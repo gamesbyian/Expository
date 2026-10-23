@@ -19,8 +19,14 @@ Expository browses **public repositories without login** and can browse selected
 - Star public repositories for quick switching, without storing private repository names
 - Preview SVGs, photos, plain/safe Markdown, source files, PDFs, and supported media
 - Pin two images for side-by-side comparison or a touch-friendly reveal slider
+- Zoom images up to 4× and pan through detail
+- Inspect the recent Git history of an individual file
+- Expand JSON as a safe tree or switch to raw source
+- Enter Story Mode for dated GitHub commits and releases, plus tags in a separate section
 - Copy deep links to folders and previews
 - Switch dark/light appearance, and clear private browsing credentials explicitly
+
+Story Mode uses real GitHub evidence, displays the sample size, and makes no claim to reconstruct missing history. The [feature roadmap](FEATURE-ROADMAP.md) distinguishes shipped capabilities from remaining planned work.
 
 Expository is **read-only**, uses direct requests to the GitHub API, and has no advertising, analytics, server-side session store, or dependency-loaded remote scripts. GitHub API rate limits and tree-index truncation may limit results on large repositories. It is not a replacement for GitHub's editor.
 
