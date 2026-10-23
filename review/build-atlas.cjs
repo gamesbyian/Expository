@@ -6,7 +6,7 @@ const source=arg('--source-sha',process.env.GITHUB_SHA||cp.spawnSync('git',['rev
 const fixture=arg('--fixture','synthetic-github-v1');
 if(!/^(?:[a-f0-9]{40}|not-captured)$/.test(source)||!/^[a-z0-9-]{3,70}$/.test(fixture))throw Error('Invalid source SHA or fixture');
 if(!fs.existsSync(screens))throw Error('Run node tests/browser-smoke.cjs first');
-const captions={'start':'Repository landing','gallery':'Image gallery','sizes':'Indexed file-size treemap','pinch':'Pinch-zoom image inspector','contact-sheet':'Selected images contact sheet','reveal':'Reveal comparison','compare':'Side-by-side comparison','pixel-diff':'Pixel difference','story':'Story Mode','json':'JSON inspector','csv':'CSV table'};
+const captions={'start':'Repository landing','gallery':'Image gallery','large-source':'Windowed large-file source inspection','sizes':'Indexed file-size treemap','pinch':'Pinch-zoom image inspector','contact-sheet':'Selected images contact sheet','reveal':'Reveal comparison','compare':'Side-by-side comparison','pixel-diff':'Pixel difference','story':'Story Mode','json':'JSON inspector','csv':'CSV table'};
 const entries=fs.readdirSync(screens).filter(x=>/^expository-[a-z0-9-]+\.png$/.test(x)).sort().map(name=>{
  const buf=fs.readFileSync(path.join(screens,name));if(buf.subarray(0,8).toString('hex')!=='89504e470d0a1a0a')throw Error('Not a PNG: '+name);
  const match=name.match(/^expository-(.+)-([0-9]+)\.png$/),scene=match?.[1]||'other';
