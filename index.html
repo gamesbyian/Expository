@@ -69,7 +69,7 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 <section id="preview" class="preview" role="dialog" aria-modal="true" aria-label="File preview"><div class="preview-head"><button id="prevPreview" class="icon-btn" aria-label="Previous file" title="Previous file">‹</button><button id="nextPreview" class="icon-btn" aria-label="Next file" title="Next file">›</button><strong id="previewTitle"></strong><button id="compareAction" class="pill" hidden aria-label="Pin image for visual comparison">Pin A</button><button id="copyRaw" class="pill" hidden aria-label="Copy file text">Copy text</button><button id="downloadRaw" class="pill" hidden aria-label="Download original file">Download</button><button id="copyFile" class="pill" title="Copy file deep link" aria-label="Copy file deep link">Copy ↗</button><a id="fileLink" class="pill" target="_blank" rel="noopener noreferrer" aria-label="View file on GitHub">Git ↗</a><button id="closePreview" class="icon-btn" aria-label="Close preview">✕</button></div><div id="inspectTools" class="inspect-tools" hidden><button id="fileHistory" class="pill">History</button><button id="structuredToggle" class="pill" hidden>JSON tree</button></div><div class="preview-body" id="previewBody"></div></section>
 <script>
 (()=>{'use strict';
-const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0,selectionMode:false,selected:new Map(),sheetSeq:0,sheetOpen:false,activeRequests:new Set(),rateLimitedUntil:0};
+const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0,selectionMode:false,selected:new Map(),sheetSeq:0,sheetOpen:false,activeRequests:new Set(),rateLimitedUntil:0,folderRecoveryKey:''};
 const codeRx=/\.(?:js|jsx|mjs|ts|tsx|py|rs|go|java|kt|c|cpp|h|hpp|sh|css|scss|html|sql|gradle)$/i,docsRx=/\.(?:md|markdown|txt|pdf|rst)$/i,dataRx=/\.(?:json|csv|tsv|yaml|yml|xml|toml|ini|properties)$/i;
 const imageRx=/\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i,textRx=/\.(md|markdown|txt|json|ya?ml|xml|csv|tsv|js|jsx|ts|tsx|css|scss|html|py|kt|java|rs|go|sh|toml|ini|svg|sql|log|gradle|properties)$/i;
 function stopStory(){
@@ -168,6 +168,48 @@ function recoverLargeFolderFromIndex(){
  if(count)state.items.sort((a,b)=>(a.type==='dir'?0:1)-(b.type==='dir'?0:1)||a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}));
  return count
 }
+async function recoverTargetedFolder(){
+ const repo=state.repo,branch=state.branch,folder=state.path,request=state.repoRequest,seq=state.seq;
+ const parts=folder?folder.split('/'):[];
+ if(state.items.length<1000||!state.indexTruncated&&!state.indexError||parts.length>8)return 0;
+ const key=repo+'@'+branch+'/'+folder;
+ if(state.folderRecoveryKey===key)return 0;
+ state.folderRecoveryKey=key;
+ const live=()=>request===state.repoRequest&&seq===state.seq&&repo===state.repo&&branch===state.branch&&folder===state.path;
+ try{
+  // Direct, nonrecursive Git trees avoid the repository-wide recursive tree cap.
+  // At most nine API reads: root plus eight explicitly visited directory levels.
+  let ref=branch,tree=[];
+  for(let depth=0;depth<=parts.length;depth++){
+   const result=await json('/repos/'+repo+'/git/trees/'+enc(ref));
+   if(!live())return 0;
+   if(!Array.isArray(result.tree))throw Error('GitHub returned an invalid direct tree.');
+   tree=result.tree;
+   if(depth<parts.length){
+    const child=tree.find(x=>x.type==='tree'&&x.path===parts[depth]&&/^[a-f0-9]{40}$/i.test(x.sha||''));
+    if(!child)throw Error('Folder is absent from its parent Git tree.');
+    ref=child.sha;
+   }else{
+    const known=new Set(state.items.map(x=>x.path));let added=0;
+    for(const entry of tree.slice(0,5000)){
+     if(!['tree','blob'].includes(entry.type)||!entry.path||entry.path.includes('/')||!safeRepoPath(entry.path))continue;
+     const path=folder?folder+'/'+entry.path:entry.path;
+     if(known.has(path))continue;
+     const item={type:entry.type==='tree'?'dir':'file',path,name:entry.path,size:entry.size||0};
+     state.items.push(item);known.add(path);added++;
+     if(item.type==='dir')treeAdd(path);
+    }
+    if(added)state.items.sort((a,b)=>(a.type==='dir'?0:1)-(b.type==='dir'?0:1)||a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}));
+    const incomplete=Boolean(result.truncated)||tree.length>5000;
+    if(live()){if(added)paint();paintTree();
+     status(state.items.length+' items · '+(folder||'/')+' · '+added+' recovered via direct Git tree'+(incomplete?' · Direct tree/5,000-item display cap; results still incomplete.':' · Folder verified without relying on truncated repository index.'))}
+    return added;
+   }
+  }
+ }catch(e){if(live())status(state.items.length+' items · '+(folder||'/')+' · Direct tree recovery unavailable: '+e.message+'. Listing may be incomplete.')}
+ finally{if(state.folderRecoveryKey===key)state.folderRecoveryKey=''}
+ return 0
+}
 async function indexTree(repo,branch,request){
  try{
   const result=await json('/repos/'+repo+'/git/trees/'+enc(branch)+'?recursive=1');
@@ -177,9 +219,9 @@ async function indexTree(repo,branch,request){
   for(const entry of result.tree||[])if(entry.type==='tree')treeAdd(entry.path);
   const recovered=recoverLargeFolderFromIndex();
   paintTree();if(recovered||$('scope').value!=='folder')paint();
-  if(result.truncated)status('Repository tree index truncated by GitHub; search and very large directory listings may be incomplete.');
+  if(result.truncated){status('Repository tree index truncated by GitHub; search and very large directory listings may be incomplete.');if(state.items.length>=1000)recoverTargetedFolder()}
   else if(recovered)status(state.items.length+' items · '+(state.path||'/')+' · '+recovered+' additional files/folders recovered from complete Git tree index.');
- }catch(e){if(request===state.repoRequest){state.indexReady=false;state.indexError=true;if($('scope').value!=='folder')paint();status('Folder indexing unavailable: '+e.message+' · Direct browsing still works.')}}
+ }catch(e){if(request===state.repoRequest){state.indexReady=false;state.indexError=true;if($('scope').value!=='folder')paint();status('Folder indexing unavailable: '+e.message+' · Direct browsing still works.');if(state.items.length>=1000)recoverTargetedFolder()}}
 }
 async function navigate(path){
  if(!safeRepoPath(path)){status('Unsafe or invalid repository path.');return false}
@@ -196,7 +238,7 @@ async function navigate(path){
   const capped=data.length>=1000,recovered=recoverLargeFolderFromIndex();
   paintTree();state.limit=80;paint();
   const coverage=!capped?'':state.indexReady&&!state.indexTruncated?(recovered?' · '+recovered+' recovered from complete Git tree index':' · verified against complete Git tree index'):state.indexTruncated?' · GitHub directory and tree indices may be incomplete':' · GitHub directory may be capped; awaiting Git tree index';
-  status(state.items.length+' items · '+(state.path||'/')+coverage);return true;
+  status(state.items.length+' items · '+(state.path||'/')+coverage);if(capped&&(state.indexTruncated||state.indexError))recoverTargetedFolder();return true;
  }catch(e){if(seq!==state.seq)return false;status('Cannot open: '+e.message);$('items').append(elem('div','empty','Check repository name, branch, permissions, or API limit.'));return false}
 }
 function storyEvent(kind,date,label,summary,url){
@@ -717,7 +759,7 @@ async function openRepo(targetPath=''){
  history.replaceState(null,'',location.pathname+location.search);
  abortRequests();
  cancelContentScan();stopStory();state.storyData=null;const request=++state.repoRequest;state.repo=repo;state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;
- clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
+ state.folderRecoveryKey='';clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
  clearObjects();clearPreview();++state.seq;status('Connecting to '+repo+'…');
  try{
   const info=await json('/repos/'+repo);if(request!==state.repoRequest)return;
@@ -727,7 +769,7 @@ async function openRepo(targetPath=''){
  }catch(e){if(request===state.repoRequest)status('Cannot open repository: '+e.message);return false}
 }
 function resetSession(){
- abortRequests();state.rateLimitedUntil=0;cancelContentScan();stopStory();state.storyData=null;++state.repoRequest;++state.seq;state.token='';state.repo='';state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;state.cache.clear();state.items=[];state.visibleItems=[];
+ abortRequests();state.rateLimitedUntil=0;state.folderRecoveryKey='';cancelContentScan();stopStory();state.storyData=null;++state.repoRequest;++state.seq;state.token='';state.repo='';state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;state.cache.clear();state.items=[];state.visibleItems=[];
  state.tree.clear();state.expanded.clear();state.indexEntries=[];state.indexReady=false;state.indexError=false;state.indexTruncated=false;state.repoIsPrivate=true;
  clearSelection();state.renderEpoch++;if(state.thumbObserver){state.thumbObserver.disconnect();state.thumbObserver=null}thumbQueue.length=0;
  clearPreview();clearObjects();paintBookmarks();$('token').value='';$('branch').value='';
