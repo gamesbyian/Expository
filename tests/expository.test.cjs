@@ -351,3 +351,17 @@ test('go-to-line is bounded and search describes truncated files honestly',()=>{
  assert.equal(big.children.at(-1).children.length,2600);
  assert.equal(big.children.at(-2).textContent,'Showing first 2,600 lines. Download the file to inspect later lines.');
 });
+
+test('public static app CSP pins GitHub API and prevents arbitrary network/media origins',()=>{
+ const csp=html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1];
+ assert.ok(csp,'a static meta CSP is present');
+ assert.match(csp,/default-src 'none'/);
+ assert.match(csp,/connect-src https:\/\/api\.github\.com;/);
+ assert.match(csp,/img-src 'self' blob: data:;/);
+ assert.match(csp,/worker-src 'none'/);
+ assert.match(csp,/object-src 'none'/);
+ assert.match(csp,/base-uri 'none'/);
+ assert.match(csp,/form-action 'none'/);
+ assert.ok(!/connect-src[^;]*\*/.test(csp),'no wildcard outgoing connections');
+ assert.ok(!/script-src[^;]*https?:/.test(csp),'no remotely hosted scripts');
+});
