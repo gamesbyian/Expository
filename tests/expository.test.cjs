@@ -10,7 +10,7 @@ const html = fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
 const source = html.match(/<script>([\s\S]+?)<\/script>/)?.[1];
 function fakeNode(tag='DIV') {
   return {
-    tagName:tag.toUpperCase(),children:[],value:'',textContent:'',style:{setProperty(name,value){this[name]=value}},classList:{add(){},remove(){},contains(){return false}},
+    tagName:tag.toUpperCase(),dataset:{},children:[],value:'',textContent:'',style:{setProperty(name,value){this[name]=value}},classList:{add(){},remove(){},contains(){return false}},
     append(...nodes){this.children.push(...nodes)},replaceChildren(...nodes){this.children=nodes},
     remove(){},querySelector(){return null},querySelectorAll(){return []},contains(){return false},getClientRects(){return [1]},setAttribute(name,value){this[name]=value},getAttribute(name){return this[name]||null},
     addEventListener(){},focus(){},click(){},get isConnected(){return true}
@@ -443,7 +443,7 @@ test('truncated recursive index recovers a capped child folder through two nonre
  };
  const {app,get}=boot(fetcher);
  app.state.repo='test/large';app.state.branch='main';app.state.path='gallery';app.state.repoRequest=2;app.state.seq=3;
- app.state.indexTruncated=true;app.state.indexReady=true;
+ app.state.indexTruncated=true;app.state.indexReady=true;app.state.mode='list';
  app.state.items=Array.from({length:1000},(_,i)=>({type:'file',name:'img'+i+'.svg',path:'gallery/img'+i+'.svg',size:50}));
  const added=await app.recoverTargetedFolder();
  assert.equal(added,2);assert.equal(app.state.items.length,1002);
@@ -453,7 +453,7 @@ test('truncated recursive index recovers a capped child folder through two nonre
 test('truncated direct folder tree never claims complete coverage',async()=>{
  const fetcher=async()=>new Response(JSON.stringify({truncated:true,tree:[{type:'blob',path:'later.svg',size:50}]}),{status:200});
  const {app,get}=boot(fetcher);app.state.repo='test/large';app.state.branch='main';app.state.path='';
- app.state.indexTruncated=true;app.state.items=Array.from({length:1000},(_,i)=>({type:'file',name:i+'.svg',path:i+'.svg',size:10}));
+ app.state.indexTruncated=true;app.state.mode='list';app.state.items=Array.from({length:1000},(_,i)=>({type:'file',name:i+'.svg',path:i+'.svg',size:10}));
  const added=await app.recoverTargetedFolder();
  assert.equal(added,1);assert.match(get('status').textContent,/results still incomplete/);
 });
