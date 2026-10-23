@@ -4,7 +4,7 @@
 
 **Product contract:** One public, static, dependency-free Expository deployment can explore any public GitHub repository or private repository explicitly permitted by a visitor's own read-only credential. No per-repository installation, tracking, shared tokens, cloud index or write access is required for core browsing.
 
-**Canonical code:** `gamesbyian/general-purpose/tools/expository/`; public static-only mirror: `gamesbyian/Expository`. Keep authentication and read-only semantics intact. Never publish the private repository tree, logs, tokens or private browsing data. The public deployment must contain only reviewed application code and non-sensitive public documentation.
+**Canonical code and GitHub Pages:** `gamesbyian/Expository`, root `index.html`. The old `gamesbyian/general-purpose/tools/expository/` is retired bootstrap history, not a current publishing source. Keep authentication and read-only semantics intact; never publish sensitive repository trees, tokens, or private browsing data.
 
 ## Weighted backlog
 
@@ -28,7 +28,7 @@ Ratings describe *general Expository relevance* (10 is highest) rather than impl
 | 9 | Relative Markdown navigation | GitHub | Path-normalized internal Markdown links, traversal refusal and HTTP(S)-only external links | Wave 2 initial |
 | 8 | JSON/CSV/YAML/Mermaid viewer | Structured data viewers | Bounded JSON tree and CSV/TSV safe tables delivered; YAML/Mermaid pending | Wave 2 partial |
 | 8 | Activity dashboard | GitHub, GitLens | Public/restricted commit and PR APIs, bounded counts | Wave 3 |
-| 8 | Story Mode: project evolution | GitLens, GitHub | Recent dated commits and releases plus undated tags delivered with source links; PR milestones, older history and advanced grouping pending | Wave 3 initial |
+| 8 | Story Mode: project evolution | GitLens, GitHub | Dated commits/release/merged-PR milestones, 50 commits per manual page to 200, undated tags; limited recent closed-PR sample and no exhaustive history | Wave 3 partial |
 | 7 | Slideshow | FolderFrame | Browser-local selected collection, accessible pause and interval | Wave 3 |
 | 7 | File-size treemap | GitLens | Indexed git blob sizes; label when index is truncated | Wave 3 |
 | 7 | Change-activity heatmap | GitLens | Git-backed per-path history, clear sampling limitations | Wave 3 |
@@ -50,7 +50,7 @@ Detect supported formats/metadata from files. Do not hardcode owner-specific beh
 4. **Bounded cost:** repo-scanning search must be user-triggered, enforce explicit caps (file count, file size, matches), use at most three parallel fetches, and permit cancellation. Never silently download a whole private repository.
 5. **Untrusted source text is data:** never execute HTML/SVG scripts in the app's own origin; use DOM/textContent and safe parser primitives. If HTML preview is added, it must be sandboxed and separately audited.
 6. **Honest fidelity:** tree index truncation, file coverage, fallback results, approximate diffs, sampling and unsupported encodings must be visible.
-7. **Deploy gate:** source-branch unit checks, real Chromium fixture smoke including portrait viewport screenshots, reviewed single-file publication to `gamesbyian/Expository`, then public source-parity check.
+7. **Deploy gate:** PR unit checks, targeted Chromium fixture smoke for behavior, optional manual visual atlas when design changes warrant it, merge to the canonical `gamesbyian/Expository` Pages repository.
 8. **Portable semantics:** no feature relies on `gamesbyian` paths unless optional detected adapter metadata justifies it.
 
 ## Delivery order
@@ -59,7 +59,7 @@ Detect supported formats/metadata from files. Do not hardcode owner-specific beh
 
 **Wave 2:** image zoom and inspection, safe Markdown links/source mode, JSON/CSV, file history, multi-image contact sheets, pixel diff. Revisit thumbnail object URL lifetime and API quota pressure before adding more media requests.
 
-**Wave 3:** first-class Story Mode (commits, tags, releases, PR milestones), treemap, change heatmap, code outlines, optional large-repository index. Keep all milestones evidence-linked.
+**Wave 3:** deepen evidence-linked Story Mode with authenticated PR/release pagination and date coverage, treemap, change heatmap, code outlines and optional large-repository index. Keep all milestones evidence-linked.
 
 ## Acceptance and current limits
 

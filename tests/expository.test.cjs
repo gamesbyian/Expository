@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl
  );
@@ -399,4 +399,35 @@ test('failed private deep links are scrubbed before GitHub auth/visibility is kn
  assert.equal(ok,false);
  assert.equal(urls[0],'/index.html','incoming fragment cleared before any API result');
  assert.equal(urls.some(x=>x.includes('hidden')),false,'private paths never written to browser history');
+});
+
+test('Story Mode shows real merged PR milestones, not merely closed PRs',()=>{
+ const {app,get}=boot();app.state.repo='gamesbyian/Expository';app.state.storyOpen=true;
+ app.state.storyData={commits:[],releases:[],tags:[],pulls:[
+  {number:72,title:'Merged feature',merged_at:'2026-10-20T13:00:00Z'},
+  {number:73,title:'Unmerged proposal',merged_at:null,closed_at:'2026-10-21T14:00:00Z'},
+  {number:74,title:'<img src=x onerror=alert(1)>',merged_at:'2026-10-22T09:00:00Z'}
+ ],filter:'pr',pages:1,hasMore:false,loadingOlder:false,olderError:'',errors:[]};
+ app.renderStory();const host=get('storyView'),stream=host.children.find(x=>x.className==='story-stream');
+ const entries=stream.children.filter(x=>x.className==='story-event');
+ assert.equal(entries.length,2,'only merged PRs receive timeline entries');
+ assert.equal(entries[0].href,'https://github.com/gamesbyian/Expository/pull/74');
+ assert.equal(entries[0].children[0].textContent,'#74 · <img src=x onerror=alert(1)>','untrusted title inert text');
+});
+test('older Story Mode commits paginate only after user intent and stop at nonfull page',async()=>{
+ const sha='f'.repeat(40);const paths=[];
+ const apiFetch=async (url)=>{paths.push(url);return new Response(JSON.stringify([{sha,commit:{message:'Older',author:{date:'2026-10-16T08:00:00Z'}}}]),{status:200,headers:{'content-type':'application/json'}})};
+ const {app}=boot(apiFetch);app.state.repo='gamesbyian/Expository';app.state.branch='main';app.state.storyOpen=true;app.state.storySeq=5;
+ const data={commits:[{sha:'a'.repeat(40),commit:{message:'Recent',author:{date:'2026-10-20T10:00:00Z'}}}],releases:[],pulls:[],tags:[],filter:'all',pages:1,hasMore:true,loadingOlder:false,olderError:'',errors:[]};
+ app.state.storyData=data;await app.loadOlderStory();
+ assert.equal(paths.length,1);assert.match(paths[0],/page=2$/);
+ assert.equal(data.commits.length,2);assert.equal(data.pages,2);assert.equal(data.hasMore,false);
+ await app.loadOlderStory();assert.equal(paths.length,1,'no request after final partial page');
+});
+test('Story Mode does not accept older commits after view was closed',async()=>{
+ let release;const apiFetch=()=>new Promise(resolve=>{release=()=>resolve(new Response(JSON.stringify([{sha:'a'.repeat(40)}]),{status:200,headers:{'content-type':'application/json'}}))});
+ const {app}=boot(apiFetch);app.state.repo='o/r';app.state.branch='main';app.state.storyOpen=true;app.state.storySeq=2;
+ const data={commits:[],releases:[],pulls:[],tags:[],filter:'all',pages:1,hasMore:true,loadingOlder:false,olderError:'',errors:[]};
+ app.state.storyData=data;const work=app.loadOlderStory();app.stopStory();release();await work;
+ assert.equal(data.commits.length,0,'stale async response discarded');
 });

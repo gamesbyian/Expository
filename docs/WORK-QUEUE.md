@@ -9,7 +9,7 @@
 | E03 | In progress | GitHub primary/secondary cooldown, generic safe API errors, abort on repo/session switch, sanitized path validation and private-URL fragment isolation; CSP request boundaries added; outstanding: real-token network validation, SVG/Markdown cross-browser security audit, full truncated-tree recovery and real-world giant-repo validation |
 | E04 | In progress | In-file find/previous/next, matching-line highlight and bounded go-to-line implemented; richer language parsers, symbols and long-file virtualization pending |
 | E05 | Planned | Image inspection: pinch/drag zoom, selected comparisons and truly registered pixel diff for same dimensions |
-| E06 | Planned | Repository Story Mode: pagination/source-backed milestones (releases, PRs), evidence timestamps and explicit coverage |
+| E06 | In progress | Merge-only PR milestones from recently updated closed PR sample and user-triggered older commit pages (max 4/200) shipped; full PR/history pagination, tags' dates and end-to-end real GitHub acceptance pending |
 | E07 | Planned | Real device/owner acceptance: Pixel 6 Pro portrait touch/focus/Chrome, private token use, 200% font, reduced motion and large gallery |
 | E08 | Planned | Public packaging: security review of public Pages serving non-app project files, optional PWA after privacy review |
 

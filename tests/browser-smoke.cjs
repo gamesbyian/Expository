@@ -98,7 +98,12 @@ const fixtures=String.raw`
   if(p.endsWith('/contents/docs/README.md'))return new Response('# Hello from fixture\n[Open data](data.csv) [unsafe](javascript:alert(1))',{status:200,headers:{'content-type':'text/plain'}});
   if(p.endsWith('/contents/docs/data.json'))return new Response(JSON.stringify({status:'ready',items:[1,2,3],active:true}),{status:200,headers:{'content-type':'application/json'}});
   if(p.endsWith('/contents/docs/data.csv'))return new Response('name,value\nAlpha,17\nBeta,23',{status:200,headers:{'content-type':'text/csv'}});
-  if(p.endsWith('/commits'))return json([{sha:'1111111111111111111111111111111111111111',commit:{message:'First fixture change',author:{date:'2026-10-22T12:00:00Z'}}}]);
+  if(p.endsWith('/commits')){
+   const fixtureCommit=n=>({sha:n.toString(16).padStart(40,'0'),commit:{message:'Fixture commit '+n,author:{date:'2026-10-22T12:00:00Z'}}});
+   if(u.searchParams.get('path'))return json([{sha:'1111111111111111111111111111111111111111',commit:{message:'First fixture change',author:{date:'2026-10-22T12:00:00Z'}}}]);
+   return json(u.searchParams.get('page')==='2'?[fixtureCommit(51),fixtureCommit(52)]:Array.from({length:50},(_,i)=>fixtureCommit(i+1)));
+  }
+  if(p.endsWith('/pulls'))return json([{number:12,title:'Merged repo work',merged_at:'2026-10-22T15:00:00Z'},{number:13,title:'Closed but never merged',merged_at:null,closed_at:'2026-10-22T17:00:00Z'}]);
   if(p.endsWith('/releases'))return json([{tag_name:'v1.0',name:'First public release',published_at:'2026-10-21T12:00:00Z'}]);
   if(p.endsWith('/tags'))return json([{name:'v1.0'}]);
   return new Response('Not found',{status:404});
@@ -219,12 +224,19 @@ async function main(){
   await evaluate("document.querySelector('#filter').value='';document.querySelector('#filter').dispatchEvent(new Event('input'))");
   
   await evaluate("document.querySelector('#storyToggle').click()");
-  await until("document.querySelectorAll('#storyView .story-event').length===2",'Story Mode history events');
+  await until("document.querySelectorAll('#storyView .story-event').length===52",'Story Mode source-backed events');
+  assert.equal(await evaluate("document.querySelectorAll('#storyView .story-event[href*=\"/pull/\"]').length"),1,'only merged PR milestone displayed');
+  await evaluate("document.querySelector('.story-paging button').click()");
+  await until("document.querySelectorAll('#storyView .story-event').length===54",'explicit older commits loaded');
+  assert.equal(await evaluate("document.querySelector('.story-notice')?.textContent?.includes('Sample:')"),false,'heading remains separate from evidence receipt');
   assert.equal(await evaluate("document.querySelector('#storyView').hidden"),false,'Story Mode visible');
   assert.equal(await evaluate("document.querySelector('#items').hidden"),true,'files hidden during Story Mode');
   assert.equal(await evaluate("document.querySelectorAll('#storyView .story-tags a').length"),1,'undated tags grouped separately');
   await evaluate("document.querySelector('.story-controls button:nth-child(3)').click()");
   assert.equal(await evaluate("document.querySelectorAll('#storyView .story-event').length"),1,'filter to releases');
+  await evaluate("document.querySelector('.story-controls button:nth-child(4)').click()");
+  assert.equal(await evaluate("document.querySelectorAll('#storyView .story-event').length"),1,'filter to merged PRs');
+  await evaluate("document.querySelector('.story-controls button:nth-child(3)').click()");
   assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'Story Mode no horizontal overflow');
   await screenshot('expository-story-360.png');
   await evaluate("document.querySelector('#storyToggle').click()");
