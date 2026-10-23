@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101118">
+<title>Expository: Repository Explorer</title>
+<style>
+:root{color-scheme:dark;--bg:#0e1017;--panel:#171a24;--panel2:#202430;--stroke:#323847;--text:#f3f3f7;--dim:#a3aabb;--accent:#88d9ff;--radius:18px;--shadow:0 18px 48px #0006}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.48 system-ui,-apple-system,Segoe UI,sans-serif}button,input,select{font:inherit}button{cursor:pointer;color:inherit}button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid #78c5ff;outline-offset:2px}button:disabled{opacity:.4;cursor:default}
+.rainbow{height:4px;background:linear-gradient(90deg,#ff6685,#ffae65,#ffdf68,#75dca9,#70c9ff,#958bff,#e58dff)}header{position:sticky;top:0;z-index:10;background:#10121bea;backdrop-filter:blur(18px);border-bottom:1px solid var(--stroke)}
+.head{display:flex;align-items:center;gap:12px;max-width:1600px;margin:auto;padding:12px 16px}.brand{font-weight:850;letter-spacing:.16em;font-size:19px;white-space:nowrap}.brand::first-letter{color:#ffac88}.brand small{display:block;letter-spacing:.025em;color:var(--dim);font-size:11px;font-weight:600}.grow{flex:1}.icon-btn,.pill{border:1px solid var(--stroke);background:var(--panel);border-radius:12px;min-height:43px;padding:9px 12px}.icon-btn:hover,.pill:hover{background:#303545}.pill.active{border-color:var(--accent);color:var(--accent)}
+main{max-width:1600px;margin:auto;padding:16px;display:grid;grid-template-columns:280px minmax(0,1fr);gap:16px}.sidebar,.workspace,.preview{background:var(--panel);border:1px solid var(--stroke);border-radius:var(--radius);min-width:0}.sidebar{padding:15px;align-self:start;position:sticky;top:86px;max-height:calc(100dvh - 106px);overflow:auto}.sidebar h2{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.stack{display:flex;flex-direction:column;gap:9px}label{font-size:12px;color:var(--dim);font-weight:700}.field{width:100%;border:1px solid var(--stroke);border-radius:11px;background:#0f1119;color:var(--text);padding:11px;min-height:44px}.hint{font-size:12px;color:var(--dim)}.sidebar hr{width:100%;border:0;border-top:1px solid var(--stroke);margin:12px 0}.workspace{overflow:hidden}.toolbar{padding:15px;display:flex;flex-wrap:wrap;gap:9px;align-items:center;border-bottom:1px solid var(--stroke)}.toolbar .field{max-width:290px;flex:1;min-width:140px}.path{padding:12px 16px;color:var(--dim);font-size:13px;word-break:break-word;border-bottom:1px solid var(--stroke)}.path button{border:0;background:transparent;color:var(--accent);padding:5px}.items{padding:13px;display:grid;gap:10px}.items.grid{grid-template-columns:repeat(auto-fill,minmax(145px,1fr))}.items.list{grid-template-columns:1fr;gap:4px}.tile{min-width:0;text-align:left;border:1px solid var(--stroke);background:var(--panel2);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:9px;position:relative}.tile:hover,.tile.selected{border-color:#8bc8ed}.thumb{height:116px;display:flex;align-items:center;justify-content:center;border-radius:9px;background:#11151f;overflow:hidden}.thumb img{width:100%;height:100%;object-fit:contain}.glyph{font-size:35px;color:#c0c4d4}.filename{font-size:12px;overflow-wrap:anywhere;font-weight:650}.meta{font-size:11px;color:var(--dim)}.items.list .tile{flex-direction:row;align-items:center;padding:8px 12px}.items.list .thumb{height:44px;width:56px;flex:0 0 56px}.items.list .glyph{font-size:22px}.items.list .filename{font-size:14px}.items.list .meta{margin-left:auto}
+.status{min-height:40px;padding:13px 16px;color:var(--dim);font-size:13px}.preview{position:fixed;inset:78px 12px 12px auto;width:min(660px,calc(100% - 24px));z-index:30;box-shadow:var(--shadow);display:none;flex-direction:column}.preview.open{display:flex}.preview-head{display:flex;align-items:center;gap:8px;padding:12px;border-bottom:1px solid var(--stroke)}.preview-head strong{flex:1;overflow-wrap:anywhere}.preview-body{flex:1;overflow:auto;display:flex;flex-direction:column;align-items:stretch;padding:15px;gap:12px}.preview-body img,.preview-body video{max-width:100%;max-height:65dvh;object-fit:contain;align-self:center}.preview-body pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0a0c12;padding:17px;border-radius:12px;tab-size:2;font-size:12px}.preview-body iframe{border:0;min-height:70dvh;background:white;border-radius:8px}.preview-body audio{width:100%}.preview-body .message{color:var(--dim)}.preview-body h1,.preview-body h2,.preview-body h3{line-height:1.2}.preview-body a{color:var(--accent)}.preview-body blockquote{border-left:3px solid #a888ff;padding-left:12px;margin-left:0;color:var(--dim)}
+.scrim{display:none;position:fixed;inset:0;background:#0009;z-index:25}.scrim.on{display:block}.mobile-nav{display:none}.empty{padding:65px 20px;text-align:center;color:var(--dim)}.empty strong{display:block;font-size:23px;color:var(--text);margin-bottom:8px}.swatch{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px}#tree button{border:0;background:none;text-align:left;color:var(--dim);width:100%;padding:8px;border-radius:8px;font-size:13px;overflow-wrap:anywhere}#tree button:hover{background:var(--panel2);color:var(--text)}#tree .nested{margin-left:11px;border-left:1px solid var(--stroke);padding-left:8px}#tree .tree-row{display:flex;align-items:center;gap:2px}#tree .tree-row .branch-toggle{flex:0 0 36px;min-height:40px;padding:5px;text-align:center}#tree .tree-row .folder-link{flex:1;min-height:40px}#tree .tree-row .folder-link[aria-current=page]{background:var(--panel2);color:var(--accent)}.items .more{grid-column:1/-1;justify-self:center}.tile .filename{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.tile .meta{overflow-wrap:anywhere}.toolbar select.field{max-width:155px;min-width:135px}.preview-head .icon-btn{min-width:42px}.preview-head .pill{font-size:12px;padding:9px;white-space:nowrap}.preview-head #previewTitle{font-size:13px}.compare-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;width:100%}.compare-panel{margin:0;min-width:0;padding:10px;border:1px solid var(--stroke);border-radius:12px;background:var(--panel2)}.compare-panel img{display:block;width:100%;height:auto;max-height:65dvh;object-fit:contain;background:var(--bg);border-radius:8px}.compare-panel figcaption{font-size:12px;font-weight:650;overflow-wrap:anywhere;margin-bottom:8px}.compare-panel .meta{display:block;font-size:11px}
+.compare-shell{display:flex;flex-direction:column;gap:14px;min-width:0}
+.compare-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.compare-controls button{font-size:12px}
+.compare-wipe{position:relative;width:100%;height:min(64dvh,640px);min-height:230px;overflow:hidden;border:1px solid var(--stroke);background:repeating-conic-gradient(#242936 0% 25%,#1b202a 0% 50%) 50%/18px 18px;border-radius:14px;--reveal:50%}
+.compare-wipe img{position:absolute;inset:0;display:block;width:100%;height:100%;max-width:none;max-height:none;object-fit:contain;pointer-events:none}
+.compare-wipe img.after{clip-path:inset(0 calc(100% - var(--reveal)) 0 0)}
+.compare-rule{position:absolute;z-index:2;left:var(--reveal);top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 0 1px #0006;pointer-events:none}
+.compare-rule::after{content:'↔';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:39px;height:39px;display:grid;place-items:center;border-radius:50%;background:#fff;color:#151824;box-shadow:0 2px 9px #0009;font-size:18px}
+.compare-label{position:absolute;top:10px;z-index:3;background:#12151cd9;padding:4px 8px;color:#fff;font-size:11px;font-weight:700;border-radius:7px;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:none}
+.compare-label.a{left:10px}.compare-label.b{right:10px}
+.compare-range{width:100%;accent-color:#7bc9fd;min-height:40px;touch-action:pan-y}
+.compare-caption{font-size:12px;color:var(--dim);overflow-wrap:anywhere}.notice{font-size:12px;color:var(--dim);padding:10px 14px}
+@media(max-width:760px){#githubLink{display:none}.head{gap:8px;padding:9px 10px}.brand{letter-spacing:.11em}.preview-head{flex-wrap:wrap}.preview-head strong{order:-1;flex-basis:calc(100% - 53px);font-size:14px}.preview-head #closePreview{order:-1;flex:0 0 43px;margin-left:auto}.preview-head .pill{padding:7px 8px}.compare-grid{grid-template-columns:1fr}.compare-wipe{height:min(43dvh,460px)}.compare-panel img{max-height:46dvh}main{display:block;padding:9px}.sidebar{display:none;position:fixed;inset:72px 12px 12px;z-index:28;max-height:none;overflow:auto;box-shadow:var(--shadow)}.sidebar.open{display:block}.mobile-nav{display:inline-flex}.head{padding:10px}.brand{font-size:16px}.brand small{font-size:10px}.toolbar{padding:10px}.preview{inset:63px 0 0;width:100%;border-radius:20px 20px 0 0}.items.grid{grid-template-columns:repeat(auto-fill,minmax(125px,1fr))}.thumb{height:105px}}
+@media(prefers-reduced-motion:no-preference){button,.tile{transition:background .15s,border-color .15s}}@media(prefers-color-scheme:light){body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1b2130;--dim:#566173;--accent:#176596;--shadow:0 18px 48px #161b2733;color-scheme:light}body.light header{background:#fffffff0}body.light .field,body.light .thumb{background:#f7f8fa}body.light .preview-body pre{background:#edf0f5}}
+body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1b2130;--dim:#566173;--accent:#176596;--shadow:0 18px 48px #161b2733;color-scheme:light}body.light header{background:#fffffff0}body.light .field,body.light .thumb{background:#f7f8fa}body.light .preview-body pre{background:#edf0f5}
+</style>
+</head>
+<body>
+<header id="pageHeader"><div class="rainbow"></div><div class="head"><button id="navToggle" class="icon-btn mobile-nav" aria-label="Open repository menu">☰</button><div class="brand">EXPOSITORY<small>Explore the story of your repository</small></div><span class="grow"></span><button id="theme" class="icon-btn" aria-label="Toggle light and dark theme">☀︎</button><a id="githubLink" class="pill" href="https://github.com" target="_blank" rel="noopener noreferrer">GitHub ↗</a></div></header>
+<div id="scrim" class="scrim"></div>
+<main id="pageMain"><aside class="sidebar stack" id="sidebar">
+<h2>Repositories</h2>
+<label for="token">Fine-grained read-only token (optional)</label>
+<input class="field" id="token" type="password" autocomplete="off" placeholder="github_pat_…" aria-describedby="tokenHint">
+<div class="hint" id="tokenHint">Used only in this tab's memory. Never saved. Required for private repositories. Use a trusted deployment.</div>
+<button class="pill" id="connect">Connect / refresh repos</button><button class="pill" id="disconnect">Forget credentials &amp; clear session</button>
+<label for="repoSelect">Your repositories</label><select class="field" id="repoSelect"><option value="">Enter a repo below</option></select>
+<label for="repo">Owner / repository</label><input class="field" id="repo" value="gamesbyian/Glimpse" autocapitalize="off" spellcheck="false">
+<label for="branch">Branch</label><input class="field" id="branch" value="" placeholder="Default branch" autocapitalize="off" spellcheck="false">
+<button class="pill active" id="openRepo">Open repository →</button>
+<hr><h2>Folders</h2><div id="tree" role="navigation" aria-label="Folder navigation"></div><hr>
+<div class="hint">Read-only by design. No editing, no analytics, no token persistence. Preview private assets locally in this tab.</div>
+</aside>
+<section class="workspace" aria-label="Repository files">
+<div class="toolbar"><button id="back" class="icon-btn" title="Parent folder" aria-label="Parent folder">↑</button><input id="filter" class="field" placeholder="Find by name…" aria-label="Filter files by name"><select id="scope" class="field" aria-label="Search and gallery scope"><option value="folder">This folder</option><option value="repo">Search entire repo</option><option value="images">Images in subfolders</option></select><button id="listBtn" class="pill" title="List view">☷</button><button id="gridBtn" class="pill active" title="Gallery view">▦</button><button id="copyFolder" class="pill" title="Copy folder link" aria-label="Copy folder link">↗</button></div>
+<div class="path" id="breadcrumbs">No repository selected</div>
+<div id="items" class="items grid"><div class="empty"><strong>Browse in full colour.</strong>Open any public repository, or connect a read-only token for your private ones.</div></div><div class="status" id="status" aria-live="polite"></div>
+</section></main>
+<section id="preview" class="preview" role="dialog" aria-modal="true" aria-label="File preview"><div class="preview-head"><button id="prevPreview" class="icon-btn" aria-label="Previous file" title="Previous file">‹</button><button id="nextPreview" class="icon-btn" aria-label="Next file" title="Next file">›</button><strong id="previewTitle"></strong><button id="compareAction" class="pill" hidden aria-label="Pin image for visual comparison">Pin A</button><button id="copyFile" class="pill" title="Copy file deep link" aria-label="Copy file deep link">Copy ↗</button><a id="fileLink" class="pill" target="_blank" rel="noopener noreferrer" aria-label="View file on GitHub">Git ↗</a><button id="closePreview" class="icon-btn" aria-label="Close preview">✕</button></div><div class="preview-body" id="previewBody"></div></section>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50};
+const imageRx=/\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i,textRx=/\.(md|markdown|txt|json|ya?ml|xml|csv|tsv|js|jsx|ts|tsx|css|scss|html|py|kt|java|rs|go|sh|toml|ini|svg|sql|log|gradle|properties)$/i;
+function status(s){$('status').textContent=s}function closeNav(){$('sidebar').classList.remove('open');$('scrim').classList.remove('on')}
+function url(path){return 'https://api.github.com'+path}function enc(s){return encodeURIComponent(s)}
+async function api(path,accept){const headers={'Accept':accept||'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};if(state.token)headers.Authorization='Bearer '+state.token;const r=await fetch(url(path),{headers,cache:'no-store'});if(!r.ok){let msg='HTTP '+r.status;try{msg=(await r.json()).message||msg}catch{}throw Error(msg+(r.status===403?' (check permissions or API rate limit)':''))}return r}
+async function json(path){return(await api(path)).json()}
+function pathPart(s){return s.split('/').map(enc).join('/')}
+function blobUrl(blob,kind='preview'){const u=URL.createObjectURL(blob);(kind==='thumb'?state.thumbUrls:state.previewUrls).add(u);return u}
+function clearUrls(kind){const set=kind==='thumb'?state.thumbUrls:state.previewUrls;for(const u of set)URL.revokeObjectURL(u);set.clear()}
+function clearObjects(){clearUrls('thumb');clearUrls('preview')}
+function withMediaType(blob,name){const ext=name.split('.').at(-1).toLowerCase();const mime={svg:'image/svg+xml',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',avif:'image/avif',bmp:'image/bmp',pdf:'application/pdf',mp4:'video/mp4',webm:'video/webm',mp3:'audio/mpeg',m4a:'audio/mp4',wav:'audio/wav',ogg:'audio/ogg'}[ext];return mime?new Blob([blob],{type:mime}):blob}
+function entryUrl(item){const p=pathPart(item.path);return '/repos/'+state.repo+'/contents/'+p+'?ref='+enc(state.branch)}
+async function fetchBlob(item){const r=await api(entryUrl(item),'application/vnd.github.raw+json');return withMediaType(await r.blob(),item.name)}
+function icon(item){return item.type==='dir'?'📁':imageRx.test(item.name)?'◈':/\.pdf$/i.test(item.name)?'▤':textRx.test(item.name)?'≡':'◇'}
+function formatSize(n){return n==null?'':n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB'}
+function elem(tag,cls,text){let el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=text;return el}
+function crumb(){const b=$('breadcrumbs');b.replaceChildren();const parts=state.path.split('/').filter(Boolean);const root=elem('button','',state.repo+' @ '+state.branch);root.onclick=()=>navigate('');b.append(root);parts.forEach((p,i)=>{b.append(document.createTextNode(' / '));let x=elem('button','',p);x.onclick=()=>navigate(parts.slice(0,i+1).join('/'));b.append(x)})}
+function treeAdd(path){const parts=path.split('/');for(let i=1;i<=parts.length;i++)state.tree.add(parts.slice(0,i).join('/'))}
+function expandAncestors(path){const parts=path.split('/').filter(Boolean);for(let i=1;i<=parts.length;i++)state.expanded.add(parts.slice(0,i).join('/'))}
+function paintTree(){
+ const host=$('tree');host.replaceChildren();const childMap=new Map();
+ for(const p of state.tree){if(!p)continue;const parent=p.includes('/')?p.slice(0,p.lastIndexOf('/')):'';if(!childMap.has(parent))childMap.set(parent,[]);childMap.get(parent).push(p)}
+ for(const children of childMap.values())children.sort((a,b)=>a.localeCompare(b));
+ function draw(parent,depth){for(const p of childMap.get(parent)||[]){
+  const row=elem('div','tree-row');row.style.paddingLeft=Math.min(depth,9)*9+'px';
+  const hasChildren=childMap.has(p),open=state.expanded.has(p);
+  const toggle=elem('button','branch-toggle',hasChildren?(open?'▾':'▸'):'·');toggle.disabled=!hasChildren;toggle.setAttribute('aria-label',(open?'Collapse ':'Expand ')+p);toggle.setAttribute('aria-expanded',String(open));toggle.onclick=()=>{if(open)state.expanded.delete(p);else state.expanded.add(p);paintTree()};
+  const link=elem('button','folder-link','📁 '+p.split('/').at(-1));link.title=p;link.setAttribute('aria-current',p===state.path?'page':'false');link.onclick=()=>navigate(p);
+  row.append(toggle,link);host.append(row);if(open)draw(p,depth+1);
+ }}
+ draw('',0);if(!state.tree.size)host.append(elem('div','hint','Folders appear here as you browse.'));
+}
+async function indexTree(repo,branch,request){
+ try{
+  const result=await json('/repos/'+repo+'/git/trees/'+enc(branch)+'?recursive=1');
+  if(request!==state.repoRequest||repo!==state.repo||branch!==state.branch)return;
+  state.indexEntries=(result.tree||[]).filter(x=>x.type==='blob').map(x=>({type:'file',path:x.path,name:x.path.split('/').at(-1),size:x.size}));
+  state.indexTruncated=Boolean(result.truncated);state.indexReady=true;state.indexError=false;
+  for(const entry of result.tree||[])if(entry.type==='tree')treeAdd(entry.path);
+  paintTree();if($('scope').value!=='folder')paint();
+  if(result.truncated)status('Repository tree index truncated by GitHub. Search results may be incomplete.');
+ }catch(e){if(request===state.repoRequest){state.indexReady=false;state.indexError=true;if($('scope').value!=='folder')paint();status('Folder indexing unavailable: '+e.message+' · Direct browsing still works.')}}
+}
+async function navigate(path){
+ const seq=++state.seq;state.path=path;expandAncestors(path);clearPreview();
+ updateHash();
+ crumb();closeNav();status('Loading '+(path||'repository root')+'…');$('items').replaceChildren();
+ try{
+  const key=state.repo+'@'+state.branch+'/'+path;let data=state.cache.get(key);
+  if(!data){data=await json('/repos/'+state.repo+'/contents/'+pathPart(path)+'?ref='+enc(state.branch));
+   if(!Array.isArray(data))throw Error('This is a file, not a directory.');state.cache.set(key,data)}
+  if(seq!==state.seq)return;
+  state.items=[...data].sort((a,b)=>(a.type==='dir'?0:1)-(b.type==='dir'?0:1)||a.name.localeCompare(b.name));
+  state.items.filter(x=>x.type==='dir').forEach(x=>treeAdd(x.path));
+  paintTree();state.limit=80;paint();
+  status(state.items.length+' items · '+(state.path||'/')+(state.items.length>=1000?' · GitHub may truncate large directories':''));
+ }catch(e){if(seq!==state.seq)return;status('Cannot open: '+e.message);$('items').append(elem('div','empty','Check repository name, branch, permissions, or API limit.'))}
+}
+function updateHash(filePath=''){const base='#'+state.repo.split('/').map(enc).join('/')+'/'+enc(state.branch)+'/'+state.path.split('/').map(enc).join('/');history.replaceState(null,'',base+(filePath?'?file='+enc(filePath):''))}
+function currentMatches(){
+ const query=$('filter').value.trim().toLowerCase(),scope=$('scope').value;
+ if(scope==='folder')return state.items.filter(x=>x.name.toLowerCase().includes(query));
+ if(!state.indexReady){if(state.indexError)return scope==='images'?state.items.filter(x=>x.type==='file'&&imageRx.test(x.name)&&x.name.toLowerCase().includes(query)):state.items.filter(x=>x.name.toLowerCase().includes(query));return null}
+ if(scope==='repo')return query?state.indexEntries.filter(x=>x.path.toLowerCase().includes(query)): [];
+ const prefix=state.path?state.path+'/':'';
+ return state.indexEntries.filter(x=>x.path.startsWith(prefix)&&imageRx.test(x.name)&&x.path.toLowerCase().includes(query));
+}
+function paint(more=false){
+ const host=$('items');if(!more)state.renderEpoch++;const epoch=state.renderEpoch;
+ if(!more){if(state.thumbObserver){state.thumbObserver.disconnect();state.thumbObserver=null}
+  thumbQueue.length=0;clearUrls('thumb');host.className='items '+state.mode;host.replaceChildren();
+ }else{host.querySelector('.more')?.remove()}
+ const matching=currentMatches(),scope=$('scope').value;
+ if(matching===null){host.append(elem('div','empty','Building the repository index…'));return}
+ if(scope==='repo'&&!$('filter').value.trim()){host.append(elem('div','empty','Type a filename or path to search the repository.'));return}
+ const previous=more?state.visibleItems.length:0;state.visibleItems=matching.slice(0,state.limit);
+ if(!more&&typeof IntersectionObserver!=='undefined'&&state.mode==='grid'){
+  state.thumbObserver=new IntersectionObserver(entries=>{for(const e of entries){if(e.isIntersecting){const target=e.target;state.thumbObserver.unobserve(target);const job=target._thumbJob;if(job)loadThumb(job.item,job.thumb,job.glyph,epoch)}}},{rootMargin:'260px'});
+ }
+ for(const item of state.visibleItems.slice(previous)){
+  const tile=elem('button','tile'),thumb=elem('div','thumb'),glyph=elem('span','glyph',icon(item));thumb.append(glyph);
+  tile.append(thumb,elem('span','filename',item.name),elem('span','meta',scope==='folder'?(item.type==='dir'?'Folder':formatSize(item.size)):(item.path+(item.size?' · '+formatSize(item.size):''))));
+  tile.title=item.path;tile.onclick=()=>item.type==='dir'?navigate(item.path):openPreview(item);host.append(tile);
+  if(state.mode==='grid'&&imageRx.test(item.name)&&item.type==='file'){
+   if(state.thumbObserver){thumb._thumbJob={item,thumb,glyph};state.thumbObserver.observe(thumb)}
+   else loadThumb(item,thumb,glyph,epoch);
+  }
+ }
+ if(matching.length>state.limit){
+  const more=elem('button','pill more','Show more ('+(matching.length-state.limit)+' remaining)');
+  more.onclick=()=>{state.limit+=80;paint(true)};host.append(more)
+ }
+ if(!matching.length)host.append(elem('div','empty',scope==='repo'?'No matching files.':'Nothing matches this view.'));
+ status(matching.length+' items matched'+(scope==='folder'?' in folder':' across indexed paths')+(state.indexTruncated?' · index incomplete':'')+(state.indexError?' · index unavailable, limited to folder':'')+(matching.length>state.limit?' · showing first '+state.limit:''));
+}
+const thumbQueue=[];let running=0;
+function loadThumb(item,thumb,glyph,epoch){if(item.size>8e6)return;thumbQueue.push({item,thumb,glyph,repo:state.repo,branch:state.branch,epoch});pump()}
+async function pump(){
+ while(running<3&&thumbQueue.length){
+  const job=thumbQueue.shift();if(job.epoch!==state.renderEpoch||job.repo!==state.repo||job.branch!==state.branch||!job.thumb.isConnected)continue;
+  running++;(async()=>{try{const blob=await fetchBlob(job.item);
+   if(job.epoch!==state.renderEpoch||!job.thumb.isConnected)return;
+   const img=elem('img');img.loading='lazy';img.alt='';img.src=blobUrl(blob,'thumb');job.thumb.replaceChildren(img);
+  }catch{}finally{running--;pump()}})()
+ }
+}
+function clearPreview(){const wasOpen=state.preview!==null;state.preview=null;state.currentBlob=null;state.compareMode=false;updateCompareAction();$('preview').classList.remove('open');$('scrim').classList.remove('on');$('previewBody').replaceChildren();clearUrls('preview');if(wasOpen&&state.repo&&state.branch)updateHash();if(wasOpen&&state.returnFocus?.isConnected)state.returnFocus.focus();state.returnFocus=null;$('pageHeader').inert=false;$('pageMain').inert=false}
+function compareReady(){return Boolean(state.pinned&&state.preview&&state.currentBlob&&imageRx.test(state.preview.name)&&state.pinned.item.path!==state.preview.path&&state.pinned.repo===state.repo&&state.pinned.branch===state.branch)}
+function updateCompareAction(){
+ const b=$('compareAction'),isImage=Boolean(state.preview&&state.currentBlob&&imageRx.test(state.preview.name));
+ b.hidden=!isImage;if(!isImage)return;
+ b.textContent=state.compareMode?'Single view':!state.pinned?'Pin A':state.pinned.item.path===state.preview.path?'Unpin A':'Compare A/B';
+ b.setAttribute('aria-label',b.textContent);
+}
+function drawComparison(){
+ if(!compareReady())return;clearUrls('preview');state.compareMode=true;
+ const shell=elem('div','compare-shell'),toolbar=elem('div','compare-controls');
+ const side=elem('button','pill'+(state.compareDisplay==='side'?' active':''),'Side by side');
+ const wipe=elem('button','pill'+(state.compareDisplay==='wipe'?' active':''),'Reveal slider');
+ side.setAttribute('aria-pressed',String(state.compareDisplay==='side'));wipe.setAttribute('aria-pressed',String(state.compareDisplay==='wipe'));
+ side.onclick=()=>{state.compareDisplay='side';drawComparison()};
+ wipe.onclick=()=>{state.compareDisplay='wipe';drawComparison()};
+ toolbar.append(side,wipe);shell.append(toolbar);
+ const entries=[{item:state.pinned.item,blob:state.pinned.blob,label:'A · Pinned'},{item:state.preview,blob:state.currentBlob,label:'B · Current'}];
+ if(state.compareDisplay==='side'){
+  const grid=elem('div','compare-grid');
+  for(const entry of entries){
+   const fig=elem('figure','compare-panel'),cap=elem('figcaption','',entry.label+' · '+entry.item.name),img=elem('img');
+   img.alt=entry.item.path;img.src=blobUrl(entry.blob);fig.append(cap,img,elem('span','meta',entry.item.path));grid.append(fig)
+  }shell.append(grid);
+ }else{
+  const stage=elem('div','compare-wipe');stage.style.setProperty('--reveal',state.compareWipe+'%');
+  const a=elem('img'),b=elem('img','after');a.src=blobUrl(entries[0].blob);b.src=blobUrl(entries[1].blob);
+  a.alt='Pinned image: '+entries[0].item.path;b.alt='Current image: '+entries[1].item.path;
+  stage.append(a,b,elem('div','compare-rule'),elem('span','compare-label a','A · '+entries[0].item.name),elem('span','compare-label b','B · '+entries[1].item.name));
+  const slider=elem('input','compare-range');slider.type='range';slider.min='0';slider.max='100';slider.step='1';slider.value=String(state.compareWipe);
+  slider.setAttribute('aria-label','Reveal pinned image A and current image B');slider.setAttribute('aria-valuetext',state.compareWipe+'% image B revealed');
+  slider.oninput=()=>{state.compareWipe=Number(slider.value);stage.style.setProperty('--reveal',state.compareWipe+'%');slider.setAttribute('aria-valuetext',state.compareWipe+'% image B revealed')};
+  shell.append(stage,slider);
+ }
+ shell.append(elem('div','compare-caption','A: '+entries[0].item.path+'   ·   B: '+entries[1].item.path));
+ showContent(shell);updateCompareAction();
+}
+function compareAction(){
+ if(!state.preview||!state.currentBlob||!imageRx.test(state.preview.name))return;
+ if(state.compareMode){state.compareMode=false;clearUrls('preview');const img=elem('img');img.alt=state.preview.name;img.src=blobUrl(state.currentBlob);showContent(img)}
+ else if(!state.pinned){state.pinned={item:state.preview,blob:state.currentBlob,repo:state.repo,branch:state.branch}}
+ else if(state.pinned.item.path===state.preview.path){state.pinned=null}
+ else drawComparison();
+ updateCompareAction();
+}
+function trapPreviewFocus(e){
+ if(!state.preview||e.key!=='Tab')return;
+ const elements=Array.from($('preview').querySelectorAll('button:not([disabled]):not([hidden]),a[href],input:not([disabled]),select:not([disabled]),[tabindex="0"]')).filter(el=>el.getClientRects().length);
+ if(!elements.length){e.preventDefault();$('closePreview').focus();return}
+ const first=elements[0],last=elements.at(-1),active=document.activeElement;
+ if(e.shiftKey&&(active===first||!$('preview').contains(active))){e.preventDefault();last.focus()}
+ else if(!e.shiftKey&&(active===last||!$('preview').contains(active))){e.preventDefault();first.focus()}
+}
+function adjacentPreview(direction){const files=state.visibleItems.filter(x=>x.type!=='dir');const i=files.findIndex(x=>x.path===state.preview?.path);if(i<0||!files.length)return;openPreview(files[(i+direction+files.length)%files.length])}
+function previewButtons(){const files=state.visibleItems.filter(x=>x.type!=='dir');const enabled=files.length>1;$('prevPreview').disabled=!enabled;$('nextPreview').disabled=!enabled}
+function showContent(node){$('previewBody').replaceChildren(node)}
+function simpleMarkdown(src){const div=elem('div');for(const line of src.split(/\r?\n/)){let match=line.match(/^(#{1,4})\s+(.+)/);if(match){div.append(elem('h'+match[1].length,'',match[2]));continue}if(/^>\s?/.test(line)){div.append(elem('blockquote','',line.slice(1).trim()));continue}if(/^[-*]\s+/.test(line)){div.append(elem('p','','• '+line.slice(2)));continue}if(line.trim()===''){div.append(elem('div',''));continue}div.append(elem('p','',line))}return div}
+async function openPreview(item){if(!state.preview)state.returnFocus=document.activeElement;clearUrls('preview');state.preview=item;state.currentBlob=null;state.compareMode=false;previewButtons();updateCompareAction();updateHash(item.path);$('previewTitle').textContent=item.name;$('fileLink').href='https://github.com/'+state.repo+'/blob/'+enc(state.branch)+'/'+pathPart(item.path);$('preview').classList.add('open');$('scrim').classList.add('on');$('pageHeader').inert=true;$('pageMain').inert=true;$('closePreview').focus();const loading=elem('div','message','Loading preview…');showContent(loading);try{if(item.size>20e6){showContent(elem('div','message','Large file. Open it on GitHub to download.'));return}const blob=await fetchBlob(item);if(state.preview!==item)return;state.currentBlob=blob;const lower=item.name.toLowerCase();let node;if(imageRx.test(lower)){node=elem('img');node.alt=item.name;node.src=blobUrl(blob)}else if(/\.pdf$/i.test(lower)){node=elem('iframe');node.title=item.name;node.src=blobUrl(new Blob([blob],{type:'application/pdf'}))}else if(/\.(mp4|webm|ogg)$/i.test(lower)){node=elem('video');node.controls=true;node.src=blobUrl(blob)}else if(/\.(mp3|wav|m4a|flac)$/i.test(lower)){node=elem('audio');node.controls=true;node.src=blobUrl(blob)}else if(textRx.test(lower)||blob.type.startsWith('text/')){const text=await blob.text();node=/\.md$/i.test(lower)?simpleMarkdown(text.slice(0,500000)):elem('pre','',text.slice(0,500000)+(text.length>500000?'\n…preview truncated':''))}else node=elem('div','message','No inline preview for this format. Use the GitHub link.');showContent(node);updateCompareAction()}catch(e){if(state.preview===item)showContent(elem('div','message','Preview unavailable: '+e.message))}}
+async function openRepo(targetPath=''){
+ const repo=$('repo').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\/$/,'');
+ if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){status('Enter owner/repository.');return}
+ const request=++state.repoRequest;state.repo=repo;state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;
+ state.cache.clear();state.tree.clear();state.expanded.clear();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
+ clearObjects();clearPreview();++state.seq;status('Connecting to '+repo+'…');
+ try{
+  const info=await json('/repos/'+repo);if(request!==state.repoRequest)return;
+  const branch=$('branch').value.trim()||info.default_branch;state.branch=branch;
+  $('branch').placeholder=info.default_branch;$('githubLink').href='https://github.com/'+repo;
+  indexTree(repo,branch,request);await navigate(targetPath);
+ }catch(e){if(request===state.repoRequest)status('Cannot open repository: '+e.message)}
+}
+function resetSession(){
+ ++state.repoRequest;++state.seq;state.token='';state.repo='';state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;state.cache.clear();state.items=[];state.visibleItems=[];
+ state.tree.clear();state.expanded.clear();state.indexEntries=[];state.indexReady=false;state.indexError=false;state.indexTruncated=false;
+ state.renderEpoch++;if(state.thumbObserver){state.thumbObserver.disconnect();state.thumbObserver=null}thumbQueue.length=0;
+ clearPreview();clearObjects();$('token').value='';$('branch').value='';
+ $('repoSelect').replaceChildren(new Option('Enter a repo below',''));$('tree').replaceChildren();$('items').replaceChildren();
+ $('breadcrumbs').textContent='No repository selected';$('githubLink').href='https://github.com';history.replaceState(null,'',location.pathname+location.search);
+}
+async function connect(){
+ const supplied=$('token').value.trim();$('token').value='';
+ if(supplied&&supplied!==state.token){resetSession();state.token=supplied}
+ if(!state.token){status('Enter a fine-grained read-only token to discover private repos, or browse public repos without connecting.');return}
+ state.cache.clear();status('Fetching accessible repositories…');
+ const request=state.repoRequest;let list=[];
+ try{for(let page=1;page<=5;page++){
+  const batch=await json('/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member&page='+page);
+  if(request!==state.repoRequest)return;list.push(...batch);if(batch.length<100)break
+ }
+ const select=$('repoSelect');select.replaceChildren(new Option('Choose repository…',''));
+ for(const r of list)select.append(new Option(r.full_name+(r.private?' 🔒':''),r.full_name));
+ status(list.length+' accessible repositories found. Token remains only in tab memory.');
+ }catch(e){if(request===state.repoRequest)status('Repository list unavailable: '+e.message+' · Public repos can be entered manually.')}
+}
+async function copyCurrentLink(){try{await navigator.clipboard.writeText(location.href);status('Shareable link copied. Credentials are never included.')}catch{status('Clipboard unavailable. Copy this page URL from the address bar.')}}
+$('openRepo').onclick=()=>openRepo();$('disconnect').onclick=()=>{resetSession();status('Credentials and private browsing state cleared from this tab.')};$('copyFolder').onclick=copyCurrentLink;$('copyFile').onclick=copyCurrentLink;$('compareAction').onclick=compareAction;$('connect').onclick=connect;$('repoSelect').onchange=()=>{if($('repoSelect').value){$('repo').value=$('repoSelect').value;$('branch').value='';openRepo()}};
+$('filter').oninput=()=>{state.limit=80;paint()};$('scope').onchange=()=>{state.limit=80;paint()};$('prevPreview').onclick=()=>adjacentPreview(-1);$('nextPreview').onclick=()=>adjacentPreview(1);$('back').onclick=()=>navigate(state.path.split('/').slice(0,-1).join('/'));$('gridBtn').onclick=()=>{state.mode='grid';$('gridBtn').classList.add('active');$('listBtn').classList.remove('active');paint()};$('listBtn').onclick=()=>{state.mode='list';$('listBtn').classList.add('active');$('gridBtn').classList.remove('active');paint()};
+$('theme').onclick=()=>{document.body.classList.toggle('light');$('theme').textContent=document.body.classList.contains('light')?'☾':'☀︎';try{localStorage.setItem('expository-theme',document.body.classList.contains('light')?'light':'dark')}catch{}};
+try{if(localStorage.getItem('expository-theme')==='light')$('theme').click()}catch{}
+$('navToggle').onclick=()=>{$('sidebar').classList.add('open');$('scrim').classList.add('on')};$('closePreview').onclick=clearPreview;$('scrim').onclick=()=>{clearPreview();closeNav()};
+document.addEventListener('keydown',e=>{
+ if(e.key==='Escape'){clearPreview();closeNav();return}
+ if(state.preview){if(e.key==='Tab'){trapPreviewFocus(e);return}
+  if(!['INPUT','TEXTAREA','SELECT'].includes(e.target?.tagName)){if(e.key==='ArrowRight')adjacentPreview(1);if(e.key==='ArrowLeft')adjacentPreview(-1)}
+ }
+});
+const match=location.hash.slice(1).match(/^([^/]+\/[^/]+)\/([^/]+)\/(.*)$/);
+if(match){try{
+ $('repo').value=decodeURIComponent(match[1]);$('branch').value=decodeURIComponent(match[2]);
+ const [encodedPath,encodedFile]=match[3].split('?file='),p=encodedPath.split('/').map(decodeURIComponent).join('/');
+ const file=encodedFile?decodeURIComponent(encodedFile):'';
+ openRepo(p).then(()=>{if(file&&state.repo&&state.branch){const item=state.items.find(x=>x.path===file)||state.indexEntries.find(x=>x.path===file)||{name:file.split('/').at(-1),path:file,type:'file'};openPreview(item)}});
+}catch{openRepo()}}else openRepo();
+})();
+</script>
+</body></html>
