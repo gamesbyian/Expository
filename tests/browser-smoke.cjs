@@ -287,6 +287,7 @@ async function main(){
   assert.equal(await evaluate("document.querySelectorAll('#storyView .story-event').length"),1,'filter to releases');
   await evaluate("document.querySelector('.story-controls button:nth-child(4)').click()");
   assert.equal(await evaluate("document.querySelectorAll('#storyView .story-event').length"),2,'filter includes older actually merged PR');
+  if(process.env.EXPOSITORY_ATLAS==='1'){await evaluate("window.scrollTo(0,0)");await screenshot('expository-older-prs-393.png')}
   await evaluate("document.querySelector('.story-controls button:nth-child(3)').click()");
   assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'Story Mode no horizontal overflow');
   await screenshot('expository-story-360.png');
