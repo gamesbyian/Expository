@@ -1,5 +1,7 @@
 # Expository
 
+The **Sizes** view turns the already loaded Git blob index into an interactive file-size treemap with folder drill-down and an accessible list. Truncated tree indexes are marked as partial; no extra file scan is performed.
+
 ### Explore the story of your repository.
 
 A mobile-first, dark-first visual explorer for GitHub repositories, with just enough rainbow to make a directory listing feel alive.

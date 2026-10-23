@@ -30,7 +30,7 @@ Ratings describe *general Expository relevance* (10 is highest) rather than impl
 | 8 | Activity dashboard | GitHub, GitLens | Public/restricted commit and PR APIs, bounded counts | Wave 3 |
 | 8 | Story Mode: project evolution | GitLens, GitHub | Dated commits/release/merged-PR milestones, 50 commits per manual page to 200, undated tags; limited recent closed-PR sample and no exhaustive history | Wave 3 partial |
 | 7 | Slideshow | FolderFrame | Browser-local selected collection, accessible pause and interval | Wave 3 |
-| 7 | File-size treemap | GitLens | Indexed git blob sizes; label when index is truncated | Wave 3 |
+| 7 | File-size treemap | GitLens | Opt-in treemap groups indexed blob sizes by immediate file/folder; largest 23 + Other, drill-down, accessible list and explicit truncated-index disclosure | Wave 3 initial |
 | 7 | Change-activity heatmap | GitLens | Git-backed per-path history, clear sampling limitations | Wave 3 |
 
 ### Optional adapters (never required)

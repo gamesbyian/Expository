@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl
  );
@@ -512,4 +512,63 @@ test('a stale branch list cannot display after a new repository is selected',asy
  const {app,get}=boot(fetcher);app.state.repo='o/private';app.state.branch='main';app.state.repoRequest=1;
  const pending=app.loadBranches();app.state.repoRequest++;app.state.repo='o/public';release();await pending;
  assert.notEqual(get('branchPicker').hidden,false);
+});
+
+test('file-size treemap aggregates direct children without fetching other files',()=>{
+ const {app}=boot();const entries=[
+  {type:'file',path:'docs/README.md',size:100},
+  {type:'file',path:'docs/tutorial/intro.md',size:200},
+  {type:'file',path:'src/main.ts',size:500},
+  {type:'file',path:'src/utils.ts',size:400},
+  {type:'file',path:'LICENSE',size:50},
+  {type:'tree',path:'src',size:100000},
+ ];
+ const root=app.sizeGroups(entries,'');
+ assert.equal(root.totalFiles,5);
+ assert.equal(root.totalBytes,1250);
+ assert.deepEqual(root.groups.map(x=>[x.name,x.bytes,x.files]),[['src',900,2],['docs',300,2],['LICENSE',50,1]]);
+ assert.deepEqual(app.sizeGroups(entries,'docs').groups.map(x=>[x.name,x.bytes]),[['tutorial',200],['README.md',100]]);
+});
+test('treemap layout tiles do not overlap or exceed normalized area',()=>{
+ const {app}=boot();const groups=[{weight:70,name:'A'},{weight:20,name:'B'},{weight:10,name:'C'}];
+ const rects=app.sizeRects(groups,100,60);
+ assert.equal(rects.length,3);
+ const total=rects.reduce((sum,x)=>sum+x.w*x.h,0);
+ assert.ok(Math.abs(total-6000)<0.0001);
+ for(const r of rects)assert.ok(r.w>=0&&r.h>=0&&r.x>=0&&r.y>=0&&r.x+r.w<=100.000001&&r.y+r.h<=60.000001);
+ for(let a=0;a<rects.length;a++)for(let b=a+1;b<rects.length;b++){
+  const x=Math.max(0,Math.min(rects[a].x+rects[a].w,rects[b].x+rects[b].w)-Math.max(rects[a].x,rects[b].x));
+  const y=Math.max(0,Math.min(rects[a].y+rects[a].h,rects[b].y+rects[b].h)-Math.max(rects[a].y,rects[b].y));
+  assert.ok(x*y<0.000001,'non-overlapping treemap rectangles');
+ }
+});
+test('many size groups are bounded and aggregated, with honest zero-byte sizes',()=>{
+ const {app}=boot();
+ const entries=Array.from({length:100},(_,i)=>({type:'file',path:'f'+i+'.svg',size:i===0?0:i}));
+ const stats=app.sizeGroups(entries,'',12);
+ assert.equal(stats.groups.length,12);assert.equal(stats.groups.at(-1).type,'other');
+ assert.equal(stats.totalFiles,100);assert.equal(stats.zeroSize,1);
+ assert.equal(stats.totalBytes,4950);
+ assert.ok(stats.omittedGroups>0);
+ const unsafe=app.sizeGroups([{type:'file',path:'bad/<script>.txt',size:40}],''),result=unsafe.groups[0];
+ assert.equal(result.name,'bad');assert.equal(result.type,'dir');
+});
+test('size view needs existing index and remains in-memory across toggles',()=>{
+ const {app,get}=boot();app.state.repo='gamesbyian/Expository';app.state.branch='main';app.state.path='';app.state.indexReady=true;
+ app.state.indexEntries=[{type:'file',name:'index.html',path:'index.html',size:900},{type:'file',name:'config.json',path:'docs/config.json',size:100}];
+ app.toggleSizeMap();
+ assert.equal(app.state.sizeOpen,true);
+ assert.equal(get('items').hidden,true);
+ assert.equal(get('sizeView').hidden,false);
+ assert.ok(get('sizeView').children.some(x=>x.className==='size-map'));
+ assert.ok(get('sizeView').children.some(x=>x.className==='size-list'));
+ app.toggleSizeMap();assert.equal(app.state.sizeOpen,false);assert.equal(get('items').hidden,false);
+ app.state.indexReady=false;app.state.indexError=true;app.toggleSizeMap();
+ assert.ok(get('sizeView').children.length===1,'error view contains only explicit coverage message');
+});
+test('truncated index labels treemap sampled coverage rather than complete totals',()=>{
+ const {app,get}=boot();app.state.repo='gamesbyian/Private';app.state.branch='main';app.state.indexReady=true;app.state.indexTruncated=true;
+ app.state.indexEntries=[{type:'file',name:'file.txt',path:'file.txt',size:300}];
+ app.renderSizeMap();
+ assert.match(get('sizeView').children[0].children[1].textContent,/truncated tree/i);
 });
