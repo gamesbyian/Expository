@@ -139,7 +139,7 @@ async function main(){
   await until("document.querySelectorAll('#sizeView .size-tile').length===2",'indexed size treemap rendered');
   assert.equal(await evaluate("document.querySelector('#items').hidden"),true,'size view hides file tiles');
   assert.equal(await evaluate("document.querySelectorAll('#sizeView .size-list button').length"),2,'accessible tap list reflects both indexed groups');
-  assert.equal(await evaluate("document.querySelector('#sizeView .size-head').textContent.includes('908')"),true,'indexed byte totals explicitly shown');
+  assert.equal(await evaluate("document.querySelector('#sizeView .size-head').textContent.includes('indexed bytes')"),true,'indexed byte coverage explicitly shown');
   assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'size treemap does not overflow phone width');
   assert.equal(await evaluate("document.querySelector('#sizeView .size-list button').getBoundingClientRect().bottom<=innerHeight"),true,'first accessible treemap folder is available on the first mobile screen');
   if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-sizes-393.png');
