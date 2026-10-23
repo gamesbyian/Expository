@@ -33,7 +33,7 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 .code-view{display:block;max-width:100%;overflow:auto;padding:8px 0!important;white-space:pre!important;overflow-wrap:normal!important;line-height:1.6;font-size:12px!important}.code-line{display:block;min-height:1.5em;padding-right:10px}.code-line:hover{background:#ffffff0a}.line-num{display:inline-block;user-select:none;color:#737c94;text-align:right;width:3.4rem;padding:0 12px 0 7px;border-right:1px solid var(--stroke);margin-right:13px;position:sticky;left:0;background:var(--panel2)}.tok-comment{color:#829093}.tok-string{color:#a7d987}.tok-num{color:#dbaa76}.tok-keyword{color:#bda0ee}.tok-type{color:#7ac8e7}.code-toolbar{display:flex;gap:8px;flex-wrap:wrap}.code-toolbar{align-items:center;margin-bottom:8px}.code-toolbar .code-find{min-height:44px;width:min(100%,190px);flex:1 1 140px;background:var(--panel2);color:var(--text);border:1px solid var(--stroke);border-radius:8px;padding:9px}.code-toolbar .code-line-number{min-height:44px;width:75px;background:var(--panel2);color:var(--text);border:1px solid var(--stroke);border-radius:8px;padding:9px}.code-toolbar button{min-height:44px;padding:8px 11px}.code-line.code-find-hit{background:#3c506b55}.code-line.code-find-current{background:#3c7a9a75;outline:1px solid var(--accent);outline-offset:-1px}.code-search-info{flex:1 1 100%;font-size:11px}.outline-panel{margin:8px 0;border:1px solid var(--stroke);border-radius:10px;padding:7px 9px;background:var(--panel2)}.outline-panel summary{cursor:pointer;min-height:38px;padding:8px;color:var(--accent);font-size:12px;font-weight:700}.outline-list{display:flex;flex-wrap:wrap;gap:7px;max-height:210px;overflow:auto;padding:6px 0}.outline-list .pill{min-height:44px;font-size:12px;max-width:100%;overflow-wrap:anywhere;text-align:left}.search-hit{display:block;text-align:left;border:1px solid var(--stroke);border-radius:10px;background:var(--panel2);padding:10px;color:var(--text);width:100%;overflow-wrap:anywhere}.search-hit small{display:block;color:var(--dim)}#searchResults{padding:0 14px 14px;display:grid;gap:7px}#favorites button{width:100%;text-align:left;overflow-wrap:anywhere}
 @media(max-width:760px){.refine{padding:9px}.refine .field{flex:1 1 105px}.refine label{flex:1 1 auto}.refine input[type=range]{flex:1;min-width:80px}.preview-head{gap:5px}.preview-head .pill{font-size:11px}.preview-body{padding:10px}}
 .inspect-tools{display:flex;gap:7px;flex-wrap:wrap;padding:7px 12px;border-bottom:1px solid var(--stroke)}.inspect-tools[hidden]{display:none}.inspect-tools .pill{font-size:12px;padding:6px 10px;min-height:40px}
-.image-viewer{display:flex;flex-direction:column;gap:8px;min-width:0}.image-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.image-actions .pill{padding:7px 12px}.image-stage{overflow:auto;max-height:62dvh;min-height:140px;background:repeating-conic-gradient(#242936 0% 25%,#1b202a 0% 50%) 50%/18px 18px;border:1px solid var(--stroke);border-radius:10px;overscroll-behavior:contain}.image-stage img{display:block;max-width:none!important;max-height:none!important;object-fit:contain;align-self:auto!important;height:auto}
+.image-viewer{display:flex;flex-direction:column;gap:8px;min-width:0}.image-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.image-actions .pill{padding:7px 12px}.image-stage{touch-action:pan-x pan-y;overflow:auto;max-height:62dvh;min-height:140px;background:repeating-conic-gradient(#242936 0% 25%,#1b202a 0% 50%) 50%/18px 18px;border:1px solid var(--stroke);border-radius:10px;overscroll-behavior:contain}.image-stage img{display:block;max-width:none!important;max-height:none!important;object-fit:contain;align-self:auto!important;height:auto}
 .json-tree{width:100%;max-width:100%;font:12px/1.5 ui-monospace,monospace;overflow-wrap:anywhere}.json-tree details{padding:4px 0 4px 14px;border-left:1px solid var(--stroke)}.json-tree summary{cursor:pointer;min-height:28px;color:var(--accent)}.json-tree .atom{padding:4px 0}.history-list{display:grid;gap:9px}.history-list a{display:block;border:1px solid var(--stroke);border-radius:11px;padding:10px;text-decoration:none;color:var(--text)}.history-list a:hover{border-color:var(--accent)}.history-list small{display:block;color:var(--dim)}
 [hidden]{display:none!important}.story-view{padding:14px;display:grid;gap:11px}.story-head{padding:12px;border:1px solid var(--stroke);background:var(--panel2);border-radius:13px}.story-head h2{margin:0;font-size:19px}.story-controls{display:flex;gap:8px;flex-wrap:wrap}.story-stream{border-left:2px solid var(--stroke);margin-left:12px;padding-left:14px;display:grid;gap:10px}.story-event{border:1px solid var(--stroke);border-radius:11px;background:var(--panel2);padding:11px;display:grid;gap:4px;position:relative;text-decoration:none;color:var(--text)}.story-event::before{content:'';position:absolute;top:15px;left:-21px;width:10px;height:10px;border-radius:50%;background:var(--accent)}.story-event strong{overflow-wrap:anywhere}.story-event small{color:var(--dim);font-size:11px}.story-event:hover{border-color:var(--accent)}.story-group{font-weight:750;font-size:12px;color:var(--dim);margin-top:6px}.story-tags{display:flex;gap:7px;flex-wrap:wrap}.story-tags a{color:var(--accent);background:var(--panel2);border-radius:9px;padding:7px;text-decoration:none;font-size:12px}.story-tags a:hover{text-decoration:underline}.story-notice{font-size:12px;color:var(--dim)}
 .diff-canvas{display:block;width:100%;max-height:55dvh;height:auto;object-fit:contain;border:1px solid var(--stroke);border-radius:12px;background:#151921}.diff-summary{font-size:13px;color:var(--dim);overflow-wrap:anywhere}.diff-summary strong{color:var(--text)}
@@ -556,16 +556,42 @@ async function openContactSheet(){
  }}
  await Promise.all([worker(),worker(),worker()]);
 }
+function boundedZoom(value){return Math.max(1,Math.min(4,Math.round(value*100)/100))}
 function imageViewer(blob,item){
  state.zoom=1;const wrap=elem('div','image-viewer'),actions=elem('div','image-actions'),stage=elem('div','image-stage'),img=elem('img');
  img.alt=item.name;img.src=blobUrl(blob);img.style.width='100%';stage.append(img);
  const minus=elem('button','pill','−'),reset=elem('button','pill','100%'),plus=elem('button','pill','+');
  minus.setAttribute('aria-label','Zoom out image');plus.setAttribute('aria-label','Zoom in image');reset.setAttribute('aria-label','Reset image zoom');
- const update=()=>{img.style.width=Math.round(state.zoom*100)+'%';reset.textContent=Math.round(state.zoom*100)+'%';minus.disabled=state.zoom<=1;plus.disabled=state.zoom>=4};
- minus.onclick=()=>{state.zoom=Math.max(1,Math.round((state.zoom-.25)*100)/100);update()};
- plus.onclick=()=>{state.zoom=Math.min(4,Math.round((state.zoom+.25)*100)/100);update()};
+ const update=()=>{img.style.width=Math.round(state.zoom*100)+'%';reset.textContent=Math.round(state.zoom*100)+'%';minus.disabled=state.zoom<=1;plus.disabled=state.zoom>=4;stage.style.overscrollBehavior=state.zoom>1?'contain':'auto'};
+ minus.onclick=()=>{state.zoom=boundedZoom(state.zoom-.25);update()};
+ plus.onclick=()=>{state.zoom=boundedZoom(state.zoom+.25);update()};
  reset.onclick=()=>{state.zoom=1;update();stage.scrollLeft=0;stage.scrollTop=0};
- actions.append(minus,reset,plus,elem('span','hint','Drag or scroll to pan a zoomed image'));update();wrap.append(actions,stage);return wrap;
+ const middle=touches=>({x:(touches[0].clientX+touches[1].clientX)/2,y:(touches[0].clientY+touches[1].clientY)/2});
+ const distance=touches=>Math.hypot(touches[0].clientX-touches[1].clientX,touches[0].clientY-touches[1].clientY);
+ let gesture=null,pan=null;
+ stage.ontouchstart=e=>{
+  if(e.touches.length===2){gesture={distance:Math.max(1,distance(e.touches)),zoom:state.zoom};pan=null;e.preventDefault()}
+  else if(e.touches.length===1){pan={x:e.touches[0].clientX,y:e.touches[0].clientY};gesture=null}
+ };
+ stage.ontouchmove=e=>{
+  if(e.touches.length===2){
+   if(!gesture)gesture={distance:Math.max(1,distance(e.touches)),zoom:state.zoom};
+   const center=middle(e.touches),rect=stage.getBoundingClientRect(),x=center.x-rect.left,y=center.y-rect.top;
+   const prior=state.zoom,anchorX=(stage.scrollLeft+x)/prior,anchorY=(stage.scrollTop+y)/prior;
+   state.zoom=boundedZoom(gesture.zoom*distance(e.touches)/gesture.distance);update();
+   stage.scrollLeft=Math.max(0,anchorX*state.zoom-x);stage.scrollTop=Math.max(0,anchorY*state.zoom-y);
+   e.preventDefault()
+  }else if(e.touches.length===1&&state.zoom>1){
+   const t=e.touches[0];if(pan){stage.scrollLeft-=t.clientX-pan.x;stage.scrollTop-=t.clientY-pan.y}
+   pan={x:t.clientX,y:t.clientY};e.preventDefault()
+  }
+ };
+ stage.ontouchend=e=>{
+  if(e.touches.length<2)gesture=null;
+  pan=e.touches.length===1?{x:e.touches[0].clientX,y:e.touches[0].clientY}:null
+ };
+ stage.ontouchcancel=()=>{gesture=null;pan=null};
+ actions.append(minus,reset,plus,elem('span','hint','Pinch with two fingers to zoom; drag to pan when enlarged. Zoom buttons work with keyboard and mouse.'));update();wrap.append(actions,stage);return wrap;
 }
 function jsonViewer(value){
  const root=elem('div','json-tree');let count=0;
