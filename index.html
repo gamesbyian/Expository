@@ -78,13 +78,13 @@ function status(s){$('status').textContent=s}function closeNav(){$('sidebar').cl
 function url(path){return 'https://api.github.com'+path}function enc(s){return encodeURIComponent(s)}
 function abortRequests(){for(const controller of state.activeRequests)controller.abort();state.activeRequests.clear()}
 function safeRepoPath(path){return typeof path==='string'&&path.length<=4096&&!/[\\\x00-\x1f\x7f]/.test(path)&&!path.split('/').some(x=>x==='.'||x==='..'||x==='')||path==='' }
-function githubFailure(response,now=Date.now()){
+function githubFailure(response,now=Date.now(),secondary=false){
  const code=response.status,header=name=>response.headers?.get(name)||'';
  const remaining=header('x-ratelimit-remaining'),retry=header('retry-after'),reset=Number(header('x-ratelimit-reset'));
  const retrySeconds=/^\d+$/.test(retry)?Number(retry):null;
  const retryDate=retrySeconds===null&&retry?Date.parse(retry):NaN;
  const explicit=retrySeconds!==null&&retrySeconds<86400*7?now+retrySeconds*1000:Number.isFinite(retryDate)?retryDate:0;
- const primary=(code===403||code===429)&&remaining==='0',limited=code===429||primary||Boolean(retry&&code===403);
+ const primary=(code===403||code===429)&&remaining==='0',limited=code===429||primary||Boolean(retry&&code===403)||Boolean(secondary&&code===403);
  if(limited){
   const until=Math.max(now+1000,explicit||0,primary&&Number.isFinite(reset)?reset*1000:0,explicit||primary?0:now+60000);
   return {limited:true,until,message:'GitHub API rate limit reached. Retry after '+new Date(until).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'. Expository will not automatically retry.'};
@@ -101,7 +101,13 @@ async function api(path,accept){
  const controller=new AbortController();state.activeRequests.add(controller);
  try{
   const r=await fetch(url(path),{headers,cache:'no-store',signal:controller.signal,redirect:'error'});
-  if(!r.ok){const failure=githubFailure(r);if(failure.limited)state.rateLimitedUntil=failure.until;throw Error(failure.message)}
+  if(!r.ok){
+   let secondary=false;
+   if(r.status===403&&!r.headers?.get('retry-after')&&r.headers?.get('x-ratelimit-remaining')!=='0'){
+    try{const data=await r.json();secondary=/secondary rate limit|abuse detection|rate limit exceeded/i.test(String(data?.message||''))}catch{}
+   }
+   const failure=githubFailure(r,Date.now(),secondary);if(failure.limited)state.rateLimitedUntil=Math.max(state.rateLimitedUntil,failure.until);throw Error(failure.message)
+  }
   return r;
  }finally{state.activeRequests.delete(controller)}
 }
@@ -590,7 +596,7 @@ async function openRepo(targetPath=''){
  const repo=$('repo').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\/$/,'');
  if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){status('Enter owner/repository.');return false}
  if(!safeRepoPath(targetPath)){status('Invalid folder path.');return false}
- abortRequests();state.rateLimitedUntil=0;
+ abortRequests();
  cancelContentScan();stopStory();state.storyData=null;const request=++state.repoRequest;state.repo=repo;state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;
  clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
  clearObjects();clearPreview();++state.seq;status('Connecting to '+repo+'…');
