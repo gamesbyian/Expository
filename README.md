@@ -19,6 +19,7 @@ Expository browses **public repositories without login** and can browse selected
 - Star public repositories for quick switching, without storing private repository names
 - Preview SVGs, photos, plain/safe Markdown, source files, PDFs, and supported media
 - Pin two images for side-by-side comparison, touch-friendly reveal, or a bounded local pixel-difference heatmap
+- Select up to 12 images across repository folders, inspect a contact sheet, and save a PNG locally without uploading private art
 - Zoom images up to 4× and pan through detail
 - Inspect the recent Git history of an individual file
 - Expand JSON as a safe tree or switch to raw source
