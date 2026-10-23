@@ -319,3 +319,35 @@ test('repo switches abort outstanding authenticated API requests',async()=>{
  assert.equal(aborted,true);
  assert.equal(app.state.activeRequests.size,0);
 });
+
+test('code inspector searches displayed lines without treating source as markup',()=>{
+ const {app}=boot();
+ const view=app.sourceViewer('const target = 1;\nconst other = 2;\n// target again','example.js');
+ const bar=view.children[0],search=bar.children[1],prev=bar.children[2],next=bar.children[3],info=bar.children[6],pre=view.children.at(-1);
+ assert.equal(pre.children.length,3);
+ search.value='target';search.oninput();
+ assert.equal(pre.children[0].className,'code-line code-find-hit');
+ assert.equal(pre.children[1].className,'code-line');
+ assert.equal(pre.children[2].className,'code-line code-find-hit');
+ next.onclick();
+ assert.equal(pre.children[0].className,'code-line code-find-hit code-find-current');
+ next.onclick();
+ assert.equal(pre.children[2].className,'code-line code-find-hit code-find-current');
+ prev.onclick();
+ assert.equal(pre.children[0].className,'code-line code-find-hit code-find-current');
+ search.value='<script>';search.oninput();
+ assert.equal(info.textContent,'No matching lines');
+});
+test('go-to-line is bounded and search describes truncated files honestly',()=>{
+ const {app}=boot();
+ const view=app.sourceViewer('one\ntwo\nthree','example.ts');
+ const bar=view.children[0],go=bar.children[4],goButton=bar.children[5],info=bar.children[6],pre=view.children.at(-1);
+ go.value='3';goButton.onclick();
+ assert.equal(info.textContent,'Line 3 of 3');
+ assert.equal(pre.children[2].className,'code-line code-find-current');
+ go.value='400';goButton.onclick();
+ assert.equal(info.textContent,'Enter a line from 1 to 3');
+ const big=app.sourceViewer(Array.from({length:2605},(_,i)=>'line '+i).join('\n'),'large.py');
+ assert.equal(big.children.at(-1).children.length,2600);
+ assert.equal(big.children.at(-2).textContent,'Showing first 2,600 lines. Download the file to inspect later lines.');
+});
