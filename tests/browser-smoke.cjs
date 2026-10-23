@@ -175,6 +175,12 @@ async function main(){
   assert.equal(await evaluate("document.querySelector('.image-stage img').style.width"),'125%','image zoom in');
   await evaluate("document.querySelector('.image-actions button:nth-child(2)').click()");
   assert.equal(await evaluate("document.querySelector('.image-stage img').style.width"),'100%','image zoom reset');
+  await evaluate("(()=>{const stage=document.querySelector('.image-stage');const t=(id,x,y)=>new Touch({identifier:id,target:stage,clientX:x,clientY:y});const send=(type,a,b)=>stage.dispatchEvent(new TouchEvent(type,{touches:[t(1,...a),t(2,...b)],bubbles:true,cancelable:true}));send('touchstart',[120,180],[220,180]);send('touchmove',[80,180],[260,180]);})()");
+  assert.equal(await evaluate("document.querySelector('.image-stage img').style.width"),'180%','two finger pinch zoom updates image');
+  assert.equal(await evaluate("document.querySelector('.image-stage').style.overscrollBehavior"),'contain','zoomed image pans within stage');
+  await evaluate("document.querySelector('.image-actions button:nth-child(2)').click()");
+  assert.equal(await evaluate("document.querySelector('.image-stage').style.overscrollBehavior"),'auto','fitted image permits natural page scroll');
+
   await evaluate("document.querySelector('#fileHistory').click()");
   await until("document.querySelector('.history-list a')?.textContent?.includes('First fixture change')",'file history loaded');
   await evaluate("document.querySelector('#fileHistory').click()");
