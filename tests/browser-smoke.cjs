@@ -143,7 +143,7 @@ async function main(){
   assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'size treemap does not overflow phone width');
   assert.equal(await evaluate("document.querySelector('#sizeView .size-list button').getBoundingClientRect().bottom<=innerHeight"),true,'first accessible treemap folder is available on the first mobile screen');
   if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-sizes-393.png');
-  await evaluate("document.querySelector('#sizeView .size-list button').click()");
+  await evaluate("Array.from(document.querySelectorAll('#sizeView .size-list button')).find(x=>x.textContent.includes('design /')).click()");
   await until("document.querySelector('#breadcrumbs')?.textContent?.includes('design')",'treemap folder drill-down');
   assert.equal(await evaluate("document.querySelector('#sizeView').hidden"),true,'drill-down returns to ordinary files');
   await evaluate("document.querySelector('#sizeToggle').click()");
