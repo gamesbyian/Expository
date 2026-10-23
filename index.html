@@ -36,6 +36,7 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 .json-tree{width:100%;max-width:100%;font:12px/1.5 ui-monospace,monospace;overflow-wrap:anywhere}.json-tree details{padding:4px 0 4px 14px;border-left:1px solid var(--stroke)}.json-tree summary{cursor:pointer;min-height:28px;color:var(--accent)}.json-tree .atom{padding:4px 0}.history-list{display:grid;gap:9px}.history-list a{display:block;border:1px solid var(--stroke);border-radius:11px;padding:10px;text-decoration:none;color:var(--text)}.history-list a:hover{border-color:var(--accent)}.history-list small{display:block;color:var(--dim)}
 [hidden]{display:none!important}.story-view{padding:14px;display:grid;gap:11px}.story-head{padding:12px;border:1px solid var(--stroke);background:var(--panel2);border-radius:13px}.story-head h2{margin:0;font-size:19px}.story-controls{display:flex;gap:8px;flex-wrap:wrap}.story-stream{border-left:2px solid var(--stroke);margin-left:12px;padding-left:14px;display:grid;gap:10px}.story-event{border:1px solid var(--stroke);border-radius:11px;background:var(--panel2);padding:11px;display:grid;gap:4px;position:relative;text-decoration:none;color:var(--text)}.story-event::before{content:'';position:absolute;top:15px;left:-21px;width:10px;height:10px;border-radius:50%;background:var(--accent)}.story-event strong{overflow-wrap:anywhere}.story-event small{color:var(--dim);font-size:11px}.story-event:hover{border-color:var(--accent)}.story-group{font-weight:750;font-size:12px;color:var(--dim);margin-top:6px}.story-tags{display:flex;gap:7px;flex-wrap:wrap}.story-tags a{color:var(--accent);background:var(--panel2);border-radius:9px;padding:7px;text-decoration:none;font-size:12px}.story-tags a:hover{text-decoration:underline}.story-notice{font-size:12px;color:var(--dim)}
 .diff-canvas{display:block;width:100%;max-height:55dvh;height:auto;object-fit:contain;border:1px solid var(--stroke);border-radius:12px;background:#151921}.diff-summary{font-size:13px;color:var(--dim);overflow-wrap:anywhere}.diff-summary strong{color:var(--text)}
+.preview-body .md-link{display:inline;border:0;padding:0;background:transparent;color:var(--accent);text-decoration:underline;font:inherit;cursor:pointer}.preview-body .md-link:focus-visible{outline:2px solid var(--accent)}.data-table-wrap{width:100%;max-width:100%;overflow:auto;border:1px solid var(--stroke);border-radius:10px}.data-table{font:12px/1.4 ui-monospace,monospace;border-collapse:collapse;width:max-content;min-width:100%}.data-table th,.data-table td{border-bottom:1px solid var(--stroke);padding:9px;max-width:260px;overflow-wrap:anywhere;text-align:left}.data-table th{position:sticky;top:0;background:var(--panel2);font-weight:700}.data-table tr:nth-child(even){background:#ffffff08}
 </style>
 </head>
 <body>
@@ -379,14 +380,16 @@ async function renderCurrentFile(){
    $('structuredToggle').hidden=value===undefined;
    $('structuredToggle').textContent=state.structuredOpen?'Raw source':'JSON tree';
    node=state.structuredOpen&&value!==undefined?jsonViewer(value):sourceViewer(text.slice(0,500000),item.name)
-  }else node=/\.md$/i.test(lower)?simpleMarkdown(text.slice(0,500000)):sourceViewer(text.slice(0,500000),item.name);
+  }else if(/\.(csv|tsv)$/i.test(lower)){$('structuredToggle').hidden=false;$('structuredToggle').textContent=state.structuredOpen?'Raw source':'Table';
+   node=state.structuredOpen?tableViewer(text.slice(0,500000),/\.tsv$/i.test(lower)?'\t':','):sourceViewer(text.slice(0,500000),item.name);
+  }else node=/\.(md|markdown)$/i.test(lower)?simpleMarkdown(text.slice(0,500000),item):sourceViewer(text.slice(0,500000),item.name);
  }else node=elem('div','message','No inline preview for this format. Use the GitHub link.');
  showContent(node);updateCompareAction()
 }
 async function toggleStructured(){if(!state.preview||!state.previewText)return;state.structuredOpen=!state.structuredOpen;await renderCurrentFile()}
 async function toggleHistory(){
  if(!state.preview)return;
- if(state.historyOpen){state.historyOpen=false;$('fileHistory').textContent='History';$('structuredToggle').hidden=!/\.json$/i.test(state.preview.name);await renderCurrentFile();return}
+ if(state.historyOpen){state.historyOpen=false;$('fileHistory').textContent='History';$('structuredToggle').hidden=!/\.(json|csv|tsv)$/i.test(state.preview.name);await renderCurrentFile();return}
  const item=state.preview,repo=state.repo,branch=state.branch;
  state.historyOpen=true;$('fileHistory').textContent='Back to file';$('structuredToggle').hidden=true;showContent(elem('div','message','Loading file history…'));
  try{
@@ -404,7 +407,62 @@ function sourceViewer(text,name){const container=elem('div'),bar=elem('div','cod
  const rx=/(\/\/[^\n]*|#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:const|let|var|function|class|return|import|export|default|async|await|if|else|for|while|try|catch|throw|new|def|from|pass|public|private|void|struct|fn|use|true|false|null|None|undefined)\b|\b\d+(?:\.\d+)?\b)/g;
  for(let i=0;i<lines.length;i++){const row=elem('div','code-line'),ln=elem('span','line-num',String(i+1));row.append(ln);let offset=0;for(const hit of lines[i].matchAll(rx)){if(hit.index>offset)row.append(document.createTextNode(lines[i].slice(offset,hit.index)));const x=hit[0],cl=x.startsWith('//')||x.startsWith('#')?'tok-comment':x.startsWith('"')||x.startsWith("'")?'tok-string':/^\d/.test(x)?'tok-num':'tok-keyword';row.append(elem('span',cl,x));offset=hit.index+x.length}row.append(document.createTextNode(lines[i].slice(offset)));pre.append(row)}
  if(text.split('\n').length>2600)container.append(elem('p','hint','Showing first 2,600 lines; download for full file.'));container.append(pre);return container}
-function simpleMarkdown(src){const div=elem('div');for(const line of src.split(/\r?\n/)){let match=line.match(/^(#{1,4})\s+(.+)/);if(match){div.append(elem('h'+match[1].length,'',match[2]));continue}if(/^>\s?/.test(line)){div.append(elem('blockquote','',line.slice(1).trim()));continue}if(/^[-*]\s+/.test(line)){div.append(elem('p','','• '+line.slice(2)));continue}if(line.trim()===''){div.append(elem('div',''));continue}div.append(elem('p','',line))}return div}
+function resolveMarkdownPath(target,sourcePath){
+ if(typeof target!=='string'||target.length>1000||target.startsWith('//'))return null;
+ if(/^https?:\/\//i.test(target)){try{const url=new URL(target);return url.protocol==='https:'||url.protocol==='http:'?{external:url.href}:null}catch{return null}}
+ if(/^[a-z][a-z\d+.-]*:/i.test(target))return null;
+ let decoded;try{decoded=decodeURIComponent(target.split('#')[0])}catch{return null}
+ if(!decoded)return null;
+ const parts=decoded.startsWith('/')?[]:sourcePath.split('/').slice(0,-1);
+ for(const bit of decoded.split('/')){if(bit===''||bit==='.')continue;if(bit==='..'){if(!parts.length)return null;parts.pop()}else if(bit.includes('\\')||bit.includes('\0'))return null;else parts.push(bit)}
+ const path=parts.join('/');return path?{path,dir:decoded.endsWith('/')}:null;
+}
+function markdownInline(parent,text,item){
+ const rx=/\[([^\]]{1,120})\]\(([^\s)]{1,900})\)/g;let position=0;
+ for(const hit of text.matchAll(rx)){
+  if(hit.index>position)parent.append(document.createTextNode(text.slice(position,hit.index)));
+  const dest=resolveMarkdownPath(hit[2],item.path);
+  if(!dest)parent.append(document.createTextNode(hit[0]));
+  else if(dest.external){const a=elem('a','',hit[1]);a.href=dest.external;a.rel='noopener noreferrer';a.target='_blank';parent.append(a)}
+  else{const b=elem('button','md-link',hit[1]);b.title=dest.path;b.onclick=()=>{if(dest.dir||state.tree.has(dest.path)){clearPreview();navigate(dest.path)}else openPreview({name:dest.path.split('/').at(-1),path:dest.path,type:'file'})};parent.append(b)}
+  position=hit.index+hit[0].length;
+ }
+ if(position<text.length)parent.append(document.createTextNode(text.slice(position)));
+}
+function simpleMarkdown(src,item){
+ const div=elem('div');for(const line of src.split(/\r?\n/)){
+  const heading=line.match(/^(#{1,4})\s+(.+)/);let node;
+  if(heading){node=elem('h'+heading[1].length);markdownInline(node,heading[2],item)}
+  else if(/^>\s?/.test(line)){node=elem('blockquote');markdownInline(node,line.slice(1).trim(),item)}
+  else if(/^[-*]\s+/.test(line)){node=elem('p');node.append(document.createTextNode('• '));markdownInline(node,line.slice(2),item)}
+  else if(line.trim()==='')node=elem('div');
+  else{node=elem('p');markdownInline(node,line,item)}
+  div.append(node)
+ }
+ return div
+}
+function parseDelimited(src,delimiter=','){
+ const rows=[];let row=[],cell='',quoted=false;
+ for(let i=0;i<Math.min(src.length,500000)&&rows.length<151;i++){
+  const c=src[i];if(quoted){if(c==='"'&&src[i+1]==='"'){cell+='"';i++}else if(c==='"')quoted=false;else cell+=c}
+  else if(c==='"'&&cell==='')quoted=true;
+  else if(c===delimiter){row.push(cell);cell=''}
+  else if(c==='\n'||c==='\r'){if(c==='\r'&&src[i+1]==='\n')i++;row.push(cell);rows.push(row);row=[];cell=''}
+  else cell+=c
+  if(row.length>40)break
+ }
+ if((cell!==''||row.length)&&rows.length<151){row.push(cell);rows.push(row)}
+ return rows
+}
+function tableViewer(text,delimiter){
+ const rows=parseDelimited(text,delimiter),wrap=elem('div','data-table-wrap');
+ if(!rows.length)return elem('p','hint','No rows found.');
+ const table=elem('table','data-table'),thead=elem('thead'),header=elem('tr');
+ for(const name of rows[0].slice(0,40))header.append(elem('th','',name));thead.append(header);table.append(thead);
+ const tbody=elem('tbody');for(const values of rows.slice(1,151)){const tr=elem('tr');for(const value of values.slice(0,40))tr.append(elem('td','',value));tbody.append(tr)}table.append(tbody);wrap.append(table);
+ const container=elem('div');container.append(elem('p','hint','Showing at most 150 data rows and 40 columns; CSV cells are plain text and formulas never execute.'),wrap);return container
+}
+
 async function openPreview(item){
  if(!state.preview)state.returnFocus=document.activeElement;
  clearUrls('preview');state.preview=item;state.currentBlob=null;state.previewText=null;state.historyOpen=false;state.structuredOpen=false;
