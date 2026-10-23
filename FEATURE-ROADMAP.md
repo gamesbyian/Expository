@@ -13,7 +13,7 @@ Ratings describe *general Expository relevance* (10 is highest) rather than impl
 | Relevance | Feature | Primary inspiration | Implementation slice | Delivery |
 |---:|---|---|---|---|
 | 10 | Repo-wide content search | Sourcegraph, TooToo | Opt-in bounded client scan; clear file/byte caps, cancellation, line snippets | Wave 1 |
-| 10 | Syntax highlighting, line numbers, code outline | Gitako, GitHub | Safe text-node highlighting, first-party dependency-free language patterns | Wave 1 highlighting + lines; outline later |
+| 10 | Syntax highlighting, line numbers, code outline | Gitako, GitHub | Safe line-numbered source previews with in-file search, next/previous match and go-to-line; symbol outline and language accuracy remain | Wave 1 + E04 initial |
 | 10 | Raw downloads/copy | Gitako, TooToo | Fetch through read-only API, copy text and save using local Blob | Wave 1 |
 | 10 | File type/size sort and filters | FolderFrame | Folder-first and indexed-search sorting, extension and type controls | Wave 1 |
 | 10 | Adjustable gallery density | FolderFrame | Touch-sized sizing control, bounded thumbnail sizes | Wave 1 |

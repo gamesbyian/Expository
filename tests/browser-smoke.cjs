@@ -187,6 +187,11 @@ async function main(){
   await until("document.querySelectorAll('#items .tile').length===1",'indexed JSON search');
   await evaluate("document.querySelector('#items .tile').click()");
   await until("document.querySelector('#structuredToggle')?.hidden===false",'JSON structure available');
+  await evaluate("(()=>{const bar=document.querySelector('.code-toolbar');const find=bar.querySelector('.code-find');find.value='status';find.dispatchEvent(new Event('input',{bubbles:true}));bar.querySelectorAll('button')[1].click()})()");
+  assert.equal(await evaluate("Boolean(document.querySelector('.code-line.code-find-current'))"),true,'in-file match highlighted');
+  await evaluate("(()=>{const bar=document.querySelector('.code-toolbar');const go=bar.querySelector('.code-line-number');go.value='1';bar.querySelectorAll('button')[2].click()})()");
+  assert.equal(await evaluate("document.querySelector('.code-search-info').textContent"),'Line 1 of 1','go-to-line works on JSON raw preview');
+
   await evaluate("document.querySelector('#structuredToggle').click()");
   await until("Boolean(document.querySelector('.json-tree details'))",'JSON tree rendered');
   if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-json-360.png');

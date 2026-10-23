@@ -29,7 +29,7 @@ main{max-width:1600px;margin:auto;padding:16px;display:grid;grid-template-column
 body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1b2130;--dim:#566173;--accent:#176596;--shadow:0 18px 48px #161b2733;color-scheme:light}body.light header{background:#fffffff0}body.light .field,body.light .thumb{background:#f7f8fa}body.light .preview-body pre{background:#edf0f5}
 .refine{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 14px;border-bottom:1px solid var(--stroke)}.refine .field{width:auto;min-width:105px;max-width:180px;flex:1;padding:8px;min-height:44px}.refine label{display:flex;align-items:center;gap:7px}.refine input[type=range]{width:100px;accent-color:var(--accent);min-height:38px}.refine .pill{padding:8px 11px}
 .items.grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--tile-min,145px)),1fr))}.items.grid .thumb{height:clamp(92px,calc(var(--tile-min,145px) * .75),240px)}
-.code-view{display:block;max-width:100%;overflow:auto;padding:8px 0!important;white-space:pre!important;overflow-wrap:normal!important;line-height:1.6;font-size:12px!important}.code-line{display:block;min-height:1.5em;padding-right:10px}.code-line:hover{background:#ffffff0a}.line-num{display:inline-block;user-select:none;color:#737c94;text-align:right;width:3.4rem;padding:0 12px 0 7px;border-right:1px solid var(--stroke);margin-right:13px;position:sticky;left:0;background:var(--panel2)}.tok-comment{color:#829093}.tok-string{color:#a7d987}.tok-num{color:#dbaa76}.tok-keyword{color:#bda0ee}.tok-type{color:#7ac8e7}.code-toolbar{display:flex;gap:8px;flex-wrap:wrap}.search-hit{display:block;text-align:left;border:1px solid var(--stroke);border-radius:10px;background:var(--panel2);padding:10px;color:var(--text);width:100%;overflow-wrap:anywhere}.search-hit small{display:block;color:var(--dim)}#searchResults{padding:0 14px 14px;display:grid;gap:7px}#favorites button{width:100%;text-align:left;overflow-wrap:anywhere}
+.code-view{display:block;max-width:100%;overflow:auto;padding:8px 0!important;white-space:pre!important;overflow-wrap:normal!important;line-height:1.6;font-size:12px!important}.code-line{display:block;min-height:1.5em;padding-right:10px}.code-line:hover{background:#ffffff0a}.line-num{display:inline-block;user-select:none;color:#737c94;text-align:right;width:3.4rem;padding:0 12px 0 7px;border-right:1px solid var(--stroke);margin-right:13px;position:sticky;left:0;background:var(--panel2)}.tok-comment{color:#829093}.tok-string{color:#a7d987}.tok-num{color:#dbaa76}.tok-keyword{color:#bda0ee}.tok-type{color:#7ac8e7}.code-toolbar{display:flex;gap:8px;flex-wrap:wrap}.code-toolbar{align-items:center;margin-bottom:8px}.code-toolbar .code-find{min-height:44px;width:min(100%,190px);flex:1 1 140px;background:var(--panel2);color:var(--text);border:1px solid var(--stroke);border-radius:8px;padding:9px}.code-toolbar .code-line-number{min-height:44px;width:75px;background:var(--panel2);color:var(--text);border:1px solid var(--stroke);border-radius:8px;padding:9px}.code-toolbar button{min-height:44px;padding:8px 11px}.code-line.code-find-hit{background:#3c506b55}.code-line.code-find-current{background:#3c7a9a75;outline:1px solid var(--accent);outline-offset:-1px}.code-search-info{flex:1 1 100%;font-size:11px}.search-hit{display:block;text-align:left;border:1px solid var(--stroke);border-radius:10px;background:var(--panel2);padding:10px;color:var(--text);width:100%;overflow-wrap:anywhere}.search-hit small{display:block;color:var(--dim)}#searchResults{padding:0 14px 14px;display:grid;gap:7px}#favorites button{width:100%;text-align:left;overflow-wrap:anywhere}
 @media(max-width:760px){.refine{padding:9px}.refine .field{flex:1 1 105px}.refine label{flex:1 1 auto}.refine input[type=range]{flex:1;min-width:80px}.preview-head{gap:5px}.preview-head .pill{font-size:11px}.preview-body{padding:10px}}
 .inspect-tools{display:flex;gap:7px;flex-wrap:wrap;padding:7px 12px;border-bottom:1px solid var(--stroke)}.inspect-tools[hidden]{display:none}.inspect-tools .pill{font-size:12px;padding:6px 10px;min-height:40px}
 .image-viewer{display:flex;flex-direction:column;gap:8px;min-width:0}.image-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.image-actions .pill{padding:7px 12px}.image-stage{overflow:auto;max-height:62dvh;min-height:140px;background:repeating-conic-gradient(#242936 0% 25%,#1b202a 0% 50%) 50%/18px 18px;border:1px solid var(--stroke);border-radius:10px;overscroll-behavior:contain}.image-stage img{display:block;max-width:none!important;max-height:none!important;object-fit:contain;align-self:auto!important;height:auto}
@@ -513,10 +513,62 @@ async function toggleHistory(){
   showContent(list);
  }catch(e){if(state.historyOpen&&state.preview===item)showContent(elem('p','message','History unavailable: '+e.message))}
 }
-function sourceViewer(text,name){const container=elem('div'),bar=elem('div','code-toolbar'),notice=elem('span','hint',name+' · '+text.split('\n').length+' lines');bar.append(notice);container.append(bar);const pre=elem('pre','code-view');const lines=text.split('\n').slice(0,2600);
+function sourceViewer(text,name){
+ const allLines=text.split('\n'),lines=allLines.slice(0,2600);
+ const container=elem('div'),bar=elem('div','code-toolbar');
+ const notice=elem('span','hint',name+' · '+(lines.length<allLines.length?lines.length+' of '+allLines.length:allLines.length)+' lines');
+ const search=elem('input','code-find');search.type='search';search.placeholder='Find in this file';search.setAttribute('aria-label','Find text in this file');
+ const prev=elem('button','pill','↑ Match'),next=elem('button','pill','↓ Match'),go=elem('input','code-line-number'),goButton=elem('button','pill','Go to line');
+ prev.type=next.type=goButton.type='button';prev.setAttribute('aria-label','Previous matching line');next.setAttribute('aria-label','Next matching line');
+ go.type='number';go.min='1';go.max=String(lines.length);go.placeholder='Line';go.setAttribute('aria-label','Go to source line number');
+ const info=elem('span','hint code-search-info','Find text within the displayed lines.');
+ bar.append(notice,search,prev,next,go,goButton,info);container.append(bar);
+ const pre=elem('pre','code-view'),rows=[];
  const rx=/(\/\/[^\n]*|#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:const|let|var|function|class|return|import|export|default|async|await|if|else|for|while|try|catch|throw|new|def|from|pass|public|private|void|struct|fn|use|true|false|null|None|undefined)\b|\b\d+(?:\.\d+)?\b)/g;
- for(let i=0;i<lines.length;i++){const row=elem('div','code-line'),ln=elem('span','line-num',String(i+1));row.append(ln);let offset=0;for(const hit of lines[i].matchAll(rx)){if(hit.index>offset)row.append(document.createTextNode(lines[i].slice(offset,hit.index)));const x=hit[0],cl=x.startsWith('//')||x.startsWith('#')?'tok-comment':x.startsWith('"')||x.startsWith("'")?'tok-string':/^\d/.test(x)?'tok-num':'tok-keyword';row.append(elem('span',cl,x));offset=hit.index+x.length}row.append(document.createTextNode(lines[i].slice(offset)));pre.append(row)}
- if(text.split('\n').length>2600)container.append(elem('p','hint','Showing first 2,600 lines; download for full file.'));container.append(pre);return container}
+ for(let i=0;i<lines.length;i++){
+  const row=elem('div','code-line'),ln=elem('span','line-num',String(i+1));row.append(ln);
+  let offset=0;
+  for(const hit of lines[i].matchAll(rx)){
+   if(hit.index>offset)row.append(document.createTextNode(lines[i].slice(offset,hit.index)));
+   const x=hit[0],cl=x.startsWith('//')||x.startsWith('#')?'tok-comment':x.startsWith('"')||x.startsWith("'")?'tok-string':/^\d/.test(x)?'tok-num':'tok-keyword';
+   row.append(elem('span',cl,x));offset=hit.index+x.length;
+  }
+  row.append(document.createTextNode(lines[i].slice(offset)));pre.append(row);rows.push(row)
+ }
+ if(lines.length<allLines.length)container.append(elem('p','hint','Showing first 2,600 lines. Download the file to inspect later lines.'));
+ container.append(pre);
+ let matches=[],position=-1,selectedLine=-1;
+ function redraw(){
+  const matchSet=new Set(matches);
+  for(let i=0;i<rows.length;i++)rows[i].className='code-line'+(matchSet.has(i)?' code-find-hit':'')+(i===selectedLine?' code-find-current':'');
+ }
+ function jump(index){
+  if(index<0||index>=rows.length)return;
+  selectedLine=index;redraw();
+  if(typeof rows[index].scrollIntoView==='function')rows[index].scrollIntoView({block:'center',inline:'nearest'});
+ }
+ function report(){
+  const suffix=allLines.length>lines.length?' (displayed portion only)':'';
+  info.textContent=!search.value.trim()?'Find text within the displayed lines.':matches.length?matches.length+' matching lines'+suffix:'No matching lines'+suffix
+ }
+ function find(){
+  const q=search.value.trim().slice(0,160).toLocaleLowerCase();
+  matches=[];position=-1;selectedLine=-1;
+  if(q){for(let i=0;i<lines.length;i++)if(lines[i].toLocaleLowerCase().includes(q))matches.push(i)}
+  redraw();report()
+ }
+ function nextMatch(step){
+  if(!matches.length)return;
+  position=(position+step+matches.length)%matches.length;jump(matches[position]);
+  info.textContent='Match '+(position+1)+' of '+matches.length+' matching lines'+(allLines.length>lines.length?' (displayed portion)':'')
+ }
+ search.oninput=find;
+ search.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();nextMatch(e.shiftKey?-1:1)}};
+ next.onclick=()=>nextMatch(1);prev.onclick=()=>nextMatch(-1);
+ goButton.onclick=()=>{const number=Number(go.value);if(Number.isInteger(number)&&number>=1&&number<=rows.length){position=-1;jump(number-1);info.textContent='Line '+number+' of '+allLines.length}else info.textContent='Enter a line from 1 to '+rows.length};
+ go.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();goButton.click()}};
+ return container
+}
 function resolveMarkdownPath(target,sourcePath){
  if(typeof target!=='string'||target.length>1000||target.startsWith('//'))return null;
  if(/^https?:\/\//i.test(target)){try{const url=new URL(target);return url.protocol==='https:'||url.protocol==='http:'?{external:url.href}:null}catch{return null}}
