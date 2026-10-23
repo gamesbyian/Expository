@@ -31,6 +31,9 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 .items.grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--tile-min,145px)),1fr))}.items.grid .thumb{height:clamp(92px,calc(var(--tile-min,145px) * .75),240px)}
 .code-view{display:block;max-width:100%;overflow:auto;padding:8px 0!important;white-space:pre!important;overflow-wrap:normal!important;line-height:1.6;font-size:12px!important}.code-line{display:block;min-height:1.5em;padding-right:10px}.code-line:hover{background:#ffffff0a}.line-num{display:inline-block;user-select:none;color:#737c94;text-align:right;width:3.4rem;padding:0 12px 0 7px;border-right:1px solid var(--stroke);margin-right:13px;position:sticky;left:0;background:var(--panel2)}.tok-comment{color:#829093}.tok-string{color:#a7d987}.tok-num{color:#dbaa76}.tok-keyword{color:#bda0ee}.tok-type{color:#7ac8e7}.code-toolbar{display:flex;gap:8px;flex-wrap:wrap}.search-hit{display:block;text-align:left;border:1px solid var(--stroke);border-radius:10px;background:var(--panel2);padding:10px;color:var(--text);width:100%;overflow-wrap:anywhere}.search-hit small{display:block;color:var(--dim)}#searchResults{padding:0 14px 14px;display:grid;gap:7px}#favorites button{width:100%;text-align:left;overflow-wrap:anywhere}
 @media(max-width:760px){.refine{padding:9px}.refine .field{flex:1 1 105px}.refine label{flex:1 1 auto}.refine input[type=range]{flex:1;min-width:80px}.preview-head{gap:5px}.preview-head .pill{font-size:11px}.preview-body{padding:10px}}
+.inspect-tools{display:flex;gap:7px;flex-wrap:wrap;padding:7px 12px;border-bottom:1px solid var(--stroke)}.inspect-tools[hidden]{display:none}.inspect-tools .pill{font-size:12px;padding:6px 10px;min-height:40px}
+.image-viewer{display:flex;flex-direction:column;gap:8px;min-width:0}.image-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.image-actions .pill{padding:7px 12px}.image-stage{overflow:auto;max-height:62dvh;min-height:140px;background:repeating-conic-gradient(#242936 0% 25%,#1b202a 0% 50%) 50%/18px 18px;border:1px solid var(--stroke);border-radius:10px;overscroll-behavior:contain}.image-stage img{display:block;max-width:none!important;max-height:none!important;object-fit:contain;align-self:auto!important;height:auto}
+.json-tree{width:100%;max-width:100%;font:12px/1.5 ui-monospace,monospace;overflow-wrap:anywhere}.json-tree details{padding:4px 0 4px 14px;border-left:1px solid var(--stroke)}.json-tree summary{cursor:pointer;min-height:28px;color:var(--accent)}.json-tree .atom{padding:4px 0}.history-list{display:grid;gap:9px}.history-list a{display:block;border:1px solid var(--stroke);border-radius:11px;padding:10px;text-decoration:none;color:var(--text)}.history-list a:hover{border-color:var(--accent)}.history-list small{display:block;color:var(--dim)}
 </style>
 </head>
 <body>
@@ -55,10 +58,10 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 <div class="path" id="breadcrumbs">No repository selected</div>
 <div id="items" class="items grid"><div class="empty"><strong>Browse in full colour.</strong>Open any public repository, or connect a read-only token for your private ones.</div></div><div class="status" id="status" aria-live="polite"></div><div id="searchResults" aria-live="polite"></div>
 </section></main>
-<section id="preview" class="preview" role="dialog" aria-modal="true" aria-label="File preview"><div class="preview-head"><button id="prevPreview" class="icon-btn" aria-label="Previous file" title="Previous file">‹</button><button id="nextPreview" class="icon-btn" aria-label="Next file" title="Next file">›</button><strong id="previewTitle"></strong><button id="compareAction" class="pill" hidden aria-label="Pin image for visual comparison">Pin A</button><button id="copyRaw" class="pill" hidden aria-label="Copy file text">Copy text</button><button id="downloadRaw" class="pill" hidden aria-label="Download original file">Download</button><button id="copyFile" class="pill" title="Copy file deep link" aria-label="Copy file deep link">Copy ↗</button><a id="fileLink" class="pill" target="_blank" rel="noopener noreferrer" aria-label="View file on GitHub">Git ↗</a><button id="closePreview" class="icon-btn" aria-label="Close preview">✕</button></div><div class="preview-body" id="previewBody"></div></section>
+<section id="preview" class="preview" role="dialog" aria-modal="true" aria-label="File preview"><div class="preview-head"><button id="prevPreview" class="icon-btn" aria-label="Previous file" title="Previous file">‹</button><button id="nextPreview" class="icon-btn" aria-label="Next file" title="Next file">›</button><strong id="previewTitle"></strong><button id="compareAction" class="pill" hidden aria-label="Pin image for visual comparison">Pin A</button><button id="copyRaw" class="pill" hidden aria-label="Copy file text">Copy text</button><button id="downloadRaw" class="pill" hidden aria-label="Download original file">Download</button><button id="copyFile" class="pill" title="Copy file deep link" aria-label="Copy file deep link">Copy ↗</button><a id="fileLink" class="pill" target="_blank" rel="noopener noreferrer" aria-label="View file on GitHub">Git ↗</a><button id="closePreview" class="icon-btn" aria-label="Close preview">✕</button></div><div id="inspectTools" class="inspect-tools" hidden><button id="fileHistory" class="pill">History</button><button id="structuredToggle" class="pill" hidden>JSON tree</button></div><div class="preview-body" id="previewBody"></div></section>
 <script>
 (()=>{'use strict';
-const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false};
+const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1};
 const codeRx=/\.(?:js|jsx|mjs|ts|tsx|py|rs|go|java|kt|c|cpp|h|hpp|sh|css|scss|html|sql|gradle)$/i,docsRx=/\.(?:md|markdown|txt|pdf|rst)$/i,dataRx=/\.(?:json|csv|tsv|yaml|yml|xml|toml|ini|properties)$/i;
 const imageRx=/\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i,textRx=/\.(md|markdown|txt|json|ya?ml|xml|csv|tsv|js|jsx|ts|tsx|css|scss|html|py|kt|java|rs|go|sh|toml|ini|svg|sql|log|gradle|properties)$/i;
 function status(s){$('status').textContent=s}function closeNav(){$('sidebar').classList.remove('open');$('scrim').classList.remove('on')}
@@ -170,7 +173,7 @@ async function pump(){
   }catch{}finally{running--;pump()}})()
  }
 }
-function clearPreview(){const wasOpen=state.preview!==null;state.preview=null;state.currentBlob=null;state.previewText=null;$('copyRaw').hidden=true;$('downloadRaw').hidden=true;state.compareMode=false;updateCompareAction();$('preview').classList.remove('open');$('scrim').classList.remove('on');$('previewBody').replaceChildren();clearUrls('preview');if(wasOpen&&state.repo&&state.branch)updateHash();if(wasOpen&&state.returnFocus?.isConnected)state.returnFocus.focus();state.returnFocus=null;$('pageHeader').inert=false;$('pageMain').inert=false}
+function clearPreview(){const wasOpen=state.preview!==null;state.preview=null;state.historyOpen=false;state.structuredOpen=false;$('inspectTools').hidden=true;state.currentBlob=null;state.previewText=null;$('copyRaw').hidden=true;$('downloadRaw').hidden=true;state.compareMode=false;updateCompareAction();$('preview').classList.remove('open');$('scrim').classList.remove('on');$('previewBody').replaceChildren();clearUrls('preview');if(wasOpen&&state.repo&&state.branch)updateHash();if(wasOpen&&state.returnFocus?.isConnected)state.returnFocus.focus();state.returnFocus=null;$('pageHeader').inert=false;$('pageMain').inert=false}
 function compareReady(){return Boolean(state.pinned&&state.preview&&state.currentBlob&&imageRx.test(state.preview.name)&&state.pinned.item.path!==state.preview.path&&state.pinned.repo===state.repo&&state.pinned.branch===state.branch)}
 function updateCompareAction(){
  const b=$('compareAction'),isImage=Boolean(state.preview&&state.currentBlob&&imageRx.test(state.preview.name));
@@ -179,7 +182,7 @@ function updateCompareAction(){
  b.setAttribute('aria-label',b.textContent);
 }
 function drawComparison(){
- if(!compareReady())return;clearUrls('preview');state.compareMode=true;
+ if(!compareReady())return;clearUrls('preview');state.compareMode=true;$('inspectTools').hidden=true;
  const shell=elem('div','compare-shell'),toolbar=elem('div','compare-controls');
  const side=elem('button','pill'+(state.compareDisplay==='side'?' active':''),'Side by side');
  const wipe=elem('button','pill'+(state.compareDisplay==='wipe'?' active':''),'Reveal slider');
@@ -209,7 +212,7 @@ function drawComparison(){
 }
 function compareAction(){
  if(!state.preview||!state.currentBlob||!imageRx.test(state.preview.name))return;
- if(state.compareMode){state.compareMode=false;clearUrls('preview');const img=elem('img');img.alt=state.preview.name;img.src=blobUrl(state.currentBlob);showContent(img)}
+ if(state.compareMode){state.compareMode=false;$('inspectTools').hidden=false;clearUrls('preview');showContent(imageViewer(state.currentBlob,state.preview))}
  else if(!state.pinned){state.pinned={item:state.preview,blob:state.currentBlob,repo:state.repo,branch:state.branch}}
  else if(state.pinned.item.path===state.preview.path){state.pinned=null}
  else drawComparison();
@@ -256,12 +259,88 @@ async function scanContents(){
  host.append(elem('p','hint','Finished: '+complete+' files; up to 2 matches per file and 80 matches total. '+(limited?'Only the first 120 eligible files were scanned.':'All eligible indexed files were scanned.')+(errors?' '+errors+' files could not be fetched.':'')));
 }
 function showContent(node){$('previewBody').replaceChildren(node)}
+function imageViewer(blob,item){
+ state.zoom=1;const wrap=elem('div','image-viewer'),actions=elem('div','image-actions'),stage=elem('div','image-stage'),img=elem('img');
+ img.alt=item.name;img.src=blobUrl(blob);img.style.width='100%';stage.append(img);
+ const minus=elem('button','pill','−'),reset=elem('button','pill','100%'),plus=elem('button','pill','+');
+ minus.setAttribute('aria-label','Zoom out image');plus.setAttribute('aria-label','Zoom in image');reset.setAttribute('aria-label','Reset image zoom');
+ const update=()=>{img.style.width=Math.round(state.zoom*100)+'%';reset.textContent=Math.round(state.zoom*100)+'%';minus.disabled=state.zoom<=1;plus.disabled=state.zoom>=4};
+ minus.onclick=()=>{state.zoom=Math.max(1,Math.round((state.zoom-.25)*100)/100);update()};
+ plus.onclick=()=>{state.zoom=Math.min(4,Math.round((state.zoom+.25)*100)/100);update()};
+ reset.onclick=()=>{state.zoom=1;update();stage.scrollLeft=0;stage.scrollTop=0};
+ actions.append(minus,reset,plus,elem('span','hint','Drag or scroll to pan a zoomed image'));update();wrap.append(actions,stage);return wrap;
+}
+function jsonViewer(value){
+ const root=elem('div','json-tree');let count=0;
+ function visit(v,label,depth){
+  if(++count>1800)return elem('span','atom','… node limit reached');
+  if(v!==null&&typeof v==='object'&&depth<9){
+   const details=elem('details'),keys=Object.keys(v),sum=elem('summary','',label+' '+(Array.isArray(v)?'['+v.length+']':'{'+keys.length+' keys}'));details.append(sum);
+   if(depth<2)details.open=true;
+   for(const key of keys.slice(0,150))details.append(visit(v[key],Array.isArray(v)?'['+key+']':key,depth+1));
+   if(keys.length>150)details.append(elem('span','hint','Only first 150 children displayed.'));
+   return details;
+  }
+  return elem('div','atom',label+': '+(typeof v==='string'?JSON.stringify(v):v===null?'null':String(v)))
+ }
+ root.append(visit(value,'Root',0));return root
+}
+async function renderCurrentFile(){
+ const item=state.preview,blob=state.currentBlob;if(!item||!blob)return;
+ clearUrls('preview');const lower=item.name.toLowerCase();let node;
+ if(imageRx.test(lower))node=imageViewer(blob,item);
+ else if(/\.pdf$/i.test(lower)){node=elem('iframe');node.title=item.name;node.src=blobUrl(new Blob([blob],{type:'application/pdf'}))}
+ else if(/\.(mp4|webm|ogg)$/i.test(lower)){node=elem('video');node.controls=true;node.src=blobUrl(blob)}
+ else if(/\.(mp3|wav|m4a|flac)$/i.test(lower)){node=elem('audio');node.controls=true;node.src=blobUrl(blob)}
+ else if(textRx.test(lower)||blob.type.startsWith('text/')){
+  const text=state.previewText??await blob.text();if(state.preview!==item)return;
+  state.previewText=text;$('copyRaw').hidden=false;
+  if(/\.json$/i.test(lower)){let value;try{value=JSON.parse(text)}catch{}
+   $('structuredToggle').hidden=value===undefined;
+   $('structuredToggle').textContent=state.structuredOpen?'Raw source':'JSON tree';
+   node=state.structuredOpen&&value!==undefined?jsonViewer(value):sourceViewer(text.slice(0,500000),item.name)
+  }else node=/\.md$/i.test(lower)?simpleMarkdown(text.slice(0,500000)):sourceViewer(text.slice(0,500000),item.name);
+ }else node=elem('div','message','No inline preview for this format. Use the GitHub link.');
+ showContent(node);updateCompareAction()
+}
+async function toggleStructured(){if(!state.preview||!state.previewText)return;state.structuredOpen=!state.structuredOpen;await renderCurrentFile()}
+async function toggleHistory(){
+ if(!state.preview)return;
+ if(state.historyOpen){state.historyOpen=false;$('fileHistory').textContent='History';$('structuredToggle').hidden=!/\.json$/i.test(state.preview.name);await renderCurrentFile();return}
+ const item=state.preview,repo=state.repo,branch=state.branch;
+ state.historyOpen=true;$('fileHistory').textContent='Back to file';$('structuredToggle').hidden=true;showContent(elem('div','message','Loading file history…'));
+ try{
+  const data=await json('/repos/'+repo+'/commits?sha='+enc(branch)+'&path='+enc(item.path)+'&per_page=20');
+  if(!state.historyOpen||state.preview!==item||repo!==state.repo)return;
+  const list=elem('div','history-list');list.append(elem('p','hint','Latest '+data.length+' commits affecting this path (up to 20); open a commit on GitHub to inspect that revision.'));
+  for(const c of data){if(!/^[a-f0-9]{40}$/i.test(c.sha||''))continue;const a=elem('a'),sha=c.sha.slice(0,7),msg=(c.commit?.message||'Commit').split('\n')[0].slice(0,150),date=c.commit?.author?.date||'';
+   a.href='https://github.com/'+repo+'/commit/'+c.sha;a.target='_blank';a.rel='noopener noreferrer';
+   a.append(elem('strong','',msg),elem('small','',sha+(date?' · '+new Date(date).toLocaleDateString():'')));list.append(a)
+  }
+  showContent(list);
+ }catch(e){if(state.historyOpen&&state.preview===item)showContent(elem('p','message','History unavailable: '+e.message))}
+}
 function sourceViewer(text,name){const container=elem('div'),bar=elem('div','code-toolbar'),notice=elem('span','hint',name+' · '+text.split('\n').length+' lines');bar.append(notice);container.append(bar);const pre=elem('pre','code-view');const lines=text.split('\n').slice(0,2600);
  const rx=/(\/\/[^\n]*|#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:const|let|var|function|class|return|import|export|default|async|await|if|else|for|while|try|catch|throw|new|def|from|pass|public|private|void|struct|fn|use|true|false|null|None|undefined)\b|\b\d+(?:\.\d+)?\b)/g;
  for(let i=0;i<lines.length;i++){const row=elem('div','code-line'),ln=elem('span','line-num',String(i+1));row.append(ln);let offset=0;for(const hit of lines[i].matchAll(rx)){if(hit.index>offset)row.append(document.createTextNode(lines[i].slice(offset,hit.index)));const x=hit[0],cl=x.startsWith('//')||x.startsWith('#')?'tok-comment':x.startsWith('"')||x.startsWith("'")?'tok-string':/^\d/.test(x)?'tok-num':'tok-keyword';row.append(elem('span',cl,x));offset=hit.index+x.length}row.append(document.createTextNode(lines[i].slice(offset)));pre.append(row)}
  if(text.split('\n').length>2600)container.append(elem('p','hint','Showing first 2,600 lines; download for full file.'));container.append(pre);return container}
 function simpleMarkdown(src){const div=elem('div');for(const line of src.split(/\r?\n/)){let match=line.match(/^(#{1,4})\s+(.+)/);if(match){div.append(elem('h'+match[1].length,'',match[2]));continue}if(/^>\s?/.test(line)){div.append(elem('blockquote','',line.slice(1).trim()));continue}if(/^[-*]\s+/.test(line)){div.append(elem('p','','• '+line.slice(2)));continue}if(line.trim()===''){div.append(elem('div',''));continue}div.append(elem('p','',line))}return div}
-async function openPreview(item){if(!state.preview)state.returnFocus=document.activeElement;clearUrls('preview');state.preview=item;state.currentBlob=null;state.previewText=null;$('copyRaw').hidden=true;$('downloadRaw').hidden=true;state.compareMode=false;previewButtons();updateCompareAction();updateHash(item.path);$('previewTitle').textContent=item.name;$('fileLink').href='https://github.com/'+state.repo+'/blob/'+enc(state.branch)+'/'+pathPart(item.path);$('preview').classList.add('open');$('scrim').classList.add('on');$('pageHeader').inert=true;$('pageMain').inert=true;$('closePreview').focus();const loading=elem('div','message','Loading preview…');showContent(loading);try{if(item.size>20e6){showContent(elem('div','message','Large file. Open it on GitHub to download.'));return}const blob=await fetchBlob(item);if(state.preview!==item)return;state.currentBlob=blob;$('downloadRaw').hidden=false;const lower=item.name.toLowerCase();let node;if(imageRx.test(lower)){node=elem('img');node.alt=item.name;node.src=blobUrl(blob)}else if(/\.pdf$/i.test(lower)){node=elem('iframe');node.title=item.name;node.src=blobUrl(new Blob([blob],{type:'application/pdf'}))}else if(/\.(mp4|webm|ogg)$/i.test(lower)){node=elem('video');node.controls=true;node.src=blobUrl(blob)}else if(/\.(mp3|wav|m4a|flac)$/i.test(lower)){node=elem('audio');node.controls=true;node.src=blobUrl(blob)}else if(textRx.test(lower)||blob.type.startsWith('text/')){const text=await blob.text();if(state.preview!==item)return;state.previewText=text;$('copyRaw').hidden=false;node=/\.md$/i.test(lower)?simpleMarkdown(text.slice(0,500000)):sourceViewer(text.slice(0,500000),item.name)}else node=elem('div','message','No inline preview for this format. Use the GitHub link.');showContent(node);updateCompareAction()}catch(e){if(state.preview===item)showContent(elem('div','message','Preview unavailable: '+e.message))}}
+async function openPreview(item){
+ if(!state.preview)state.returnFocus=document.activeElement;
+ clearUrls('preview');state.preview=item;state.currentBlob=null;state.previewText=null;state.historyOpen=false;state.structuredOpen=false;
+ $('fileHistory').textContent='History';$('inspectTools').hidden=false;$('structuredToggle').hidden=true;
+ $('copyRaw').hidden=true;$('downloadRaw').hidden=true;state.compareMode=false;
+ previewButtons();updateCompareAction();updateHash(item.path);
+ $('previewTitle').textContent=item.name;$('fileLink').href='https://github.com/'+state.repo+'/blob/'+enc(state.branch)+'/'+pathPart(item.path);
+ $('preview').classList.add('open');$('scrim').classList.add('on');$('pageHeader').inert=true;$('pageMain').inert=true;$('closePreview').focus();
+ showContent(elem('div','message','Loading preview…'));
+ try{
+  if(item.size>20e6){showContent(elem('div','message','Large file. Open it on GitHub to download.'));return}
+  const blob=await fetchBlob(item);if(state.preview!==item)return;
+  state.currentBlob=blob;$('downloadRaw').hidden=false;await renderCurrentFile();
+ }catch(e){if(state.preview===item)showContent(elem('div','message','Preview unavailable: '+e.message))}
+}
+
 async function openRepo(targetPath=''){
  const repo=$('repo').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\/$/,'');
  if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){status('Enter owner/repository.');return}
@@ -299,7 +378,7 @@ async function connect(){
  }catch(e){if(request===state.repoRequest)status('Repository list unavailable: '+e.message+' · Public repos can be entered manually.')}
 }
 async function copyCurrentLink(){try{await navigator.clipboard.writeText(location.href);status('Shareable link copied. Credentials are never included.')}catch{status('Clipboard unavailable. Copy this page URL from the address bar.')}}
-$('openRepo').onclick=()=>openRepo();$('disconnect').onclick=()=>{resetSession();status('Credentials and private browsing state cleared from this tab.')};$('copyFolder').onclick=copyCurrentLink;$('copyFile').onclick=copyCurrentLink;$('compareAction').onclick=compareAction;$('downloadRaw').onclick=downloadOriginal;$('copyRaw').onclick=copyText;$('bookmark').onclick=toggleBookmark;$('contentSearch').onclick=scanContents;$('connect').onclick=connect;$('repoSelect').onchange=()=>{if($('repoSelect').value){$('repo').value=$('repoSelect').value;$('branch').value='';openRepo()}};
+$('openRepo').onclick=()=>openRepo();$('disconnect').onclick=()=>{resetSession();status('Credentials and private browsing state cleared from this tab.')};$('copyFolder').onclick=copyCurrentLink;$('copyFile').onclick=copyCurrentLink;$('compareAction').onclick=compareAction;$('downloadRaw').onclick=downloadOriginal;$('copyRaw').onclick=copyText;$('fileHistory').onclick=toggleHistory;$('structuredToggle').onclick=toggleStructured;$('bookmark').onclick=toggleBookmark;$('contentSearch').onclick=scanContents;$('connect').onclick=connect;$('repoSelect').onchange=()=>{if($('repoSelect').value){$('repo').value=$('repoSelect').value;$('branch').value='';openRepo()}};
 $('filter').oninput=()=>{state.limit=80;paint()};$('sortFiles').onchange=()=>{state.limit=80;paint()};$('fileKind').onchange=()=>{state.limit=80;paint()};$('density').oninput=()=>{$('items').style.setProperty('--tile-min',$('density').value+'px')};$('scope').onchange=()=>{state.limit=80;paint()};$('prevPreview').onclick=()=>adjacentPreview(-1);$('nextPreview').onclick=()=>adjacentPreview(1);$('back').onclick=()=>navigate(state.path.split('/').slice(0,-1).join('/'));$('gridBtn').onclick=()=>{state.mode='grid';$('gridBtn').classList.add('active');$('listBtn').classList.remove('active');paint()};$('listBtn').onclick=()=>{state.mode='list';$('listBtn').classList.add('active');$('gridBtn').classList.remove('active');paint()};
 $('theme').onclick=()=>{document.body.classList.toggle('light');$('theme').textContent=document.body.classList.contains('light')?'☾':'☀︎';try{localStorage.setItem('expository-theme',document.body.classList.contains('light')?'light':'dark')}catch{}};
 try{if(localStorage.getItem('expository-theme')==='light')$('theme').click()}catch{}
