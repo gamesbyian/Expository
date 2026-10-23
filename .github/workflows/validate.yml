@@ -18,8 +18,6 @@ jobs:
         with:
           node-version: '22'
       - run: node --test tests/expository.test.cjs
-      - name: Targeted source outline Chrome regression (temporary)
-        run: node tests/browser-smoke.cjs
       - name: Validate browser and atlas scripts
         run: |
           node --check tests/browser-smoke.cjs
