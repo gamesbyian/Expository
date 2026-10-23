@@ -37,6 +37,7 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 [hidden]{display:none!important}.story-view{padding:14px;display:grid;gap:11px}.story-head{padding:12px;border:1px solid var(--stroke);background:var(--panel2);border-radius:13px}.story-head h2{margin:0;font-size:19px}.story-controls{display:flex;gap:8px;flex-wrap:wrap}.story-stream{border-left:2px solid var(--stroke);margin-left:12px;padding-left:14px;display:grid;gap:10px}.story-event{border:1px solid var(--stroke);border-radius:11px;background:var(--panel2);padding:11px;display:grid;gap:4px;position:relative;text-decoration:none;color:var(--text)}.story-event::before{content:'';position:absolute;top:15px;left:-21px;width:10px;height:10px;border-radius:50%;background:var(--accent)}.story-event strong{overflow-wrap:anywhere}.story-event small{color:var(--dim);font-size:11px}.story-event:hover{border-color:var(--accent)}.story-group{font-weight:750;font-size:12px;color:var(--dim);margin-top:6px}.story-tags{display:flex;gap:7px;flex-wrap:wrap}.story-tags a{color:var(--accent);background:var(--panel2);border-radius:9px;padding:7px;text-decoration:none;font-size:12px}.story-tags a:hover{text-decoration:underline}.story-notice{font-size:12px;color:var(--dim)}
 .diff-canvas{display:block;width:100%;max-height:55dvh;height:auto;object-fit:contain;border:1px solid var(--stroke);border-radius:12px;background:#151921}.diff-summary{font-size:13px;color:var(--dim);overflow-wrap:anywhere}.diff-summary strong{color:var(--text)}
 .preview-body .md-link{display:inline;border:0;padding:0;background:transparent;color:var(--accent);text-decoration:underline;font:inherit;cursor:pointer}.preview-body .md-link:focus-visible{outline:2px solid var(--accent)}.data-table-wrap{width:100%;max-width:100%;overflow:auto;border:1px solid var(--stroke);border-radius:10px}.data-table{font:12px/1.4 ui-monospace,monospace;border-collapse:collapse;width:max-content;min-width:100%}.data-table th,.data-table td{border-bottom:1px solid var(--stroke);padding:9px;max-width:260px;overflow-wrap:anywhere;text-align:left}.data-table th{position:sticky;top:0;background:var(--panel2);font-weight:700}.data-table tr:nth-child(even){background:#ffffff08}
+.sheet-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}.sheet-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:10px;width:100%}.sheet-card{min-width:0;margin:0;background:var(--panel2);border:1px solid var(--stroke);border-radius:11px;padding:8px}.sheet-card img{display:block;width:100%;height:170px;max-height:170px;object-fit:contain;background:#10131c;border-radius:6px}.sheet-card figcaption{font-size:11px;margin-top:7px;overflow-wrap:anywhere;color:var(--dim)}.sheet-card .sheet-placeholder{height:170px;display:grid;place-items:center;color:var(--dim);font-size:12px}.sheet-note{font-size:12px;color:var(--dim)}.items .tile[aria-pressed=true]{border:2px solid var(--accent);background:#224057}.items .tile[aria-pressed=true]::after{content:'✓';position:absolute;top:5px;right:7px;font-size:19px;color:#8ad5ff;font-weight:800}@media(max-width:760px){.sheet-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sheet-card img,.sheet-card .sheet-placeholder{height:130px;max-height:130px}}
 </style>
 </head>
 <body>
@@ -56,7 +57,7 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 <div class="hint">Read-only by design. No editing, no analytics, no token persistence. Preview private assets locally in this tab.</div>
 </aside>
 <section class="workspace" aria-label="Repository files">
-<div class="toolbar"><button id="back" class="icon-btn" title="Parent folder" aria-label="Parent folder">↑</button><input id="filter" class="field" placeholder="Find by name…" aria-label="Filter files by name"><select id="scope" class="field" aria-label="Search and gallery scope"><option value="folder">This folder</option><option value="repo">Search entire repo</option><option value="images">Images in subfolders</option></select><button id="listBtn" class="pill" title="List view">☷</button><button id="gridBtn" class="pill active" title="Gallery view">▦</button><button id="copyFolder" class="pill" title="Copy folder link" aria-label="Copy folder link">↗</button><button id="storyToggle" class="pill" aria-pressed="false" title="Explore commits, releases and tags">Story</button></div>
+<div class="toolbar"><button id="back" class="icon-btn" title="Parent folder" aria-label="Parent folder">↑</button><input id="filter" class="field" placeholder="Find by name…" aria-label="Filter files by name"><select id="scope" class="field" aria-label="Search and gallery scope"><option value="folder">This folder</option><option value="repo">Search entire repo</option><option value="images">Images in subfolders</option></select><button id="listBtn" class="pill" title="List view">☷</button><button id="gridBtn" class="pill active" title="Gallery view">▦</button><button id="copyFolder" class="pill" title="Copy folder link" aria-label="Copy folder link">↗</button><button id="storyToggle" class="pill" aria-pressed="false" title="Explore commits, releases and tags">Story</button><button id="selectMode" class="pill" aria-pressed="false" title="Select up to 12 images for a contact sheet">Select images</button><button id="contactSheet" class="pill" hidden disabled>Contact sheet (0)</button><button id="clearSelection" class="pill" hidden>Clear</button></div>
 <div class="refine"><label for="sortFiles">Sort</label><select id="sortFiles" class="field" aria-label="Sort files"><option value="name">Name</option><option value="size">Largest</option><option value="extension">Extension</option></select><label for="fileKind">Kind</label><select id="fileKind" class="field" aria-label="Filter by file category"><option value="all">Everything</option><option value="image">Images</option><option value="code">Code</option><option value="doc">Documents</option><option value="data">Data</option><option value="other">Other</option></select><label for="density">Gallery size <input id="density" type="range" min="110" max="270" value="145" step="10" aria-label="Gallery thumbnail size"></label><button id="contentSearch" class="pill" title="Scan bounded text files for a phrase">Search contents</button></div>
 <div class="path" id="breadcrumbs">No repository selected</div>
 <section id="storyView" class="story-view" hidden aria-label="Repository Story Mode"></section><div id="items" class="items grid"><div class="empty"><strong>Browse in full colour.</strong>Open any public repository, or connect a read-only token for your private ones.</div></div><div class="status" id="status" aria-live="polite"></div><div id="searchResults" aria-live="polite"></div>
@@ -64,7 +65,7 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 <section id="preview" class="preview" role="dialog" aria-modal="true" aria-label="File preview"><div class="preview-head"><button id="prevPreview" class="icon-btn" aria-label="Previous file" title="Previous file">‹</button><button id="nextPreview" class="icon-btn" aria-label="Next file" title="Next file">›</button><strong id="previewTitle"></strong><button id="compareAction" class="pill" hidden aria-label="Pin image for visual comparison">Pin A</button><button id="copyRaw" class="pill" hidden aria-label="Copy file text">Copy text</button><button id="downloadRaw" class="pill" hidden aria-label="Download original file">Download</button><button id="copyFile" class="pill" title="Copy file deep link" aria-label="Copy file deep link">Copy ↗</button><a id="fileLink" class="pill" target="_blank" rel="noopener noreferrer" aria-label="View file on GitHub">Git ↗</a><button id="closePreview" class="icon-btn" aria-label="Close preview">✕</button></div><div id="inspectTools" class="inspect-tools" hidden><button id="fileHistory" class="pill">History</button><button id="structuredToggle" class="pill" hidden>JSON tree</button></div><div class="preview-body" id="previewBody"></div></section>
 <script>
 (()=>{'use strict';
-const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0};
+const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0,selectionMode:false,selected:new Map(),sheetSeq:0,sheetOpen:false};
 const codeRx=/\.(?:js|jsx|mjs|ts|tsx|py|rs|go|java|kt|c|cpp|h|hpp|sh|css|scss|html|sql|gradle)$/i,docsRx=/\.(?:md|markdown|txt|pdf|rst)$/i,dataRx=/\.(?:json|csv|tsv|yaml|yml|xml|toml|ini|properties)$/i;
 const imageRx=/\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i,textRx=/\.(md|markdown|txt|json|ya?ml|xml|csv|tsv|js|jsx|ts|tsx|css|scss|html|py|kt|java|rs|go|sh|toml|ini|svg|sql|log|gradle|properties)$/i;
 function stopStory(){
@@ -187,6 +188,23 @@ function currentMatches(){
  const prefix=state.path?state.path+'/':'';
  return filterSort(state.indexEntries.filter(x=>x.path.startsWith(prefix)&&imageRx.test(x.name)&&x.path.toLowerCase().includes(query)));
 }
+function updateSelectionControls(){
+ const count=state.selected.size,active=state.selectionMode;
+ $('selectMode').textContent=active?'Done selecting':'Select images';$('selectMode').setAttribute('aria-pressed',String(active));
+ $('contactSheet').hidden=count===0;$('contactSheet').disabled=count===0;$('contactSheet').textContent='Contact sheet ('+count+'/12)';
+ $('clearSelection').hidden=count===0;
+ for(const tile of $('items').querySelectorAll('.tile[data-path]')){
+  const yes=state.selected.has(tile.dataset.path);
+  tile.setAttribute('aria-pressed',String(yes));tile.classList.toggle('selected',yes);
+ }
+}
+function selectImage(item){
+ if(item.type!=='file'||!imageRx.test(item.name))return false;
+ if(state.selected.has(item.path))state.selected.delete(item.path);
+ else {if(state.selected.size>=12){status('Contact sheets are limited to 12 images; deselect one first.');return false}state.selected.set(item.path,item)}
+ updateSelectionControls();return true
+}
+function clearSelection(){state.selected.clear();state.selectionMode=false;updateSelectionControls()}
 function paint(more=false){
  const host=$('items');host.style.setProperty('--tile-min',($('density').value||145)+'px');if(!more)state.renderEpoch++;const epoch=state.renderEpoch;
  if(!more){if(state.thumbObserver){state.thumbObserver.disconnect();state.thumbObserver=null}
@@ -202,7 +220,8 @@ function paint(more=false){
  for(const item of state.visibleItems.slice(previous)){
   const tile=elem('button','tile'),thumb=elem('div','thumb'),glyph=elem('span','glyph',icon(item));thumb.append(glyph);
   tile.append(thumb,elem('span','filename',item.name),elem('span','meta',scope==='folder'?(item.type==='dir'?'Folder':formatSize(item.size)):(item.path+(item.size?' · '+formatSize(item.size):''))));
-  tile.title=item.path;tile.onclick=()=>item.type==='dir'?navigate(item.path):openPreview(item);host.append(tile);
+  tile.title=item.path;tile.dataset.path=item.path;tile.setAttribute('aria-pressed',String(state.selected.has(item.path)));if(state.selected.has(item.path))tile.classList.add('selected');
+  tile.onclick=()=>item.type==='dir'?navigate(item.path):state.selectionMode&&imageRx.test(item.name)?selectImage(item):openPreview(item);host.append(tile);
   if(state.mode==='grid'&&imageRx.test(item.name)&&item.type==='file'){
    if(state.thumbObserver){thumb._thumbJob={item,thumb,glyph};state.thumbObserver.observe(thumb)}
    else loadThumb(item,thumb,glyph,epoch);
@@ -212,7 +231,7 @@ function paint(more=false){
   const more=elem('button','pill more','Show more ('+(matching.length-state.limit)+' remaining)');
   more.onclick=()=>{state.limit+=80;paint(true)};host.append(more)
  }
- if(!matching.length)host.append(elem('div','empty',scope==='repo'?'No matching files.':'Nothing matches this view.'));
+ if(!matching.length)host.append(elem('div','empty',scope==='repo'?'No matching files.':'Nothing matches this view.'));updateSelectionControls();
  status(matching.length+' items matched'+(scope==='folder'?' in folder':' across indexed paths')+(state.indexTruncated?' · index incomplete':'')+(state.indexError?' · index unavailable, limited to folder':'')+(matching.length>state.limit?' · showing first '+state.limit:''));
 }
 const thumbQueue=[];let running=0;
@@ -226,7 +245,7 @@ async function pump(){
   }catch{}finally{running--;pump()}})()
  }
 }
-function clearPreview(){++state.compareSeq;const wasOpen=state.preview!==null;state.preview=null;state.historyOpen=false;state.structuredOpen=false;$('inspectTools').hidden=true;state.currentBlob=null;state.previewText=null;$('copyRaw').hidden=true;$('downloadRaw').hidden=true;state.compareMode=false;updateCompareAction();$('preview').classList.remove('open');$('scrim').classList.remove('on');$('previewBody').replaceChildren();clearUrls('preview');if(wasOpen&&state.repo&&state.branch)updateHash();if(wasOpen&&state.returnFocus?.isConnected)state.returnFocus.focus();state.returnFocus=null;$('pageHeader').inert=false;$('pageMain').inert=false}
+function clearPreview(){++state.sheetSeq;state.sheetOpen=false;++state.compareSeq;const wasOpen=state.preview!==null;state.preview=null;state.historyOpen=false;state.structuredOpen=false;$('inspectTools').hidden=true;state.currentBlob=null;state.previewText=null;$('copyRaw').hidden=true;$('downloadRaw').hidden=true;state.compareMode=false;updateCompareAction();$('preview').classList.remove('open');$('scrim').classList.remove('on');$('previewBody').replaceChildren();clearUrls('preview');if(wasOpen&&state.repo&&state.branch)updateHash();if(wasOpen&&state.returnFocus?.isConnected)state.returnFocus.focus();state.returnFocus=null;$('pageHeader').inert=false;$('pageMain').inert=false}
 function compareReady(){return Boolean(state.pinned&&state.preview&&state.currentBlob&&imageRx.test(state.preview.name)&&state.pinned.item.path!==state.preview.path&&state.pinned.repo===state.repo&&state.pinned.branch===state.branch)}
 function updateCompareAction(){
  const b=$('compareAction'),isImage=Boolean(state.preview&&state.currentBlob&&imageRx.test(state.preview.name));
@@ -340,6 +359,56 @@ async function scanContents(){
  host.append(elem('p','hint','Finished: '+complete+' files; up to 2 matches per file and 80 matches total. '+(limited?'Only the first 120 eligible files were scanned.':'All eligible indexed files were scanned.')+(errors?' '+errors+' files could not be fetched.':'')));
 }
 function showContent(node){$('previewBody').replaceChildren(node)}
+async function saveContactSheet(images){
+ if(!state.sheetOpen||!images.length)return;
+ const width=960,cellWidth=300,cellHeight=258,pad=30,header=82,rows=Math.ceil(images.length/3);
+ const canvas=elem('canvas');canvas.width=width;canvas.height=header+rows*cellHeight+pad;
+ const ctx=canvas.getContext('2d');if(!ctx){status('Canvas export is unavailable.');return}
+ ctx.fillStyle='#111521';ctx.fillRect(0,0,canvas.width,canvas.height);
+ ctx.font='bold 28px system-ui';ctx.fillStyle='#f0f4fa';ctx.fillText('EXPOSITORY · Contact sheet',pad,40);
+ ctx.font='14px system-ui';ctx.fillStyle='#a7b5c8';ctx.fillText(images.length+' images · '+state.repo+' @ '+state.branch,pad,65);
+ let skipped=0;
+ for(let i=0;i<images.length;i++){
+  const x=pad+(i%3)*cellWidth,y=header+Math.floor(i/3)*cellHeight;
+  ctx.fillStyle='#202735';ctx.fillRect(x,y,cellWidth-10,cellHeight-12);
+  const {image,item}=images[i];
+  try{
+   await image.decode();const w=image.naturalWidth,h=image.naturalHeight;if(!w||!h)throw Error('empty image');
+   const scale=Math.min((cellWidth-28)/w,193/h),drawW=w*scale,drawH=h*scale;
+   ctx.drawImage(image,x+(cellWidth-10-drawW)/2,y+8+(195-drawH)/2,drawW,drawH)
+  }catch{skipped++}
+  ctx.fillStyle='#ebeff7';ctx.font='12px system-ui';ctx.fillText(item.name.slice(0,38),x+10,y+221,cellWidth-26);
+ }
+ if(!state.sheetOpen)return;
+ canvas.toBlob(blob=>{if(!blob){status('Export unavailable for these images.');return}const url=URL.createObjectURL(blob);
+  const anchor=elem('a');anchor.href=url;anchor.download='expository-contact-sheet.png';document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),15000);
+  status('Contact sheet saved locally'+(skipped?' · '+skipped+' images could not be rendered':'')+'.')
+ },'image/png');
+}
+async function openContactSheet(){
+ const selection=[...state.selected.values()].slice(0,12);if(!selection.length||!state.repo)return;
+ clearPreview();const seq=++state.sheetSeq;state.sheetOpen=true;
+ if(!state.returnFocus)state.returnFocus=document.activeElement;
+ state.preview={name:'Contact sheet',path:state.path};state.currentBlob=null;state.previewText=null;
+ $('previewTitle').textContent='Contact sheet · '+selection.length+' images';
+ for(const id of ['prevPreview','nextPreview','fileLink','copyFile','copyRaw','downloadRaw','compareAction'])$(id).hidden=true;
+ $('inspectTools').hidden=true;$('preview').classList.add('open');$('scrim').classList.add('on');
+ $('pageHeader').inert=true;$('pageMain').inert=true;$('closePreview').focus();
+ const body=elem('div'),controls=elem('div','sheet-controls'),save=elem('button','pill','Save sheet as PNG');
+ save.disabled=true;controls.append(save,elem('span','sheet-note','Max 12 images · same repository · browser-local. No upload.'));
+ const grid=elem('div','sheet-grid');const result=selection.map(item=>{const card=elem('figure','sheet-card'),placeholder=elem('div','sheet-placeholder','Loading…');
+  card.append(placeholder,elem('figcaption','',item.path));grid.append(card);return {item,card,placeholder}});
+ body.append(controls,grid);showContent(body);let cursor=0,ready=0;const loaded=[];
+ async function worker(){while(cursor<result.length&&state.sheetOpen&&seq===state.sheetSeq){
+  const slot=result[cursor++];try{if(slot.item.size>8e6)throw Error('large image');const blob=await fetchBlob(slot.item);
+   if(!state.sheetOpen||seq!==state.sheetSeq)return;
+   const image=elem('img');image.alt=slot.item.path;image.src=blobUrl(blob);
+   slot.card.replaceChild(image,slot.placeholder);loaded.push({item:slot.item,image});
+  }catch{if(state.sheetOpen&&seq===state.sheetSeq)slot.placeholder.textContent='Preview unavailable'}
+  ready++;if(state.sheetOpen&&seq===state.sheetSeq&&ready===result.length){save.disabled=!loaded.length;save.onclick=()=>saveContactSheet(loaded);controls.lastChild.textContent=loaded.length+' of '+selection.length+' images ready · PNG export stays on this device'}
+ }}
+ await Promise.all([worker(),worker(),worker()]);
+}
 function imageViewer(blob,item){
  state.zoom=1;const wrap=elem('div','image-viewer'),actions=elem('div','image-actions'),stage=elem('div','image-stage'),img=elem('img');
  img.alt=item.name;img.src=blobUrl(blob);img.style.width='100%';stage.append(img);
@@ -464,6 +533,8 @@ function tableViewer(text,delimiter){
 }
 
 async function openPreview(item){
+ state.sheetOpen=false;++state.sheetSeq;
+ for(const id of ['prevPreview','nextPreview','fileLink','copyFile'])$(id).hidden=false;
  if(!state.preview)state.returnFocus=document.activeElement;
  clearUrls('preview');state.preview=item;state.currentBlob=null;state.previewText=null;state.historyOpen=false;state.structuredOpen=false;
  $('fileHistory').textContent='History';$('inspectTools').hidden=false;$('structuredToggle').hidden=true;
@@ -483,7 +554,7 @@ async function openRepo(targetPath=''){
  const repo=$('repo').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\/$/,'');
  if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){status('Enter owner/repository.');return}
  cancelContentScan();stopStory();state.storyData=null;const request=++state.repoRequest;state.repo=repo;state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;
- state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
+ clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
  clearObjects();clearPreview();++state.seq;status('Connecting to '+repo+'…');
  try{
   const info=await json('/repos/'+repo);if(request!==state.repoRequest)return;
@@ -495,7 +566,7 @@ async function openRepo(targetPath=''){
 function resetSession(){
  cancelContentScan();stopStory();state.storyData=null;++state.repoRequest;++state.seq;state.token='';state.repo='';state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;state.cache.clear();state.items=[];state.visibleItems=[];
  state.tree.clear();state.expanded.clear();state.indexEntries=[];state.indexReady=false;state.indexError=false;state.indexTruncated=false;state.repoIsPrivate=true;
- state.renderEpoch++;if(state.thumbObserver){state.thumbObserver.disconnect();state.thumbObserver=null}thumbQueue.length=0;
+ clearSelection();state.renderEpoch++;if(state.thumbObserver){state.thumbObserver.disconnect();state.thumbObserver=null}thumbQueue.length=0;
  clearPreview();clearObjects();paintBookmarks();$('token').value='';$('branch').value='';
  $('repoSelect').replaceChildren(new Option('Enter a repo below',''));$('tree').replaceChildren();$('items').replaceChildren();
  $('breadcrumbs').textContent='No repository selected';$('githubLink').href='https://github.com';history.replaceState(null,'',location.pathname+location.search);
@@ -516,7 +587,7 @@ async function connect(){
  }catch(e){if(request===state.repoRequest)status('Repository list unavailable: '+e.message+' · Public repos can be entered manually.')}
 }
 async function copyCurrentLink(){try{await navigator.clipboard.writeText(location.href);status('Shareable link copied. Credentials are never included.')}catch{status('Clipboard unavailable. Copy this page URL from the address bar.')}}
-$('openRepo').onclick=()=>openRepo();$('disconnect').onclick=()=>{resetSession();status('Credentials and private browsing state cleared from this tab.')};$('copyFolder').onclick=copyCurrentLink;$('copyFile').onclick=copyCurrentLink;$('compareAction').onclick=compareAction;$('downloadRaw').onclick=downloadOriginal;$('copyRaw').onclick=copyText;$('fileHistory').onclick=toggleHistory;$('structuredToggle').onclick=toggleStructured;$('bookmark').onclick=toggleBookmark;$('contentSearch').onclick=scanContents;$('storyToggle').onclick=toggleStory;$('connect').onclick=connect;$('repoSelect').onchange=()=>{if($('repoSelect').value){$('repo').value=$('repoSelect').value;$('branch').value='';openRepo()}};
+$('openRepo').onclick=()=>openRepo();$('disconnect').onclick=()=>{resetSession();status('Credentials and private browsing state cleared from this tab.')};$('copyFolder').onclick=copyCurrentLink;$('copyFile').onclick=copyCurrentLink;$('compareAction').onclick=compareAction;$('downloadRaw').onclick=downloadOriginal;$('copyRaw').onclick=copyText;$('fileHistory').onclick=toggleHistory;$('structuredToggle').onclick=toggleStructured;$('bookmark').onclick=toggleBookmark;$('contentSearch').onclick=scanContents;$('storyToggle').onclick=toggleStory;$('selectMode').onclick=()=>{state.selectionMode=!state.selectionMode;updateSelectionControls()};$('contactSheet').onclick=openContactSheet;$('clearSelection').onclick=clearSelection;$('connect').onclick=connect;$('repoSelect').onchange=()=>{if($('repoSelect').value){$('repo').value=$('repoSelect').value;$('branch').value='';openRepo()}};
 $('filter').oninput=()=>{state.limit=80;paint()};$('sortFiles').onchange=()=>{state.limit=80;paint()};$('fileKind').onchange=()=>{state.limit=80;paint()};$('density').oninput=()=>{$('items').style.setProperty('--tile-min',$('density').value+'px')};$('scope').onchange=()=>{state.limit=80;paint()};$('prevPreview').onclick=()=>adjacentPreview(-1);$('nextPreview').onclick=()=>adjacentPreview(1);$('back').onclick=()=>navigate(state.path.split('/').slice(0,-1).join('/'));$('gridBtn').onclick=()=>{state.mode='grid';$('gridBtn').classList.add('active');$('listBtn').classList.remove('active');paint()};$('listBtn').onclick=()=>{state.mode='list';$('listBtn').classList.add('active');$('gridBtn').classList.remove('active');paint()};
 $('theme').onclick=()=>{document.body.classList.toggle('light');$('theme').textContent=document.body.classList.contains('light')?'☾':'☀︎';try{localStorage.setItem('expository-theme',document.body.classList.contains('light')?'light':'dark')}catch{}};
 try{if(localStorage.getItem('expository-theme')==='light')$('theme').click()}catch{}
