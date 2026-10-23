@@ -10,7 +10,7 @@
 
 ## Next actions
 
-1. Fix desktop sidebar credential-button spacing and portrait toolbar density in a focused follow-up; verify 393 and 1440 screenshots.
+1. A focused follow-up PR changes the long desktop private-session label and collapses advanced filters by default on phones. **Pending re-capture** at 393 and 1440 before marking the findings resolved.
 2. Test actual export PNG bytes and ordered caption layout with a deterministic browser assertion.
 3. Physical Pixel 6 Pro user journeys, real GitHub auth, reduced motion and TalkBack remain **unverified**.
 4. Avoid promoting this fixture atlas into an approved visual baseline or automatic screenshot requirement.
