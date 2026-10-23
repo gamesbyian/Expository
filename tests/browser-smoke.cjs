@@ -1,0 +1,218 @@
+'use strict';
+// Real Chromium mobile browser smoke tests without npm dependencies or GitHub tokens.
+// Run: node tests/browser-smoke.cjs (EXPOSITORY_ATLAS=1 for expanded review captures)
+const {spawn,spawnSync}=require('node:child_process');
+const fs=require('node:fs');
+const os=require('node:os');
+const path=require('node:path');
+const {pathToFileURL}=require('node:url');
+const assert=require('node:assert/strict');
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const which=name=>{const r=spawnSync('which',[name],{encoding:'utf8'});return r.status===0?r.stdout.trim():null};
+const CHROME=process.env.CHROME_BIN||which('google-chrome')||which('google-chrome-stable')||which('chromium')||which('chromium-browser');
+if(!CHROME)throw Error('Chromium/Google Chrome is required for this browser smoke test.');
+const work=fs.mkdtempSync(path.join(os.tmpdir(),'expository-smoke-'));
+const screenshots=path.join(__dirname,'..','review','evidence');
+fs.mkdirSync(screenshots,{recursive:true});
+console.log('Chromium binary:',CHROME);
+const browser=spawn(CHROME,['--headless=new','--no-sandbox','--disable-gpu','--disable-dev-shm-usage','--no-first-run',
+ '--disable-background-networking','--remote-allow-origins=*','--remote-debugging-port=0','--user-data-dir='+work,'--window-size=393,852','about:blank'],{stdio:['ignore','pipe','pipe']});
+let browserOutput='';for(const stream of [browser.stdout,browser.stderr])stream.on('data',chunk=>{browserOutput=(browserOutput+String(chunk)).slice(-5000)});
+browser.on('error',error=>{browserOutput+='\nSpawn error: '+error.message});
+let socket,sequence=0;
+const pending=new Map(),runtimeErrors=[];
+function fail(message){throw Error(message)}
+async function connect(){
+ let port;
+ for(let i=0;i<100;i++){
+  if(browser.exitCode!==null)fail('Chromium exited before DevTools connection: '+browser.exitCode);
+  try{port=Number(fs.readFileSync(path.join(work,'DevToolsActivePort'),'utf8').split('\n')[0]);if(port)break}catch{}
+  await sleep(100);
+ }
+ if(!port)fail('Chromium did not expose a DevTools port (exit='+browser.exitCode+', signal='+browser.signalCode+'). Browser logs: '+browserOutput);
+ let targets;
+ for(let i=0;i<30;i++){try{targets=await(await fetch('http://127.0.0.1:'+port+'/json/list')).json();if(targets.some(x=>x.type==='page'))break}catch{}await sleep(100)}
+ const target=targets?.find(x=>x.type==='page');if(!target)fail('No browser page target.');
+ socket=new WebSocket(target.webSocketDebuggerUrl);
+ await new Promise((resolve,reject)=>{
+  const timeout=setTimeout(()=>reject(Error('WebSocket connection timed out')),5000);
+  socket.onopen=()=>{clearTimeout(timeout);resolve()};
+  socket.onerror=()=>{clearTimeout(timeout);reject(Error('CDP WebSocket connection failed'))};
+ });
+ socket.addEventListener('message',evt=>{
+  const m=JSON.parse(evt.data);
+  if(m.method==='Runtime.exceptionThrown')runtimeErrors.push(m.params.exceptionDetails?.exception?.description||m.params.exceptionDetails?.text||'Runtime error');
+  if(m.id&&pending.has(m.id)){const q=pending.get(m.id);pending.delete(m.id);m.error?q.reject(Error(m.error.message)):q.resolve(m.result)}
+ });
+}
+function send(method,params={}){
+ return new Promise((resolve,reject)=>{
+  const id=++sequence;pending.set(id,{resolve,reject});
+  socket.send(JSON.stringify({id,method,params}));
+  setTimeout(()=>{if(pending.has(id)){pending.delete(id);reject(Error('CDP timeout: '+method))}},12000).unref();
+ });
+}
+async function evaluate(expression){
+ const r=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});
+ if(r.exceptionDetails)fail(r.exceptionDetails.exception?.description||r.exceptionDetails.text);
+ return r.result?.value;
+}
+async function until(expression,label){
+ for(let i=0;i<70;i++){
+  try{if(await evaluate(expression))return}catch{}
+  await sleep(100);
+ }
+ fail('Timed out waiting for: '+label);
+}
+async function screenshot(name){const x=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});fs.writeFileSync(path.join(screenshots,name),Buffer.from(x.data,'base64'))}
+const fixtures=String.raw`
+(()=> {
+ const original=window.fetch;
+ const dirs=(...items)=>items.map(([name,p])=>({name,path:p,type:'dir',size:0}));
+ const files=(...items)=>items.map(([name,p])=>({name,path:p,type:'file',size:250}));
+ const svg=(fill,name)=>'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450"><rect width="800" height="450" fill="#182033"/><circle cx="400" cy="225" r="160" fill="'+fill+'"/><text x="400" y="235" fill="white" text-anchor="middle" font-size="42">'+name+'</text></svg>';
+ const dataA=svg('#2acbab','A'),dataB=svg('#c966e9','B');
+ window.fetch=async (input,opts={})=>{
+  const u=new URL(String(input),location.href);
+  if(u.hostname!=='api.github.com')return original(input,opts);
+  const p=decodeURIComponent(u.pathname),json=obj=>new Response(JSON.stringify(obj),{status:200,headers:{'content-type':'application/json'}});
+  if(p==='/repos/gamesbyian/Glimpse')return json({default_branch:'main',private:false});
+  if(p.endsWith('/git/trees/main'))return json({truncated:false,tree:[
+   {path:'design',type:'tree'},{path:'design/proposals',type:'tree'},
+   {path:'design/proposals/a.svg',type:'blob',size:250},
+   {path:'design/proposals/b.svg',type:'blob',size:250},
+   {path:'docs',type:'tree'},{path:'docs/README.md',type:'blob',size:48},{path:'docs/data.json',type:'blob',size:120},{path:'docs/data.csv',type:'blob',size:100}
+  ]});
+  if(p.endsWith('/contents/'))return json(dirs(['design','design'],['docs','docs']));
+  if(p.endsWith('/contents/design'))return json(dirs(['proposals','design/proposals']));
+  if(p.endsWith('/contents/docs'))return json(files(['README.md','docs/README.md'],['data.json','docs/data.json'],['data.csv','docs/data.csv']));
+  if(p.endsWith('/contents/design/proposals'))return json(files(['a.svg','design/proposals/a.svg'],['b.svg','design/proposals/b.svg']));
+  if(p.endsWith('/contents/design/proposals/a.svg'))return new Response(dataA,{status:200,headers:{'content-type':'image/svg+xml'}});
+  if(p.endsWith('/contents/design/proposals/b.svg'))return new Response(dataB,{status:200,headers:{'content-type':'image/svg+xml'}});
+  if(p.endsWith('/contents/docs/README.md'))return new Response('# Hello from fixture\n[Open data](data.csv) [unsafe](javascript:alert(1))',{status:200,headers:{'content-type':'text/plain'}});
+  if(p.endsWith('/contents/docs/data.json'))return new Response(JSON.stringify({status:'ready',items:[1,2,3],active:true}),{status:200,headers:{'content-type':'application/json'}});
+  if(p.endsWith('/contents/docs/data.csv'))return new Response('name,value\nAlpha,17\nBeta,23',{status:200,headers:{'content-type':'text/csv'}});
+  if(p.endsWith('/commits'))return json([{sha:'1111111111111111111111111111111111111111',commit:{message:'First fixture change',author:{date:'2026-10-22T12:00:00Z'}}}]);
+  if(p.endsWith('/releases'))return json([{tag_name:'v1.0',name:'First public release',published_at:'2026-10-21T12:00:00Z'}]);
+  if(p.endsWith('/tags'))return json([{name:'v1.0'}]);
+  return new Response('Not found',{status:404});
+ };
+})();
+`;
+async function main(){
+ try{
+  await connect();await send('Page.enable');await send('Runtime.enable');
+  await send('Page.addScriptToEvaluateOnNewDocument',{source:fixtures});
+  await send('Emulation.setDeviceMetricsOverride',{width:393,height:852,deviceScaleFactor:1,mobile:true});
+  const page=pathToFileURL(path.join(__dirname,'..','index.html')).href;
+  await send('Page.navigate',{url:page});
+  await until("document.querySelector('#status')?.textContent?.includes('items')",'initial listing');
+  if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-start-393.png');
+  await evaluate("document.querySelector('#scope').value='images';document.querySelector('#scope').dispatchEvent(new Event('change'))");
+  await until("document.querySelectorAll('#items .tile').length===2",'recursive image gallery');
+  await evaluate("document.querySelector('#sortFiles').value='size';document.querySelector('#sortFiles').dispatchEvent(new Event('change'))");
+  await until("document.querySelectorAll('#items .tile').length===2",'sorted gallery');
+  await evaluate("document.querySelector('#density').value='210';document.querySelector('#density').dispatchEvent(new Event('input'))");
+  assert.equal(await evaluate("document.querySelector('#items').style.getPropertyValue('--tile-min')"),'210px','resizable gallery');
+  await evaluate("document.querySelector('#filter').value='circle';document.querySelector('#contentSearch').click()");
+  await until("document.querySelector('#contentSearch').textContent==='Search contents'",'bounded content search completion');
+  assert.equal(await evaluate("document.querySelectorAll('#searchResults .search-hit').length>=1"),true,'content search found SVG text');
+  await evaluate("document.querySelector('#filter').value='';document.querySelector('#filter').dispatchEvent(new Event('input'))");
+  await until("document.querySelectorAll('#items .tile').length===2",'restored gallery after search');
+  assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'393px overflow');
+  await screenshot('expository-gallery-393.png');
+  if(process.env.EXPOSITORY_ATLAS==='1'){
+   await send('Emulation.setDeviceMetricsOverride',{width:412,height:892,deviceScaleFactor:1,mobile:true});
+   assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'412px gallery overflow');
+   await screenshot('expository-gallery-412.png');
+   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+   assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'1440px gallery overflow');
+   await screenshot('expository-gallery-1440.png');
+   await send('Emulation.setDeviceMetricsOverride',{width:393,height:852,deviceScaleFactor:1,mobile:true});
+  }
+  await evaluate("document.querySelector('#items .tile').click()");
+  await until("document.querySelector('#compareAction')?.hidden===false",'first image preview');
+  assert.equal(await evaluate("Boolean(document.querySelector('.image-viewer .image-stage img'))"),true,'image inspector displayed');
+  await evaluate("document.querySelector('.image-actions button:nth-child(3)').click()");
+  assert.equal(await evaluate("document.querySelector('.image-stage img').style.width"),'125%','image zoom in');
+  await evaluate("document.querySelector('.image-actions button:nth-child(2)').click()");
+  assert.equal(await evaluate("document.querySelector('.image-stage img').style.width"),'100%','image zoom reset');
+  await evaluate("document.querySelector('#fileHistory').click()");
+  await until("document.querySelector('.history-list a')?.textContent?.includes('First fixture change')",'file history loaded');
+  await evaluate("document.querySelector('#fileHistory').click()");
+  await until("Boolean(document.querySelector('.image-viewer'))",'return from history');
+  assert.equal(await evaluate("document.querySelector('#pageMain').inert"),true,'modal background inert');
+  await evaluate("document.querySelector('#compareAction').click();document.querySelector('#nextPreview').click()");
+  await until("document.querySelector('#compareAction')?.textContent==='Compare A/B'",'second preview');
+  await evaluate("document.querySelector('#compareAction').click()");
+  await until("Boolean(document.querySelector('.compare-wipe'))",'touch reveal comparison');
+  assert.equal(await evaluate("document.querySelector('.compare-range').getBoundingClientRect().bottom<=innerHeight-8"),true,'mobile reveal control visible without scrolling');
+  assert.equal(await evaluate("Math.abs(document.querySelector('#closePreview').getBoundingClientRect().top-document.querySelector('#previewTitle').getBoundingClientRect().top)<12"),true,'modal close and title share first header row');
+  await evaluate("const s=document.querySelector('.compare-range');s.value='75';s.dispatchEvent(new Event('input',{bubbles:true}))");
+  assert.equal(await evaluate("document.querySelector('.compare-wipe').style.getPropertyValue('--reveal')"),'75%','slider changes wipe');
+  await screenshot('expository-reveal-393.png');
+  await evaluate("document.querySelector('.compare-controls button').click()");
+  await until("Boolean(document.querySelector('.compare-grid'))",'side by side mode');
+  await evaluate("document.querySelector('.compare-controls button:nth-child(3)').click()");
+  await until("Boolean(document.querySelector('.diff-canvas'))",'canvas pixel diff');
+  assert.equal(await evaluate("document.querySelector('.diff-summary')?.textContent?.includes('differing sampled pixels')"),true,'pixel difference metric visible');
+  await screenshot('expository-pixel-diff-393.png');
+  await evaluate("document.querySelector('.compare-controls button:first-child').click()");
+  await until("Boolean(document.querySelector('.compare-grid'))",'restore comparison mode');
+  await send('Emulation.setDeviceMetricsOverride',{width:360,height:780,deviceScaleFactor:1,mobile:true});
+  assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'360px overflow');
+  await screenshot('expository-compare-360.png');
+  await evaluate("document.querySelector('#closePreview').click()");
+  assert.equal(await evaluate("document.querySelector('#pageMain').inert"),false,'modal background restored');
+  await evaluate("document.querySelector('#scope').value='repo';document.querySelector('#scope').dispatchEvent(new Event('change'));document.querySelector('#filter').value='data.json';document.querySelector('#filter').dispatchEvent(new Event('input'))");
+  await until("document.querySelectorAll('#items .tile').length===1",'indexed JSON search');
+  await evaluate("document.querySelector('#items .tile').click()");
+  await until("document.querySelector('#structuredToggle')?.hidden===false",'JSON structure available');
+  await evaluate("document.querySelector('#structuredToggle').click()");
+  await until("Boolean(document.querySelector('.json-tree details'))",'JSON tree rendered');
+  if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-json-360.png');
+  assert.equal(await evaluate("document.querySelector('.json-tree summary')?.textContent"),'Root {3 keys}','safe JSON hierarchy');
+  await evaluate("document.querySelector('#closePreview').click()");
+  assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'no overflow after inspector');
+  
+  await evaluate("document.querySelector('#filter').value='README.md';document.querySelector('#filter').dispatchEvent(new Event('input'))");
+  await until("document.querySelectorAll('#items .tile').length===1",'Markdown fixture found');
+  await evaluate("document.querySelector('#items .tile').click()");
+  await until("Boolean(document.querySelector('.md-link'))",'relative Markdown navigation available');
+  assert.equal(await evaluate("document.querySelectorAll('.md-link').length"),1,'unsafe URL not linkified');
+  await evaluate("document.querySelector('.md-link').click()");
+  await until("document.querySelector('#structuredToggle')?.hidden===false",'CSV table option shown');
+  await evaluate("document.querySelector('#structuredToggle').click()");
+  await until("Boolean(document.querySelector('.data-table'))",'CSV table rendered');
+  assert.equal(await evaluate("document.querySelectorAll('.data-table tbody tr').length"),2,'CSV rows shown');
+  if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-csv-360.png');
+  await evaluate("document.querySelector('#closePreview').click()");
+  await evaluate("document.querySelector('#filter').value='';document.querySelector('#filter').dispatchEvent(new Event('input'))");
+  
+  await evaluate("document.querySelector('#storyToggle').click()");
+  await until("document.querySelectorAll('#storyView .story-event').length===2",'Story Mode history events');
+  assert.equal(await evaluate("document.querySelector('#storyView').hidden"),false,'Story Mode visible');
+  assert.equal(await evaluate("document.querySelector('#items').hidden"),true,'files hidden during Story Mode');
+  assert.equal(await evaluate("document.querySelectorAll('#storyView .story-tags a').length"),1,'undated tags grouped separately');
+  await evaluate("document.querySelector('.story-controls button:nth-child(3)').click()");
+  assert.equal(await evaluate("document.querySelectorAll('#storyView .story-event').length"),1,'filter to releases');
+  assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'Story Mode no horizontal overflow');
+  await screenshot('expository-story-360.png');
+  await evaluate("document.querySelector('#storyToggle').click()");
+  assert.equal(await evaluate("document.querySelector('#items').hidden"),false,'returns to files');
+  assert.equal(runtimeErrors.length,0,'browser runtime exceptions: '+runtimeErrors.join(' | '));
+  console.log('PASS: real Chromium mobile gallery, sorting, bounded search, zoom, file history, JSON tree, modal isolation, reveal, pixel difference, side-by-side, 360/393px overflow checks.');
+  console.log('Evidence: '+screenshots);
+ }finally{
+  try{socket?.close()}catch{}
+  if(browser.exitCode===null){
+   browser.kill('SIGTERM');
+   await Promise.race([
+    new Promise(resolve=>browser.once('exit',resolve)),
+    sleep(1500).then(()=>{if(browser.exitCode===null)browser.kill('SIGKILL')})
+   ]);
+  }
+  for(let attempt=0;attempt<4;attempt++){try{fs.rmSync(work,{recursive:true,force:true});break}catch(e){if(attempt===3)console.warn('Temporary Chrome profile could not be removed:',e.message);else await sleep(150)} }
+ }
+}
+main().catch(e=>{console.error(e.stack||e);process.exitCode=1;});

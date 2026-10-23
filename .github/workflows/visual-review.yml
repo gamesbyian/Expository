@@ -1,0 +1,45 @@
+name: Expository Visual Review
+on:
+  workflow_dispatch:
+    inputs:
+      fixture:
+        description: Synthetic review fixture
+        type: choice
+        required: true
+        default: synthetic-github-v1
+        options:
+          - synthetic-github-v1
+permissions:
+  contents: read
+jobs:
+  atlas:
+    name: Manual Chrome atlas
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Browser acceptance and visual captures
+        env:
+          EXPOSITORY_ATLAS: '1'
+        run: node tests/browser-smoke.cjs
+      - name: Build offline atlas and provenance receipt
+        env:
+          ATLAS_FIXTURE: ${{ inputs.fixture }}
+        run: node review/build-atlas.cjs --source-sha "${GITHUB_SHA}" --fixture "${ATLAS_FIXTURE}"
+      - name: Review summary
+        run: |
+          echo "## Expository synthetic Chromium visual evidence" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Source: \`${GITHUB_SHA}\`; no private repos, user tokens or real-device proof." >> "${GITHUB_STEP_SUMMARY}"
+          echo "Download the **expository-visual-atlas** artifact and open \`index.html\` offline." >> "${GITHUB_STEP_SUMMARY}"
+      - name: Upload only synthetic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: expository-visual-atlas
+          path: |
+            review/atlas/
+          if-no-files-found: warn
+          retention-days: 7

@@ -35,8 +35,12 @@ For the feature plan and current development stages, see the [weighted feature r
 
 ## How this site is published
 
-This is a **public, application-only** deployment. Only the reviewed standalone `index.html` is copied from the private development source `gamesbyian/general-purpose/tools/expository/`. The private repository's other files, manifests, histories, workflows, and credentials are not published here.
+This public repository is now the **canonical application and development source**. The earlier `gamesbyian/general-purpose/tools/expository/` version is preservation/bootstrap history, not a second active development lane. The Pages deployment continues to use root `index.html` only. Public agent instructions, synthetic test fixtures and visual review scripts live beside it; no personal repository content or credentials are included.
 
-The `.expository-managed` file records that this is the designated deployment target for guarded future app updates. `.nojekyll` disables Jekyll transformations.
+The `.expository-managed` marker is historical from the original guarded deployment and is not an instruction to overwrite this repository from the archived private source. `.nojekyll` disables Jekyll transformations.
 
-For issues and implementation work, see the [private development source](https://github.com/gamesbyian/general-purpose/tree/main/tools/expository) if you have access.
+For development work, start at [AGENTS.md](AGENTS.md) and [the live work queue](docs/WORK-QUEUE.md). For screenshot acceptance and a standalone offline atlas, see [visual review](review/README.md) and the manual **Expository Visual Review** Action. The [weighted roadmap](FEATURE-ROADMAP.md) is the strategic feature list; it is not evidence that every item is already implemented.
+
+## Development and verification
+
+The ordinary PR check runs `node --test tests/expository.test.cjs` plus lightweight script syntax checks. For meaningful interaction changes, run `node tests/browser-smoke.cjs` with Chrome installed. Visual reviews are **manually dispatched**, synthetic-data-only, and produce an offline HTML screenshot atlas with SHA/provenance receipts. A passing browser run does not imply Pixel 6 Pro handset approval or artistic acceptance.
