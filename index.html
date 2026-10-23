@@ -630,7 +630,7 @@ async function connect(){
  status(list.length+' accessible repositories found. Token remains only in tab memory.');
  }catch(e){if(request===state.repoRequest)status('Repository list unavailable: '+e.message+' · Public repos can be entered manually.')}
 }
-async function currentShareUrl(){
+function currentShareUrl(){
  if(!state.repoIsPrivate)return location.href;
  const base='https://github.com/'+state.repo+(state.preview&&!state.sheetOpen?'/blob/'+enc(state.branch)+'/'+pathPart(state.preview.path):'/tree/'+enc(state.branch)+(state.path?'/'+pathPart(state.path):''));
  return base
