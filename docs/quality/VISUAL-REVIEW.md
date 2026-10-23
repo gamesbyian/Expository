@@ -18,6 +18,7 @@
 | X10 | Contact sheet | after E02; selected file count, overflow/caps/export state |
 | X11 | Accessibility | reduced motion, keyboard focus, text-scale and contrast; compare to DOM/ARIA evidence |
 | X12 | Production security | public/private switch, token purge and untrusted Markdown/SVG; use only synthetic credentials in captures |
+| X13 | File-size treemap | 393×852 and 1440×900; size-weighted regions, safe labels, accessible 44px list and explicit partial-index disclosure |
 
 ## Evidence receipt
 
