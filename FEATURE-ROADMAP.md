@@ -24,7 +24,7 @@ Ratings describe *general Expository relevance* (10 is highest) rather than impl
 | 9 | Code symbol navigation | Sourcegraph | Lightweight client outline, optional generated index for large repos | Wave 3 |
 | 9 | File revision timeline | GitLens, GitHub | Path-scoped last 20 commits with dates and GitHub provenance links implemented | Wave 2 initial |
 | 9 | Pixel diffs | Image compare tools | Local magenta diff heatmap, exact intrinsic-dimension gate, 1024×1024 bounded sampling, explicit percent changed | Wave 2 initial |
-| 9 | Multi-select contact sheets | FolderFrame | Client-only capture with explicit selection count and caps | Wave 2 |
+| 9 | Multi-select contact sheets | FolderFrame | Up to 12 source images in one repo; in-tab gallery, PNG export and bounded fetches, with private-session cleanup | Wave 2 initial |
 | 9 | Relative Markdown navigation | GitHub | Path-normalized internal Markdown links, traversal refusal and HTTP(S)-only external links | Wave 2 initial |
 | 8 | JSON/CSV/YAML/Mermaid viewer | Structured data viewers | Bounded JSON tree and CSV/TSV safe tables delivered; YAML/Mermaid pending | Wave 2 partial |
 | 8 | Activity dashboard | GitHub, GitLens | Public/restricted commit and PR APIs, bounded counts | Wave 3 |
