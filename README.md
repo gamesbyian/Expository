@@ -13,12 +13,18 @@ Expository browses **public repositories without login** and can browse selected
 - Explore branches and collapsible nested folders
 - Search paths across a repository and browse recursive image galleries
 - Switch between gallery thumbnails and compact file lists
+- Sort by name, size or extension; filter by file category and adjust thumbnail density
+- Run bounded, opt-in full-text scans with matching-line snippets
+- Read source with line numbers and lightweight syntax colours; copy or download originals
+- Star public repositories for quick switching, without storing private repository names
 - Preview SVGs, photos, plain/safe Markdown, source files, PDFs, and supported media
 - Pin two images for side-by-side comparison or a touch-friendly reveal slider
 - Copy deep links to folders and previews
 - Switch dark/light appearance, and clear private browsing credentials explicitly
 
 Expository is **read-only**, uses direct requests to the GitHub API, and has no advertising, analytics, server-side session store, or dependency-loaded remote scripts. GitHub API rate limits and tree-index truncation may limit results on large repositories. It is not a replacement for GitHub's editor.
+
+For the feature plan and current development stages, see the [weighted feature roadmap](FEATURE-ROADMAP.md). Not every planned item is implemented.
 
 ## How this site is published
 
