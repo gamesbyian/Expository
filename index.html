@@ -287,7 +287,7 @@ function renderStory(){
  }
  events.sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));const shown=events.filter(e=>data.filter==='all'||data.filter===e.kind);
  const merged=(data.pulls||[]).filter(p=>p.merged_at).length;
- const info=elem('p','story-notice','Sample: '+(data.commits?.length||0)+' commits ('+(data.pages||1)+' of at most 4 pages), '+(data.releases?.length||0)+' recent releases, '+merged+' merged PRs among '+(data.pulls?.length||0)+' recently updated closed PRs, '+(data.tags?.length||0)+' undated tags'+(data.errors.length?' · '+data.errors.map(e=>e.split(':')[0]).join(', ')+' unavailable':'')+'. History and PR coverage are incomplete.');host.append(info);
+ const info=elem('p','story-notice','Sample: '+(data.commits?.length||0)+' commits ('+(data.pages||1)+' of at most 4 pages), '+(data.releases?.length||0)+' recent releases, '+merged+' merged PRs among '+(data.pulls?.length||0)+' recently updated closed PRs ('+(data.pullPages||1)+' of at most 4 pages), '+(data.tags?.length||0)+' undated tags'+(data.errors.length?' · '+data.errors.map(e=>e.split(':')[0]).join(', ')+' unavailable':'')+'. History and PR coverage are incomplete.');host.append(info);
  const stream=elem('div','story-stream');let month='';
  for(const event of shown){const stamp=new Date(event.date),m=stamp.toLocaleDateString(undefined,{year:'numeric',month:'long'});
   if(m!==month){stream.append(elem('div','story-group',m));month=m}stream.append(storyEvent(event.kind,stamp.toLocaleDateString(),event.label,event.summary,event.url))
@@ -301,10 +301,40 @@ function renderStory(){
  }else if((data.pages||1)>=4&&data.hasMore)paging.append(elem('span','story-detail','Four-page / 200-commit limit reached. This is not a full history.'));
  else paging.append(elem('span','story-detail',data.commits.length?'No further sampled commit pages available.':'No commit pages currently available.'));
  if(data.olderError)paging.append(elem('p','story-detail','Older commits could not be fetched: '+data.olderError));
+ if(data.hasMorePulls&&(data.pullPages||1)<4){
+  const morePulls=elem('button','pill',data.loadingOlderPulls?'Loading older PRs…':'Load 20 older closed PRs');
+  morePulls.disabled=Boolean(data.loadingOlderPulls);
+  morePulls.setAttribute('aria-label','Load the next page of recently updated closed pull requests from GitHub; only actually merged PRs appear in the timeline');
+  morePulls.onclick=loadOlderPulls;paging.append(morePulls)
+ }else if(data.hasMorePulls&&(data.pullPages||1)>=4)paging.append(elem('span','story-detail','80 closed-PR sample cap reached. Older merged PRs may be omitted.'));
+ else paging.append(elem('span','story-detail','No more closed-PR pages currently available in this bounded sample.'));
+ if(data.olderPullError)paging.append(elem('p','story-detail','Older PRs could not be fetched: '+data.olderPullError));
  host.append(paging);
  const tags=(data.tags||[]).filter(x=>x.name&&typeof x.name==='string');if(tags.length){
   host.append(elem('h3','','Tags (no reliable dates in the tags API)'));
   const links=elem('div','story-tags');for(const tag of tags){const a=elem('a','',tag.name);a.href='https://github.com/'+state.repo+'/tree/'+enc(tag.name);a.target='_blank';a.rel='noopener noreferrer';links.append(a)}host.append(links)
+ }
+}
+async function loadOlderPulls(){
+ const data=state.storyData;
+ if(!state.storyOpen||!data||data.loadingOlderPulls||!data.hasMorePulls||(data.pullPages||1)>=4)return;
+ const seq=state.storySeq,repo=state.repo,branch=state.branch,nextPage=(data.pullPages||1)+1;
+ data.loadingOlderPulls=true;data.olderPullError='';renderStory();
+ try{
+  const page=await json('/repos/'+repo+'/pulls?state=closed&sort=updated&direction=desc&per_page=20&page='+nextPage);
+  if(seq!==state.storySeq||state.storyData!==data||repo!==state.repo||branch!==state.branch||!state.storyOpen)return;
+  if(!Array.isArray(page))throw Error('GitHub returned an invalid closed-PR page');
+  const known=new Set(data.pulls.map(p=>p.number));
+  for(const item of page){
+   if(!Number.isSafeInteger(item?.number)||item.number<=0||known.has(item.number))continue;
+   data.pulls.push(item);known.add(item.number)
+  }
+  data.pullPages=nextPage;data.hasMorePulls=page.length===20
+ }catch(e){
+  if(seq!==state.storySeq||state.storyData!==data||!state.storyOpen)return;
+  data.olderPullError=e.message
+ }finally{
+  if(seq===state.storySeq&&state.storyData===data&&state.storyOpen){data.loadingOlderPulls=false;renderStory()}
  }
 }
 async function loadOlderStory(){
@@ -419,9 +449,9 @@ async function toggleStory(){
  const endpoints=[['commits','/repos/'+repo+'/commits?sha='+enc(branch)+'&per_page=50&page=1'],['releases','/repos/'+repo+'/releases?per_page=10'],['tags','/repos/'+repo+'/tags?per_page=10'],['pulls','/repos/'+repo+'/pulls?state=closed&sort=updated&direction=desc&per_page=20']];
  const resolved=await Promise.all(endpoints.map(async([key,url])=>{try{const data=await json(url);return {key,data:Array.isArray(data)?data:[]}}catch(e){return {key,data:[],error:e.message}}}));
  if(seq!==state.storySeq||repo!==state.repo||!state.storyOpen)return;
- const data={commits:[],releases:[],tags:[],pulls:[],filter:'all',pages:1,hasMore:false,loadingOlder:false,olderError:'',errors:[]};
+ const data={commits:[],releases:[],tags:[],pulls:[],filter:'all',pages:1,hasMore:false,loadingOlder:false,olderError:'',pullPages:1,hasMorePulls:false,loadingOlderPulls:false,olderPullError:'',errors:[]};
  for(const x of resolved){data[x.key]=x.data;if(x.error)data.errors.push(x.key+': '+x.error)}
- data.hasMore=data.commits.length===50;
+ data.hasMore=data.commits.length===50;data.hasMorePulls=data.pulls.length===20;
  state.storyData=data;renderStory();
 }
 function updateHash(filePath=''){
