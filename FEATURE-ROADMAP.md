@@ -21,7 +21,7 @@ Ratings describe *general Expository relevance* (10 is highest) rather than impl
 | 9 | Zoom, pan, fullscreen, rotate | FolderFrame | 1×–4× zoom, scroll/pan/reset shipped; native pinch, rotate, fullscreen remain | Wave 2 partial |
 | 9 | Rendered/raw Markdown, safe structured data | TooToo | Safe Markdown links to repo paths, expandable JSON, CSV/TSV tables delivered; richer GFM rendering and universal raw toggle pending | Wave 2 partial |
 | 9 | Public-only favorites and recent folders | Gitako | Never store private-repo names/paths or tokens, clear control | Wave 1 bookmarks |
-| 9 | Code symbol navigation | Sourcegraph | Lightweight client outline, optional generated index for large repos | Wave 3 |
+| 9 | Code symbol navigation | Sourcegraph | Heuristic, bounded in-file JS/TS/Python/Rust/Go/Java/Kotlin symbol outline with line jumps; full language parser and repo-wide symbols pending | Wave 3 initial |
 | 9 | File revision timeline | GitLens, GitHub | Path-scoped last 20 commits with dates and GitHub provenance links implemented | Wave 2 initial |
 | 9 | Pixel diffs | Image compare tools | Local magenta diff heatmap, exact intrinsic-dimension gate, 1024×1024 bounded sampling, explicit percent changed | Wave 2 initial |
 | 9 | Multi-select contact sheets | FolderFrame | Up to 12 source images in one repo; in-tab gallery, PNG export and bounded fetches, with private-session cleanup | Wave 2 initial |
