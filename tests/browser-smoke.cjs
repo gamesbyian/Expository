@@ -140,6 +140,8 @@ async function main(){
   await evaluate("document.querySelector('#scrim').click()");
   await evaluate("document.querySelector('#sizeToggle').click()");
   await until("document.querySelectorAll('#sizeView .size-tile').length===2",'indexed size treemap rendered');
+  assert.equal(await evaluate("document.querySelector('#workspace').dataset.mode"),'review','size viewer uses focused toolbar');
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('#selectMode')).display"),'none','selection buttons absent in size mode');
   assert.equal(await evaluate("document.querySelector('#items').hidden"),true,'size view hides file tiles');
   assert.equal(await evaluate("document.querySelectorAll('#sizeView .size-list button').length"),2,'accessible tap list reflects both indexed groups');
   assert.equal(await evaluate("document.querySelector('#sizeView .size-head').textContent.includes('indexed bytes')"),true,'indexed byte coverage explicitly shown');
@@ -149,6 +151,7 @@ async function main(){
   await evaluate("Array.from(document.querySelectorAll('#sizeView .size-list button')).find(x=>x.textContent.includes('design /')).click()");
   await until("document.querySelector('#breadcrumbs')?.textContent?.includes('design')",'treemap folder drill-down');
   assert.equal(await evaluate("document.querySelector('#sizeView').hidden"),true,'drill-down returns to ordinary files');
+  assert.equal(await evaluate("document.querySelector('#workspace').dataset.mode"),'files','folder drill-down restores file controls');
   await evaluate("document.querySelector('#sizeToggle').click()");
   await until("document.querySelector('#sizeView .size-head')?.textContent?.includes('design')",'nested folder size map');
   assert.equal(await evaluate("document.querySelectorAll('#sizeView .size-list button').length"),1,'nested directory aggregates children');
@@ -282,6 +285,9 @@ async function main(){
   assert.equal(await evaluate("document.querySelector('.story-notice')?.textContent?.includes('Sample:')"),false,'heading remains separate from evidence receipt');
   assert.equal(await evaluate("document.querySelector('#storyView').hidden"),false,'Story Mode visible');
   assert.equal(await evaluate("document.querySelector('#items').hidden"),true,'files hidden during Story Mode');
+  assert.equal(await evaluate("document.querySelector('#workspace').dataset.mode"),'review','Story Mode focuses review controls');
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('#contactSheet')).display"),'none','contact sheet controls hidden, selection preserved');
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('#filter')).display"),'none','file filter hidden in Story Mode');
   assert.equal(await evaluate("document.querySelectorAll('#storyView .story-tags a').length"),1,'undated tags grouped separately');
   await evaluate("document.querySelector('.story-controls button:nth-child(3)').click()");
   assert.equal(await evaluate("document.querySelectorAll('#storyView .story-event').length"),1,'filter to releases');
@@ -293,6 +299,8 @@ async function main(){
   await screenshot('expository-story-360.png');
   await evaluate("document.querySelector('#storyToggle').click()");
   assert.equal(await evaluate("document.querySelector('#items').hidden"),false,'returns to files');
+  assert.equal(await evaluate("document.querySelector('#workspace').dataset.mode"),'files','file controls restored after Story Mode');
+  assert.equal(await evaluate("document.querySelector('#contactSheet').hidden"),false,'prior image selection still available when returning');
   await evaluate("document.querySelector('#scope').value='repo';document.querySelector('#scope').dispatchEvent(new Event('change'));document.querySelector('#filter').value='example.ts';document.querySelector('#filter').dispatchEvent(new Event('input'))");
   await until("document.querySelectorAll('#items .tile').length===1",'source outline fixture listed');
   await evaluate("document.querySelector('#items .tile').click()");
