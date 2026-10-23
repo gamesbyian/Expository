@@ -19,7 +19,7 @@ Expository browses **public repositories without login** and can browse selected
 - Sort by name, size or extension; filter by file category and adjust thumbnail density using collapsible phone filters
 - Run bounded, opt-in full-text scans with matching-line snippets
 - Read source with line numbers and lightweight syntax colours; copy or download originals
-- Find text within a source preview, cycle matches and jump to line numbers. Expand the optional, **heuristic** symbol outline to jump directly to likely functions, classes and types in JS/TS, Python, Rust, Go, Java or Kotlin. Outlines are not full language parsing and are bounded to the displayed first 2,600 lines.
+- Find text across the loaded source preview, cycle matching lines and jump directly to any loaded line. Source rendering is windowed to 500 lines at a time instead of creating thousands of DOM rows; the first 500,000 characters of a file can be inspected, with a clear warning when truncated. Expand the optional, **heuristic** symbol outline to jump directly to likely functions, classes and types in JS/TS, Python, Rust, Go, Java or Kotlin. Outlines are heuristic rather than full language parsing and scan only the first 2,600 loaded lines.
 - Star public repositories for quick switching, without storing private repository names
 - Preview SVGs, photos, plain/safe Markdown, source files, PDFs, and supported media
 - Pin two images for side-by-side comparison, touch-friendly reveal, or a bounded local pixel-difference heatmap

@@ -73,6 +73,7 @@ const fixtures=String.raw`
  const svg=(fill,name)=>'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450"><rect width="800" height="450" fill="#182033"/><circle cx="400" cy="225" r="160" fill="'+fill+'"/><text x="400" y="235" fill="white" text-anchor="middle" font-size="42">'+name+'</text></svg>';
  const dataA=svg('#2acbab','A'),dataB=svg('#c966e9','B');
  const largePaths=Array.from({length:1012},(_,i)=>'gallery'+String(i).padStart(4,'0')+'.png');
+ const hugeCode=Array.from({length:1205},(_,i)=>i===1100?'export function distantSymbol() {}':'const row_'+i+' = '+i+';').join('\n');
  window.fetch=async (input,opts={})=>{
   const u=new URL(String(input),location.href);
   if(u.hostname!=='api.github.com')return original(input,opts);
@@ -96,11 +97,11 @@ const fixtures=String.raw`
    {path:'design',type:'tree'},{path:'design/proposals',type:'tree'},
    {path:'design/proposals/a.svg',type:'blob',size:250},
    {path:'design/proposals/b.svg',type:'blob',size:250},
-   {path:'docs',type:'tree'},{path:'docs/README.md',type:'blob',size:48},{path:'docs/data.json',type:'blob',size:120},{path:'docs/data.csv',type:'blob',size:100},{path:'docs/example.ts',type:'blob',size:140}
+   {path:'docs',type:'tree'},{path:'docs/README.md',type:'blob',size:48},{path:'docs/data.json',type:'blob',size:120},{path:'docs/data.csv',type:'blob',size:100},{path:'docs/example.ts',type:'blob',size:140},{path:'docs/huge.ts',type:'blob',size:hugeCode.length}
   ]});
   if(p.endsWith('/contents/'))return json(dirs(['design','design'],['docs','docs']));
   if(p.endsWith('/contents/design'))return json(dirs(['proposals','design/proposals']));
-  if(p.endsWith('/contents/docs'))return json(files(['README.md','docs/README.md'],['data.json','docs/data.json'],['data.csv','docs/data.csv'],['example.ts','docs/example.ts']));
+  if(p.endsWith('/contents/docs'))return json(files(['README.md','docs/README.md'],['data.json','docs/data.json'],['data.csv','docs/data.csv'],['example.ts','docs/example.ts'],['huge.ts','docs/huge.ts']));
   if(p.endsWith('/contents/design/proposals'))return json(files(['a.svg','design/proposals/a.svg'],['b.svg','design/proposals/b.svg']));
   if(p.endsWith('/contents/design/proposals/a.svg'))return new Response(dataA,{status:200,headers:{'content-type':'image/svg+xml'}});
   if(p.endsWith('/contents/design/proposals/b.svg'))return new Response(dataB,{status:200,headers:{'content-type':'image/svg+xml'}});
@@ -108,6 +109,7 @@ const fixtures=String.raw`
   if(p.endsWith('/contents/docs/data.json'))return new Response(JSON.stringify({status:'ready',items:[1,2,3],active:true}),{status:200,headers:{'content-type':'application/json'}});
   if(p.endsWith('/contents/docs/data.csv'))return new Response('name,value\nAlpha,17\nBeta,23',{status:200,headers:{'content-type':'text/csv'}});
   if(p.endsWith('/contents/docs/example.ts'))return new Response('export function hello() {}\nclass MyTool {}',{status:200,headers:{'content-type':'text/plain'}});
+  if(p.endsWith('/contents/docs/huge.ts'))return new Response(hugeCode,{status:200,headers:{'content-type':'text/plain'}});
   if(p.endsWith('/commits')){
    const fixtureCommit=n=>({sha:n.toString(16).padStart(40,'0'),commit:{message:'Fixture commit '+n,author:{date:'2026-10-22T12:00:00Z'}}});
    if(u.searchParams.get('path'))return json([{sha:'1111111111111111111111111111111111111111',commit:{message:'First fixture change',author:{date:'2026-10-22T12:00:00Z'}}}]);
@@ -137,11 +139,11 @@ async function main(){
   await until("document.querySelectorAll('#sizeView .size-tile').length===2",'indexed size treemap rendered');
   assert.equal(await evaluate("document.querySelector('#items').hidden"),true,'size view hides file tiles');
   assert.equal(await evaluate("document.querySelectorAll('#sizeView .size-list button').length"),2,'accessible tap list reflects both indexed groups');
-  assert.equal(await evaluate("document.querySelector('#sizeView .size-head').textContent.includes('908')"),true,'indexed byte totals explicitly shown');
+  assert.equal(await evaluate("document.querySelector('#sizeView .size-head').textContent.includes('indexed bytes')"),true,'indexed byte coverage explicitly shown');
   assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'size treemap does not overflow phone width');
   assert.equal(await evaluate("document.querySelector('#sizeView .size-list button').getBoundingClientRect().bottom<=innerHeight"),true,'first accessible treemap folder is available on the first mobile screen');
   if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-sizes-393.png');
-  await evaluate("document.querySelector('#sizeView .size-list button').click()");
+  await evaluate("Array.from(document.querySelectorAll('#sizeView .size-list button')).find(x=>x.textContent.includes('design /')).click()");
   await until("document.querySelector('#breadcrumbs')?.textContent?.includes('design')",'treemap folder drill-down');
   assert.equal(await evaluate("document.querySelector('#sizeView').hidden"),true,'drill-down returns to ordinary files');
   await evaluate("document.querySelector('#sizeToggle').click()");
@@ -292,6 +294,19 @@ async function main(){
   assert.equal(await evaluate("document.querySelectorAll('.code-find-current').length"),1,'symbol jump highlights one source line');
   await evaluate("document.querySelector('#closePreview').click()");
   await evaluate("document.querySelector('#filter').value='';document.querySelector('#filter').dispatchEvent(new Event('input'))");
+  await evaluate("document.querySelector('#filter').value='huge.ts';document.querySelector('#filter').dispatchEvent(new Event('input'))");
+  await until("document.querySelectorAll('#items .tile').length===1",'long source fixture found');
+  await evaluate("document.querySelector('#items .tile').click()");
+  await until("Boolean(document.querySelector('.code-pages'))",'windowed source preview');
+  assert.equal(await evaluate("document.querySelectorAll('.code-view .code-line').length"),500,'only 500 DOM source rows, not all 1205');
+  await evaluate("document.querySelector('.code-pages button:last-child').click()");
+  assert.equal(await evaluate("document.querySelector('.code-pages .hint').textContent"),'501–1000 / 1205 lines','next source window');
+  await evaluate("(()=>{const bar=document.querySelector('.code-toolbar');bar.querySelector('.code-line-number').value='1205';bar.querySelectorAll('button')[2].click()})()");
+  assert.equal(await evaluate("document.querySelector('.code-pages .hint').textContent"),'1001–1205 / 1205 lines','jump beyond former 2600 cutoff');
+  await evaluate("(()=>{const bar=document.querySelector('.code-toolbar');const search=bar.querySelector('.code-find');search.value='distantSymbol';search.dispatchEvent(new Event('input',{bubbles:true}));bar.querySelectorAll('button')[1].click()})()");
+  assert.equal(await evaluate("document.querySelectorAll('.code-line.code-find-current').length"),1,'search across windows highlights distant line');
+  if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-large-source-393.png');
+  await evaluate("document.querySelector('#closePreview').click();document.querySelector('#filter').value='';document.querySelector('#filter').dispatchEvent(new Event('input'))");
 
   await evaluate("document.querySelector('#repo').value='gamesbyian/PrivateFixture';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
   await until("document.querySelector('#status')?.textContent?.includes('items')",'private fixture loaded');

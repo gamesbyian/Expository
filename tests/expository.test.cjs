@@ -348,8 +348,16 @@ test('go-to-line is bounded and search describes truncated files honestly',()=>{
  go.value='400';goButton.onclick();
  assert.equal(info.textContent,'Enter a line from 1 to 3');
  const big=app.sourceViewer(Array.from({length:2605},(_,i)=>'line '+i).join('\n'),'large.py');
- assert.equal(big.children.at(-1).children.length,2600);
- assert.equal(big.children.at(-2).textContent,'Showing first 2,600 lines. Download the file to inspect later lines.');
+ const rows=big.children.at(-1),pager=big.children.find(x=>x.className==='code-pages');
+ assert.equal(rows.children.length,500,'bounded DOM window renders only 500 rows');
+ assert.equal(pager.children[1].textContent,'1–500 / 2605 lines');
+ pager.children[2].onclick();
+ assert.equal(rows.children.length,500);
+ assert.equal(pager.children[1].textContent,'501–1000 / 2605 lines');
+ const bar2=big.children[0];bar2.children[4].value='2605';bar2.children[5].onclick();
+ assert.equal(rows.children.length,105,'last window has only 105 rows');
+ assert.equal(pager.children[1].textContent,'2501–2605 / 2605 lines');
+ assert.equal(rows.children.at(-1).className,'code-line code-find-current');
 });
 
 test('public static app CSP pins GitHub API and prevents arbitrary network/media origins',()=>{
@@ -478,7 +486,7 @@ test('source outline buttons select the actual code line using inert DOM',()=>{
  const {app}=boot();
  const viewer=app.sourceViewer('export function alpha() {}\nclass Beta {}\n// unsafe <script>', 'code.js');
  const details=viewer.children.find(node=>node.className==='outline-panel');
- assert.equal(details.children[0].textContent,'Symbols (2) · heuristic, not full parsing');
+ assert.equal(details.children[0].textContent,'Symbols (2) · heuristic, first 2,600 lines');
  const buttons=details.children[1].children;
  assert.equal(buttons.length,2);buttons[1].onclick();
  const code=viewer.children.at(-1);
@@ -571,4 +579,30 @@ test('truncated index labels treemap sampled coverage rather than complete total
  app.state.indexEntries=[{type:'file',name:'file.txt',path:'file.txt',size:300}];
  app.renderSizeMap();
  assert.match(get('sizeView').children[0].children[1].textContent,/truncated tree/i);
+});
+
+test('code search spans multiple displayed windows without rendering all lines',()=>{
+ const {app}=boot();
+ const input=Array.from({length:1801},(_,i)=>i===1750?'needle = 17':'const x = '+i).join('\n');
+ const view=app.sourceViewer(input,'huge.js'),bar=view.children[0],pager=view.children.find(x=>x.className==='code-pages'),pre=view.children.at(-1);
+ assert.equal(pre.children.length,500);
+ bar.children[1].value='needle';bar.children[1].oninput();bar.children[3].onclick();
+ assert.equal(pager.children[1].textContent,'1501–1801 / 1801 lines');
+ assert.equal(pre.children[250].className,'code-line code-find-hit code-find-current');
+ assert.equal(pre.children.length,301,'only last window rendered, no full-file DOM');
+});
+test('source code preview explains 500,000-character safety limit',()=>{
+ const {app}=boot();
+ const view=app.sourceViewer('foo\nbar','huge.ts',true);
+ assert.ok(view.children.some(x=>x.textContent.includes('500,000 characters')),'download warning shown');
+ assert.ok(view.children[0].children[0].textContent.includes('500k-character cap'));
+});
+test('find caps active matches while honestly reporting all matching loaded lines',()=>{
+ const {app}=boot();
+ const view=app.sourceViewer(Array.from({length:1003},()=> 'a').join('\n'),'repeats.py');
+ const search=view.children[0].children[1],info=view.children[0].children[6];
+ search.value='a';search.oninput();
+ assert.match(info.textContent,/First 500 of 1003 matching lines/);
+ view.children[0].children[3].onclick();
+ assert.match(info.textContent,/of first 500 \(of 1003\)/);
 });

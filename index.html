@@ -30,7 +30,7 @@ main{max-width:1600px;margin:auto;padding:16px;display:grid;grid-template-column
 body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1b2130;--dim:#566173;--accent:#176596;--shadow:0 18px 48px #161b2733;color-scheme:light}body.light header{background:#fffffff0}body.light .field,body.light .thumb{background:#f7f8fa}body.light .preview-body pre{background:#edf0f5}
 .refine{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 14px;border-bottom:1px solid var(--stroke)}.refine .field{width:auto;min-width:105px;max-width:180px;flex:1;padding:8px;min-height:44px}.refine label{display:flex;align-items:center;gap:7px}.refine input[type=range]{width:100px;accent-color:var(--accent);min-height:38px}.refine .pill{padding:8px 11px}
 .items.grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--tile-min,145px)),1fr))}.items.grid .thumb{height:clamp(92px,calc(var(--tile-min,145px) * .75),240px)}
-.code-view{display:block;max-width:100%;overflow:auto;padding:8px 0!important;white-space:pre!important;overflow-wrap:normal!important;line-height:1.6;font-size:12px!important}.code-line{display:block;min-height:1.5em;padding-right:10px}.code-line:hover{background:#ffffff0a}.line-num{display:inline-block;user-select:none;color:#737c94;text-align:right;width:3.4rem;padding:0 12px 0 7px;border-right:1px solid var(--stroke);margin-right:13px;position:sticky;left:0;background:var(--panel2)}.tok-comment{color:#829093}.tok-string{color:#a7d987}.tok-num{color:#dbaa76}.tok-keyword{color:#bda0ee}.tok-type{color:#7ac8e7}.code-toolbar{display:flex;gap:8px;flex-wrap:wrap}.code-toolbar{align-items:center;margin-bottom:8px}.code-toolbar .code-find{min-height:44px;width:min(100%,190px);flex:1 1 140px;background:var(--panel2);color:var(--text);border:1px solid var(--stroke);border-radius:8px;padding:9px}.code-toolbar .code-line-number{min-height:44px;width:75px;background:var(--panel2);color:var(--text);border:1px solid var(--stroke);border-radius:8px;padding:9px}.code-toolbar button{min-height:44px;padding:8px 11px}.code-line.code-find-hit{background:#3c506b55}.code-line.code-find-current{background:#3c7a9a75;outline:1px solid var(--accent);outline-offset:-1px}.code-search-info{flex:1 1 100%;font-size:11px}.outline-panel{margin:8px 0;border:1px solid var(--stroke);border-radius:10px;padding:7px 9px;background:var(--panel2)}.outline-panel summary{cursor:pointer;min-height:38px;padding:8px;color:var(--accent);font-size:12px;font-weight:700}.outline-list{display:flex;flex-wrap:wrap;gap:7px;max-height:210px;overflow:auto;padding:6px 0}.outline-list .pill{min-height:44px;font-size:12px;max-width:100%;overflow-wrap:anywhere;text-align:left}.search-hit{display:block;text-align:left;border:1px solid var(--stroke);border-radius:10px;background:var(--panel2);padding:10px;color:var(--text);width:100%;overflow-wrap:anywhere}.search-hit small{display:block;color:var(--dim)}#searchResults{padding:0 14px 14px;display:grid;gap:7px}#favorites button{width:100%;text-align:left;overflow-wrap:anywhere}
+.code-view{display:block;max-width:100%;overflow:auto;padding:8px 0!important;white-space:pre!important;overflow-wrap:normal!important;line-height:1.6;font-size:12px!important}.code-line{display:block;min-height:1.5em;padding-right:10px}.code-line:hover{background:#ffffff0a}.line-num{display:inline-block;user-select:none;color:#737c94;text-align:right;width:3.4rem;padding:0 12px 0 7px;border-right:1px solid var(--stroke);margin-right:13px;position:sticky;left:0;background:var(--panel2)}.tok-comment{color:#829093}.tok-string{color:#a7d987}.tok-num{color:#dbaa76}.tok-keyword{color:#bda0ee}.tok-type{color:#7ac8e7}.code-toolbar{display:flex;gap:8px;flex-wrap:wrap}.code-pages{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:8px 0}.code-pages button{min-height:44px}.code-pages span{flex:1;text-align:center;min-width:110px}.code-toolbar{align-items:center;margin-bottom:8px}.code-toolbar .code-find{min-height:44px;width:min(100%,190px);flex:1 1 140px;background:var(--panel2);color:var(--text);border:1px solid var(--stroke);border-radius:8px;padding:9px}.code-toolbar .code-line-number{min-height:44px;width:75px;background:var(--panel2);color:var(--text);border:1px solid var(--stroke);border-radius:8px;padding:9px}.code-toolbar button{min-height:44px;padding:8px 11px}.code-line.code-find-hit{background:#3c506b55}.code-line.code-find-current{background:#3c7a9a75;outline:1px solid var(--accent);outline-offset:-1px}.code-search-info{flex:1 1 100%;font-size:11px}.outline-panel{margin:8px 0;border:1px solid var(--stroke);border-radius:10px;padding:7px 9px;background:var(--panel2)}.outline-panel summary{cursor:pointer;min-height:38px;padding:8px;color:var(--accent);font-size:12px;font-weight:700}.outline-list{display:flex;flex-wrap:wrap;gap:7px;max-height:210px;overflow:auto;padding:6px 0}.outline-list .pill{min-height:44px;font-size:12px;max-width:100%;overflow-wrap:anywhere;text-align:left}.search-hit{display:block;text-align:left;border:1px solid var(--stroke);border-radius:10px;background:var(--panel2);padding:10px;color:var(--text);width:100%;overflow-wrap:anywhere}.search-hit small{display:block;color:var(--dim)}#searchResults{padding:0 14px 14px;display:grid;gap:7px}#favorites button{width:100%;text-align:left;overflow-wrap:anywhere}
 @media(max-width:760px){.refine{padding:9px}.refine .field{flex:1 1 105px}.refine label{flex:1 1 auto}.refine input[type=range]{flex:1;min-width:80px}.preview-head{gap:5px}.preview-head .pill{font-size:11px}.preview-body{padding:10px}}
 .inspect-tools{display:flex;gap:7px;flex-wrap:wrap;padding:7px 12px;border-bottom:1px solid var(--stroke)}.inspect-tools[hidden]{display:none}.inspect-tools .pill{font-size:12px;padding:6px 10px;min-height:40px}
 .image-viewer{display:flex;flex-direction:column;gap:8px;min-width:0}.image-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.image-actions .pill{padding:7px 12px}.image-stage{touch-action:pan-x pan-y;overflow:auto;max-height:62dvh;min-height:140px;background:repeating-conic-gradient(#242936 0% 25%,#1b202a 0% 50%) 50%/18px 18px;border:1px solid var(--stroke);border-radius:10px;overscroll-behavior:contain}.image-stage img{display:block;max-width:none!important;max-height:none!important;object-fit:contain;align-self:auto!important;height:auto}
@@ -723,10 +723,10 @@ async function renderCurrentFile(){
   if(/\.json$/i.test(lower)){let value;try{value=JSON.parse(text)}catch{}
    $('structuredToggle').hidden=value===undefined;
    $('structuredToggle').textContent=state.structuredOpen?'Raw source':'JSON tree';
-   node=state.structuredOpen&&value!==undefined?jsonViewer(value):sourceViewer(text.slice(0,500000),item.name)
+   node=state.structuredOpen&&value!==undefined?jsonViewer(value):sourceViewer(text.slice(0,500000),item.name,text.length>500000)
   }else if(/\.(csv|tsv)$/i.test(lower)){$('structuredToggle').hidden=false;$('structuredToggle').textContent=state.structuredOpen?'Raw source':'Table';
-   node=state.structuredOpen?tableViewer(text.slice(0,500000),/\.tsv$/i.test(lower)?'\t':','):sourceViewer(text.slice(0,500000),item.name);
-  }else node=/\.(md|markdown)$/i.test(lower)?simpleMarkdown(text.slice(0,500000),item):sourceViewer(text.slice(0,500000),item.name);
+   node=state.structuredOpen?tableViewer(text.slice(0,500000),/\.tsv$/i.test(lower)?'\t':','):sourceViewer(text.slice(0,500000),item.name,text.length>500000);
+  }else node=/\.(md|markdown)$/i.test(lower)?simpleMarkdown(text.slice(0,500000),item):sourceViewer(text.slice(0,500000),item.name,text.length>500000);
  }else node=elem('div','message','No inline preview for this format. Use the GitHub link.');
  showContent(node);updateCompareAction()
 }
@@ -774,19 +774,21 @@ function extractSourceSymbols(lines,filename){
  }
  return found
 }
-function sourceViewer(text,name){
- const allLines=text.split('\n'),lines=allLines.slice(0,2600);
+function sourceViewer(text,name,previewTruncated=false){
+ // The file data has already been limited by renderCurrentFile to 500k characters.
+ // A 500-line DOM window avoids building thousands of syntax-highlighted elements on a phone.
+ const allLines=text.split('\n'),PAGE=500,MAX_MATCHES=500;
  const container=elem('div'),bar=elem('div','code-toolbar');
- const notice=elem('span','hint',name+' · '+(lines.length<allLines.length?lines.length+' of '+allLines.length:allLines.length)+' lines');
- const search=elem('input','code-find');search.type='search';search.placeholder='Find in this file';search.setAttribute('aria-label','Find text in this file');
+ const notice=elem('span','hint','');
+ const search=elem('input','code-find');search.type='search';search.placeholder='Find in preview';search.setAttribute('aria-label','Find in loaded file preview');
  const prev=elem('button','pill','↑ Match'),next=elem('button','pill','↓ Match'),go=elem('input','code-line-number'),goButton=elem('button','pill','Go to line');
  prev.type=next.type=goButton.type='button';prev.setAttribute('aria-label','Previous matching line');next.setAttribute('aria-label','Next matching line');
- go.type='number';go.min='1';go.max=String(lines.length);go.placeholder='Line';go.setAttribute('aria-label','Go to source line number');
- const info=elem('span','hint code-search-info','Find text within the displayed lines.');
+ go.type='number';go.min='1';go.max=String(allLines.length);go.placeholder='Line';go.setAttribute('aria-label','Go to line number in loaded file preview');
+ const info=elem('span','hint code-search-info','Search all lines loaded in this preview.');
  bar.append(notice,search,prev,next,go,goButton,info);container.append(bar);
- const symbols=extractSourceSymbols(lines,name);
+ const symbols=extractSourceSymbols(allLines,name);
  if(symbols.length){
-  const panel=elem('details','outline-panel'),summary=elem('summary','','Symbols ('+symbols.length+') · heuristic, not full parsing');
+  const panel=elem('details','outline-panel'),summary=elem('summary','','Symbols ('+symbols.length+') · heuristic, first 2,600 lines');
   const list=elem('div','outline-list');panel.append(summary);
   for(const symbol of symbols){
    const button=elem('button','pill',symbol.kind+' '+symbol.name+' · L'+symbol.line);
@@ -795,52 +797,70 @@ function sourceViewer(text,name){
   }
   panel.append(list);container.append(panel)
  }
- const pre=elem('pre','code-view'),rows=[];
+ const pager=elem('div','code-pages'),back=elem('button','pill','← Previous 500'),forward=elem('button','pill','Next 500 →'),pageLabel=elem('span','hint');
+ back.type=forward.type='button';back.setAttribute('aria-label','Display previous 500 source lines');forward.setAttribute('aria-label','Display next 500 source lines');
+ pager.append(back,pageLabel,forward);container.append(pager);
+ if(previewTruncated)container.append(elem('p','hint','Source preview limited to the first 500,000 characters. Download the original for any content beyond that limit.'));
+ const pre=elem('pre','code-view');container.append(pre);
  const rx=/(\/\/[^\n]*|#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:const|let|var|function|class|return|import|export|default|async|await|if|else|for|while|try|catch|throw|new|def|from|pass|public|private|void|struct|fn|use|true|false|null|None|undefined)\b|\b\d+(?:\.\d+)?\b)/g;
- for(let i=0;i<lines.length;i++){
-  const row=elem('div','code-line'),ln=elem('span','line-num',String(i+1));row.append(ln);
-  let offset=0;
-  for(const hit of lines[i].matchAll(rx)){
-   if(hit.index>offset)row.append(document.createTextNode(lines[i].slice(offset,hit.index)));
-   const x=hit[0],cl=x.startsWith('//')||x.startsWith('#')?'tok-comment':x.startsWith('"')||x.startsWith("'")?'tok-string':/^\d/.test(x)?'tok-num':'tok-keyword';
-   row.append(elem('span',cl,x));offset=hit.index+x.length;
-  }
-  row.append(document.createTextNode(lines[i].slice(offset)));pre.append(row);rows.push(row)
- }
- if(lines.length<allLines.length)container.append(elem('p','hint','Showing first 2,600 lines. Download the file to inspect later lines.'));
- container.append(pre);
- let matches=[],position=-1,selectedLine=-1;
+ let start=0,rows=[],matches=[],position=-1,selectedLine=-1,matchTotal=0;
  function redraw(){
-  const matchSet=new Set(matches);
-  for(let i=0;i<rows.length;i++)rows[i].className='code-line'+(matchSet.has(i)?' code-find-hit':'')+(i===selectedLine?' code-find-current':'');
+  const set=new Set(matches);
+  for(let i=0;i<rows.length;i++){
+   const global=start+i;
+   rows[i].className='code-line'+(set.has(global)?' code-find-hit':'')+(global===selectedLine?' code-find-current':'')
+  }
  }
+ function renderWindow(){
+  rows=[];pre.replaceChildren();
+  const end=Math.min(start+PAGE,allLines.length);
+  for(let i=start;i<end;i++){
+   const row=elem('div','code-line'),ln=elem('span','line-num',String(i+1));row.append(ln);
+   let offset=0;
+   for(const hit of allLines[i].matchAll(rx)){
+    if(hit.index>offset)row.append(document.createTextNode(allLines[i].slice(offset,hit.index)));
+    const value=hit[0],cls=value.startsWith('//')||value.startsWith('#')?'tok-comment':value.startsWith('"')||value.startsWith("'")?'tok-string':/^\d/.test(value)?'tok-num':'tok-keyword';
+    row.append(elem('span',cls,value));offset=hit.index+value.length
+   }
+   row.append(document.createTextNode(allLines[i].slice(offset)));pre.append(row);rows.push(row)
+  }
+  notice.textContent=name+' · lines '+(start+1)+'–'+end+' of '+allLines.length+(previewTruncated?' loaded (500k-character cap)':'');
+  pageLabel.textContent=(start+1)+'–'+end+' / '+allLines.length+' lines';
+  back.disabled=start===0;forward.disabled=end===allLines.length;redraw()
+ }
+ function showWindow(index){start=Math.floor(index/PAGE)*PAGE;renderWindow()}
  function jump(index){
-  if(index<0||index>=rows.length)return;
-  selectedLine=index;redraw();
-  if(typeof rows[index].scrollIntoView==='function')rows[index].scrollIntoView({block:'center',inline:'nearest'});
+  if(index<0||index>=allLines.length)return;
+  selectedLine=index;
+  if(index<start||index>=start+rows.length)showWindow(index);else redraw();
+  const visible=rows[index-start];
+  if(typeof visible?.scrollIntoView==='function')visible.scrollIntoView({block:'center',inline:'nearest'})
  }
  function report(){
-  const suffix=allLines.length>lines.length?' (displayed portion only)':'';
-  info.textContent=!search.value.trim()?'Find text within the displayed lines.':matches.length?matches.length+' matching lines'+suffix:'No matching lines'+suffix
+  const suffix=previewTruncated?' · first 500k characters only':'';
+  info.textContent=!search.value.trim()?'Search all lines loaded in this preview.':matchTotal?(matchTotal>matches.length?'First '+matches.length+' of '+matchTotal+' matching lines'+suffix:matchTotal+' matching lines'+suffix):'No matching lines'+suffix
  }
  function find(){
   const q=search.value.trim().slice(0,160).toLocaleLowerCase();
-  matches=[];position=-1;selectedLine=-1;
-  if(q){for(let i=0;i<lines.length;i++)if(lines[i].toLocaleLowerCase().includes(q))matches.push(i)}
+  matches=[];matchTotal=0;position=-1;selectedLine=-1;
+  if(q)for(let i=0;i<allLines.length;i++)if(allLines[i].toLocaleLowerCase().includes(q)){matchTotal++;if(matches.length<MAX_MATCHES)matches.push(i)}
   redraw();report()
  }
  function nextMatch(step){
   if(!matches.length)return;
   position=(position+step+matches.length)%matches.length;jump(matches[position]);
-  info.textContent='Match '+(position+1)+' of '+matches.length+' matching lines'+(allLines.length>lines.length?' (displayed portion)':'')
+  info.textContent='Match '+(position+1)+' of '+(matchTotal>matches.length?'first '+matches.length+' (of '+matchTotal+')':matches.length)+' matching lines'+(previewTruncated?' · first 500k characters':'')
  }
  search.oninput=find;
  search.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();nextMatch(e.shiftKey?-1:1)}};
  next.onclick=()=>nextMatch(1);prev.onclick=()=>nextMatch(-1);
- goButton.onclick=()=>{const number=Number(go.value);if(Number.isInteger(number)&&number>=1&&number<=rows.length){position=-1;jump(number-1);info.textContent='Line '+number+' of '+allLines.length}else info.textContent='Enter a line from 1 to '+rows.length};
+ goButton.onclick=()=>{const number=Number(go.value);if(Number.isInteger(number)&&number>=1&&number<=allLines.length){position=-1;jump(number-1);info.textContent='Line '+number+' of '+allLines.length+(previewTruncated?' loaded':'')}else info.textContent='Enter a line from 1 to '+allLines.length};
  go.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();goButton.click()}};
- return container
+ back.onclick=()=>{selectedLine=-1;showWindow(Math.max(0,start-PAGE))};
+ forward.onclick=()=>{selectedLine=-1;showWindow(Math.min(allLines.length-1,start+PAGE))};
+ renderWindow();return container
 }
+
 function resolveMarkdownPath(target,sourcePath){
  if(typeof target!=='string'||target.length>1000||target.startsWith('//'))return null;
  if(/^https?:\/\//i.test(target)){try{const url=new URL(target);return url.protocol==='https:'||url.protocol==='http:'?{external:url.href}:null}catch{return null}}
