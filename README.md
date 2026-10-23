@@ -6,7 +6,7 @@ A mobile-first, dark-first visual explorer for GitHub repositories, with just en
 
 **[Open Expository](https://gamesbyian.github.io/Expository/)**
 
-Expository browses **public repositories without login** and can browse selected **private repositories** using a fine-grained GitHub personal access token with **Contents: Read-only** access. Tokens stay in the browser tab's memory: they are not saved to local storage, embedded in links, or sent to an Expository server. For public repositories Expository keeps shareable browse links in the address bar; for **private** repositories it clears repo/path fragments and the share control copies a standard GitHub URL instead. Private browsing still requires the visitor's own GitHub authorization. Use only your own trusted deployment when supplying a token. A user with a private-repo link still needs their own GitHub access.
+Expository browses **public repositories without login** and can browse selected **private repositories** using a fine-grained GitHub personal access token with **Contents: Read-only** access. Tokens stay in the browser tab's memory: they are not saved to local storage, embedded in links, or sent to an Expository server. For public repositories Expository keeps shareable browse links in the address bar; for **private** repositories it clears repo/path fragments, including incoming links that fail authentication, and the share control copies a standard GitHub URL instead. Private browsing still requires the visitor's own GitHub authorization. Use only your own trusted deployment when supplying a token. A user with a private-repo link still needs their own GitHub access.
 
 ## What you can do
 
