@@ -28,7 +28,7 @@ Ratings describe *general Expository relevance* (10 is highest) rather than impl
 | 9 | Relative Markdown navigation | GitHub | Safe links constrained to repository path | Wave 2 |
 | 8 | JSON/CSV/YAML/Mermaid viewer | Structured data viewers | Bounded expandable JSON tree and raw toggle implemented; CSV/YAML/Mermaid pending | Wave 2 partial |
 | 8 | Activity dashboard | GitHub, GitLens | Public/restricted commit and PR APIs, bounded counts | Wave 3 |
-| 8 | Story Mode: project evolution | GitLens, GitHub | Evidence-backed commits/tags/releases/PRs with provenance links; no invented chronology | Wave 3 |
+| 8 | Story Mode: project evolution | GitLens, GitHub | Recent dated commits and releases plus undated tags delivered with source links; PR milestones, older history and advanced grouping pending | Wave 3 initial |
 | 7 | Slideshow | FolderFrame | Browser-local selected collection, accessible pause and interval | Wave 3 |
 | 7 | File-size treemap | GitLens | Indexed git blob sizes; label when index is truncated | Wave 3 |
 | 7 | Change-activity heatmap | GitLens | Git-backed per-path history, clear sampling limitations | Wave 3 |
