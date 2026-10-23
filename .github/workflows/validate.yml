@@ -1,0 +1,30 @@
+name: Expository checks
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: expository-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  quick:
+    name: Fast source and behavior
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/expository.test.cjs
+      - name: Validate browser and atlas scripts
+        run: |
+          node --check tests/browser-smoke.cjs
+          node --check review/build-atlas.cjs
+      - name: Validate public-source boundaries
+        run: |
+          test -f index.html
+          test -f AGENTS.md
+          test -f docs/WORK-QUEUE.md
+          ! grep -q 'github_pat_[A-Za-z0-9]' index.html
