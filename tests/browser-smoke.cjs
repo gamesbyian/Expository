@@ -79,6 +79,7 @@ const fixtures=String.raw`
   const p=decodeURIComponent(u.pathname),json=obj=>new Response(JSON.stringify(obj),{status:200,headers:{'content-type':'application/json'}});
   if(p==='/repos/gamesbyian/Glimpse')return json({default_branch:'main',private:false});
   if(p==='/repos/gamesbyian/PrivateFixture')return json({default_branch:'main',private:true});
+  if(p==='/repos/gamesbyian/DeniedPrivate')return new Response(JSON.stringify({message:'Not Found'}),{status:404,headers:{'content-type':'application/json'}});
   if(p==='/repos/gamesbyian/LargeFixture')return json({default_branch:'main',private:false});
   if(p==='/repos/gamesbyian/LargeFixture/git/trees/main')return json({truncated:false,tree:largePaths.map(path=>({type:'blob',path,size:200}))});
   if(p==='/repos/gamesbyian/LargeFixture/contents/')return json(files(...largePaths.slice(0,1000).map(path=>[path,path])));
@@ -238,6 +239,9 @@ async function main(){
   await evaluate("document.querySelector('#repo').value='gamesbyian/LargeFixture';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
   await until("document.querySelector('#status')?.textContent?.includes('1012 items')",'large directory repaired from Git tree');
   assert.equal(await evaluate("document.querySelector('#status').textContent.includes('recovered from complete Git tree index')"),true,'complete tree recovery is explicitly labeled');
+  await evaluate("history.replaceState(null,'','#gamesbyian/DeniedPrivate/main/secret?file=private%2Fnotes.md');document.querySelector('#repo').value='gamesbyian/DeniedPrivate';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
+  await until("document.querySelector('#status')?.textContent?.includes('Cannot open repository')",'denied private fixture');
+  assert.equal(await evaluate("location.hash"),'','denied private repo link scrubbed');
   await evaluate("window.__cspChecks=[];document.addEventListener('securitypolicyviolation',e=>window.__cspChecks.push(e.effectiveDirective));window.fetch('https://expository-test.invalid/egress-check').catch(()=>{})");
   await until("window.__cspChecks.includes('connect-src')",'CSP blocks network egress outside GitHub API');
   assert.equal(runtimeErrors.length,0,'browser runtime exceptions: '+runtimeErrors.join(' | '));
