@@ -121,6 +121,16 @@ async function main(){
   await until("document.querySelectorAll('#items .tile').length===2",'restored gallery after search');
   assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'393px overflow');
   await screenshot('expository-gallery-393.png');
+  await evaluate("document.querySelector('#selectMode').click();document.querySelectorAll('#items .tile')[0].click();document.querySelectorAll('#items .tile')[1].click()");
+  assert.equal(await evaluate("document.querySelector('#contactSheet').textContent"),'Contact sheet (2/12)','selection count');
+  await evaluate("document.querySelector('#contactSheet').click()");
+  await until("document.querySelectorAll('.sheet-card img').length===2",'contact sheet images loaded');
+  assert.equal(await evaluate("document.querySelector('#pageMain').inert"),true,'sheet modal background inert');
+  assert.equal(await evaluate("document.querySelector('.sheet-controls button').disabled"),false,'export enabled after decode');
+  if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-contact-sheet-393.png');
+  await evaluate("document.querySelector('#closePreview').click();document.querySelector('#selectMode').click()");
+  assert.equal(await evaluate("document.querySelector('#pageMain').inert"),false,'contact sheet close restores page');
+
   if(process.env.EXPOSITORY_ATLAS==='1'){
    await send('Emulation.setDeviceMetricsOverride',{width:412,height:892,deviceScaleFactor:1,mobile:true});
    assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'412px gallery overflow');
