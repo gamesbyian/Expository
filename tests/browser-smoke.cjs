@@ -133,6 +133,22 @@ async function main(){
   assert.equal(await evaluate("document.querySelector('#branchPicker').options.length"),3,'two read-only branches listed');
   assert.equal(await evaluate("document.querySelector('#branchPicker').value"),'main','current branch preselected');
   await evaluate("document.querySelector('#scrim').click()");
+  await evaluate("document.querySelector('#sizeToggle').click()");
+  await until("document.querySelectorAll('#sizeView .size-tile').length===2",'indexed size treemap rendered');
+  assert.equal(await evaluate("document.querySelector('#items').hidden"),true,'size view hides file tiles');
+  assert.equal(await evaluate("document.querySelectorAll('#sizeView .size-list button').length"),2,'accessible tap list reflects both indexed groups');
+  assert.equal(await evaluate("document.querySelector('#sizeView .size-head').textContent.includes('908')"),true,'indexed byte totals explicitly shown');
+  assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'size treemap does not overflow phone width');
+  if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-sizes-393.png');
+  await evaluate("document.querySelector('#sizeView .size-list button').click()");
+  await until("document.querySelector('#breadcrumbs')?.textContent?.includes('design')",'treemap folder drill-down');
+  assert.equal(await evaluate("document.querySelector('#sizeView').hidden"),true,'drill-down returns to ordinary files');
+  await evaluate("document.querySelector('#sizeToggle').click()");
+  await until("document.querySelector('#sizeView .size-head')?.textContent?.includes('design')",'nested folder size map');
+  assert.equal(await evaluate("document.querySelectorAll('#sizeView .size-list button').length"),1,'nested directory aggregates children');
+  await evaluate("document.querySelector('#sizeToggle').click()");
+  await evaluate("document.querySelector('#back').click()");
+  await until("document.querySelector('#breadcrumbs')?.textContent?.includes('Glimpse')",'treemap browsing returns to root');
 
   assert.equal(await evaluate("document.querySelector('#refineControls').hidden"),true,'phone opens with filters collapsed');
   if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-start-393.png');
