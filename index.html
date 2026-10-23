@@ -67,7 +67,7 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 <section id="preview" class="preview" role="dialog" aria-modal="true" aria-label="File preview"><div class="preview-head"><button id="prevPreview" class="icon-btn" aria-label="Previous file" title="Previous file">‹</button><button id="nextPreview" class="icon-btn" aria-label="Next file" title="Next file">›</button><strong id="previewTitle"></strong><button id="compareAction" class="pill" hidden aria-label="Pin image for visual comparison">Pin A</button><button id="copyRaw" class="pill" hidden aria-label="Copy file text">Copy text</button><button id="downloadRaw" class="pill" hidden aria-label="Download original file">Download</button><button id="copyFile" class="pill" title="Copy file deep link" aria-label="Copy file deep link">Copy ↗</button><a id="fileLink" class="pill" target="_blank" rel="noopener noreferrer" aria-label="View file on GitHub">Git ↗</a><button id="closePreview" class="icon-btn" aria-label="Close preview">✕</button></div><div id="inspectTools" class="inspect-tools" hidden><button id="fileHistory" class="pill">History</button><button id="structuredToggle" class="pill" hidden>JSON tree</button></div><div class="preview-body" id="previewBody"></div></section>
 <script>
 (()=>{'use strict';
-const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0,selectionMode:false,selected:new Map(),sheetSeq:0,sheetOpen:false};
+const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0,selectionMode:false,selected:new Map(),sheetSeq:0,sheetOpen:false,activeRequests:new Set(),rateLimitedUntil:0};
 const codeRx=/\.(?:js|jsx|mjs|ts|tsx|py|rs|go|java|kt|c|cpp|h|hpp|sh|css|scss|html|sql|gradle)$/i,docsRx=/\.(?:md|markdown|txt|pdf|rst)$/i,dataRx=/\.(?:json|csv|tsv|yaml|yml|xml|toml|ini|properties)$/i;
 const imageRx=/\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i,textRx=/\.(md|markdown|txt|json|ya?ml|xml|csv|tsv|js|jsx|ts|tsx|css|scss|html|py|kt|java|rs|go|sh|toml|ini|svg|sql|log|gradle|properties)$/i;
 function stopStory(){
@@ -76,7 +76,41 @@ function stopStory(){
 }
 function status(s){$('status').textContent=s}function closeNav(){$('sidebar').classList.remove('open');$('scrim').classList.remove('on')}
 function url(path){return 'https://api.github.com'+path}function enc(s){return encodeURIComponent(s)}
-async function api(path,accept){const headers={'Accept':accept||'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};if(state.token)headers.Authorization='Bearer '+state.token;const r=await fetch(url(path),{headers,cache:'no-store'});if(!r.ok){let msg='HTTP '+r.status;try{msg=(await r.json()).message||msg}catch{}throw Error(msg+(r.status===403?' (check permissions or API rate limit)':''))}return r}
+function abortRequests(){for(const controller of state.activeRequests)controller.abort();state.activeRequests.clear()}
+function safeRepoPath(path){return typeof path==='string'&&path.length<=4096&&!/[\\\x00-\x1f\x7f]/.test(path)&&!path.split('/').some(x=>x==='.'||x==='..'||x==='')||path==='' }
+function githubFailure(response,now=Date.now(),secondary=false){
+ const code=response.status,header=name=>response.headers?.get(name)||'';
+ const remaining=header('x-ratelimit-remaining'),retry=header('retry-after'),reset=Number(header('x-ratelimit-reset'));
+ const retrySeconds=/^\d+$/.test(retry)?Number(retry):null;
+ const retryDate=retrySeconds===null&&retry?Date.parse(retry):NaN;
+ const explicit=retrySeconds!==null&&retrySeconds<86400*7?now+retrySeconds*1000:Number.isFinite(retryDate)?retryDate:0;
+ const primary=(code===403||code===429)&&remaining==='0',limited=code===429||primary||Boolean(retry&&code===403)||Boolean(secondary&&code===403);
+ if(limited){
+  const until=Math.max(now+1000,explicit||0,primary&&Number.isFinite(reset)?reset*1000:0,explicit||primary?0:now+60000);
+  return {limited:true,until,message:'GitHub API rate limit reached. Retry after '+new Date(until).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'. Expository will not automatically retry.'};
+ }
+ if(code===401)return {limited:false,until:0,message:'GitHub rejected the token (401). Check or replace its credentials.'};
+ if(code===403)return {limited:false,until:0,message:'GitHub denied access (403). Verify token repository permissions or organization authorization.'};
+ if(code===404)return {limited:false,until:0,message:'Repository or path not found (404), or the current token has no access.'};
+ return {limited:false,until:0,message:'GitHub request failed (HTTP '+code+'). Please retry later.'};
+}
+async function api(path,accept){
+ if(Date.now()<state.rateLimitedUntil)throw Error('GitHub API is temporarily rate-limited. Try again after '+new Date(state.rateLimitedUntil).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'.');
+ const headers={'Accept':accept||'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
+ if(state.token)headers.Authorization='Bearer '+state.token;
+ const controller=new AbortController();state.activeRequests.add(controller);
+ try{
+  const r=await fetch(url(path),{headers,cache:'no-store',signal:controller.signal,redirect:'error'});
+  if(!r.ok){
+   let secondary=false;
+   if(r.status===403&&!r.headers?.get('retry-after')&&r.headers?.get('x-ratelimit-remaining')!=='0'){
+    try{const data=await r.json();secondary=/secondary rate limit|abuse detection|rate limit exceeded/i.test(String(data?.message||''))}catch{}
+   }
+   const failure=githubFailure(r,Date.now(),secondary);if(failure.limited)state.rateLimitedUntil=Math.max(state.rateLimitedUntil,failure.until);throw Error(failure.message)
+  }
+  return r;
+ }finally{state.activeRequests.delete(controller)}
+}
 async function json(path){return(await api(path)).json()}
 function pathPart(s){return s.split('/').map(enc).join('/')}
 function blobUrl(blob,kind='preview'){const u=URL.createObjectURL(blob);(kind==='thumb'?state.thumbUrls:state.previewUrls).add(u);return u}
@@ -121,6 +155,7 @@ async function indexTree(repo,branch,request){
  }catch(e){if(request===state.repoRequest){state.indexReady=false;state.indexError=true;if($('scope').value!=='folder')paint();status('Folder indexing unavailable: '+e.message+' · Direct browsing still works.')}}
 }
 async function navigate(path){
+ if(!safeRepoPath(path)){status('Unsafe or invalid repository path.');return false}
  stopStory();const seq=++state.seq;state.path=path;expandAncestors(path);clearPreview();
  updateHash();
  crumb();closeNav();status('Loading '+(path||'repository root')+'…');$('items').replaceChildren();
@@ -128,12 +163,12 @@ async function navigate(path){
   const key=state.repo+'@'+state.branch+'/'+path;let data=state.cache.get(key);
   if(!data){data=await json('/repos/'+state.repo+'/contents/'+pathPart(path)+'?ref='+enc(state.branch));
    if(!Array.isArray(data))throw Error('This is a file, not a directory.');state.cache.set(key,data)}
-  if(seq!==state.seq)return;
+  if(seq!==state.seq)return false;
   state.items=[...data].sort((a,b)=>(a.type==='dir'?0:1)-(b.type==='dir'?0:1)||a.name.localeCompare(b.name));
   state.items.filter(x=>x.type==='dir').forEach(x=>treeAdd(x.path));
   paintTree();state.limit=80;paint();
-  status(state.items.length+' items · '+(state.path||'/')+(state.items.length>=1000?' · GitHub may truncate large directories':''));
- }catch(e){if(seq!==state.seq)return;status('Cannot open: '+e.message);$('items').append(elem('div','empty','Check repository name, branch, permissions, or API limit.'))}
+  status(state.items.length+' items · '+(state.path||'/')+(state.items.length>=1000?' · GitHub may truncate large directories':''));return true;
+ }catch(e){if(seq!==state.seq)return false;status('Cannot open: '+e.message);$('items').append(elem('div','empty','Check repository name, branch, permissions, or API limit.'));return false}
 }
 function storyEvent(kind,date,label,summary,url){
  const a=elem('a','story-event'),heading=elem('strong','',label),description=elem('small','',kind+' · '+date);
@@ -181,7 +216,11 @@ async function toggleStory(){
  const data={commits:[],releases:[],tags:[],filter:'all',errors:[]};for(const x of resolved){data[x.key]=x.data;if(x.error)data.errors.push(x.key+': '+x.error)}
  state.storyData=data;renderStory();
 }
-function updateHash(filePath=''){const base='#'+state.repo.split('/').map(enc).join('/')+'/'+enc(state.branch)+'/'+state.path.split('/').map(enc).join('/');history.replaceState(null,'',base+(filePath?'?file='+enc(filePath):''))}
+function updateHash(filePath=''){
+ if(!state.repo||!state.branch||state.repoIsPrivate){history.replaceState(null,'',location.pathname+location.search);return}
+ const base='#'+state.repo.split('/').map(enc).join('/')+'/'+enc(state.branch)+'/'+state.path.split('/').map(enc).join('/');
+ history.replaceState(null,'',base+(filePath?'?file='+enc(filePath):''))
+}
 function currentMatches(){
  const query=$('filter').value.trim().toLowerCase(),scope=$('scope').value;
  if(scope==='folder')return filterSort(state.items.filter(x=>x.name.toLowerCase().includes(query)));
@@ -535,6 +574,7 @@ function tableViewer(text,delimiter){
 }
 
 async function openPreview(item){
+ if(!safeRepoPath(item?.path)||!item.path){status('Invalid preview path.');return}
  state.sheetOpen=false;++state.sheetSeq;
  for(const id of ['prevPreview','nextPreview','fileLink','copyFile'])$(id).hidden=false;
  if(!state.preview)state.returnFocus=document.activeElement;
@@ -554,7 +594,9 @@ async function openPreview(item){
 
 async function openRepo(targetPath=''){
  const repo=$('repo').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\/$/,'');
- if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){status('Enter owner/repository.');return}
+ if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){status('Enter owner/repository.');return false}
+ if(!safeRepoPath(targetPath)){status('Invalid folder path.');return false}
+ abortRequests();
  cancelContentScan();stopStory();state.storyData=null;const request=++state.repoRequest;state.repo=repo;state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;
  clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
  clearObjects();clearPreview();++state.seq;status('Connecting to '+repo+'…');
@@ -562,11 +604,11 @@ async function openRepo(targetPath=''){
   const info=await json('/repos/'+repo);if(request!==state.repoRequest)return;
   const branch=$('branch').value.trim()||info.default_branch;state.branch=branch;state.repoIsPrivate=info.private!==false;paintBookmarks();
   $('branch').placeholder=info.default_branch;$('githubLink').href='https://github.com/'+repo;
-  indexTree(repo,branch,request);await navigate(targetPath);
- }catch(e){if(request===state.repoRequest)status('Cannot open repository: '+e.message)}
+  indexTree(repo,branch,request);const loaded=await navigate(targetPath);return loaded&&request===state.repoRequest;
+ }catch(e){if(request===state.repoRequest)status('Cannot open repository: '+e.message);return false}
 }
 function resetSession(){
- cancelContentScan();stopStory();state.storyData=null;++state.repoRequest;++state.seq;state.token='';state.repo='';state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;state.cache.clear();state.items=[];state.visibleItems=[];
+ abortRequests();state.rateLimitedUntil=0;cancelContentScan();stopStory();state.storyData=null;++state.repoRequest;++state.seq;state.token='';state.repo='';state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;state.cache.clear();state.items=[];state.visibleItems=[];
  state.tree.clear();state.expanded.clear();state.indexEntries=[];state.indexReady=false;state.indexError=false;state.indexTruncated=false;state.repoIsPrivate=true;
  clearSelection();state.renderEpoch++;if(state.thumbObserver){state.thumbObserver.disconnect();state.thumbObserver=null}thumbQueue.length=0;
  clearPreview();clearObjects();paintBookmarks();$('token').value='';$('branch').value='';
@@ -588,7 +630,12 @@ async function connect(){
  status(list.length+' accessible repositories found. Token remains only in tab memory.');
  }catch(e){if(request===state.repoRequest)status('Repository list unavailable: '+e.message+' · Public repos can be entered manually.')}
 }
-async function copyCurrentLink(){try{await navigator.clipboard.writeText(location.href);status('Shareable link copied. Credentials are never included.')}catch{status('Clipboard unavailable. Copy this page URL from the address bar.')}}
+function currentShareUrl(){
+ if(!state.repoIsPrivate)return location.href;
+ const base='https://github.com/'+state.repo+(state.preview&&!state.sheetOpen?'/blob/'+enc(state.branch)+'/'+pathPart(state.preview.path):'/tree/'+enc(state.branch)+(state.path?'/'+pathPart(state.path):''));
+ return base
+}
+async function copyCurrentLink(){try{await navigator.clipboard.writeText(currentShareUrl());status(state.repoIsPrivate?'GitHub link copied. Private paths stay out of Expository URLs.':'Shareable Expository link copied; credentials are never included.')}catch{status('Clipboard unavailable; use the GitHub file link or your browser address bar.')}}
 $('openRepo').onclick=()=>openRepo();$('disconnect').onclick=()=>{resetSession();status('Credentials and private browsing state cleared from this tab.')};$('copyFolder').onclick=copyCurrentLink;$('copyFile').onclick=copyCurrentLink;$('compareAction').onclick=compareAction;$('downloadRaw').onclick=downloadOriginal;$('copyRaw').onclick=copyText;$('fileHistory').onclick=toggleHistory;$('structuredToggle').onclick=toggleStructured;$('bookmark').onclick=toggleBookmark;$('contentSearch').onclick=scanContents;$('storyToggle').onclick=toggleStory;$('selectMode').onclick=()=>{state.selectionMode=!state.selectionMode;updateSelectionControls()};$('contactSheet').onclick=openContactSheet;$('clearSelection').onclick=clearSelection;$('connect').onclick=connect;$('repoSelect').onchange=()=>{if($('repoSelect').value){$('repo').value=$('repoSelect').value;$('branch').value='';openRepo()}};
 function syncRefineToViewport(){
  const mobile=typeof window!=='undefined'&&window.matchMedia('(max-width:760px)').matches;
@@ -612,7 +659,7 @@ if(match){try{
  $('repo').value=decodeURIComponent(match[1]);$('branch').value=decodeURIComponent(match[2]);
  const [encodedPath,encodedFile]=match[3].split('?file='),p=encodedPath.split('/').map(decodeURIComponent).join('/');
  const file=encodedFile?decodeURIComponent(encodedFile):'';
- openRepo(p).then(()=>{if(file&&state.repo&&state.branch){const item=state.items.find(x=>x.path===file)||state.indexEntries.find(x=>x.path===file)||{name:file.split('/').at(-1),path:file,type:'file'};openPreview(item)}});
+ openRepo(p).then(ok=>{if(ok&&file&&safeRepoPath(file)&&state.repo&&state.branch){const item=state.items.find(x=>x.path===file)||state.indexEntries.find(x=>x.path===file)||{name:file.split('/').at(-1),path:file,type:'file'};openPreview(item)}});
 }catch{openRepo()}}else openRepo();
 })();
 </script>

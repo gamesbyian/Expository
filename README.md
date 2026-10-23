@@ -6,7 +6,7 @@ A mobile-first, dark-first visual explorer for GitHub repositories, with just en
 
 **[Open Expository](https://gamesbyian.github.io/Expository/)**
 
-Expository browses **public repositories without login** and can browse selected **private repositories** using a fine-grained GitHub personal access token with **Contents: Read-only** access. Tokens stay in the browser tab's memory: they are not saved to local storage, embedded in links, or sent to an Expository server. Use only your own trusted deployment when supplying a token. A user with a private-repo link still needs their own GitHub access.
+Expository browses **public repositories without login** and can browse selected **private repositories** using a fine-grained GitHub personal access token with **Contents: Read-only** access. Tokens stay in the browser tab's memory: they are not saved to local storage, embedded in links, or sent to an Expository server. For public repositories Expository keeps shareable browse links in the address bar; for **private** repositories it clears repo/path fragments and the share control copies a standard GitHub URL instead. Private browsing still requires the visitor's own GitHub authorization. Use only your own trusted deployment when supplying a token. A user with a private-repo link still needs their own GitHub access.
 
 ## What you can do
 
@@ -30,7 +30,7 @@ Expository browses **public repositories without login** and can browse selected
 
 Story Mode uses real GitHub evidence, displays the sample size, and makes no claim to reconstruct missing history. The [feature roadmap](FEATURE-ROADMAP.md) distinguishes shipped capabilities from remaining planned work.
 
-Expository is **read-only**, uses direct requests to the GitHub API, and has no advertising, analytics, server-side session store, or dependency-loaded remote scripts. GitHub API rate limits and tree-index truncation may limit results on large repositories. It is not a replacement for GitHub's editor.
+Expository is **read-only**, uses direct requests to the GitHub API, and has no advertising, analytics, server-side session store, or dependency-loaded remote scripts. GitHub API rate limits and tree-index truncation may limit results on large repositories. On a rate-limit response Expository uses GitHub's reset/Retry-After headers where available, shows a retry time, and refrains from making further requests during the cooldown. Requests started in an older repository/session are aborted when switching or disconnecting. It is not a replacement for GitHub's editor.
 
 For the feature plan and current development stages, see the [weighted feature roadmap](FEATURE-ROADMAP.md). Not every planned item is implemented.
 

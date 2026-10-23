@@ -16,7 +16,7 @@ function fakeNode(tag='DIV') {
     addEventListener(){},focus(){},click(){},get isConnected(){return true}
   };
 }
-function boot() {
+function boot(fetchImpl=globalThis.fetch) {
  const elements = new Map(),urls=[];
  const get = id => {
   if (!elements.has(id)) elements.set(id,fakeNode());
@@ -31,9 +31,9 @@ function boot() {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection};\n})();';
- const app=new Function('document','history','location','localStorage','Option',isolated)(
-   document,history,location,localStorage,function Option(name,value){return {name,value}}
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl};\n})();';
+ const app=new Function('document','history','location','localStorage','Option','fetch',isolated)(
+   document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl
  );
  return {app,get,urls,document};
 }
@@ -74,7 +74,7 @@ test('repo-wide names and recursive image views match expected paths',()=>{
 });
 test('share hashes retain repository slash and never contain credentials',()=>{
  const {app,urls}=boot();
- app.state.repo='gamesbyian/Glimpse';app.state.branch='main';app.state.path='design/proposals';app.state.token='SECRET_TEST_TOKEN';
+ app.state.repo='gamesbyian/Glimpse';app.state.branch='main';app.state.path='design/proposals';app.state.repoIsPrivate=false;app.state.token='SECRET_TEST_TOKEN';
  app.updateHash('design/proposals/sample image.svg');
  assert.equal(urls.at(-1),'#gamesbyian/Glimpse/main/design/proposals?file=design%2Fproposals%2Fsample%20image.svg');
  assert.ok(!urls.at(-1).includes('SECRET_TEST_TOKEN'));
@@ -266,4 +266,56 @@ test('image contact sheet selections are bounded, reversible and cleared',()=>{
  assert.equal(app.state.selected.size,0);
  assert.equal(app.state.selectionMode,false);
  assert.equal(get('contactSheet').disabled,true);
+});
+
+test('private repository browsing never leaves identifiers in Expository URL fragments',()=>{
+ const {app,urls}=boot();
+ app.state.repo='gamesbyian/secret-project';app.state.branch='main';app.state.path='assets/private';app.state.repoIsPrivate=true;
+ app.updateHash('assets/private/photo.png');
+ assert.equal(urls.at(-1),'/index.html','private location scrubbed');
+ assert.ok(!urls.at(-1).includes('secret-project'));
+ assert.equal(app.currentShareUrl(),'https://github.com/gamesbyian/secret-project/tree/main/assets/private','explicit private share becomes a GitHub URL');
+ app.state.preview={name:'photo.png',path:'assets/private/photo.png'};
+ assert.equal(app.currentShareUrl(),'https://github.com/gamesbyian/secret-project/blob/main/assets/private/photo.png');
+});
+test('deep linked paths reject traversal, invalid separators, and control chars',()=>{
+ const {app}=boot();
+ for(const unsafe of ['../secret','dir/../secret','a//b','a/./b','a\\b','a\0b','a\nb'])assert.equal(app.safeRepoPath(unsafe),false,unsafe);
+ for(const good of ['','README.md','docs/proposals/First story.svg','design/色見本.png'])assert.equal(app.safeRepoPath(good),true,good);
+});
+test('primary and secondary GitHub rate limits map to actionable safe cooldowns',()=>{
+ const {app}=boot();
+ const response=(status,headers={})=>({status,headers:{get:k=>headers[k]||null}});
+ const now=1771000000000;
+ const primary=app.githubFailure(response(403,{'x-ratelimit-remaining':'0','x-ratelimit-reset':String(Math.floor(now/1000)+90)}),now);
+ assert.equal(primary.limited,true);assert.equal(primary.until,now+90000);assert.match(primary.message,/rate limit/);
+ const secondary=app.githubFailure(response(403,{}),now,true);
+ assert.equal(secondary.limited,true);assert.ok(secondary.until>=now+60000);
+ const retry=app.githubFailure(response(429,{'retry-after':'120'}),now);
+ assert.equal(retry.until,now+120000);
+ assert.match(app.githubFailure(response(401),now).message,/token/);
+ assert.match(app.githubFailure(response(404),now).message,/not found/);
+});
+test('API cooldown prevents repeated requests and never repeats GitHub error body or token',async()=>{
+ let calls=0;
+ const apiFetch=async()=>{calls++;return new Response(JSON.stringify({message:'secret token ghp_dontshow'}),{status:403,headers:{'x-ratelimit-remaining':'0','x-ratelimit-reset':String(Math.floor(Date.now()/1000)+180)}})};
+ const {app}=boot(apiFetch);app.state.token='ghp_localtest';
+ await assert.rejects(app.api('/repos/example/private'),e=>/rate limit/.test(e.message)&&!e.message.includes('ghp_'));
+ assert.equal(calls,1);
+ await assert.rejects(app.api('/repos/example/private'),/temporarily rate-limited/);
+ assert.equal(calls,1,'cooldown blocked subsequent network call');
+ app.resetSession();
+ assert.equal(app.state.rateLimitedUntil,0,'disconnect resets cooldown for new credentials');
+});
+test('repo switches abort outstanding authenticated API requests',async()=>{
+ let aborted=false;
+ const apiFetch=(_u,opts)=>new Promise((_resolve,reject)=>{
+  opts.signal.addEventListener('abort',()=>{aborted=true;reject(Object.assign(new Error('Aborted'),{name:'AbortError'}))});
+ });
+ const {app}=boot(apiFetch);
+ const pending=app.api('/repos/example/private');
+ app.abortRequests();
+ await assert.rejects(pending,/Aborted/);
+ assert.equal(aborted,true);
+ assert.equal(app.state.activeRequests.size,0);
 });

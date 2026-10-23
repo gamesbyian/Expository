@@ -77,6 +77,7 @@ const fixtures=String.raw`
   if(u.hostname!=='api.github.com')return original(input,opts);
   const p=decodeURIComponent(u.pathname),json=obj=>new Response(JSON.stringify(obj),{status:200,headers:{'content-type':'application/json'}});
   if(p==='/repos/gamesbyian/Glimpse')return json({default_branch:'main',private:false});
+  if(p==='/repos/gamesbyian/PrivateFixture')return json({default_branch:'main',private:true});
   if(p.endsWith('/git/trees/main'))return json({truncated:false,tree:[
    {path:'design',type:'tree'},{path:'design/proposals',type:'tree'},
    {path:'design/proposals/a.svg',type:'blob',size:250},
@@ -218,6 +219,13 @@ async function main(){
   await screenshot('expository-story-360.png');
   await evaluate("document.querySelector('#storyToggle').click()");
   assert.equal(await evaluate("document.querySelector('#items').hidden"),false,'returns to files');
+  await evaluate("document.querySelector('#repo').value='gamesbyian/PrivateFixture';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
+  await until("document.querySelector('#status')?.textContent?.includes('items')",'private fixture loaded');
+  assert.equal(await evaluate("location.hash"),'','private repo does not leak into fragment');
+  assert.equal(await evaluate("document.querySelector('#bookmark').disabled"),true,'private repo cannot be bookmarked');
+  await evaluate("document.querySelector('#repo').value='gamesbyian/Glimpse';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
+  await until("document.querySelector('#status')?.textContent?.includes('items')",'public fixture restored');
+  assert.equal(await evaluate("location.hash.includes('gamesbyian/Glimpse')"),true,'public deep links still work');
   assert.equal(runtimeErrors.length,0,'browser runtime exceptions: '+runtimeErrors.join(' | '));
   console.log('PASS: real Chromium mobile gallery, sorting, bounded search, zoom, file history, JSON tree, modal isolation, reveal, pixel difference, side-by-side, 360/393px overflow checks.');
   console.log('Evidence: '+screenshots);
