@@ -16,6 +16,7 @@ Expository browses **public repositories without login** and can browse selected
 - Sort by name, size or extension; filter by file category and adjust thumbnail density using collapsible phone filters
 - Run bounded, opt-in full-text scans with matching-line snippets
 - Read source with line numbers and lightweight syntax colours; copy or download originals
+- Find text within a source preview, cycle matching lines with keyboard/buttons, or jump directly to a line number; large previews explicitly label their displayed-line limit
 - Star public repositories for quick switching, without storing private repository names
 - Preview SVGs, photos, plain/safe Markdown, source files, PDFs, and supported media
 - Pin two images for side-by-side comparison, touch-friendly reveal, or a bounded local pixel-difference heatmap
