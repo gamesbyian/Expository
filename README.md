@@ -25,7 +25,7 @@ Expository browses **public repositories without login** and can browse selected
 - Inspect the recent Git history of an individual file
 - Expand JSON as a safe tree or switch to raw source
 - Follow safe relative Markdown links within repositories and view CSV/TSV as bounded tables
-- Enter Story Mode for dated GitHub commits and releases, plus tags in a separate section
+- Enter Story Mode for dated GitHub commits, releases, genuinely merged PR milestones and undated tags. Load older commits explicitly, up to four pages (200 commits). A PR sample is the latest 20 closed PRs, so older merges may be absent.
 - Copy deep links to folders and previews
 - Switch dark/light appearance, and clear private browsing credentials explicitly
 
