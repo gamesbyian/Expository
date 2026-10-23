@@ -380,7 +380,7 @@ async function saveContactSheet(images){
   ctx.fillStyle='#ebeff7';ctx.font='12px system-ui';ctx.fillText(item.name.slice(0,38),x+10,y+221,cellWidth-26);
  }
  if(!state.sheetOpen)return;
- canvas.toBlob(blob=>{if(!blob){status('Export unavailable for these images.');return}const url=URL.createObjectURL(blob);
+ const saveSeq=state.sheetSeq;canvas.toBlob(blob=>{if(!state.sheetOpen||saveSeq!==state.sheetSeq)return;if(!blob){status('Export unavailable for these images.');return}const url=URL.createObjectURL(blob);
   const anchor=elem('a');anchor.href=url;anchor.download='expository-contact-sheet.png';document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),15000);
   status('Contact sheet saved locally'+(skipped?' · '+skipped+' images could not be rendered':'')+'.')
  },'image/png');
@@ -398,14 +398,14 @@ async function openContactSheet(){
  save.disabled=true;controls.append(save,elem('span','sheet-note','Max 12 images · same repository · browser-local. No upload.'));
  const grid=elem('div','sheet-grid');const result=selection.map(item=>{const card=elem('figure','sheet-card'),placeholder=elem('div','sheet-placeholder','Loading…');
   card.append(placeholder,elem('figcaption','',item.path));grid.append(card);return {item,card,placeholder}});
- body.append(controls,grid);showContent(body);let cursor=0,ready=0;const loaded=[];
+ body.append(controls,grid);showContent(body);let cursor=0,ready=0;
  async function worker(){while(cursor<result.length&&state.sheetOpen&&seq===state.sheetSeq){
   const slot=result[cursor++];try{if(slot.item.size>8e6)throw Error('large image');const blob=await fetchBlob(slot.item);
    if(!state.sheetOpen||seq!==state.sheetSeq)return;
    const image=elem('img');image.alt=slot.item.path;image.src=blobUrl(blob);
-   slot.card.replaceChild(image,slot.placeholder);loaded.push({item:slot.item,image});
+   slot.card.replaceChild(image,slot.placeholder);slot.image=image;
   }catch{if(state.sheetOpen&&seq===state.sheetSeq)slot.placeholder.textContent='Preview unavailable'}
-  ready++;if(state.sheetOpen&&seq===state.sheetSeq&&ready===result.length){save.disabled=!loaded.length;save.onclick=()=>saveContactSheet(loaded);controls.lastChild.textContent=loaded.length+' of '+selection.length+' images ready · PNG export stays on this device'}
+  ready++;if(state.sheetOpen&&seq===state.sheetSeq&&ready===result.length){const loaded=result.filter(x=>x.image).map(x=>({item:x.item,image:x.image}));save.disabled=!loaded.length;save.onclick=()=>saveContactSheet(loaded);controls.lastChild.textContent=loaded.length+' of '+selection.length+' images ready · PNG export stays on this device'}
  }}
  await Promise.all([worker(),worker(),worker()]);
 }
