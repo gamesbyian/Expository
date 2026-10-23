@@ -12,6 +12,7 @@
 | E06 | In progress | Merge-only PR milestones from recently updated closed PR sample and user-triggered older commit pages (max 4/200) shipped; full PR/history pagination, tags' dates and end-to-end real GitHub acceptance pending |
 | E07 | Planned | Real device/owner acceptance: Pixel 6 Pro portrait touch/focus/Chrome, private token use, 200% font, reduced motion and large gallery |
 | E08 | Planned | Public packaging: security review of public Pages serving non-app project files, optional PWA after privacy review |
+| E09 | Delivered pending merge | Size treemap from already fetched Git blob index, bounded groups with keyboard/touch list, folder/file drill-down, truncation disclosure; mobile visual atlas and actual Pixel acceptance separate |
 
 **Exclusions:** no automatic personal-data collection, server-hosted credentials, cross-project data mining, CI screenshot floods or unverified AI narration. Any extra work follows the same read-only and evidence contract.
 
