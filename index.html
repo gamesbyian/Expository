@@ -676,6 +676,9 @@ async function openRepo(targetPath=''){
  const repo=$('repo').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\/$/,'');
  if(!/^[\w.-]+\/[\w.-]+$/.test(repo)){status('Enter owner/repository.');return false}
  if(!safeRepoPath(targetPath)){status('Invalid folder path.');return false}
+ // The repository's visibility is unknown until GitHub responds. Scrub any incoming
+ // deep link now; public links are restored only after successful public access.
+ history.replaceState(null,'',location.pathname+location.search);
  abortRequests();
  cancelContentScan();stopStory();state.storyData=null;const request=++state.repoRequest;state.repo=repo;state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;
  clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
