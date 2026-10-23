@@ -57,6 +57,8 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 .size-list button{min-height:44px;display:flex;justify-content:space-between;gap:10px;align-items:center;background:var(--panel2);border:1px solid var(--stroke);border-radius:10px;padding:9px 12px;text-align:left;overflow-wrap:anywhere}
 .size-list button span{min-width:0}.size-list button small{color:var(--dim);flex:0 0 auto;font-size:11px}
 @media(max-width:760px){.size-map{min-height:260px;height:min(37dvh,350px)}.size-tile{padding:4px}.size-tile small{font-size:10px}}
+#workspace[data-mode="review"] .toolbar > :not(#storyToggle):not(#sizeToggle){display:none!important}
+#workspace[data-mode="review"] #refineControls,#workspace[data-mode="review"] #searchResults{display:none!important}
 </style>
 </head>
 <body>
@@ -76,7 +78,7 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 <hr><h2>Starred public repositories</h2><div id="favorites" class="stack"></div><hr><h2>Folders</h2><div id="tree" role="navigation" aria-label="Folder navigation"></div><hr>
 <div class="hint">Read-only by design. No editing, no analytics, no token persistence. Preview private assets locally in this tab.</div>
 </aside>
-<section class="workspace" aria-label="Repository files">
+<section class="workspace" id="workspace" data-mode="files" aria-label="Repository files">
 <div class="toolbar"><button id="back" class="icon-btn" title="Parent folder" aria-label="Parent folder">↑</button><input id="filter" class="field" placeholder="Find by name…" aria-label="Filter files by name"><select id="scope" class="field" aria-label="Search and gallery scope"><option value="folder">This folder</option><option value="repo">Search entire repo</option><option value="images">Images in subfolders</option></select><button id="listBtn" class="pill" title="List view">☷</button><button id="gridBtn" class="pill active" title="Gallery view">▦</button><button id="copyFolder" class="pill" title="Copy folder link" aria-label="Copy folder link">↗</button><button id="refineToggle" class="pill" aria-expanded="true" aria-controls="refineControls">Filters</button><button id="storyToggle" class="pill" aria-pressed="false" title="Explore commits, releases and tags">Story</button><button id="sizeToggle" class="pill" aria-pressed="false" aria-controls="sizeView" title="Explore indexed files and folders by size">Sizes</button><button id="selectMode" class="pill" aria-pressed="false" title="Select up to 12 images for a contact sheet">Select images</button><button id="contactSheet" class="pill" hidden disabled>Contact sheet (0)</button><button id="clearSelection" class="pill" hidden>Clear</button></div>
 <div class="refine" id="refineControls"><label for="sortFiles">Sort</label><select id="sortFiles" class="field" aria-label="Sort files"><option value="name">Name</option><option value="size">Largest</option><option value="extension">Extension</option></select><label for="fileKind">Kind</label><select id="fileKind" class="field" aria-label="Filter by file category"><option value="all">Everything</option><option value="image">Images</option><option value="code">Code</option><option value="doc">Documents</option><option value="data">Data</option><option value="other">Other</option></select><label for="density">Gallery size <input id="density" type="range" min="110" max="270" value="145" step="10" aria-label="Gallery thumbnail size"></label><button id="contentSearch" class="pill" title="Scan bounded text files for a phrase">Search contents</button></div>
 <div class="path" id="breadcrumbs">No repository selected</div>
@@ -90,11 +92,11 @@ const codeRx=/\.(?:js|jsx|mjs|ts|tsx|py|rs|go|java|kt|c|cpp|h|hpp|sh|css|scss|ht
 const imageRx=/\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i,textRx=/\.(md|markdown|txt|json|ya?ml|xml|csv|tsv|js|jsx|ts|tsx|css|scss|html|py|kt|java|rs|go|sh|toml|ini|svg|sql|log|gradle|properties)$/i;
 function hideSizeMap(){
  state.sizeOpen=false;$('sizeView').hidden=true;$('sizeView').replaceChildren();$('items').hidden=state.storyOpen;
- $('sizeToggle').textContent='Sizes';$('sizeToggle').classList.remove('active');$('sizeToggle').setAttribute('aria-pressed','false')
+ $('sizeToggle').textContent='Sizes';$('sizeToggle').classList.remove('active');$('sizeToggle').setAttribute('aria-pressed','false');$('workspace').dataset.mode=state.storyOpen?'review':'files'
 }
 function stopStory(){
  state.storyOpen=false;++state.storySeq;$('storyView').hidden=true;$('items').hidden=false;
- $('storyToggle').classList.remove('active');$('storyToggle').setAttribute('aria-pressed','false');$('storyToggle').textContent='Story';
+ $('storyToggle').classList.remove('active');$('storyToggle').setAttribute('aria-pressed','false');$('storyToggle').textContent='Story';$('workspace').dataset.mode=state.sizeOpen?'review':'files';
 }
 function status(s){$('status').textContent=s}function closeNav(){$('sidebar').classList.remove('open');$('scrim').classList.remove('on')}
 function url(path){return 'https://api.github.com'+path}function enc(s){return encodeURIComponent(s)}
@@ -287,7 +289,7 @@ function renderStory(){
  }
  events.sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));const shown=events.filter(e=>data.filter==='all'||data.filter===e.kind);
  const merged=(data.pulls||[]).filter(p=>p.merged_at).length;
- const info=elem('p','story-notice','Sample: '+(data.commits?.length||0)+' commits ('+(data.pages||1)+' of at most 4 pages), '+(data.releases?.length||0)+' recent releases, '+merged+' merged PRs among '+(data.pulls?.length||0)+' recently updated closed PRs, '+(data.tags?.length||0)+' undated tags'+(data.errors.length?' · '+data.errors.map(e=>e.split(':')[0]).join(', ')+' unavailable':'')+'. History and PR coverage are incomplete.');host.append(info);
+ const info=elem('p','story-notice','Sample: '+(data.commits?.length||0)+' commits ('+(data.pages||1)+' of at most 4 pages), '+(data.releases?.length||0)+' recent releases, '+merged+' merged PRs among '+(data.pulls?.length||0)+' recently updated closed PRs ('+(data.pullPages||1)+' of at most 4 pages), '+(data.tags?.length||0)+' undated tags'+(data.errors.length?' · '+data.errors.map(e=>e.split(':')[0]).join(', ')+' unavailable':'')+'. History and PR coverage are incomplete.');host.append(info);
  const stream=elem('div','story-stream');let month='';
  for(const event of shown){const stamp=new Date(event.date),m=stamp.toLocaleDateString(undefined,{year:'numeric',month:'long'});
   if(m!==month){stream.append(elem('div','story-group',m));month=m}stream.append(storyEvent(event.kind,stamp.toLocaleDateString(),event.label,event.summary,event.url))
@@ -301,10 +303,40 @@ function renderStory(){
  }else if((data.pages||1)>=4&&data.hasMore)paging.append(elem('span','story-detail','Four-page / 200-commit limit reached. This is not a full history.'));
  else paging.append(elem('span','story-detail',data.commits.length?'No further sampled commit pages available.':'No commit pages currently available.'));
  if(data.olderError)paging.append(elem('p','story-detail','Older commits could not be fetched: '+data.olderError));
+ if(data.hasMorePulls&&(data.pullPages||1)<4){
+  const morePulls=elem('button','pill',data.loadingOlderPulls?'Loading older PRs…':'Load 20 older closed PRs');
+  morePulls.disabled=Boolean(data.loadingOlderPulls);
+  morePulls.setAttribute('aria-label','Load the next page of recently updated closed pull requests from GitHub; only actually merged PRs appear in the timeline');
+  morePulls.onclick=loadOlderPulls;paging.append(morePulls)
+ }else if(data.hasMorePulls&&(data.pullPages||1)>=4)paging.append(elem('span','story-detail','80 closed-PR sample cap reached. Older merged PRs may be omitted.'));
+ else paging.append(elem('span','story-detail','No more closed-PR pages currently available in this bounded sample.'));
+ if(data.olderPullError)paging.append(elem('p','story-detail','Older PRs could not be fetched: '+data.olderPullError));
  host.append(paging);
  const tags=(data.tags||[]).filter(x=>x.name&&typeof x.name==='string');if(tags.length){
   host.append(elem('h3','','Tags (no reliable dates in the tags API)'));
   const links=elem('div','story-tags');for(const tag of tags){const a=elem('a','',tag.name);a.href='https://github.com/'+state.repo+'/tree/'+enc(tag.name);a.target='_blank';a.rel='noopener noreferrer';links.append(a)}host.append(links)
+ }
+}
+async function loadOlderPulls(){
+ const data=state.storyData;
+ if(!state.storyOpen||!data||data.loadingOlderPulls||!data.hasMorePulls||(data.pullPages||1)>=4)return;
+ const seq=state.storySeq,repo=state.repo,branch=state.branch,nextPage=(data.pullPages||1)+1;
+ data.loadingOlderPulls=true;data.olderPullError='';renderStory();
+ try{
+  const page=await json('/repos/'+repo+'/pulls?state=closed&sort=updated&direction=desc&per_page=20&page='+nextPage);
+  if(seq!==state.storySeq||state.storyData!==data||repo!==state.repo||branch!==state.branch||!state.storyOpen)return;
+  if(!Array.isArray(page))throw Error('GitHub returned an invalid closed-PR page');
+  const known=new Set(data.pulls.map(p=>p.number));
+  for(const item of page){
+   if(!Number.isSafeInteger(item?.number)||item.number<=0||known.has(item.number))continue;
+   data.pulls.push(item);known.add(item.number)
+  }
+  data.pullPages=nextPage;data.hasMorePulls=page.length===20
+ }catch(e){
+  if(seq!==state.storySeq||state.storyData!==data||!state.storyOpen)return;
+  data.olderPullError=e.message
+ }finally{
+  if(seq===state.storySeq&&state.storyData===data&&state.storyOpen){data.loadingOlderPulls=false;renderStory()}
  }
 }
 async function loadOlderStory(){
@@ -404,14 +436,14 @@ function renderSizeMap(){
 function toggleSizeMap(){
  if(state.sizeOpen){hideSizeMap();return}
  if(!state.repo||!state.branch){status('Open a repository first.');return}
- stopStory();clearPreview();state.sizeOpen=true;$('sizeView').hidden=false;$('items').hidden=true;
+ stopStory();clearPreview();state.sizeOpen=true;$('sizeView').hidden=false;$('items').hidden=true;$('workspace').dataset.mode='review';
  $('sizeToggle').textContent='Files';$('sizeToggle').classList.add('active');$('sizeToggle').setAttribute('aria-pressed','true');
  renderSizeMap()
 }
 async function toggleStory(){
  if(state.storyOpen){stopStory();return}
  if(!state.repo||!state.branch){status('Open a repository first.');return}
- hideSizeMap();clearPreview();state.storyOpen=true;$('storyView').hidden=false;$('items').hidden=true;
+ hideSizeMap();clearPreview();state.storyOpen=true;$('storyView').hidden=false;$('items').hidden=true;$('workspace').dataset.mode='review';
  $('storyToggle').textContent='Files';$('storyToggle').classList.add('active');$('storyToggle').setAttribute('aria-pressed','true');
  const seq=++state.storySeq,repo=state.repo,branch=state.branch;
  if(state.storyData){renderStory();return}
@@ -419,9 +451,9 @@ async function toggleStory(){
  const endpoints=[['commits','/repos/'+repo+'/commits?sha='+enc(branch)+'&per_page=50&page=1'],['releases','/repos/'+repo+'/releases?per_page=10'],['tags','/repos/'+repo+'/tags?per_page=10'],['pulls','/repos/'+repo+'/pulls?state=closed&sort=updated&direction=desc&per_page=20']];
  const resolved=await Promise.all(endpoints.map(async([key,url])=>{try{const data=await json(url);return {key,data:Array.isArray(data)?data:[]}}catch(e){return {key,data:[],error:e.message}}}));
  if(seq!==state.storySeq||repo!==state.repo||!state.storyOpen)return;
- const data={commits:[],releases:[],tags:[],pulls:[],filter:'all',pages:1,hasMore:false,loadingOlder:false,olderError:'',errors:[]};
+ const data={commits:[],releases:[],tags:[],pulls:[],filter:'all',pages:1,hasMore:false,loadingOlder:false,olderError:'',pullPages:1,hasMorePulls:false,loadingOlderPulls:false,olderPullError:'',errors:[]};
  for(const x of resolved){data[x.key]=x.data;if(x.error)data.errors.push(x.key+': '+x.error)}
- data.hasMore=data.commits.length===50;
+ data.hasMore=data.commits.length===50;data.hasMorePulls=data.pulls.length===20;
  state.storyData=data;renderStory();
 }
 function updateHash(filePath=''){

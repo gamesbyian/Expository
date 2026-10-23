@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl
  );
@@ -605,4 +605,33 @@ test('find caps active matches while honestly reporting all matching loaded line
  assert.match(info.textContent,/First 500 of 1003 matching lines/);
  view.children[0].children[3].onclick();
  assert.match(info.textContent,/of first 500 \(of 1003\)/);
+});
+
+test('older PR samples request only on intent, deduplicate, and display only merged items',async()=>{
+ const requests=[];
+ const apiFetch=async url=>{
+  requests.push(url);
+  return new Response(JSON.stringify([{number:2,title:'New merged',merged_at:'2026-10-20T08:00:00Z'},{number:1,title:'Duplicated prior merged',merged_at:'2026-10-19T08:00:00Z'},{number:3,title:'Only closed',merged_at:null}]),{status:200,headers:{'content-type':'application/json'}})
+ };
+ const {app,get}=boot(apiFetch);
+ app.state.repo='owner/repo';app.state.branch='main';app.state.storyOpen=true;app.state.storySeq=9;
+ const data={commits:[],releases:[],tags:[],pulls:[{number:1,title:'Old merged',merged_at:'2026-10-19T08:00:00Z'}],filter:'pr',pages:1,hasMore:false,loadingOlder:false,olderError:'',pullPages:1,hasMorePulls:true,loadingOlderPulls:false,olderPullError:'',errors:[]};
+ app.state.storyData=data;
+ assert.equal(requests.length,0,'no eager PR pagination');
+ await app.loadOlderPulls();
+ assert.equal(requests.length,1);assert.match(requests[0],/per_page=20&page=2$/);
+ assert.deepEqual(data.pulls.map(x=>x.number),[1,2,3],'duplicate PR is not appended');
+ assert.equal(data.pullPages,2);assert.equal(data.hasMorePulls,false,'short page ends discovery');
+ const stream=get('storyView').children.find(x=>x.className==='story-stream');
+ assert.equal(stream.children.filter(x=>x.className==='story-event').length,2,'closed-only entry not shown as a merge');
+ await app.loadOlderPulls();assert.equal(requests.length,1,'short page prevents unnecessary extra API reads');
+});
+test('older PR pagination caps four pages and ignores stale results when view closes',async()=>{
+ let release;const fetcher=()=>new Promise(resolve=>{release=()=>resolve(new Response(JSON.stringify([{number:2,merged_at:'2026-10-20T08:00:00Z'}]),{status:200}))});
+ const {app}=boot(fetcher);app.state.repo='o/r';app.state.branch='main';app.state.storyOpen=true;app.state.storySeq=3;
+ const data={commits:[],releases:[],tags:[],pulls:[{number:1}],filter:'pr',pages:1,hasMore:false,loadingOlder:false,olderError:'',pullPages:2,hasMorePulls:true,loadingOlderPulls:false,olderPullError:'',errors:[]};
+ app.state.storyData=data;const work=app.loadOlderPulls();app.stopStory();release();await work;
+ assert.equal(data.pulls.length,1,'stale PR page never used after closing Story Mode');
+ app.state.storyOpen=true;data.pullPages=4;await app.loadOlderPulls();
+ assert.equal(data.pulls.length,1,'four-page limit stops additional requests');
 });

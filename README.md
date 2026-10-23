@@ -28,7 +28,7 @@ Expository browses **public repositories without login** and can browse selected
 - Inspect the recent Git history of an individual file
 - Expand JSON as a safe tree or switch to raw source
 - Follow safe relative Markdown links within repositories and view CSV/TSV as bounded tables
-- Enter Story Mode for dated GitHub commits, releases, genuinely merged PR milestones and undated tags. Load older commits explicitly, up to four pages (200 commits). A PR sample is the latest 20 closed PRs, so older merges may be absent.
+- Enter Story Mode for dated GitHub commits, releases, genuinely merged PR milestones and undated tags. Load older commits explicitly, up to four pages (200 commits). PR discovery starts with the 20 most recently updated closed PRs, and you can explicitly load up to 3 older pages (80 closed PRs total). Only genuinely merged PRs enter the dated story, and even 80 closed PRs may omit older merges.
 - Copy deep links to folders and previews
 - Switch dark/light appearance, and clear private browsing credentials explicitly
 

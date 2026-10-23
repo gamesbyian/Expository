@@ -115,7 +115,10 @@ const fixtures=String.raw`
    if(u.searchParams.get('path'))return json([{sha:'1111111111111111111111111111111111111111',commit:{message:'First fixture change',author:{date:'2026-10-22T12:00:00Z'}}}]);
    return json(u.searchParams.get('page')==='2'?[fixtureCommit(51),fixtureCommit(52)]:Array.from({length:50},(_,i)=>fixtureCommit(i+1)));
   }
-  if(p.endsWith('/pulls'))return json([{number:12,title:'Merged repo work',merged_at:'2026-10-22T15:00:00Z'},{number:13,title:'Closed but never merged',merged_at:null,closed_at:'2026-10-22T17:00:00Z'}]);
+  if(p.endsWith('/pulls')){
+   if(u.searchParams.get('page')==='2')return json([{number:99,title:'Older merged milestone',merged_at:'2026-10-15T08:00:00Z'}]);
+   return json(Array.from({length:20},(_,i)=>({number:12+i,title:i===0?'Merged repo work':'Closed only '+i,merged_at:i===0?'2026-10-22T15:00:00Z':null,closed_at:'2026-10-22T17:00:00Z'})))
+  }
   if(p.endsWith('/releases'))return json([{tag_name:'v1.0',name:'First public release',published_at:'2026-10-21T12:00:00Z'}]);
   if(p.endsWith('/tags'))return json([{name:'v1.0'}]);
   return new Response('Not found',{status:404});
@@ -137,6 +140,8 @@ async function main(){
   await evaluate("document.querySelector('#scrim').click()");
   await evaluate("document.querySelector('#sizeToggle').click()");
   await until("document.querySelectorAll('#sizeView .size-tile').length===2",'indexed size treemap rendered');
+  assert.equal(await evaluate("document.querySelector('#workspace').dataset.mode"),'review','size viewer uses focused toolbar');
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('#selectMode')).display"),'none','selection buttons absent in size mode');
   assert.equal(await evaluate("document.querySelector('#items').hidden"),true,'size view hides file tiles');
   assert.equal(await evaluate("document.querySelectorAll('#sizeView .size-list button').length"),2,'accessible tap list reflects both indexed groups');
   assert.equal(await evaluate("document.querySelector('#sizeView .size-head').textContent.includes('indexed bytes')"),true,'indexed byte coverage explicitly shown');
@@ -146,6 +151,7 @@ async function main(){
   await evaluate("Array.from(document.querySelectorAll('#sizeView .size-list button')).find(x=>x.textContent.includes('design /')).click()");
   await until("document.querySelector('#breadcrumbs')?.textContent?.includes('design')",'treemap folder drill-down');
   assert.equal(await evaluate("document.querySelector('#sizeView').hidden"),true,'drill-down returns to ordinary files');
+  assert.equal(await evaluate("document.querySelector('#workspace').dataset.mode"),'files','folder drill-down restores file controls');
   await evaluate("document.querySelector('#sizeToggle').click()");
   await until("document.querySelector('#sizeView .size-head')?.textContent?.includes('design')",'nested folder size map');
   assert.equal(await evaluate("document.querySelectorAll('#sizeView .size-list button').length"),1,'nested directory aggregates children');
@@ -273,19 +279,28 @@ async function main(){
   assert.equal(await evaluate("document.querySelectorAll('#storyView .story-event[href*=\"/pull/\"]').length"),1,'only merged PR milestone displayed');
   await evaluate("document.querySelector('.story-paging button').click()");
   await until("document.querySelectorAll('#storyView .story-event').length===54",'explicit older commits loaded');
+  await evaluate("Array.from(document.querySelectorAll('#storyView .story-paging button')).find(b=>b.textContent.includes('older closed PRs')).click()");
+  await until("document.querySelectorAll('#storyView .story-event').length===55",'older genuinely merged PR milestone loaded');
+  assert.equal(await evaluate("document.querySelector('#storyView .story-notice').textContent.includes('Source-backed')"),true,'provenance intro retained');
   assert.equal(await evaluate("document.querySelector('.story-notice')?.textContent?.includes('Sample:')"),false,'heading remains separate from evidence receipt');
   assert.equal(await evaluate("document.querySelector('#storyView').hidden"),false,'Story Mode visible');
   assert.equal(await evaluate("document.querySelector('#items').hidden"),true,'files hidden during Story Mode');
+  assert.equal(await evaluate("document.querySelector('#workspace').dataset.mode"),'review','Story Mode focuses review controls');
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('#contactSheet')).display"),'none','contact sheet controls hidden, selection preserved');
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('#filter')).display"),'none','file filter hidden in Story Mode');
   assert.equal(await evaluate("document.querySelectorAll('#storyView .story-tags a').length"),1,'undated tags grouped separately');
   await evaluate("document.querySelector('.story-controls button:nth-child(3)').click()");
   assert.equal(await evaluate("document.querySelectorAll('#storyView .story-event').length"),1,'filter to releases');
   await evaluate("document.querySelector('.story-controls button:nth-child(4)').click()");
-  assert.equal(await evaluate("document.querySelectorAll('#storyView .story-event').length"),1,'filter to merged PRs');
+  assert.equal(await evaluate("document.querySelectorAll('#storyView .story-event').length"),2,'filter includes older actually merged PR');
+  if(process.env.EXPOSITORY_ATLAS==='1'){await evaluate("window.scrollTo(0,0)");await screenshot('expository-older-prs-393.png')}
   await evaluate("document.querySelector('.story-controls button:nth-child(3)').click()");
   assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'Story Mode no horizontal overflow');
   await screenshot('expository-story-360.png');
   await evaluate("document.querySelector('#storyToggle').click()");
   assert.equal(await evaluate("document.querySelector('#items').hidden"),false,'returns to files');
+  assert.equal(await evaluate("document.querySelector('#workspace').dataset.mode"),'files','file controls restored after Story Mode');
+  assert.equal(await evaluate("document.querySelector('#contactSheet').hidden"),false,'prior image selection still available when returning');
   await evaluate("document.querySelector('#scope').value='repo';document.querySelector('#scope').dispatchEvent(new Event('change'));document.querySelector('#filter').value='example.ts';document.querySelector('#filter').dispatchEvent(new Event('input'))");
   await until("document.querySelectorAll('#items .tile').length===1",'source outline fixture listed');
   await evaluate("document.querySelector('#items .tile').click()");
