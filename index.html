@@ -569,11 +569,11 @@ function imageViewer(blob,item){
  const middle=touches=>({x:(touches[0].clientX+touches[1].clientX)/2,y:(touches[0].clientY+touches[1].clientY)/2});
  const distance=touches=>Math.hypot(touches[0].clientX-touches[1].clientX,touches[0].clientY-touches[1].clientY);
  let gesture=null,pan=null;
- stage.ontouchstart=e=>{
+ stage.addEventListener('touchstart',e=>{
   if(e.touches.length===2){gesture={distance:Math.max(1,distance(e.touches)),zoom:state.zoom};pan=null;e.preventDefault()}
   else if(e.touches.length===1){pan={x:e.touches[0].clientX,y:e.touches[0].clientY};gesture=null}
- };
- stage.ontouchmove=e=>{
+ },{passive:false});
+ stage.addEventListener('touchmove',e=>{
   if(e.touches.length===2){
    if(!gesture)gesture={distance:Math.max(1,distance(e.touches)),zoom:state.zoom};
    const center=middle(e.touches),rect=stage.getBoundingClientRect(),x=center.x-rect.left,y=center.y-rect.top;
@@ -585,12 +585,12 @@ function imageViewer(blob,item){
    const t=e.touches[0];if(pan){stage.scrollLeft-=t.clientX-pan.x;stage.scrollTop-=t.clientY-pan.y}
    pan={x:t.clientX,y:t.clientY};e.preventDefault()
   }
- };
- stage.ontouchend=e=>{
+ },{passive:false});
+ stage.addEventListener('touchend',e=>{
   if(e.touches.length<2)gesture=null;
   pan=e.touches.length===1?{x:e.touches[0].clientX,y:e.touches[0].clientY}:null
- };
- stage.ontouchcancel=()=>{gesture=null;pan=null};
+ },{passive:false});
+ stage.addEventListener('touchcancel',()=>{gesture=null;pan=null},{passive:false});
  actions.append(minus,reset,plus,elem('span','hint','Pinch with two fingers to zoom; drag to pan when enlarged. Zoom buttons work with keyboard and mouse.'));update();wrap.append(actions,stage);return wrap;
 }
 function jsonViewer(value){
