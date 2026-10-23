@@ -18,15 +18,15 @@ Ratings describe *general Expository relevance* (10 is highest) rather than impl
 | 10 | File type/size sort and filters | FolderFrame | Folder-first and indexed-search sorting, extension and type controls | Wave 1 |
 | 10 | Adjustable gallery density | FolderFrame | Touch-sized sizing control, bounded thumbnail sizes | Wave 1 |
 | 10 | Huge repository resilience | Gitako, FolderFrame | Bounded concurrent network, keep truncated-index warnings, incremental pages | Wave 1 ongoing |
-| 9 | Zoom, pan, fullscreen, rotate | FolderFrame | Progressive image inspect; touch zoom and reset; browser native fullscreen as optional | Wave 2 |
+| 9 | Zoom, pan, fullscreen, rotate | FolderFrame | 1×–4× zoom, scroll/pan/reset shipped; native pinch, rotate, fullscreen remain | Wave 2 partial |
 | 9 | Rendered/raw Markdown, safe structured data | TooToo | Render/source switch, safe local Markdown links, JSON tree, CSV tables | Wave 2 |
 | 9 | Public-only favorites and recent folders | Gitako | Never store private-repo names/paths or tokens, clear control | Wave 1 bookmarks |
 | 9 | Code symbol navigation | Sourcegraph | Lightweight client outline, optional generated index for large repos | Wave 3 |
-| 9 | File revision timeline | GitLens, GitHub | GitHub commit history API with explicit dates and source links | Wave 2 |
+| 9 | File revision timeline | GitLens, GitHub | Path-scoped last 20 commits with dates and GitHub provenance links implemented | Wave 2 initial |
 | 9 | Pixel diffs | Image compare tools | Canvas-based diff with pixel-alignment and mismatch caveats | Wave 2 |
 | 9 | Multi-select contact sheets | FolderFrame | Client-only capture with explicit selection count and caps | Wave 2 |
 | 9 | Relative Markdown navigation | GitHub | Safe links constrained to repository path | Wave 2 |
-| 8 | JSON/CSV/YAML/Mermaid viewer | Structured data viewers | Safe DOM JSON/CSV first; YAML/Mermaid optional, never execute unknown code | Wave 2 |
+| 8 | JSON/CSV/YAML/Mermaid viewer | Structured data viewers | Bounded expandable JSON tree and raw toggle implemented; CSV/YAML/Mermaid pending | Wave 2 partial |
 | 8 | Activity dashboard | GitHub, GitLens | Public/restricted commit and PR APIs, bounded counts | Wave 3 |
 | 8 | Story Mode: project evolution | GitLens, GitHub | Evidence-backed commits/tags/releases/PRs with provenance links; no invented chronology | Wave 3 |
 | 7 | Slideshow | FolderFrame | Browser-local selected collection, accessible pause and interval | Wave 3 |
@@ -55,7 +55,7 @@ Detect supported formats/metadata from files. Do not hardcode owner-specific beh
 
 ## Delivery order
 
-**Wave 1, delivered in PR #55 (with remaining hardening):** clear foundations for filtering/sorting, adjustable density, read-only raw actions, syntax rendering, public bookmarks; a bounded opt-in content search. Each requires regression tests. Merge only after green scoped CI and replay against Chromium fixtures.
+**Wave 1, immediate:** clear foundations for filtering/sorting, adjustable density, read-only raw actions, syntax rendering, public bookmarks; a bounded opt-in content search. Each requires regression tests. Merge only after green scoped CI and replay against Chromium fixtures.
 
 **Wave 2:** image zoom and inspection, safe Markdown links/source mode, JSON/CSV, file history, multi-image contact sheets, pixel diff. Revisit thumbnail object URL lifetime and API quota pressure before adding more media requests.
 
