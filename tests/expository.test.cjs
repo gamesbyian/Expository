@@ -31,7 +31,7 @@ function boot() {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection};\n})();';
  const app=new Function('document','history','location','localStorage','Option',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}}
  );
@@ -249,4 +249,21 @@ test('Markdown renders links as safe DOM buttons rather than injected HTML',()=>
  const paragraph=doc.children[0];
  assert.ok(paragraph.children.some(x=>x.className==='md-link'));
  assert.ok(!paragraph.children.some(x=>x.tagName==='SCRIPT'));
+});
+
+test('image contact sheet selections are bounded, reversible and cleared',()=>{
+ const {app,get}=boot();
+ app.state.repo='gamesbyian/Glimpse';app.state.branch='main';
+ assert.equal(app.selectImage({name:'notes.md',path:'docs/notes.md',type:'file'}),false);
+ for(let i=0;i<12;i++)assert.equal(app.selectImage({name:i+'.svg',path:'design/'+i+'.svg',type:'file'}),true);
+ assert.equal(app.state.selected.size,12);
+ assert.equal(get('contactSheet').disabled,false);
+ assert.equal(app.selectImage({name:'overflow.svg',path:'design/overflow.svg',type:'file'}),false);
+ assert.equal(app.state.selected.size,12);
+ assert.equal(app.selectImage({name:'0.svg',path:'design/0.svg',type:'file'}),true);
+ assert.equal(app.state.selected.size,11);
+ app.state.selectionMode=true;app.clearSelection();
+ assert.equal(app.state.selected.size,0);
+ assert.equal(app.state.selectionMode,false);
+ assert.equal(get('contactSheet').disabled,true);
 });
