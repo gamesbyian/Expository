@@ -38,7 +38,7 @@ For the feature plan and current development stages, see the [weighted feature r
 
 This public repository is now the **canonical application and development source**. The earlier `gamesbyian/general-purpose/tools/expository/` version is preservation/bootstrap history, not a second active development lane. The Pages deployment continues to use root `index.html` only. Public agent instructions, synthetic test fixtures and visual review scripts live beside it; no personal repository content or credentials are included.
 
-The `.expository-managed` marker is historical from the original guarded deployment and is not an instruction to overwrite this repository from the archived private source. `.nojekyll` disables Jekyll transformations.
+The original `.expository-managed` marker has been removed deliberately: it prevents the archived guarded publisher in the old private source from overwriting current public development. `.nojekyll` disables Jekyll transformations.
 
 For development work, start at [AGENTS.md](AGENTS.md) and [the live work queue](docs/WORK-QUEUE.md). For screenshot acceptance and a standalone offline atlas, see [visual review](review/README.md) and the manual **Expository Visual Review** Action. The [weighted roadmap](FEATURE-ROADMAP.md) is the strategic feature list; it is not evidence that every item is already implemented.
 
