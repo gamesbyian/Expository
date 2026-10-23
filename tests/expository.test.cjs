@@ -31,11 +31,11 @@ function boot(fetchImpl=globalThis.fetch) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,indexedDirectChildren,recoverLargeFolderFromIndex};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl
  );
- return {app,get,urls,document};
+ return {app,get,urls,document,location};
 }
 test('browser source parses and controls have matching elements',()=>{
  assert.ok(source, 'inline script exists');
@@ -388,4 +388,15 @@ test('truncated tree index cannot falsely certify or backfill huge directories',
  app.state.indexReady=true;app.state.indexTruncated=true;app.state.indexEntries=[{type:'file',path:'media/unlisted.svg',name:'unlisted.svg'}];
  assert.equal(app.recoverLargeFolderFromIndex(),0);
  assert.equal(app.state.items.length,1000);
+});
+
+test('failed private deep links are scrubbed before GitHub auth/visibility is known',async()=>{
+ const refused=async()=>new Response(JSON.stringify({message:'Not Found'}),{status:404,headers:{'content-type':'application/json'}});
+ const {app,get,urls,location}=boot(refused);
+ get('repo').value='owner/PrivateFixture';
+ location.hash='#owner/PrivateFixture/main/hidden/docs?file=hidden%2Fsecret.md';
+ const ok=await app.openRepo('hidden/docs');
+ assert.equal(ok,false);
+ assert.equal(urls[0],'/index.html','incoming fragment cleared before any API result');
+ assert.equal(urls.some(x=>x.includes('hidden')),false,'private paths never written to browser history');
 });
