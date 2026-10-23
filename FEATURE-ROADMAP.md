@@ -23,7 +23,7 @@ Ratings describe *general Expository relevance* (10 is highest) rather than impl
 | 9 | Public-only favorites and recent folders | Gitako | Never store private-repo names/paths or tokens, clear control | Wave 1 bookmarks |
 | 9 | Code symbol navigation | Sourcegraph | Lightweight client outline, optional generated index for large repos | Wave 3 |
 | 9 | File revision timeline | GitLens, GitHub | Path-scoped last 20 commits with dates and GitHub provenance links implemented | Wave 2 initial |
-| 9 | Pixel diffs | Image compare tools | Canvas-based diff with pixel-alignment and mismatch caveats | Wave 2 |
+| 9 | Pixel diffs | Image compare tools | Local magenta diff heatmap, exact intrinsic-dimension gate, 1024×1024 bounded sampling, explicit percent changed | Wave 2 initial |
 | 9 | Multi-select contact sheets | FolderFrame | Client-only capture with explicit selection count and caps | Wave 2 |
 | 9 | Relative Markdown navigation | GitHub | Safe links constrained to repository path | Wave 2 |
 | 8 | JSON/CSV/YAML/Mermaid viewer | Structured data viewers | Bounded expandable JSON tree and raw toggle implemented; CSV/YAML/Mermaid pending | Wave 2 partial |
