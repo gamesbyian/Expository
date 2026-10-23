@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,indexedDirectChildren,recoverLargeFolderFromIndex};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl
  );
@@ -364,4 +364,28 @@ test('public static app CSP pins GitHub API and prevents arbitrary network/media
  assert.match(csp,/form-action 'none'/);
  assert.ok(!/connect-src[^;]*\*/.test(csp),'no wildcard outgoing connections');
  assert.ok(!/script-src[^;]*https?:/.test(csp),'no remotely hosted scripts');
+});
+
+test('large folder uses completed Git tree to recover entries beyond Contents API cap',()=>{
+ const {app}=boot();
+ app.state.path='gallery';app.state.indexReady=true;app.state.indexTruncated=false;
+ app.state.items=Array.from({length:1000},(_,i)=>({type:'file',name:'image'+i+'.png',path:'gallery/image'+i+'.png',size:10}));
+ app.state.indexEntries=[
+  {type:'file',name:'image1000.png',path:'gallery/image1000.png',size:12},
+  {type:'file',name:'image1001.png',path:'gallery/image1001.png',size:13},
+  {type:'file',name:'nested.png',path:'gallery/child/nested.png',size:15},
+  {type:'file',name:'offsite.png',path:'other/offsite.png',size:12}
+ ];
+ app.treeAdd('gallery/child');
+ assert.deepEqual(app.indexedDirectChildren('gallery').map(x=>x.path),['gallery/image1000.png','gallery/image1001.png','gallery/child']);
+ assert.equal(app.recoverLargeFolderFromIndex(),3);
+ assert.equal(app.state.items.length,1003);
+ assert.equal(app.recoverLargeFolderFromIndex(),0,'no duplicate recovery');
+});
+test('truncated tree index cannot falsely certify or backfill huge directories',()=>{
+ const {app}=boot();
+ app.state.path='media';app.state.items=Array.from({length:1000},(_,i)=>({type:'file',path:'media/'+i+'.svg',name:i+'.svg'}));
+ app.state.indexReady=true;app.state.indexTruncated=true;app.state.indexEntries=[{type:'file',path:'media/unlisted.svg',name:'unlisted.svg'}];
+ assert.equal(app.recoverLargeFolderFromIndex(),0);
+ assert.equal(app.state.items.length,1000);
 });
