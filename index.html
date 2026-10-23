@@ -35,6 +35,7 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 .image-viewer{display:flex;flex-direction:column;gap:8px;min-width:0}.image-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.image-actions .pill{padding:7px 12px}.image-stage{overflow:auto;max-height:62dvh;min-height:140px;background:repeating-conic-gradient(#242936 0% 25%,#1b202a 0% 50%) 50%/18px 18px;border:1px solid var(--stroke);border-radius:10px;overscroll-behavior:contain}.image-stage img{display:block;max-width:none!important;max-height:none!important;object-fit:contain;align-self:auto!important;height:auto}
 .json-tree{width:100%;max-width:100%;font:12px/1.5 ui-monospace,monospace;overflow-wrap:anywhere}.json-tree details{padding:4px 0 4px 14px;border-left:1px solid var(--stroke)}.json-tree summary{cursor:pointer;min-height:28px;color:var(--accent)}.json-tree .atom{padding:4px 0}.history-list{display:grid;gap:9px}.history-list a{display:block;border:1px solid var(--stroke);border-radius:11px;padding:10px;text-decoration:none;color:var(--text)}.history-list a:hover{border-color:var(--accent)}.history-list small{display:block;color:var(--dim)}
 [hidden]{display:none!important}.story-view{padding:14px;display:grid;gap:11px}.story-head{padding:12px;border:1px solid var(--stroke);background:var(--panel2);border-radius:13px}.story-head h2{margin:0;font-size:19px}.story-controls{display:flex;gap:8px;flex-wrap:wrap}.story-stream{border-left:2px solid var(--stroke);margin-left:12px;padding-left:14px;display:grid;gap:10px}.story-event{border:1px solid var(--stroke);border-radius:11px;background:var(--panel2);padding:11px;display:grid;gap:4px;position:relative;text-decoration:none;color:var(--text)}.story-event::before{content:'';position:absolute;top:15px;left:-21px;width:10px;height:10px;border-radius:50%;background:var(--accent)}.story-event strong{overflow-wrap:anywhere}.story-event small{color:var(--dim);font-size:11px}.story-event:hover{border-color:var(--accent)}.story-group{font-weight:750;font-size:12px;color:var(--dim);margin-top:6px}.story-tags{display:flex;gap:7px;flex-wrap:wrap}.story-tags a{color:var(--accent);background:var(--panel2);border-radius:9px;padding:7px;text-decoration:none;font-size:12px}.story-tags a:hover{text-decoration:underline}.story-notice{font-size:12px;color:var(--dim)}
+.diff-canvas{display:block;width:100%;max-height:55dvh;height:auto;object-fit:contain;border:1px solid var(--stroke);border-radius:12px;background:#151921}.diff-summary{font-size:13px;color:var(--dim);overflow-wrap:anywhere}.diff-summary strong{color:var(--text)}
 </style>
 </head>
 <body>
@@ -62,7 +63,7 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 <section id="preview" class="preview" role="dialog" aria-modal="true" aria-label="File preview"><div class="preview-head"><button id="prevPreview" class="icon-btn" aria-label="Previous file" title="Previous file">‹</button><button id="nextPreview" class="icon-btn" aria-label="Next file" title="Next file">›</button><strong id="previewTitle"></strong><button id="compareAction" class="pill" hidden aria-label="Pin image for visual comparison">Pin A</button><button id="copyRaw" class="pill" hidden aria-label="Copy file text">Copy text</button><button id="downloadRaw" class="pill" hidden aria-label="Download original file">Download</button><button id="copyFile" class="pill" title="Copy file deep link" aria-label="Copy file deep link">Copy ↗</button><a id="fileLink" class="pill" target="_blank" rel="noopener noreferrer" aria-label="View file on GitHub">Git ↗</a><button id="closePreview" class="icon-btn" aria-label="Close preview">✕</button></div><div id="inspectTools" class="inspect-tools" hidden><button id="fileHistory" class="pill">History</button><button id="structuredToggle" class="pill" hidden>JSON tree</button></div><div class="preview-body" id="previewBody"></div></section>
 <script>
 (()=>{'use strict';
-const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null};
+const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0};
 const codeRx=/\.(?:js|jsx|mjs|ts|tsx|py|rs|go|java|kt|c|cpp|h|hpp|sh|css|scss|html|sql|gradle)$/i,docsRx=/\.(?:md|markdown|txt|pdf|rst)$/i,dataRx=/\.(?:json|csv|tsv|yaml|yml|xml|toml|ini|properties)$/i;
 const imageRx=/\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i,textRx=/\.(md|markdown|txt|json|ya?ml|xml|csv|tsv|js|jsx|ts|tsx|css|scss|html|py|kt|java|rs|go|sh|toml|ini|svg|sql|log|gradle|properties)$/i;
 function stopStory(){
@@ -224,7 +225,7 @@ async function pump(){
   }catch{}finally{running--;pump()}})()
  }
 }
-function clearPreview(){const wasOpen=state.preview!==null;state.preview=null;state.historyOpen=false;state.structuredOpen=false;$('inspectTools').hidden=true;state.currentBlob=null;state.previewText=null;$('copyRaw').hidden=true;$('downloadRaw').hidden=true;state.compareMode=false;updateCompareAction();$('preview').classList.remove('open');$('scrim').classList.remove('on');$('previewBody').replaceChildren();clearUrls('preview');if(wasOpen&&state.repo&&state.branch)updateHash();if(wasOpen&&state.returnFocus?.isConnected)state.returnFocus.focus();state.returnFocus=null;$('pageHeader').inert=false;$('pageMain').inert=false}
+function clearPreview(){++state.compareSeq;const wasOpen=state.preview!==null;state.preview=null;state.historyOpen=false;state.structuredOpen=false;$('inspectTools').hidden=true;state.currentBlob=null;state.previewText=null;$('copyRaw').hidden=true;$('downloadRaw').hidden=true;state.compareMode=false;updateCompareAction();$('preview').classList.remove('open');$('scrim').classList.remove('on');$('previewBody').replaceChildren();clearUrls('preview');if(wasOpen&&state.repo&&state.branch)updateHash();if(wasOpen&&state.returnFocus?.isConnected)state.returnFocus.focus();state.returnFocus=null;$('pageHeader').inert=false;$('pageMain').inert=false}
 function compareReady(){return Boolean(state.pinned&&state.preview&&state.currentBlob&&imageRx.test(state.preview.name)&&state.pinned.item.path!==state.preview.path&&state.pinned.repo===state.repo&&state.pinned.branch===state.branch)}
 function updateCompareAction(){
  const b=$('compareAction'),isImage=Boolean(state.preview&&state.currentBlob&&imageRx.test(state.preview.name));
@@ -232,15 +233,43 @@ function updateCompareAction(){
  b.textContent=state.compareMode?'Single view':!state.pinned?'Pin A':state.pinned.item.path===state.preview.path?'Unpin A':'Compare A/B';
  b.setAttribute('aria-label',b.textContent);
 }
+function calculatePixelDiff(a,b,threshold=36){
+ if(a.length!==b.length||a.length%4!==0)throw Error('Pixel buffers must have equal dimensions');
+ const out=new Uint8ClampedArray(a.length);let changed=0;
+ for(let i=0;i<a.length;i+=4){
+  const distance=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2])+Math.abs(a[i+3]-b[i+3]);
+  const different=distance>threshold;if(different)changed++;
+  const mono=Math.round((a[i]*.21+a[i+1]*.72+a[i+2]*.07)*.65);
+  out[i]=different?255:mono;out[i+1]=different?74:mono;out[i+2]=different?160:mono;out[i+3]=255
+ }
+ return {pixels:out,changed,total:a.length/4};
+}
+async function renderPixelDiff(entries,shell,sequence){
+ const summary=elem('p','diff-summary','Loading images and computing a local comparison…');shell.append(summary);
+ const imageFromBlob=blob=>new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=()=>reject(Error('Image could not be decoded'));image.src=blobUrl(blob)});
+ try{
+  const [a,b]=await Promise.all(entries.map(x=>imageFromBlob(x.blob)));
+  if(sequence!==state.compareSeq||!state.compareMode||state.compareDisplay!=='diff')return;
+  if(a.naturalWidth!==b.naturalWidth||a.naturalHeight!==b.naturalHeight){summary.textContent='Pixel-difference mode requires matching intrinsic image dimensions. A: '+a.naturalWidth+'×'+a.naturalHeight+', B: '+b.naturalWidth+'×'+b.naturalHeight+'. Use the reveal slider or side-by-side comparison instead.';return}
+  const factor=Math.min(1,1024/a.naturalWidth,1024/a.naturalHeight),w=Math.max(1,Math.round(a.naturalWidth*factor)),h=Math.max(1,Math.round(a.naturalHeight*factor));
+  const pixelsOf=img=>{const cvs=elem('canvas');cvs.width=w;cvs.height=h;const ctx=cvs.getContext('2d',{willReadFrequently:true});if(!ctx)throw Error('Canvas unavailable');ctx.drawImage(img,0,0,w,h);return ctx.getImageData(0,0,w,h).data};
+  const diff=calculatePixelDiff(pixelsOf(a),pixelsOf(b)),canvas=elem('canvas','diff-canvas');canvas.width=w;canvas.height=h;canvas.setAttribute('role','img');canvas.setAttribute('aria-label','Magenta marks pixels that changed compared with the pinned image');
+  const context=canvas.getContext('2d');const output=context.createImageData(w,h);output.data.set(diff.pixels);context.putImageData(output,0,0);
+  if(sequence!==state.compareSeq||!state.compareMode||state.compareDisplay!=='diff')return;
+  summary.textContent=(100*diff.changed/diff.total).toFixed(2)+'% differing sampled pixels ('+diff.changed.toLocaleString()+'/'+diff.total.toLocaleString()+') · '+w+'×'+h+' sample, channel-difference threshold 36'+(factor<1?' · reduced resolution':'')+'. Magenta shows changes; grayscale is unchanged pinned image.';
+  shell.append(canvas);
+ }catch(e){if(sequence===state.compareSeq)summary.textContent='Pixel difference unavailable: '+e.message+'. Try side-by-side instead.'}
+}
 function drawComparison(){
- if(!compareReady())return;clearUrls('preview');state.compareMode=true;$('inspectTools').hidden=true;
+ if(!compareReady())return;const sequence=++state.compareSeq;clearUrls('preview');state.compareMode=true;$('inspectTools').hidden=true;
  const shell=elem('div','compare-shell'),toolbar=elem('div','compare-controls');
  const side=elem('button','pill'+(state.compareDisplay==='side'?' active':''),'Side by side');
  const wipe=elem('button','pill'+(state.compareDisplay==='wipe'?' active':''),'Reveal slider');
- side.setAttribute('aria-pressed',String(state.compareDisplay==='side'));wipe.setAttribute('aria-pressed',String(state.compareDisplay==='wipe'));
+ const diff=elem('button','pill'+(state.compareDisplay==='diff'?' active':''),'Pixel diff');
+ side.setAttribute('aria-pressed',String(state.compareDisplay==='side'));wipe.setAttribute('aria-pressed',String(state.compareDisplay==='wipe'));diff.setAttribute('aria-pressed',String(state.compareDisplay==='diff'));
  side.onclick=()=>{state.compareDisplay='side';drawComparison()};
- wipe.onclick=()=>{state.compareDisplay='wipe';drawComparison()};
- toolbar.append(side,wipe);shell.append(toolbar);
+ wipe.onclick=()=>{state.compareDisplay='wipe';drawComparison()};diff.onclick=()=>{state.compareDisplay='diff';drawComparison()};
+ toolbar.append(side,wipe,diff);shell.append(toolbar);
  const entries=[{item:state.pinned.item,blob:state.pinned.blob,label:'A · Pinned'},{item:state.preview,blob:state.currentBlob,label:'B · Current'}];
  if(state.compareDisplay==='side'){
   const grid=elem('div','compare-grid');
@@ -248,7 +277,7 @@ function drawComparison(){
    const fig=elem('figure','compare-panel'),cap=elem('figcaption','',entry.label+' · '+entry.item.name),img=elem('img');
    img.alt=entry.item.path;img.src=blobUrl(entry.blob);fig.append(cap,img,elem('span','meta',entry.item.path));grid.append(fig)
   }shell.append(grid);
- }else{
+ }else if(state.compareDisplay==='wipe'){
   const stage=elem('div','compare-wipe');stage.style.setProperty('--reveal',state.compareWipe+'%');
   const a=elem('img'),b=elem('img','after');a.src=blobUrl(entries[0].blob);b.src=blobUrl(entries[1].blob);
   a.alt='Pinned image: '+entries[0].item.path;b.alt='Current image: '+entries[1].item.path;
@@ -257,7 +286,7 @@ function drawComparison(){
   slider.setAttribute('aria-label','Reveal pinned image A and current image B');slider.setAttribute('aria-valuetext',state.compareWipe+'% image B revealed');
   slider.oninput=()=>{state.compareWipe=Number(slider.value);stage.style.setProperty('--reveal',state.compareWipe+'%');slider.setAttribute('aria-valuetext',state.compareWipe+'% image B revealed')};
   shell.append(stage,slider);
- }
+ }else if(state.compareDisplay==='diff')renderPixelDiff(entries,shell,sequence);
  shell.append(elem('div','compare-caption','A: '+entries[0].item.path+'   ·   B: '+entries[1].item.path));
  showContent(shell);updateCompareAction();
 }
