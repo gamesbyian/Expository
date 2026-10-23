@@ -261,6 +261,8 @@ async function main(){
   assert.equal(await evaluate("document.querySelector('#status').textContent.includes('recovered from complete Git tree index')"),true,'complete tree recovery is explicitly labeled');
   await evaluate("document.querySelector('#repo').value='gamesbyian/DeepLarge';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
   await until("document.querySelector('#status')?.textContent?.includes('1 items')",'truncated large repo root loaded');
+  await evaluate("document.querySelector('#scope').value='folder';document.querySelector('#scope').dispatchEvent(new Event('change'))");
+  await until("Boolean(document.querySelector('#items .tile'))",'large nested folder tile visible');
   await evaluate("document.querySelector('#items .tile').click()");
   await until("document.querySelector('#status')?.textContent?.includes('1012 items')",'capped nested directory repaired from direct trees');
   assert.equal(await evaluate("document.querySelector('#status').textContent.includes('Folder verified without relying on truncated repository index')"),true,'folder-scoped recovery reports complete coverage');
