@@ -107,6 +107,12 @@ async function main(){
   const page=pathToFileURL(path.join(__dirname,'..','index.html')).href;
   await send('Page.navigate',{url:page});
   await until("document.querySelector('#status')?.textContent?.includes('items')",'initial listing');
+  assert.equal(await evaluate("document.querySelector('#refineControls').hidden"),true,'phone opens with filters collapsed');
+  await evaluate("document.querySelector('#refineToggle').click()");
+  assert.equal(await evaluate("document.querySelector('#refineControls').hidden"),false,'filters expand on phone');
+  await evaluate("document.querySelector('#refineToggle').click()");
+  assert.equal(await evaluate("document.querySelector('#refineControls').hidden"),true,'filters collapse again');
+  await evaluate("document.querySelector('#refineToggle').click()");
   if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-start-393.png');
   await evaluate("document.querySelector('#scope').value='images';document.querySelector('#scope').dispatchEvent(new Event('change'))");
   await until("document.querySelectorAll('#items .tile').length===2",'recursive image gallery');
@@ -136,6 +142,7 @@ async function main(){
    assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'412px gallery overflow');
    await screenshot('expository-gallery-412.png');
    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+   await until("document.querySelector('#refineControls').hidden===false",'desktop refinement controls visible');
    assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'1440px gallery overflow');
    await screenshot('expository-gallery-1440.png');
    await send('Emulation.setDeviceMetricsOverride',{width:393,height:852,deviceScaleFactor:1,mobile:true});
