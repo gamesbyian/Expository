@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl
  );
@@ -430,4 +430,37 @@ test('Story Mode does not accept older commits after view was closed',async()=>{
  const data={commits:[],releases:[],pulls:[],tags:[],filter:'all',pages:1,hasMore:true,loadingOlder:false,olderError:'',errors:[]};
  app.state.storyData=data;const work=app.loadOlderStory();app.stopStory();release();await work;
  assert.equal(data.commits.length,0,'stale async response discarded');
+});
+
+test('truncated recursive index recovers a capped child folder through two nonrecursive Git trees',async()=>{
+ const paths=[],sha='b'.repeat(40);
+ const fetcher=async url=>{
+  paths.push(url);
+  const root=url.endsWith('/git/trees/main');
+  const data=root?{truncated:false,tree:[{type:'tree',path:'gallery',sha}]}:
+   {truncated:false,tree:Array.from({length:1002},(_,i)=>({type:'blob',path:'img'+i+'.svg',size:50}))};
+  return new Response(JSON.stringify(data),{status:200,headers:{'content-type':'application/json'}})
+ };
+ const {app,get}=boot(fetcher);
+ app.state.repo='test/large';app.state.branch='main';app.state.path='gallery';app.state.repoRequest=2;app.state.seq=3;
+ app.state.indexTruncated=true;app.state.indexReady=true;
+ app.state.items=Array.from({length:1000},(_,i)=>({type:'file',name:'img'+i+'.svg',path:'gallery/img'+i+'.svg',size:50}));
+ const added=await app.recoverTargetedFolder();
+ assert.equal(added,2);assert.equal(app.state.items.length,1002);
+ assert.equal(paths.length,2,'one root and one folder tree, no recursive refetch');
+ assert.equal(get('status').textContent.includes('Folder verified'),true);
+});
+test('truncated direct folder tree never claims complete coverage',async()=>{
+ const fetcher=async()=>new Response(JSON.stringify({truncated:true,tree:[{type:'blob',path:'later.svg',size:50}]}),{status:200});
+ const {app,get}=boot(fetcher);app.state.repo='test/large';app.state.branch='main';app.state.path='';
+ app.state.indexTruncated=true;app.state.items=Array.from({length:1000},(_,i)=>({type:'file',name:i+'.svg',path:i+'.svg',size:10}));
+ const added=await app.recoverTargetedFolder();
+ assert.equal(added,1);assert.match(get('status').textContent,/results still incomplete/);
+});
+test('direct folder recovery never paints responses after navigation changes',async()=>{
+ let release;const fetcher=()=>new Promise(resolve=>{release=()=>resolve(new Response(JSON.stringify({truncated:false,tree:[{type:'blob',path:'late.svg',size:10}]}),{status:200}))});
+ const {app}=boot(fetcher);app.state.repo='test/large';app.state.branch='main';app.state.path='';app.state.indexTruncated=true;
+ app.state.items=Array.from({length:1000},(_,i)=>({type:'file',name:i+'.svg',path:i+'.svg',size:10}));
+ const work=app.recoverTargetedFolder();app.state.seq++;release();await work;
+ assert.equal(app.state.items.length,1000,'old directory unchanged');
 });
