@@ -27,4 +27,5 @@ jobs:
           test -f index.html
           test -f AGENTS.md
           test -f docs/WORK-QUEUE.md
+          test ! -e .expository-managed
           ! grep -q 'github_pat_[A-Za-z0-9]' index.html
