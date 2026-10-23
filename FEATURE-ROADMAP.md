@@ -19,14 +19,14 @@ Ratings describe *general Expository relevance* (10 is highest) rather than impl
 | 10 | Adjustable gallery density | FolderFrame | Touch-sized sizing control, bounded thumbnail sizes | Wave 1 |
 | 10 | Huge repository resilience | Gitako, FolderFrame | Bounded concurrent network, keep truncated-index warnings, incremental pages | Wave 1 ongoing |
 | 9 | Zoom, pan, fullscreen, rotate | FolderFrame | 1×–4× zoom, scroll/pan/reset shipped; native pinch, rotate, fullscreen remain | Wave 2 partial |
-| 9 | Rendered/raw Markdown, safe structured data | TooToo | Render/source switch, safe local Markdown links, JSON tree, CSV tables | Wave 2 |
+| 9 | Rendered/raw Markdown, safe structured data | TooToo | Safe Markdown links to repo paths, expandable JSON, CSV/TSV tables delivered; richer GFM rendering and universal raw toggle pending | Wave 2 partial |
 | 9 | Public-only favorites and recent folders | Gitako | Never store private-repo names/paths or tokens, clear control | Wave 1 bookmarks |
 | 9 | Code symbol navigation | Sourcegraph | Lightweight client outline, optional generated index for large repos | Wave 3 |
 | 9 | File revision timeline | GitLens, GitHub | Path-scoped last 20 commits with dates and GitHub provenance links implemented | Wave 2 initial |
 | 9 | Pixel diffs | Image compare tools | Local magenta diff heatmap, exact intrinsic-dimension gate, 1024×1024 bounded sampling, explicit percent changed | Wave 2 initial |
 | 9 | Multi-select contact sheets | FolderFrame | Client-only capture with explicit selection count and caps | Wave 2 |
-| 9 | Relative Markdown navigation | GitHub | Safe links constrained to repository path | Wave 2 |
-| 8 | JSON/CSV/YAML/Mermaid viewer | Structured data viewers | Bounded expandable JSON tree and raw toggle implemented; CSV/YAML/Mermaid pending | Wave 2 partial |
+| 9 | Relative Markdown navigation | GitHub | Path-normalized internal Markdown links, traversal refusal and HTTP(S)-only external links | Wave 2 initial |
+| 8 | JSON/CSV/YAML/Mermaid viewer | Structured data viewers | Bounded JSON tree and CSV/TSV safe tables delivered; YAML/Mermaid pending | Wave 2 partial |
 | 8 | Activity dashboard | GitHub, GitLens | Public/restricted commit and PR APIs, bounded counts | Wave 3 |
 | 8 | Story Mode: project evolution | GitLens, GitHub | Recent dated commits and releases plus undated tags delivered with source links; PR milestones, older history and advanced grouping pending | Wave 3 initial |
 | 7 | Slideshow | FolderFrame | Browser-local selected collection, accessible pause and interval | Wave 3 |
