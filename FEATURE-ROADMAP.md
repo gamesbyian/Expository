@@ -18,7 +18,7 @@ Ratings describe *general Expository relevance* (10 is highest) rather than impl
 | 10 | File type/size sort and filters | FolderFrame | Folder-first and indexed-search sorting, extension and type controls | Wave 1 |
 | 10 | Adjustable gallery density | FolderFrame | Touch-sized sizing control, bounded thumbnail sizes | Wave 1 |
 | 10 | Huge repository resilience | Gitako, FolderFrame | Reuse complete recursive tree; for truncated trees, recover capped current folders via bounded nonrecursive tree traversal (max 9 requests, 5,000 entries). Real giant-repo testing and deeper paths pending | Wave 1/E03 partial |
-| 9 | Zoom, pan, fullscreen, rotate | FolderFrame | 1×–4× zoom, scroll/pan/reset shipped; native pinch, rotate, fullscreen remain | Wave 2 partial |
+| 9 | Zoom, pan, fullscreen, rotate | FolderFrame | 1×–4× bounded zoom, two-finger pinch and drag-to-pan, buttons and reset; rotation/fullscreen and physical touch validation outstanding | Wave 2 partial |
 | 9 | Rendered/raw Markdown, safe structured data | TooToo | Safe Markdown links to repo paths, expandable JSON, CSV/TSV tables delivered; richer GFM rendering and universal raw toggle pending | Wave 2 partial |
 | 9 | Public-only favorites and recent folders | Gitako | Never store private-repo names/paths or tokens, clear control | Wave 1 bookmarks |
 | 9 | Code symbol navigation | Sourcegraph | Heuristic, bounded in-file JS/TS/Python/Rust/Go/Java/Kotlin symbol outline with line jumps; full language parser and repo-wide symbols pending | Wave 3 initial |
