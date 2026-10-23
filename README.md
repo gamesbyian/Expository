@@ -22,6 +22,7 @@ Expository browses **public repositories without login** and can browse selected
 - Zoom images up to 4× and pan through detail
 - Inspect the recent Git history of an individual file
 - Expand JSON as a safe tree or switch to raw source
+- Follow safe relative Markdown links within repositories and view CSV/TSV as bounded tables
 - Enter Story Mode for dated GitHub commits and releases, plus tags in a separate section
 - Copy deep links to folders and previews
 - Switch dark/light appearance, and clear private browsing credentials explicitly
