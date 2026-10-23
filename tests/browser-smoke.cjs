@@ -121,7 +121,7 @@ const fixtures=String.raw`
 `;
 async function main(){
  try{
-  await connect();await send('Page.enable');await send('Runtime.enable');
+  await connect();await send('Page.enable');await send('Runtime.enable');await send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:2});
   await send('Page.addScriptToEvaluateOnNewDocument',{source:fixtures});
   await send('Emulation.setDeviceMetricsOverride',{width:393,height:852,deviceScaleFactor:1,mobile:true});
   const page=pathToFileURL(path.join(__dirname,'..','index.html')).href;
