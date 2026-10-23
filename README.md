@@ -13,7 +13,7 @@ Expository browses **public repositories without login** and can browse selected
 - Explore branches and collapsible nested folders
 - Search paths across a repository and browse recursive image galleries
 - Switch between gallery thumbnails and compact file lists
-- Sort by name, size or extension; filter by file category and adjust thumbnail density
+- Sort by name, size or extension; filter by file category and adjust thumbnail density using collapsible phone filters
 - Run bounded, opt-in full-text scans with matching-line snippets
 - Read source with line numbers and lightweight syntax colours; copy or download originals
 - Star public repositories for quick switching, without storing private repository names
