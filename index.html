@@ -57,6 +57,8 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 .size-list button{min-height:44px;display:flex;justify-content:space-between;gap:10px;align-items:center;background:var(--panel2);border:1px solid var(--stroke);border-radius:10px;padding:9px 12px;text-align:left;overflow-wrap:anywhere}
 .size-list button span{min-width:0}.size-list button small{color:var(--dim);flex:0 0 auto;font-size:11px}
 @media(max-width:760px){.size-map{min-height:260px;height:min(37dvh,350px)}.size-tile{padding:4px}.size-tile small{font-size:10px}}
+#workspace[data-mode="review"] .toolbar > :not(#storyToggle):not(#sizeToggle){display:none!important}
+#workspace[data-mode="review"] #refineControls,#workspace[data-mode="review"] #searchResults{display:none!important}
 </style>
 </head>
 <body>
@@ -76,7 +78,7 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 <hr><h2>Starred public repositories</h2><div id="favorites" class="stack"></div><hr><h2>Folders</h2><div id="tree" role="navigation" aria-label="Folder navigation"></div><hr>
 <div class="hint">Read-only by design. No editing, no analytics, no token persistence. Preview private assets locally in this tab.</div>
 </aside>
-<section class="workspace" aria-label="Repository files">
+<section class="workspace" id="workspace" data-mode="files" aria-label="Repository files">
 <div class="toolbar"><button id="back" class="icon-btn" title="Parent folder" aria-label="Parent folder">↑</button><input id="filter" class="field" placeholder="Find by name…" aria-label="Filter files by name"><select id="scope" class="field" aria-label="Search and gallery scope"><option value="folder">This folder</option><option value="repo">Search entire repo</option><option value="images">Images in subfolders</option></select><button id="listBtn" class="pill" title="List view">☷</button><button id="gridBtn" class="pill active" title="Gallery view">▦</button><button id="copyFolder" class="pill" title="Copy folder link" aria-label="Copy folder link">↗</button><button id="refineToggle" class="pill" aria-expanded="true" aria-controls="refineControls">Filters</button><button id="storyToggle" class="pill" aria-pressed="false" title="Explore commits, releases and tags">Story</button><button id="sizeToggle" class="pill" aria-pressed="false" aria-controls="sizeView" title="Explore indexed files and folders by size">Sizes</button><button id="selectMode" class="pill" aria-pressed="false" title="Select up to 12 images for a contact sheet">Select images</button><button id="contactSheet" class="pill" hidden disabled>Contact sheet (0)</button><button id="clearSelection" class="pill" hidden>Clear</button></div>
 <div class="refine" id="refineControls"><label for="sortFiles">Sort</label><select id="sortFiles" class="field" aria-label="Sort files"><option value="name">Name</option><option value="size">Largest</option><option value="extension">Extension</option></select><label for="fileKind">Kind</label><select id="fileKind" class="field" aria-label="Filter by file category"><option value="all">Everything</option><option value="image">Images</option><option value="code">Code</option><option value="doc">Documents</option><option value="data">Data</option><option value="other">Other</option></select><label for="density">Gallery size <input id="density" type="range" min="110" max="270" value="145" step="10" aria-label="Gallery thumbnail size"></label><button id="contentSearch" class="pill" title="Scan bounded text files for a phrase">Search contents</button></div>
 <div class="path" id="breadcrumbs">No repository selected</div>
@@ -90,11 +92,11 @@ const codeRx=/\.(?:js|jsx|mjs|ts|tsx|py|rs|go|java|kt|c|cpp|h|hpp|sh|css|scss|ht
 const imageRx=/\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i,textRx=/\.(md|markdown|txt|json|ya?ml|xml|csv|tsv|js|jsx|ts|tsx|css|scss|html|py|kt|java|rs|go|sh|toml|ini|svg|sql|log|gradle|properties)$/i;
 function hideSizeMap(){
  state.sizeOpen=false;$('sizeView').hidden=true;$('sizeView').replaceChildren();$('items').hidden=state.storyOpen;
- $('sizeToggle').textContent='Sizes';$('sizeToggle').classList.remove('active');$('sizeToggle').setAttribute('aria-pressed','false')
+ $('sizeToggle').textContent='Sizes';$('sizeToggle').classList.remove('active');$('sizeToggle').setAttribute('aria-pressed','false');$('workspace').dataset.mode=state.storyOpen?'review':'files'
 }
 function stopStory(){
  state.storyOpen=false;++state.storySeq;$('storyView').hidden=true;$('items').hidden=false;
- $('storyToggle').classList.remove('active');$('storyToggle').setAttribute('aria-pressed','false');$('storyToggle').textContent='Story';
+ $('storyToggle').classList.remove('active');$('storyToggle').setAttribute('aria-pressed','false');$('storyToggle').textContent='Story';$('workspace').dataset.mode=state.sizeOpen?'review':'files';
 }
 function status(s){$('status').textContent=s}function closeNav(){$('sidebar').classList.remove('open');$('scrim').classList.remove('on')}
 function url(path){return 'https://api.github.com'+path}function enc(s){return encodeURIComponent(s)}
@@ -434,14 +436,14 @@ function renderSizeMap(){
 function toggleSizeMap(){
  if(state.sizeOpen){hideSizeMap();return}
  if(!state.repo||!state.branch){status('Open a repository first.');return}
- stopStory();clearPreview();state.sizeOpen=true;$('sizeView').hidden=false;$('items').hidden=true;
+ stopStory();clearPreview();state.sizeOpen=true;$('sizeView').hidden=false;$('items').hidden=true;$('workspace').dataset.mode='review';
  $('sizeToggle').textContent='Files';$('sizeToggle').classList.add('active');$('sizeToggle').setAttribute('aria-pressed','true');
  renderSizeMap()
 }
 async function toggleStory(){
  if(state.storyOpen){stopStory();return}
  if(!state.repo||!state.branch){status('Open a repository first.');return}
- hideSizeMap();clearPreview();state.storyOpen=true;$('storyView').hidden=false;$('items').hidden=true;
+ hideSizeMap();clearPreview();state.storyOpen=true;$('storyView').hidden=false;$('items').hidden=true;$('workspace').dataset.mode='review';
  $('storyToggle').textContent='Files';$('storyToggle').classList.add('active');$('storyToggle').setAttribute('aria-pressed','true');
  const seq=++state.storySeq,repo=state.repo,branch=state.branch;
  if(state.storyData){renderStory();return}
