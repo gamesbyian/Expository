@@ -72,12 +72,16 @@ const fixtures=String.raw`
  const files=(...items)=>items.map(([name,p])=>({name,path:p,type:'file',size:250}));
  const svg=(fill,name)=>'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450"><rect width="800" height="450" fill="#182033"/><circle cx="400" cy="225" r="160" fill="'+fill+'"/><text x="400" y="235" fill="white" text-anchor="middle" font-size="42">'+name+'</text></svg>';
  const dataA=svg('#2acbab','A'),dataB=svg('#c966e9','B');
+ const largePaths=Array.from({length:1012},(_,i)=>'gallery'+String(i).padStart(4,'0')+'.png');
  window.fetch=async (input,opts={})=>{
   const u=new URL(String(input),location.href);
   if(u.hostname!=='api.github.com')return original(input,opts);
   const p=decodeURIComponent(u.pathname),json=obj=>new Response(JSON.stringify(obj),{status:200,headers:{'content-type':'application/json'}});
   if(p==='/repos/gamesbyian/Glimpse')return json({default_branch:'main',private:false});
   if(p==='/repos/gamesbyian/PrivateFixture')return json({default_branch:'main',private:true});
+  if(p==='/repos/gamesbyian/LargeFixture')return json({default_branch:'main',private:false});
+  if(p==='/repos/gamesbyian/LargeFixture/git/trees/main')return json({truncated:false,tree:largePaths.map(path=>({type:'blob',path,size:200}))});
+  if(p==='/repos/gamesbyian/LargeFixture/contents/')return json(files(...largePaths.slice(0,1000).map(path=>[path,path])));
   if(p.endsWith('/git/trees/main'))return json({truncated:false,tree:[
    {path:'design',type:'tree'},{path:'design/proposals',type:'tree'},
    {path:'design/proposals/a.svg',type:'blob',size:250},
@@ -231,6 +235,9 @@ async function main(){
   await evaluate("document.querySelector('#repo').value='gamesbyian/Glimpse';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
   await until("document.querySelector('#status')?.textContent?.includes('items')",'public fixture restored');
   assert.equal(await evaluate("location.hash.includes('gamesbyian/Glimpse')"),true,'public deep links still work');
+  await evaluate("document.querySelector('#repo').value='gamesbyian/LargeFixture';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
+  await until("document.querySelector('#status')?.textContent?.includes('1012 items')",'large directory repaired from Git tree');
+  assert.equal(await evaluate("document.querySelector('#status').textContent.includes('recovered from complete Git tree index')"),true,'complete tree recovery is explicitly labeled');
   await evaluate("window.__cspChecks=[];document.addEventListener('securitypolicyviolation',e=>window.__cspChecks.push(e.effectiveDirective));window.fetch('https://expository-test.invalid/egress-check').catch(()=>{})");
   await until("window.__cspChecks.includes('connect-src')",'CSP blocks network egress outside GitHub API');
   assert.equal(runtimeErrors.length,0,'browser runtime exceptions: '+runtimeErrors.join(' | '));

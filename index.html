@@ -144,6 +144,29 @@ function paintTree(){
  }}
  draw('',0);if(!state.tree.size)host.append(elem('div','hint','Folders appear here as you browse.'));
 }
+function indexedDirectChildren(folder){
+ const prefix=folder?folder+'/':'',result=[];
+ for(const item of state.indexEntries){
+  if(!item.path.startsWith(prefix))continue;
+  const remainder=item.path.slice(prefix.length);
+  if(remainder&&remainder.indexOf('/')<0)result.push(item)
+ }
+ for(const path of state.tree){
+  if(!path.startsWith(prefix))continue;
+  const remainder=path.slice(prefix.length);
+  if(remainder&&remainder.indexOf('/')<0)result.push({type:'dir',path,name:remainder,size:0})
+ }
+ return result
+}
+function recoverLargeFolderFromIndex(){
+ if(state.items.length<1000||!state.indexReady||state.indexTruncated)return 0;
+ const known=new Set(state.items.map(item=>item.path));let count=0;
+ for(const item of indexedDirectChildren(state.path)){
+  if(!known.has(item.path)){state.items.push(item);known.add(item.path);count++}
+ }
+ if(count)state.items.sort((a,b)=>(a.type==='dir'?0:1)-(b.type==='dir'?0:1)||a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}));
+ return count
+}
 async function indexTree(repo,branch,request){
  try{
   const result=await json('/repos/'+repo+'/git/trees/'+enc(branch)+'?recursive=1');
@@ -151,8 +174,10 @@ async function indexTree(repo,branch,request){
   state.indexEntries=(result.tree||[]).filter(x=>x.type==='blob').map(x=>({type:'file',path:x.path,name:x.path.split('/').at(-1),size:x.size}));
   state.indexTruncated=Boolean(result.truncated);state.indexReady=true;state.indexError=false;
   for(const entry of result.tree||[])if(entry.type==='tree')treeAdd(entry.path);
-  paintTree();if($('scope').value!=='folder')paint();
-  if(result.truncated)status('Repository tree index truncated by GitHub. Search results may be incomplete.');
+  const recovered=recoverLargeFolderFromIndex();
+  paintTree();if(recovered||$('scope').value!=='folder')paint();
+  if(result.truncated)status('Repository tree index truncated by GitHub; search and very large directory listings may be incomplete.');
+  else if(recovered)status(state.items.length+' items · '+(state.path||'/')+' · '+recovered+' additional files/folders recovered from complete Git tree index.');
  }catch(e){if(request===state.repoRequest){state.indexReady=false;state.indexError=true;if($('scope').value!=='folder')paint();status('Folder indexing unavailable: '+e.message+' · Direct browsing still works.')}}
 }
 async function navigate(path){
@@ -167,8 +192,10 @@ async function navigate(path){
   if(seq!==state.seq)return false;
   state.items=[...data].sort((a,b)=>(a.type==='dir'?0:1)-(b.type==='dir'?0:1)||a.name.localeCompare(b.name));
   state.items.filter(x=>x.type==='dir').forEach(x=>treeAdd(x.path));
+  const capped=data.length>=1000,recovered=recoverLargeFolderFromIndex();
   paintTree();state.limit=80;paint();
-  status(state.items.length+' items · '+(state.path||'/')+(state.items.length>=1000?' · GitHub may truncate large directories':''));return true;
+  const coverage=!capped?'':state.indexReady&&!state.indexTruncated?(recovered?' · '+recovered+' recovered from complete Git tree index':' · verified against complete Git tree index'):state.indexTruncated?' · GitHub directory and tree indices may be incomplete':' · GitHub directory may be capped; awaiting Git tree index';
+  status(state.items.length+' items · '+(state.path||'/')+coverage);return true;
  }catch(e){if(seq!==state.seq)return false;status('Cannot open: '+e.message);$('items').append(elem('div','empty','Check repository name, branch, permissions, or API limit.'));return false}
 }
 function storyEvent(kind,date,label,summary,url){
