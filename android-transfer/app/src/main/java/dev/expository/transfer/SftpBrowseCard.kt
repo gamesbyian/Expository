@@ -70,8 +70,9 @@ fun SftpBrowseCard() {
     var status by remember { mutableStateOf("Enter a known SHA-256 SSH host-key fingerprint. Unknown keys are never trusted automatically.") }
     var busy by remember { mutableStateOf(false) }
 
-    DisposableEffect(session) {
-        onDispose { session?.close() }
+    val ownedSession = session
+    DisposableEffect(ownedSession) {
+        onDispose { ownedSession?.close() }
     }
 
     val saveAs = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
