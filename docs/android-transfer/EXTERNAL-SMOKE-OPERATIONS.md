@@ -81,6 +81,25 @@ files, upload, rename, move, delete, or create folders. If the owner server
 offers *only* cleartext FTP on port 21, the secure smoke test fails closed and
 the insecure configuration should be assessed separately.
 
+## Single-server TLS 1.2 compatibility diagnostic
+
+Rebex's published read-only sample produced a final FTP 425 response after
+valid control TLS, authentication, MLST and a bounded RETR attempt. To test
+the Apache Commons Net TLS-session-resumption hypothesis without lowering
+identity verification, use the exact owner-only PR command
+`/transfer-smoke rebex-tls12`. This creates one standalone run with TLS 1.2
+only, preserving certificate-chain trust, hostname/remote-peer verification,
+`PBSZ 0`, protected data TLS (`PROT P`), bounded file reads and no
+plaintext downgrade. No global JVM TLS switches or reflection into private
+SSL session state are allowed.
+
+This is a controlled compatibility experiment, not an automatic retry or a
+production policy change. Default connections continue to negotiate TLS 1.3
+or 1.2. Record success or the sanitized failure category once, then avoid
+repeated traffic to the public demo. The hypothesis is described in Apache
+Commons Net [NET-744](https://issues.apache.org/jira/browse/NET-744); a
+425 reply alone does not prove that Rebex requires session resumption.
+
 ## Evidence and limits
 Test fixture SHA, CI run URL, exact protocol and whether a read was actually
 verified must accompany any acceptance claim. This workflow proves a server

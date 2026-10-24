@@ -17,6 +17,8 @@ object FtpsExternalSmokeSuite {
         return when (vars["EXPOSITORY_SMOKE_TARGET"]) {
             "rebex-explicit" -> Profile("test.rebex.net", 21, FtpsMode.EXPLICIT_TLS,
                 "demo", "password", "/pub/example", "/pub/example/readme.txt")
+            "rebex-tls12" -> Profile("test.rebex.net", 21, FtpsMode.EXPLICIT_TLS,
+                "demo", "password", "/pub/example", "/pub/example/readme.txt")
             "rebex-implicit" -> Profile("test.rebex.net", 990, FtpsMode.IMPLICIT_TLS,
                 "demo", "password", "/pub/example", "/pub/example/readme.txt")
             "wing-implicit" -> Profile("demo.wftpserver.com", 990, FtpsMode.IMPLICIT_TLS,
@@ -45,7 +47,9 @@ object FtpsExternalSmokeSuite {
         val p = profile()
         var stage = "CONNECT"
         try {
-            SecureFtps.connect(FtpsTarget(p.host, p.port, p.mode),
+            val policy = if (System.getenv("EXPOSITORY_SMOKE_TARGET") == "rebex-tls12")
+                FtpsTlsPolicy.TLS12_ONLY else FtpsTlsPolicy.MODERN
+            SecureFtps.connect(FtpsTarget(p.host, p.port, p.mode, policy),
                 p.username, p.password.toCharArray()).use { session ->
                 stage = "LIST"
                 val preview = session.browseReadOnly(FtpsPath.checked(p.root))
