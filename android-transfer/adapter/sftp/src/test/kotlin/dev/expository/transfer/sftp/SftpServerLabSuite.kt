@@ -1,5 +1,6 @@
 package dev.expository.transfer.sftp
 
+import dev.expository.transfer.planner.*
 import org.apache.sshd.server.SshServer
 import org.apache.sshd.common.keyprovider.KeyPairProvider
 import org.apache.sshd.sftp.server.SftpSubsystemFactory
@@ -66,6 +67,25 @@ object SftpServerLabSuite {
                 check(session.openRead("/synthetic.txt").use { it.readBytes() }
                     .contentEquals(payload.toByteArray(StandardCharsets.UTF_8)))
                 println("PASS SFTP LAB exclusive new upload/read-back and existing-file refusal")
+                val capability = CapabilityProof(Support.SUPPORTED, "isolated-live-mkdir", Long.MAX_VALUE)
+                val root = LocationRef(
+                    LocationKey(LocationKind.REMOTE_SFTP, "isolated-session", "synthetic-root", "/"),
+                    emptyList(), "known-live-listing",
+                    mapOf(Capability.WRITE to capability, Capability.CREATE_CHILD to capability),
+                    verifiedNamespace = "isolated-session", verifiedStorageDomain = "synthetic-server"
+                )
+                val beforeCreate = session.browse("/")
+                val plan = DirectoryCreatePlanner.plan(DirectoryCreateRequest(root, "new-dir",
+                    DestinationListing("observed-live-listing", !beforeCreate.truncated,
+                        beforeCreate.entries.map { it.name })), 100L)
+                check(plan.executable)
+                session.createPlannedDirectory(plan)
+                check(session.observeDirectory("/new-dir"))
+                check(session.browse("/").entries.any { it.name == "new-dir" && it.directory })
+                check(runCatching { session.createPlannedDirectory(plan) }.isFailure) {
+                    "A repeated MKDIR must not silently mutate an existing directory"
+                }
+                println("PASS SFTP LAB planned direct MKDIR, observed folder, duplicate refused")
             }
             println("PASS SFTP LAB trusted host fingerprint + authenticated directory read")
             val refused = runCatching {
@@ -78,6 +98,7 @@ object SftpServerLabSuite {
             runCatching { sshd.stop(true) }
             runCatching { Files.deleteIfExists(tmp.resolve("synthetic.txt")) }
             runCatching { Files.deleteIfExists(tmp.resolve("synthetic-upload.txt")) }
+            runCatching { Files.deleteIfExists(tmp.resolve("new-dir")) }
             runCatching { Files.deleteIfExists(tmp) }
         }
     }
