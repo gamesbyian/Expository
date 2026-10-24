@@ -26,6 +26,14 @@ proof and a developer debug APK, post one exact PR comment as repository owner:
 `/transfer-native ftps-lab`, `/transfer-native sftp-lab`, or
 `/transfer-native apk`. These invoke `transfer-native.yml` using reviewed
 `main` only; they cannot load proposed PR code or production credentials.
+For opt-in E2 Android emulator Compose interaction evidence (no remote
+credentials), add the exact owner-authored PR comment `/transfer-native emulator`.
+This executes the small native FTPS selector test on a disposable API 35
+emulator against trusted `main` and uploads synthetic JUnit results.
+It requires Android SDK/network access during runner setup but makes no FTP
+connections itself. Never call this physical Pixel, TalkBack, real file
+picker/provider, or release acceptance.
+
 For a **focused compile of the actual code on an unmerged PR**, comment
 `/transfer-native apk-pr` on that PR. The separate
 `.github/workflows/transfer-pr-apk.yml` resolves and verifies an immutable
