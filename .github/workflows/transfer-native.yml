@@ -64,8 +64,8 @@ jobs:
           retention-days: 5
 
   ftps-lab:
-    # Dedicated verification; do not run disposable servers on routine PRs.
-    if: github.event_name == 'workflow_dispatch' && inputs.ftps_lab
+    # One-time diagnostic retry on PR #34; restore to manual after evidence.
+    if: (github.event_name == 'workflow_dispatch' && inputs.ftps_lab) || (github.event_name == 'pull_request' && github.event.pull_request.number == 34)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -108,6 +108,11 @@ jobs:
             sleep 1
           done
           echo "Synthetic FTPS server did not start"
+          if test -f "$RUNNER_TEMP/ftps-lab/server.log"; then
+            echo "--- synthetic server startup diagnostics ---"
+            cat "$RUNNER_TEMP/ftps-lab/server.log"
+            echo "--- end startup diagnostics ---"
+          fi
           exit 1
       - name: Reject untrusted self-signed FTPS certificate
         working-directory: android-transfer
