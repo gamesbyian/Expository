@@ -93,6 +93,10 @@ Select multiple files/folders → **Rename (N)** → a one-screen sheet with ope
 
 An external app shares image/video/document(s); Expository presents saved server profiles and last explicit remote destination, previews transfer count, then uploads. It accepts temporary grants for `content://` URIs. If the grant cannot last until delayed execution, either persist a permitted SAF grant or safely stage the file after explicit approval, subject to storage limits. If neither is possible, declare **needs source permission** before queueing.
 
+### J7: Continue an interrupted transfer
+
+A network disconnect, process kill or Android time-limit does not leave a fake “success.” Reopening Transfer shows the durable queue with exact last-known bytes/state, retry/resume eligibility and a privacy-redacted reason. Unsupported resume restarts only that file, after user-controlled collision policy. A cross-location **Move** never deletes the source unless each destination item is verified.
+
 ### J8: Copy to Google Drive or create/open in Google Docs from either pane (P0)
 
 At any selected Local or Remote file, the compact **Copy / Send to…** destination sheet includes **Save to Google Drive**, **Create Google Doc** (for live-supported source MIME types), **Open with Google Docs** (when an Android handler supports the format), and **Share with app…**. These represent four distinct actions. A Google Doc is not a generic destination folder: Create converts to a native Workspace document, Open launches a compatible editor for the original document and Share delegates to another app. **None implicitly moves or deletes the source.** Users can choose Google destinations from either pane in Local/Local, Local/Remote or Remote/Remote mode, with 48dp targets and a keyboard/TalkBack equivalent.
@@ -100,10 +104,6 @@ At any selected Local or Remote file, the compact **Copy / Send to…** destinat
 **Save to Drive** selects the account and writable folder via tested SAF or explicitly authorized Drive API `drive.file` fallback; remote files stream through the phone without a detour through public Downloads. Folder hierarchy, interruption, duplicates and result verification use the normal durable transfer queue. **Create Google Doc** requests explicit consent, checks current `about.importFormats`, uploads/converts using Drive v3, confirms the target Docs MIME/id, and warns that document fidelity can change. **Open with Docs** uses a scoped URI / `ACTION_VIEW` if an installed compatible editor exists; a Sharesheet `ACTION_SEND` handoff is distinct and cannot be marked Saved. A remote document may need a bounded, private temporary file or reliable streaming ContentProvider for the recipient to re-open. Unsupported types/folders offer Save original or another compatible app, not a fake Docs destination.
 
 Completion receipts distinguish **Saved to Drive (verified)**, **Drive write acknowledged (not yet confirmed)**, **Created Google Doc (converted)**, **Opened externally**, **Handed off (unverified)**, and **Blocked/needs permission**. [Detailed contracts and D13–D20](GOOGLE-DRIVE-INTEGRATION.md#first-class-destination-ux-initiation-from-anywhere-owner-requirement-23-october-2026).
-
-### J7: Continue an interrupted transfer
-
-A network disconnect, process kill or Android time-limit does not leave a fake “success.” Reopening Transfer shows the durable queue with exact last-known bytes/state, retry/resume eligibility and a privacy-redacted reason. Unsupported resume restarts only that file, after user-controlled collision policy. A cross-location **Move** never deletes the source unless each destination item is verified.
 
 ## 3. Navigation and information architecture
 
