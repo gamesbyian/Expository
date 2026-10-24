@@ -113,7 +113,7 @@ A network disconnect, process kill or Android time-limit does not leave a fake �
 | P0 | Native single/multi-file **Save** using Create Document / chosen folder | First half of core promise |
 | P0 | Native single/multi-file **Upload** using Open Document | Second half of core promise |
 | P0 | Whole folder upload and download via separate tree pickers and recursive queue | User explicitly demands folders |
-| P0 | Optional local/remote split workspace; drag/drop + accessible action alternative | User explicitly demands it |
+| P0 | Optional any-two-location workspace: Device/Device, Device/Server, Server/Server; drag/drop + accessible action alternative | User explicitly demands all three combinations; supports both transfer directions |
 | P0 | Durable queue, conflict policies, cancel/retry, verified completion receipts | User trust, integrity |
 | P0 | Secure saved credentials with explicit opt-in, LAN permission, Android lifecycle compliance | Correctness/security |
 | P0 | Share-to-upload via Android share sheet | Delivers natural Android integration |
@@ -198,8 +198,8 @@ Remote `/incoming` → **Upload** → Android “Choose file(s)” → `report.p
 **D. Folder upload**  
 Remote `/incoming` → **Upload folder** → Android “Allow access to chosen folder” → review include-parent-folder toggle → Queue → Done.
 
-**E. Split-pane drag copy**  
-Workspace Local top/Remote bottom (portrait) → long press select three local photos → drag to Remote → drop target says **Copy 3 photos → /gallery** → preflight → Queue. Same outcome via selected-items toolbar **Copy to remote**. Reverse drag gives **Copy to device**.
+**E. Split-pane drag copy, all three pairings**  
+Workspace Device top/Server bottom (portrait) → long press select three local photos → drag to Server → drop target says **Copy 3 photos → /gallery** → preflight → Queue. Same outcome via selected-items toolbar **Copy to other pane**. Reverse drag copies to device. The same screen can switch either pane to another **Device folder** (Device/Device) or another **Server directory/profile** (Server/Server). Moving a remote file between folders on one server should use an on-server rename where supported; copying between different servers transparently streams through the device.
 
 **F. Overwrite danger**  
 When `report.pdf` already exists: show exact source/destination and “Keep both,” “Skip,” “Replace,” optionally “Apply to remaining.” Default is **Keep both or ask**, never silent overwrite. “Move” demands explicit additional approval.
