@@ -26,6 +26,12 @@ proof and a developer debug APK, post one exact PR comment as repository owner:
 `/transfer-native ftps-lab`, `/transfer-native sftp-lab`, or
 `/transfer-native apk`. These invoke `transfer-native.yml` using reviewed
 `main` only; they cannot load proposed PR code or production credentials.
+For a **focused compile of the actual code on an unmerged PR**, comment
+`/transfer-native apk-pr` on that PR. The separate
+`.github/workflows/transfer-pr-apk.yml` resolves and verifies an immutable
+same-repository head SHA, checks it out without persisted Git credentials,
+compiles an opt-in developer-only APK and records its SHA. Never mistake an
+APK compilation for a device install or a signed production release.
 Never use these workflows for owner
 media mutation, public demo writes, load tests, or claims of Android-device
 acceptance. A triggered run is not a passed test; investigate failures, update

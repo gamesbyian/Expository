@@ -1,0 +1,68 @@
+name: Expository Transfer targeted PR Android compile
+# A trusted maintainer comment can request compiling the *actual* PR head.
+# No production credentials, writable tokens, automatic CI or fork execution.
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+jobs:
+  android-pr-debug:
+    if: >-
+      github.event.issue.pull_request != null &&
+      github.event.comment.user.login == 'gamesbyian' &&
+      github.event.comment.body == '/transfer-native apk-pr'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Resolve immutable same-repository PR head
+        id: source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          details="$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '[.head.repo.full_name, .head.sha] | join("|")')"
+          IFS='|' read -r origin sha <<< "$details"
+          if [[ "$origin" != "$REPO" || ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Unsafe or unresolved PR source; refusing build"
+            exit 2
+          fi
+          printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
+          echo "Resolved same-repository immutable PR source."
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+      - name: Install scoped SDK
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+          cache-read-only: true
+      - name: Compile selected PR head developer-only Android APK
+        working-directory: android-transfer
+        run: gradle -PwithAndroid=true :app:assembleDebug --no-daemon
+      - name: Record source and debug APK SHA256
+        working-directory: android-transfer
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          printf '%s  source-commit\n' "$SOURCE_SHA" > app/build/outputs/apk/debug/SOURCE-SHA.txt
+          sha256sum app/build/outputs/apk/debug/app-debug.apk > app/build/outputs/apk/debug/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: expository-transfer-pr-${{ github.event.issue.number }}-debug
+          path: |
+            android-transfer/app/build/outputs/apk/debug/app-debug.apk
+            android-transfer/app/build/outputs/apk/debug/SHA256SUMS.txt
+            android-transfer/app/build/outputs/apk/debug/SOURCE-SHA.txt
+          retention-days: 5
