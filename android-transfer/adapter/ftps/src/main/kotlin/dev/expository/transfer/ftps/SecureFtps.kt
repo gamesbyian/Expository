@@ -18,10 +18,17 @@ import java.time.Duration
 /** Both modes negotiate TLS; plaintext FTP is never used as a fallback. */
 enum class FtpsMode { EXPLICIT_TLS, IMPLICIT_TLS }
 
+/** Compatibility opt-in for a server that requires TLS 1.2 data-session reuse.
+ * A secure TLS handshake, certificate chain, hostname and PROT P remain mandatory.
+ * No SSLv3, TLSv1.0/1.1 or plaintext fallback.
+ */
+enum class FtpsTlsPolicy { MODERN, TLS12_ONLY }
+
 data class FtpsTarget(
     val host: String,
     val port: Int = 21,
-    val mode: FtpsMode = FtpsMode.EXPLICIT_TLS
+    val mode: FtpsMode = FtpsMode.EXPLICIT_TLS,
+    val tlsPolicy: FtpsTlsPolicy = FtpsTlsPolicy.MODERN
 ) {
     init {
         require(host.isNotBlank() && host.length <= 253 &&
@@ -105,15 +112,20 @@ internal object FtpsFailureCodes {
 
 /** Encrypted FTPS control/data adapter with explicit or implicit TLS. */
 object SecureFtps {
-    fun configuredClient(mode: FtpsMode = FtpsMode.EXPLICIT_TLS): FTPSClient =
-        FTPSClient(mode == FtpsMode.IMPLICIT_TLS).apply {
+    fun configuredClient(
+        mode: FtpsMode = FtpsMode.EXPLICIT_TLS,
+        tlsPolicy: FtpsTlsPolicy = FtpsTlsPolicy.MODERN
+    ): FTPSClient = FTPSClient(mode == FtpsMode.IMPLICIT_TLS).apply {
         // Commons Net's default certificate manager validates dates but NOT CA
         // trust. Use the platform trust anchors (or explicit user-trusted store).
         // Hostname matching alone cannot authenticate an untrusted certificate.
         setTrustManager(TrustManagerUtils.getDefaultTrustManager(null))
         setEndpointCheckingEnabled(true) // Commons Net's default is FALSE
         setRemoteVerificationEnabled(true)
-        setEnabledProtocols(arrayOf("TLSv1.3", "TLSv1.2"))
+        setEnabledProtocols(
+            if (tlsPolicy == FtpsTlsPolicy.TLS12_ONLY) arrayOf("TLSv1.2")
+            else arrayOf("TLSv1.3", "TLSv1.2")
+        )
         connectTimeout = 12_000
         defaultTimeout = 12_000
         setDataTimeout(Duration.ofSeconds(30))
@@ -128,7 +140,7 @@ object SecureFtps {
         require(password.isNotEmpty() && password.none { it == '\r' || it == '\n' || it == '\u0000' }) {
             "INVALID_SECRET"
         }
-        val client = configuredClient(target.mode)
+        val client = configuredClient(target.mode, target.tlsPolicy)
         try {
             client.connect(target.host, target.port)
             client.soTimeout = 30_000
