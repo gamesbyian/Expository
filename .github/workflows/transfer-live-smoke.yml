@@ -88,8 +88,8 @@ jobs:
           if len(host) != 1 or len(account) != 1 or not host[0].endswith(".seedhost.eu"):
               raise RuntimeError("S60_CONFIG_REFERENCE_INVALID")
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as handle:
-              handle.write("EXPOSITORY_SMOKE_HOST=" + host[0] + "\\n")
-              handle.write("EXPOSITORY_SMOKE_USER=" + account[0] + "\\n")
+              handle.write("EXPOSITORY_SMOKE_HOST=" + host[0] + "\n")
+              handle.write("EXPOSITORY_SMOKE_USER=" + account[0] + "\n")
           print("Pinned S60 connection metadata loaded; host and account redacted.")
           PY
       - name: Fail closed on missing private configuration
