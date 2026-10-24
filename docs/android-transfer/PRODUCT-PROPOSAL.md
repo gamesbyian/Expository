@@ -12,7 +12,7 @@ This proposal remains the product vision. For ambiguous provider operations, cop
 
 A same-server **Move** may be a server-side rename after capability and identity checks; an ordinary **Copy** must not secretly rename the source. A receipt differentiates acknowledged write, destination confirmation and content-hash verification, and cross-provider source deletion is never automatic on a weak proof. Neither FTP RNFR/RNTO nor generic SFTP rename is presumed atomic or undoable.
 
-**Gate:** G0–G9 in the hardened implementation plan, A01–A32, D01–D12 and T01–T12. This document is not an implemented application or a verified Android/Google Drive capability.
+**Gate:** G0–G9 in the hardened implementation plan, A01–A32, D01–D20 and T01–T12. This document is not an implemented application or a verified Android/Google Drive capability.
 
 ## 1. Product definition
 
