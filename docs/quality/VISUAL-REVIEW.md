@@ -20,6 +20,7 @@
 | X12 | Production security | public/private switch, token purge and untrusted Markdown/SVG; use only synthetic credentials in captures |
 | X13 | File-size treemap | 393×852 and 1440×900; size-weighted regions, safe labels, accessible 44px list and explicit partial-index disclosure |
 | X14 | Long source preview | 393×852; 500-line DOM window, 1,200+-line navigation, match highlighting, honest 500k-character preview cap, keyboard focus |
+| X15 | Native image fullscreen | 393×852 image viewer; fullscreen entry/exit, retained close and zoom controls, Escape preserving file preview, non-support fallback and focus restoration |
 
 ## Evidence receipt
 

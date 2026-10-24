@@ -34,6 +34,13 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 @media(max-width:760px){.refine{padding:9px}.refine .field{flex:1 1 105px}.refine label{flex:1 1 auto}.refine input[type=range]{flex:1;min-width:80px}.preview-head{gap:5px}.preview-head .pill{font-size:11px}.preview-body{padding:10px}}
 .inspect-tools{display:flex;gap:7px;flex-wrap:wrap;padding:7px 12px;border-bottom:1px solid var(--stroke)}.inspect-tools[hidden]{display:none}.inspect-tools .pill{font-size:12px;padding:6px 10px;min-height:40px}
 .image-viewer{display:flex;flex-direction:column;gap:8px;min-width:0}.image-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.image-actions .pill{padding:7px 12px}.image-stage{touch-action:pan-x pan-y;overflow:auto;max-height:62dvh;min-height:140px;background:repeating-conic-gradient(#242936 0% 25%,#1b202a 0% 50%) 50%/18px 18px;border:1px solid var(--stroke);border-radius:10px;overscroll-behavior:contain}.image-stage img{display:block;max-width:none!important;max-height:none!important;object-fit:contain;align-self:auto!important;height:auto}
+.image-viewer:fullscreen{box-sizing:border-box;width:100%;height:100%;max-width:none;padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));background:var(--bg);color:var(--text);overflow:hidden}
+.image-viewer:fullscreen .image-actions{flex:0 0 auto}
+.image-viewer:fullscreen .image-stage{flex:1;min-height:0;max-height:none;height:auto}
+.image-viewer:fullscreen .image-stage[data-zoomed="false"]{display:grid;place-items:center}
+.image-viewer:fullscreen .image-stage[data-zoomed="false"] img{width:auto!important;height:auto!important;max-height:100%!important;max-width:100%!important}
+.image-actions button{min-height:44px}
+.image-immersive-note{font-size:12px;color:var(--dim)}
 .json-tree{width:100%;max-width:100%;font:12px/1.5 ui-monospace,monospace;overflow-wrap:anywhere}.json-tree details{padding:4px 0 4px 14px;border-left:1px solid var(--stroke)}.json-tree summary{cursor:pointer;min-height:28px;color:var(--accent)}.json-tree .atom{padding:4px 0}.history-list{display:grid;gap:9px}.history-list a{display:block;border:1px solid var(--stroke);border-radius:11px;padding:10px;text-decoration:none;color:var(--text)}.history-list a:hover{border-color:var(--accent)}.history-list small{display:block;color:var(--dim)}
 [hidden]{display:none!important}.story-view{padding:14px;display:grid;gap:11px}.story-head{padding:12px;border:1px solid var(--stroke);background:var(--panel2);border-radius:13px}.story-head h2{margin:0;font-size:19px}.story-controls{display:flex;gap:8px;flex-wrap:wrap}.story-stream{border-left:2px solid var(--stroke);margin-left:12px;padding-left:14px;display:grid;gap:10px}.story-event{border:1px solid var(--stroke);border-radius:11px;background:var(--panel2);padding:11px;display:grid;gap:4px;position:relative;text-decoration:none;color:var(--text)}.story-event::before{content:'';position:absolute;top:15px;left:-21px;width:10px;height:10px;border-radius:50%;background:var(--accent)}.story-event strong{overflow-wrap:anywhere}.story-event small{color:var(--dim);font-size:11px}.story-event:hover{border-color:var(--accent)}.story-group{font-weight:750;font-size:12px;color:var(--dim);margin-top:6px}.story-tags{display:flex;gap:7px;flex-wrap:wrap}.story-tags a{color:var(--accent);background:var(--panel2);border-radius:9px;padding:7px;text-decoration:none;font-size:12px}.story-tags a:hover{text-decoration:underline}.story-notice{font-size:12px;color:var(--dim)}
 .diff-canvas{display:block;width:100%;max-height:55dvh;height:auto;object-fit:contain;border:1px solid var(--stroke);border-radius:12px;background:#151921}.diff-summary{font-size:13px;color:var(--dim);overflow-wrap:anywhere}.diff-summary strong{color:var(--text)}
@@ -87,7 +94,7 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 <section id="preview" class="preview" role="dialog" aria-modal="true" aria-label="File preview"><div class="preview-head"><button id="prevPreview" class="icon-btn" aria-label="Previous file" title="Previous file">‹</button><button id="nextPreview" class="icon-btn" aria-label="Next file" title="Next file">›</button><strong id="previewTitle"></strong><button id="compareAction" class="pill" hidden aria-label="Pin image for visual comparison">Pin A</button><button id="copyRaw" class="pill" hidden aria-label="Copy file text">Copy text</button><button id="downloadRaw" class="pill" hidden aria-label="Download original file">Download</button><button id="copyFile" class="pill" title="Copy file deep link" aria-label="Copy file deep link">Copy ↗</button><a id="fileLink" class="pill" target="_blank" rel="noopener noreferrer" aria-label="View file on GitHub">Git ↗</a><button id="closePreview" class="icon-btn" aria-label="Close preview">✕</button></div><div id="inspectTools" class="inspect-tools" hidden><button id="fileHistory" class="pill">History</button><button id="structuredToggle" class="pill" hidden>JSON tree</button></div><div class="preview-body" id="previewBody"></div></section>
 <script>
 (()=>{'use strict';
-const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0,selectionMode:false,selected:new Map(),sheetSeq:0,sheetOpen:false,activeRequests:new Set(),rateLimitedUntil:0,folderRecoveryKey:'',sizeOpen:false};
+const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0,selectionMode:false,selected:new Map(),sheetSeq:0,sheetOpen:false,activeRequests:new Set(),rateLimitedUntil:0,folderRecoveryKey:'',sizeOpen:false,imageFullscreenCleanup:null};
 const codeRx=/\.(?:js|jsx|mjs|ts|tsx|py|rs|go|java|kt|c|cpp|h|hpp|sh|css|scss|html|sql|gradle)$/i,docsRx=/\.(?:md|markdown|txt|pdf|rst)$/i,dataRx=/\.(?:json|csv|tsv|yaml|yml|xml|toml|ini|properties)$/i;
 const imageRx=/\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i,textRx=/\.(md|markdown|txt|json|ya?ml|xml|csv|tsv|js|jsx|ts|tsx|css|scss|html|py|kt|java|rs|go|sh|toml|ini|svg|sql|log|gradle|properties)$/i;
 function hideSizeMap(){
@@ -526,7 +533,15 @@ async function pump(){
   }catch{}finally{running--;pump()}})()
  }
 }
-function clearPreview(){++state.sheetSeq;state.sheetOpen=false;++state.compareSeq;const wasOpen=state.preview!==null;state.preview=null;state.historyOpen=false;state.structuredOpen=false;$('inspectTools').hidden=true;state.currentBlob=null;state.previewText=null;$('copyRaw').hidden=true;$('downloadRaw').hidden=true;state.compareMode=false;updateCompareAction();$('preview').classList.remove('open');$('scrim').classList.remove('on');$('previewBody').replaceChildren();clearUrls('preview');if(wasOpen&&state.repo&&state.branch)updateHash();if(wasOpen&&state.returnFocus?.isConnected)state.returnFocus.focus();state.returnFocus=null;$('pageHeader').inert=false;$('pageMain').inert=false}
+function closeImageFullscreen(){
+ const cleanup=state.imageFullscreenCleanup;state.imageFullscreenCleanup=null;
+ if(cleanup)cleanup();
+ const fullscreen=document.fullscreenElement;
+ if(fullscreen?.classList?.contains('image-viewer')&&typeof document.exitFullscreen==='function'){
+  Promise.resolve(document.exitFullscreen()).catch(()=>{});
+ }
+}
+function clearPreview(){closeImageFullscreen();++state.sheetSeq;state.sheetOpen=false;++state.compareSeq;const wasOpen=state.preview!==null;state.preview=null;state.historyOpen=false;state.structuredOpen=false;$('inspectTools').hidden=true;state.currentBlob=null;state.previewText=null;$('copyRaw').hidden=true;$('downloadRaw').hidden=true;state.compareMode=false;updateCompareAction();$('preview').classList.remove('open');$('scrim').classList.remove('on');$('previewBody').replaceChildren();clearUrls('preview');if(wasOpen&&state.repo&&state.branch)updateHash();if(wasOpen&&state.returnFocus?.isConnected)state.returnFocus.focus();state.returnFocus=null;$('pageHeader').inert=false;$('pageMain').inert=false}
 function compareReady(){return Boolean(state.pinned&&state.preview&&state.currentBlob&&imageRx.test(state.preview.name)&&state.pinned.item.path!==state.preview.path&&state.pinned.repo===state.repo&&state.pinned.branch===state.branch)}
 function updateCompareAction(){
  const b=$('compareAction'),isImage=Boolean(state.preview&&state.currentBlob&&imageRx.test(state.preview.name));
@@ -696,7 +711,7 @@ function imageViewer(blob,item){
  img.alt=item.name;img.src=blobUrl(blob);img.style.width='100%';stage.append(img);
  const minus=elem('button','pill','−'),reset=elem('button','pill','100%'),plus=elem('button','pill','+');
  minus.setAttribute('aria-label','Zoom out image');plus.setAttribute('aria-label','Zoom in image');reset.setAttribute('aria-label','Reset image zoom');
- const update=()=>{img.style.width=Math.round(state.zoom*100)+'%';reset.textContent=Math.round(state.zoom*100)+'%';minus.disabled=state.zoom<=1;plus.disabled=state.zoom>=4;stage.style.overscrollBehavior=state.zoom>1?'contain':'auto'};
+ const update=()=>{img.style.width=Math.round(state.zoom*100)+'%';reset.textContent=Math.round(state.zoom*100)+'%';minus.disabled=state.zoom<=1;plus.disabled=state.zoom>=4;stage.style.overscrollBehavior=state.zoom>1?'contain':'auto';stage.dataset.zoomed=String(state.zoom>1)};
  minus.onclick=()=>{state.zoom=boundedZoom(state.zoom-.25);update()};
  plus.onclick=()=>{state.zoom=boundedZoom(state.zoom+.25);update()};
  reset.onclick=()=>{state.zoom=1;update();stage.scrollLeft=0;stage.scrollTop=0};
@@ -725,7 +740,33 @@ function imageViewer(blob,item){
   pan=e.touches.length===1?{x:e.touches[0].clientX,y:e.touches[0].clientY}:null
  },{passive:false});
  stage.addEventListener('touchcancel',()=>{gesture=null;pan=null},{passive:false});
- actions.append(minus,reset,plus,elem('span','hint','Pinch with two fingers to zoom; drag to pan when enlarged. Zoom buttons work with keyboard and mouse.'));update();wrap.append(actions,stage);return wrap;
+ const full=elem('button','pill','Fullscreen');
+ full.type='button';full.setAttribute('aria-label','Enter image fullscreen');
+ const canFullscreen=typeof wrap.requestFullscreen==='function'&&typeof document.exitFullscreen==='function';
+ full.disabled=!canFullscreen;
+ if(!canFullscreen)full.title='Fullscreen is not supported by this browser; zoom and pan remain available.';
+ const syncFullscreen=()=>{
+  const active=document.fullscreenElement===wrap;
+  full.textContent=active?'Exit fullscreen':'Fullscreen';
+  full.setAttribute('aria-label',active?'Exit image fullscreen':'Enter image fullscreen');
+  full.setAttribute('aria-pressed',String(active));
+  stage.setAttribute('aria-label',active?'Fullscreen image, pinch to zoom and drag to pan':'Image preview, pinch to zoom and drag to pan');
+ };
+ if(typeof document.addEventListener==='function')document.addEventListener('fullscreenchange',syncFullscreen);
+ state.imageFullscreenCleanup=()=>document.removeEventListener?.('fullscreenchange',syncFullscreen);
+ full.onclick=async()=>{
+  if(full.disabled)return;
+  try{
+   if(document.fullscreenElement===wrap)await document.exitFullscreen();
+   else await wrap.requestFullscreen({navigationUI:'hide'});
+   syncFullscreen()
+  }catch{
+   status('This browser refused fullscreen. Image zoom and pan remain available.');
+   syncFullscreen()
+  }
+ };
+ actions.append(minus,reset,plus,full,elem('span','hint','Pinch to zoom or drag to pan when enlarged. The fullscreen control is browser-dependent; zoom buttons also work with keyboard and mouse.'));
+ update();wrap.append(actions,stage);syncFullscreen();return wrap;
 }
 function jsonViewer(value){
  const root=elem('div','json-tree');let count=0;
@@ -744,7 +785,7 @@ function jsonViewer(value){
 }
 async function renderCurrentFile(){
  const item=state.preview,blob=state.currentBlob;if(!item||!blob)return;
- clearUrls('preview');const lower=item.name.toLowerCase();let node;
+ closeImageFullscreen();clearUrls('preview');const lower=item.name.toLowerCase();let node;
  if(imageRx.test(lower))node=imageViewer(blob,item);
  else if(/\.pdf$/i.test(lower)){node=elem('iframe');node.title=item.name;node.src=blobUrl(new Blob([blob],{type:'application/pdf'}))}
  else if(/\.(mp4|webm|ogg)$/i.test(lower)){node=elem('video');node.controls=true;node.src=blobUrl(blob)}
@@ -1043,7 +1084,7 @@ $('theme').onclick=()=>{document.body.classList.toggle('light');$('theme').textC
 try{if(localStorage.getItem('expository-theme')==='light')$('theme').click()}catch{}
 $('navToggle').onclick=()=>{$('sidebar').classList.add('open');$('scrim').classList.add('on')};$('closePreview').onclick=clearPreview;$('scrim').onclick=()=>{clearPreview();closeNav()};
 document.addEventListener('keydown',e=>{
- if(e.key==='Escape'){clearPreview();closeNav();return}
+ if(e.key==='Escape'){if(document.fullscreenElement?.classList?.contains('image-viewer')){e.preventDefault();document.exitFullscreen?.();return}clearPreview();closeNav();return}
  if(state.preview){if(e.key==='Tab'){trapPreviewFocus(e);return}
   if(!['INPUT','TEXTAREA','SELECT'].includes(e.target?.tagName)){if(e.key==='ArrowRight')adjacentPreview(1);if(e.key==='ArrowLeft')adjacentPreview(-1)}
  }

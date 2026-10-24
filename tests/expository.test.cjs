@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl
  );
@@ -634,4 +634,18 @@ test('older PR pagination caps four pages and ignores stale results when view cl
  assert.equal(data.pulls.length,1,'stale PR page never used after closing Story Mode');
  app.state.storyOpen=true;data.pullPages=4;await app.loadOlderPulls();
  assert.equal(data.pulls.length,1,'four-page limit stops additional requests');
+});
+
+test('image fullscreen affordance is accessible and degrades safely without browser API',()=>{
+ const {app}=boot();
+ const view=app.imageViewer(new Blob(['fixture'],{type:'image/png'}),{name:'example.png',path:'example.png'});
+ const actions=view.children[0],stage=view.children[1],full=actions.children[3];
+ assert.equal(full.textContent,'Fullscreen');
+ assert.equal(full['aria-label'],'Enter image fullscreen');
+ assert.equal(full.disabled,true,'unsupported fullscreen does not masquerade as active');
+ assert.match(full.title,/not supported/);
+ assert.equal(stage['aria-label'],'Image preview, pinch to zoom and drag to pan');
+ assert.equal(app.state.zoom,1);
+ app.closeImageFullscreen();
+ assert.equal(app.state.imageFullscreenCleanup,null,'fullscreen listener cleaned when preview closes');
 });
