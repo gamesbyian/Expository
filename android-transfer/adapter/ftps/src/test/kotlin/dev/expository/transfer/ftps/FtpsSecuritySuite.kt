@@ -35,6 +35,12 @@ object FtpsSecuritySuite {
                 check(runCatching { FtpsPath.checked(p) }.isFailure)
             }
         }
+        checkCase("malformed MLSD child names must fail closed") {
+            check(FtpsPath.checkedChild("Episode 02.mkv") == "Episode 02.mkv")
+            for (name in listOf("", "..", ".", "a/b", "a\\\\b", "x\u0000y")) {
+                check(runCatching { FtpsPath.checkedChild(name) }.isFailure)
+            }
+        }
         checkCase("invalid identity rejected without network") {
             check(runCatching {
                 SecureFtps.connect(FtpsTarget("example.invalid"), "\r", charArrayOf('x'))
