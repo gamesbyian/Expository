@@ -225,6 +225,7 @@ async function main(){
   assert.equal(await evaluate("document.querySelector('.image-stage').dataset.rotated"),'true','display-only quarter turn activates');
   assert.equal(await evaluate("document.querySelector('.image-stage img').style.transform.includes('rotate(90deg)')"),true,'image actually rotated clockwise');
   assert.equal(await evaluate("(()=>{const box=document.querySelector('.image-stage'),frame=box.querySelector('.image-rotation-frame');return frame.getBoundingClientRect().width<=box.clientWidth+2&&frame.getBoundingClientRect().height<=box.clientHeight+2})()"),true,'turned image fits image stage');
+  assert.equal(await evaluate("(()=>{const stage=document.querySelector('.image-stage').getBoundingClientRect(),frame=document.querySelector('.image-rotation-frame').getBoundingClientRect();return Math.abs((frame.left+frame.width/2)-(stage.left+stage.width/2))<3&&Math.abs((frame.top+frame.height/2)-(stage.top+stage.height/2))<3})()"),true,'fitted rotation is centered in stage');
   if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-rotate-393.png');
   await evaluate("document.querySelector('.image-actions button:nth-child(3)').click()");
   assert.equal(await evaluate("document.querySelector('.image-stage').dataset.zoomed"),'true','rotated zoom remains functional');
