@@ -87,6 +87,11 @@ object SecureSftp {
     }
 }
 
+data class SftpRemoteEntry(val name: String, val directory: Boolean, val size: Long, val modifiedMillis: Long?) {
+    val revision: String get() = listOf(size, modifiedMillis ?: -1L, directory).joinToString(":")
+}
+data class SftpBrowsePage(val entries: List<SftpRemoteEntry>, val truncated: Boolean)
+
 class SftpSession internal constructor(
     private val ssh: SshClient,
     private val session: ClientSession,
@@ -104,6 +109,31 @@ class SftpSession internal constructor(
 
     fun openRead(absoluteFile: String): InputStream =
         sftp.read(SftpPath.requireAbsolute(absoluteFile))
+
+    /**
+     * Bounded UI view. Server-side listings may be huge; never materialize
+     * the entire directory in Compose. Full pagination is a later G4 gate.
+     */
+    fun browse(absoluteFolder: String, maxEntries: Int = 200): SftpBrowsePage {
+        require(maxEntries in 1..200)
+        val entries = sftp.readDir(SftpPath.requireAbsolute(absoluteFolder))
+            .asSequence().filter { it.filename != "." && it.filename != ".." }
+            .take(maxEntries + 1).map { item ->
+                val a = item.attributes
+                SftpRemoteEntry(SftpPath.validateChild(item.filename),
+                    a.isDirectory, a.size, a.modifyTime?.toMillis())
+            }.toList()
+        return SftpBrowsePage(entries.take(maxEntries), entries.size > maxEntries)
+    }
+
+    fun statFile(absoluteFile: String): SftpRemoteEntry {
+        val path = SftpPath.requireAbsolute(absoluteFile)
+        require(path != "/") { "NOT_A_FILE" }
+        val a = sftp.stat(path)
+        require(!a.isDirectory) { "NOT_A_FILE" }
+        return SftpRemoteEntry(SftpPath.validateChild(path.substringAfterLast('/')),
+            false, a.size, a.modifyTime?.toMillis())
+    }
 
     override fun close() {
         runCatching { sftp.close() }
