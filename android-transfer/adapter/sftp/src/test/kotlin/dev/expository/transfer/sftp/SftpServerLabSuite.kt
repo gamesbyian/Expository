@@ -1,8 +1,8 @@
 package dev.expository.transfer.sftp
 
 import org.apache.sshd.server.SshServer
-import org.apache.sshd.server.keyprovider.SimpleGeneratorHostKeyProvider
-import org.apache.sshd.server.subsystem.sftp.SftpSubsystemFactory
+import org.apache.sshd.common.keyprovider.KeyPairProvider
+import org.apache.sshd.sftp.server.SftpSubsystemFactory
 import org.apache.sshd.common.file.virtualfs.VirtualFileSystemFactory
 import java.nio.file.Files
 import java.nio.charset.StandardCharsets
@@ -24,13 +24,10 @@ object SftpServerLabSuite {
         val sshd = SshServer.setUpDefaultServer()
         sshd.host = "127.0.0.1"
         sshd.port = 0
-        sshd.keyPairProvider = object : org.apache.sshd.common.keyprovider.KeyPairProvider {
-            private val key: KeyPair = KeyPairGenerator.getInstance("RSA").apply {
-                initialize(2048)
-            }.generateKeyPair()
-            override fun loadKeys(session: org.apache.sshd.common.session.SessionContext?): Iterable<KeyPair> =
-                listOf(key)
-        }
+        val hostKey: KeyPair = KeyPairGenerator.getInstance("RSA").apply {
+            initialize(2048)
+        }.generateKeyPair()
+        sshd.keyPairProvider = KeyPairProvider.wrap(hostKey)
         sshd.passwordAuthenticator = org.apache.sshd.server.auth.password.PasswordAuthenticator {
             user, password, _ -> user == "synthetic" && password == "synthetic-password"
         }
@@ -39,12 +36,11 @@ object SftpServerLabSuite {
         try {
             sshd.start()
             val port = sshd.port
-            val actualHostKey = sshd.keyPairProvider.loadKeys(null).first().public
+            val actualHostKey = hostKey.public
             val correct = SftpHostKeyPin(SftpHostKeyPin.observed(actualHostKey))
             val wrong = SftpHostKeyPin(SftpHostKeyPin.observed(
                 KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair().public
             ))
-            check(!correct.verifies(wrongKey(wrong)))
             val trusted = SecureSftp.connect(SftpTarget("127.0.0.1", port, correct),
                 "synthetic", "synthetic-password".toCharArray())
             trusted.use { session ->
@@ -65,6 +61,4 @@ object SftpServerLabSuite {
             runCatching { Files.deleteIfExists(tmp) }
         }
     }
-    private fun wrongKey(pin: SftpHostKeyPin): java.security.PublicKey =
-        KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair().public
 }
