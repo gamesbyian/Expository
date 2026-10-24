@@ -86,6 +86,24 @@ object SftpServerLabSuite {
                     "A repeated MKDIR must not silently mutate an existing directory"
                 }
                 println("PASS SFTP LAB planned direct MKDIR, observed folder, duplicate refused")
+                val sourceBytes = ("Move payload" + 10.toChar()).toByteArray(StandardCharsets.UTF_8)
+                session.openExclusiveWrite("/move-source.txt").use { it.write(sourceBytes) }
+                val movePlan = TransferPlan("c".repeat(64),
+                    TransferRoute.VERIFIED_REMOTE_RENAME, Operation.MOVE, emptyList())
+                check(runCatching {
+                    session.movePlannedFile(movePlan, "/move-source.txt", "/synthetic.txt")
+                }.isFailure) { "Native rename must reject an existing destination" }
+                check(session.openRead("/synthetic.txt").use { it.readBytes() }
+                    .contentEquals(payload.toByteArray(StandardCharsets.UTF_8)))
+                check(session.openRead("/move-source.txt").use { it.readBytes() }
+                    .contentEquals(sourceBytes))
+                session.movePlannedFile(movePlan, "/move-source.txt",
+                    "/new-dir/move-source.txt")
+                check(session.statFile("/new-dir/move-source.txt").size == sourceBytes.size.toLong())
+                check(runCatching { session.statFile("/move-source.txt") }.isFailure)
+                check(session.openRead("/new-dir/move-source.txt").use { it.readBytes() }
+                    .contentEquals(sourceBytes))
+                println("PASS SFTP LAB no-overwrite server-side Move, source gone, destination bytes equal")
             }
             println("PASS SFTP LAB trusted host fingerprint + authenticated directory read")
             val refused = runCatching {
@@ -98,6 +116,7 @@ object SftpServerLabSuite {
             runCatching { sshd.stop(true) }
             runCatching { Files.deleteIfExists(tmp.resolve("synthetic.txt")) }
             runCatching { Files.deleteIfExists(tmp.resolve("synthetic-upload.txt")) }
+            runCatching { Files.deleteIfExists(tmp.resolve("new-dir/move-source.txt")) }
             runCatching { Files.deleteIfExists(tmp.resolve("new-dir")) }
             runCatching { Files.deleteIfExists(tmp) }
         }

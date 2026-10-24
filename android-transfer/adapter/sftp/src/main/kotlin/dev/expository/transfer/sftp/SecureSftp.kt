@@ -1,6 +1,9 @@
 package dev.expository.transfer.sftp
 
 import dev.expository.transfer.planner.DirectoryCreatePlan
+import dev.expository.transfer.planner.TransferPlan
+import dev.expository.transfer.planner.Operation
+import dev.expository.transfer.planner.TransferRoute
 import org.apache.sshd.client.SshClient
 import org.apache.sshd.client.keyverifier.ServerKeyVerifier
 import org.apache.sshd.client.session.ClientSession
@@ -151,6 +154,23 @@ class SftpSession internal constructor(
         val path = SftpPath.requireAbsolute(plan.absoluteTarget)
         require(path != "/")
         sftp.mkdir(path)
+    }
+
+    /**
+     * Same authenticated server-only native Move, no file bytes downloaded.
+     * NEVER request Overwrite/Atomic extension flags; caller must revalidate a
+     * collision-free immutable Move plan, journal the attempt, and reconcile.
+     * Server behavior beyond controlled SFTP fixtures is not yet accepted.
+     */
+    fun movePlannedFile(plan: TransferPlan, fromPath: String, intoPath: String) {
+        require(plan.executable && plan.operation == Operation.MOVE &&
+            plan.route == TransferRoute.VERIFIED_REMOTE_RENAME) {
+            "NOT_VERIFIED_NATIVE_MOVE_PLAN"
+        }
+        val from = SftpPath.requireAbsolute(fromPath)
+        val to = SftpPath.requireAbsolute(intoPath)
+        require(from != "/" && to != "/" && from != to) { "INVALID_MOVE_PATH" }
+        sftp.rename(from, to) // absent Overwrite flag: fail when destination exists
     }
 
     fun observeDirectory(absolutePath: String): Boolean =

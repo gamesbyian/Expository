@@ -17,3 +17,11 @@ tasks.register<JavaExec>("directoryScenarios") {
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("dev.expository.transfer.planner.DirectoryCreateSuite")
 }
+
+tasks.register<JavaExec>("moveScenarios") {
+    group = "verification"
+    description = "Same-server Move planner prevents cross-server destructive routes"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.planner.SftpMoveSuite")
+}

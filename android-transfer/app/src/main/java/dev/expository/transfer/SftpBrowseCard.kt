@@ -45,6 +45,8 @@ import dev.expository.transfer.sftp.SftpToSafSave
 import dev.expository.transfer.sftp.SafToSftpUpload
 import dev.expository.transfer.sftp.SftpNewFolder
 import dev.expository.transfer.sftp.FolderCreateProof
+import dev.expository.transfer.sftp.SftpSameServerMove
+import dev.expository.transfer.sftp.ServerMoveProof
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
@@ -74,6 +76,7 @@ fun SftpBrowseCard() {
     var newFolderName by remember { mutableStateOf("") }
     var page by remember { mutableStateOf<SftpBrowsePage?>(null) }
     var pendingFile by remember { mutableStateOf<String?>(null) }
+    var pendingMove by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf("Enter a known SHA-256 SSH host-key fingerprint. Unknown keys are never trusted automatically.") }
     var busy by remember { mutableStateOf(false) }
 
@@ -261,11 +264,66 @@ fun SftpBrowseCard() {
                         sessionId = ""
                         page = null
                         pendingFile = null
+                        pendingMove = null
                         status = "Disconnected. Remote session cleared."
                     }) { Text("Disconnect") }
                     Button(enabled = !busy, onClick = { browseTo(folder) }) { Text("Refresh") }
                 }
                 Text("Remote folder: " + folder)
+                pendingMove?.let { sourceToMove ->
+                    Text("Selected to move: " + sourceToMove,
+                        style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(enabled = !busy && page?.truncated != true &&
+                            folder != "/" &&
+                            folder != sourceToMove.substringBeforeLast('/', "").ifBlank { "/" },
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = {
+                                val live = session
+                                if (live != null) {
+                                    val selectedSource = sourceToMove
+                                    val chosenFolder = folder
+                                    val opaque = sessionId
+                                    busy = true
+                                    status = "Revalidating server-side Move preflight…"
+                                    scope.launch {
+                                        val receipt = withContext(Dispatchers.IO) {
+                                            SftpSameServerMove { digest ->
+                                                AndroidAtomicAttemptStorage(
+                                                    context.applicationContext, digest)
+                                            }.move(live, opaque, selectedSource, chosenFolder)
+                                        }
+                                        val destinationName = chosenFolder.trimEnd('/') +
+                                            "/" + selectedSource.substringAfterLast('/')
+                                        status = when (receipt.proof) {
+                                            ServerMoveProof.MOVE_OBSERVED ->
+                                                "Move observed: " + selectedSource + " → " +
+                                                destinationName + ". No payload relayed. " +
+                                                "Destination metadata matched; bytes were not rehashed."
+                                            ServerMoveProof.UNCERTAIN ->
+                                                "Move uncertain. Inspect original " + selectedSource +
+                                                " and destination " + destinationName +
+                                                " before retrying. Reason: " +
+                                                receipt.reason.replace('_', ' ')
+                                            ServerMoveProof.BLOCKED ->
+                                                "Move blocked: " + receipt.reason.replace('_', ' ')
+                                        }
+                                        if (receipt.proof != ServerMoveProof.BLOCKED)
+                                            pendingMove = null
+                                        if (session === live) {
+                                            val refreshed = withContext(Dispatchers.IO) {
+                                                runCatching { live.browse(chosenFolder) }
+                                            }
+                                            refreshed.onSuccess { page = it }
+                                        }
+                                        busy = false
+                                    }
+                                }
+                            }) { Text("Move here") }
+                        Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = { pendingMove = null }) { Text("Cancel Move") }
+                    }
+                }
                 OutlinedTextField(newFolderName, { newFolderName = it },
                     label = { Text("New folder name") }, singleLine = true,
                     enabled = !busy, modifier = Modifier.fillMaxWidth())
@@ -334,20 +392,28 @@ fun SftpBrowseCard() {
                                 Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
                                     onClick = { browseTo(path) }) { Text("Open") }
                             } else {
-                                Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
-                                    onClick = {
-                                        pendingFile = path
-                                        busy = true // Freeze session/navigation while Android picker owns the choice
-                                        val extension = entry.name.substringAfterLast('.', "").lowercase()
-                                        val mime = MimeTypeMap.getSingleton()
-                                            .getMimeTypeFromExtension(extension)
-                                            ?: "application/octet-stream"
-                                        saveAs.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                                            addCategory(Intent.CATEGORY_OPENABLE)
-                                            type = mime
-                                            putExtra(Intent.EXTRA_TITLE, entry.name)
-                                        })
-                                    }) { Text("Save As…") }
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
+                                        onClick = {
+                                            pendingFile = path
+                                            busy = true
+                                            val extension = entry.name.substringAfterLast('.', "").lowercase()
+                                            val mime = MimeTypeMap.getSingleton()
+                                                .getMimeTypeFromExtension(extension)
+                                                ?: "application/octet-stream"
+                                            saveAs.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                                addCategory(Intent.CATEGORY_OPENABLE)
+                                                type = mime
+                                                putExtra(Intent.EXTRA_TITLE, entry.name)
+                                            })
+                                        }) { Text("Save As…") }
+                                    Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
+                                        onClick = {
+                                            pendingMove = path
+                                            status = "Choose a destination folder, then tap Move here. " +
+                                                "The source is relocated on this same server."
+                                        }) { Text("Move…") }
+                                }
                             }
                         }
                     }

@@ -19,5 +19,9 @@ G2 only accepts `content://` URIs returned from user-initiated `ACTION_OPEN_DOCU
 
 The G6 New Folder operation in PR #46 commits a private attempt journal and revalidates an immutable complete sibling snapshot before direct SFTP MKDIR. It verifies the resulting directory with an authenticated server stat. No synthetic test or command ACK alone warrants an Android/device completion claim. An ambiguous reply leaves an uncertain folder that must be inspected manually before retry; the app never recursively deletes existing remote content as cleanup. Folder operations with more than 200 visible children currently fail closed until proper pagination exists.
 
+## Native same-server Move policy
+
+PR #47 introduces explicit one-file Move between distinct folders of the *same* pinned-SFTP session. A direct SFTP rename is permitted only for a validated immutable `VERIFIED_REMOTE_RENAME` plan, complete collision-free destination listing and matching authenticated namespace. Neither the Android device nor client relays file bytes, and no separate source Delete command is used. An attempted mutation is journaled before the request. A successful reply is insufficient without observed original-name absence and destination metadata agreement. The synthetic fixture tested no-overwrite behavior, but other servers, concurrent writers and lost replies remain unverified; user-facing receipt must distinguish observed metadata from content hashes, and never retry automatically.
+
 ## Evidence
 Synthetic fixture data are **E1**, an APK compilation artifact is **build provenance**, not a device acceptance. Keep debug APK artifacts at short retention; no user data in screenshot jobs. Real device, server and OAuth tests must be opt-in with separately documented consent and scope.
