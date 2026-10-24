@@ -38,9 +38,9 @@ Expository is **read-only**, uses direct requests to the GitHub API, and has no 
 
 For the feature plan and current development stages, see the [weighted feature roadmap](FEATURE-ROADMAP.md). Not every planned item is implemented.
 
-## Expository family: Android Transfer exploration
+## Expository family: Android Transfer development
 
-The Expository brand is exploring a **separate, native Android FTP/FTPS/SFTP transfer client**. This is a product proposal, **not an implemented app or permission expansion of this read-only GitHub explorer**. The first requirements are native Android **Save to device** / **Upload files or folders** using system interfaces, optional Device/Device, Device/Server and Server/Server split panes with drag-and-drop and accessible copy controls, fast same-server **Move to… → New folder** and a compact preview-first **bulk renamer**.
+A **separate, relocatable native Android project** now lives under [`android-transfer/`](android-transfer/) (G0/G1 foundation merged in [PR #32](https://github.com/gamesbyian/Expository/pull/32)). The brand's FTP/FTPS/SFTP transfer client remains **under development, not ready for general use**. The app has a synthetic remote browser and, in [G2 PR #33](https://github.com/gamesbyian/Expository/pull/33), an experimental **single-file Local → Local Copy** using Android's Open and Save As interfaces. Debug APK compilation and pure Kotlin tests are witnessed; actual device/provider acceptance and real remote/Google Drive/Docs transfers are pending. This does **not** expand the read-only GitHub explorer's permissions or modify its deployed Pages app. The first requirements are native Android **Save to device** / **Upload files or folders** using system interfaces, optional Device/Device, Device/Server and Server/Server split panes with drag-and-drop and accessible copy controls, fast same-server **Move to… → New folder** and a compact preview-first **bulk renamer**.
 
 - [Critical review: release-blocking product and filesystem assumptions](docs/android-transfer/CRITICAL-REVIEW.md)
 - [Hardened architecture, milestones, fault injection and release gates](docs/android-transfer/HARDENED-IMPLEMENTATION-PLAN.md)
