@@ -149,15 +149,19 @@ fun FtpsBrowseCard() {
             Text("Experimental foreground copy. Password stays in this session; server certificate must validate.",
                 style = MaterialTheme.typography.bodySmall)
             if (session == null) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(enabled = !busy, onClick = {
-                        mode = FtpsMode.EXPLICIT_TLS
-                        port = "21"
-                    }) { Text(if (mode == FtpsMode.EXPLICIT_TLS) "✓ Explicit TLS" else "Explicit TLS") }
-                    Button(enabled = !busy, onClick = {
-                        mode = FtpsMode.IMPLICIT_TLS
-                        port = "990"
-                    }) { Text(if (mode == FtpsMode.IMPLICIT_TLS) "✓ Implicit TLS" else "Implicit TLS") }
+                // Stack mode choices at large font scales and narrow phones:
+                // never require horizontal scrolling to pick a secure protocol.
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Button(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        enabled = !busy, onClick = {
+                            mode = FtpsMode.EXPLICIT_TLS
+                            port = "21"
+                        }) { Text(if (mode == FtpsMode.EXPLICIT_TLS) "✓ Explicit TLS" else "Explicit TLS") }
+                    Button(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        enabled = !busy, onClick = {
+                            mode = FtpsMode.IMPLICIT_TLS
+                            port = "990"
+                        }) { Text(if (mode == FtpsMode.IMPLICIT_TLS) "✓ Implicit TLS" else "Implicit TLS") }
                 }
                 OutlinedTextField(host, { host = it }, label = { Text("FTPS host") },
                     enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
