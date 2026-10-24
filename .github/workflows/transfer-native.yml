@@ -14,6 +14,10 @@ on:
         description: "Opt-in isolated FTPS TLS server and read proof"
         type: boolean
         default: false
+      sftp_lab:
+        description: "Opt-in SFTP pinned-key live synthetic lab"
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -122,8 +126,8 @@ jobs:
         run: gradle :adapter:ftps:lab -PftpsLabMode=trusted-read -PftpsTrustStore="$RUNNER_TEMP/ftps-lab/truststore.p12" --no-daemon
 
   sftp-lab:
-    # Scoped bootstrap evidence on PR #35 only. Restore to manual-only after proof.
-    if: github.event_name == 'pull_request' && github.event.pull_request.number == 35
+    # Ephemeral pinned-key protocol lab, opt-in only after bootstrap proof.
+    if: github.event_name == 'workflow_dispatch' && inputs.sftp_lab
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
