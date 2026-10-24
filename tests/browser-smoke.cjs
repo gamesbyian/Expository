@@ -221,20 +221,31 @@ async function main(){
   if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-pinch-393.png');
   await evaluate("document.querySelector('.image-actions button:nth-child(2)').click()");
   assert.equal(await evaluate("document.querySelector('.image-stage').style.overscrollBehavior"),'auto','fitted image permits natural page scroll');
+  await evaluate("document.querySelector('.image-actions button:nth-child(4)').click()");
+  assert.equal(await evaluate("document.querySelector('.image-stage').dataset.rotated"),'true','display-only quarter turn activates');
+  assert.equal(await evaluate("document.querySelector('.image-stage img').style.transform.includes('rotate(90deg)')"),true,'image actually rotated clockwise');
+  assert.equal(await evaluate("(()=>{const box=document.querySelector('.image-stage'),frame=box.querySelector('.image-rotation-frame');return frame.getBoundingClientRect().width<=box.clientWidth+2&&frame.getBoundingClientRect().height<=box.clientHeight+2})()"),true,'turned image fits image stage');
+  if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-rotate-393.png');
+  await evaluate("document.querySelector('.image-actions button:nth-child(3)').click()");
+  assert.equal(await evaluate("document.querySelector('.image-stage').dataset.zoomed"),'true','rotated zoom remains functional');
+  await evaluate("document.querySelector('.image-actions button:nth-child(2)').click()");
+  for(let n=0;n<3;n++)await evaluate("document.querySelector('.image-actions button:nth-child(4)').click()");
+  assert.equal(await evaluate("document.querySelector('.image-stage').dataset.rotated"),'false','four turns return to original orientation');
+  assert.equal(await evaluate("document.querySelector('.image-stage img').style.transform"),'','temporary rotation cleared');
   const nativeFullscreen=await evaluate("document.fullscreenEnabled && typeof document.querySelector('.image-viewer').requestFullscreen==='function'");
   if(nativeFullscreen){
-   await evaluateWithGesture("document.querySelector('.image-actions button:nth-child(4)').click()");
+   await evaluateWithGesture("document.querySelector('.image-actions button:nth-child(5)').click()");
    await until("Boolean(document.fullscreenElement)||document.querySelector('#status').textContent.includes('refused fullscreen')",'fullscreen response');
    if(await evaluate("Boolean(document.fullscreenElement)")){
     assert.equal(await evaluate("document.fullscreenElement.classList.contains('image-viewer')"),true,'only image viewer entered fullscreen');
-    assert.equal(await evaluate("document.querySelector('.image-actions button:nth-child(4)').getAttribute('aria-label')"),'Exit image fullscreen','exit visible while fullscreen');
+    assert.equal(await evaluate("document.querySelector('.image-actions button:nth-child(5)').getAttribute('aria-label')"),'Exit image fullscreen','exit visible while fullscreen');
     assert.equal(await evaluate("document.querySelector('.image-viewer').getBoundingClientRect().height>=innerHeight-1"),true,'fullscreen preview occupies screen');
     if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-image-fullscreen-393.png');
     await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}))");
     await until("document.fullscreenElement===null",'Escape exits viewer fullscreen');
     assert.equal(await evaluate("document.querySelector('#preview').classList.contains('open')"),true,'Escape from fullscreen retains file preview');
    }else{
-    assert.equal(await evaluate("document.querySelector('.image-actions button:nth-child(4)').getAttribute('aria-label')"),'Enter image fullscreen','refused browser request restores control state');
+    assert.equal(await evaluate("document.querySelector('.image-actions button:nth-child(5)').getAttribute('aria-label')"),'Enter image fullscreen','refused browser request restores control state');
    }
   }else{
    assert.equal(await evaluate("document.querySelector('.image-actions button:nth-child(4)').disabled"),true,'unsupported fullscreen clearly disabled')
