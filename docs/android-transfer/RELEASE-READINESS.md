@@ -139,3 +139,21 @@ it, and [run #40139897851](https://github.com/gamesbyian/Expository/actions/runs
 then compiled the actual PR code and published an APK. This is build
 provenance, **not** E2 emulator, E4 physical device or production release
 acceptance. G3 and G4 remain **IN PROGRESS**.
+
+## 24 October: first real Android emulator UI execution
+
+[Workflow run #40141816359](https://github.com/gamesbyian/Expository/actions/runs/40141816359)
+booted a disposable Google APIs Android 15 / API 35 emulator and executed
+**three** native Compose tests successfully (log: 3 started, 3 finished;
+Gradle BUILD SUCCESSFUL). Its artifact #12578544833 contains synthetic
+Android test reports. The tests exercised FTPS protocol selection without
+network access; SFTP rename selection and preview on a two-item synthetic
+snapshot; and refusal of a truncated remote listing. This is specifically
+**E2 bounded UI runtime evidence**. There was no login, socket transfer,
+Android SAF picker/provider, TalkBack, IME, forced 200% text, physical Pixel
+or Android 17/37 acceptance. The earlier first emulator attempt
+[#40140863642](https://github.com/gamesbyian/Expository/actions/runs/40140863642)
+failed before test execution due a Compose test BOM omission; PR #63
+corrected it, and the PR-head dual-APK compiler in PR #64 now detects
+instrumentation compile errors before emulator runs. Do not erase either
+the failed precursor or the successful scoped test from the evidence record.
