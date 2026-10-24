@@ -128,6 +128,10 @@ jobs:
           account = re.findall(r"^\s*FTP_USER:\s*([a-zA-Z0-9._-]+)\s*$", source, flags=re.M)
           if len(host) != 1 or len(account) != 1 or not host[0].endswith(".seedhost.eu"):
               raise RuntimeError("S60_CONFIG_REFERENCE_INVALID")
+          # GitHub Actions echoes job environment variables at each step.
+          # Mask these connection labels before exporting them for later steps.
+          print("::add-mask::" + host[0], flush=True)
+          print("::add-mask::" + account[0], flush=True)
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as handle:
               handle.write("EXPOSITORY_SMOKE_HOST=" + host[0] + "\n")
               handle.write("EXPOSITORY_SMOKE_USER=" + account[0] + "\n")

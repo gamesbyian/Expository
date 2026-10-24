@@ -16,9 +16,9 @@ object FtpsExternalSmokeSuite {
         val vars = System.getenv()
         return when (vars["EXPOSITORY_SMOKE_TARGET"]) {
             "rebex-explicit" -> Profile("test.rebex.net", 21, FtpsMode.EXPLICIT_TLS,
-                "demo", "password", "/", "/readme.txt")
+                "demo", "password", "/pub/example", "/pub/example/readme.txt")
             "rebex-implicit" -> Profile("test.rebex.net", 990, FtpsMode.IMPLICIT_TLS,
-                "demo", "password", "/", "/readme.txt")
+                "demo", "password", "/pub/example", "/pub/example/readme.txt")
             "wing-implicit" -> Profile("demo.wftpserver.com", 990, FtpsMode.IMPLICIT_TLS,
                 "demo", "demo", "/", null)
             "owner-explicit", "owner-implicit" -> {
@@ -43,9 +43,11 @@ object FtpsExternalSmokeSuite {
         // Sanitize all network failures: no host, account, file, or raw reply
         // may accidentally enter a workflow log.
         val p = profile()
+        var stage = "CONNECT"
         try {
             SecureFtps.connect(FtpsTarget(p.host, p.port, p.mode),
                 p.username, p.password.toCharArray()).use { session ->
+                stage = "LIST"
                 val entries = session.list(FtpsPath.checked(p.root))
                 check(entries.isNotEmpty()) { "EMPTY_LISTING" }
                 println("PASS FTPS external authenticated protected MLSD count=" + entries.size)
@@ -54,6 +56,7 @@ object FtpsExternalSmokeSuite {
                     check(entries.any { it.name == sample.substringAfterLast('/') && !it.isDirectory }) {
                         "SAMPLE_ABSENT"
                     }
+                    stage = "READ"
                     var received = 0
                     session.openRead(FtpsPath.checked(sample)).use { input ->
                         val buffer = ByteArray(4096)
@@ -72,7 +75,9 @@ object FtpsExternalSmokeSuite {
                 }
             }
         } catch (_: Exception) {
-            throw IllegalStateException("FTPS_EXTERNAL_SMOKE_FAILED_NO_RAW_SERVER_LOG")
+            // Stage is useful for debugging without exposing a private host,
+            // path, remote reply or exception containing a credential.
+            throw IllegalStateException("FTPS_EXTERNAL_" + stage + "_FAILED_REDACTED")
         }
     }
 }

@@ -40,7 +40,8 @@ object SftpExternalSmokeSuite {
         try {
             SecureSftp.connect(SftpTarget(host, port, pin), user, password.toCharArray())
                 .use { session ->
-                    val page = session.browse("/", maxEntries = 64)
+                    val root = if (profile == "rebex-sftp") "/pub/example" else "/"
+                    val page = session.browse(root, maxEntries = 64)
                     check(page.entries.isNotEmpty()) { "EMPTY_LISTING" }
                     println("PASS SFTP external pinned SSH login + bounded browse entries=" +
                         page.entries.size + " truncated=" + page.truncated)
@@ -49,7 +50,7 @@ object SftpExternalSmokeSuite {
                         if (file != null) {
                             check(file.size in 1..65_536) { "SAMPLE_SIZE_BOUND_EXCEEDED" }
                             var received = 0L
-                            session.openRead("/readme.txt").use { input ->
+                            session.openRead("/pub/example/readme.txt").use { input ->
                                 val buffer = ByteArray(4096)
                                 while (true) {
                                     val n = input.read(buffer)
