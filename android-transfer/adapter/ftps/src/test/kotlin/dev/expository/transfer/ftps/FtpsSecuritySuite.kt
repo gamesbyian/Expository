@@ -47,6 +47,38 @@ object FtpsSecuritySuite {
                 check(runCatching { FtpsPath.checkedChild(name) }.isFailure)
             }
         }
+        checkCase("MLST file observation is required for remote file identity") {
+            val expected = org.apache.commons.net.ftp.FTPFile().apply {
+                name = "file.txt"
+                type = org.apache.commons.net.ftp.FTPFile.FILE_TYPE
+                size = 12
+                timestamp = java.util.GregorianCalendar(java.util.TimeZone.getTimeZone("UTC"))
+            }
+            val client = object : org.apache.commons.net.ftp.FTPSClient(false) {
+                override fun mlistFile(pathname: String): org.apache.commons.net.ftp.FTPFile? =
+                    if (pathname == "/safe/file.txt") expected else null
+            }
+            FtpsSession(client).use { session ->
+                val stat = session.statFile("/safe/file.txt")
+                check(stat.name == "file.txt" && stat.size == 12L)
+                check(stat.revision.isNotBlank())
+                check(runCatching { session.statFile("/safe/unknown") }.isFailure)
+            }
+        }
+        checkCase("MLST missing timestamp or file identity fails closed") {
+            val bad = org.apache.commons.net.ftp.FTPFile().apply {
+                name = "file.txt"
+                type = org.apache.commons.net.ftp.FTPFile.FILE_TYPE
+                size = 12
+            }
+            val client = object : org.apache.commons.net.ftp.FTPSClient(false) {
+                override fun mlistFile(pathname: String): org.apache.commons.net.ftp.FTPFile? = bad
+            }
+            val result = runCatching {
+                FtpsSession(client).use { it.statFile("/safe/file.txt") }
+            }
+            check(result.isFailure && result.exceptionOrNull()?.message == "FTPS_FILE_STAT_UNVERIFIED")
+        }
         checkCase("empty MLSD permits LIST preview but never mutation witness") {
             fun file(name: String): org.apache.commons.net.ftp.FTPFile =
                 org.apache.commons.net.ftp.FTPFile().apply {

@@ -32,6 +32,13 @@ data class FtpsTarget(
 }
 data class FtpsEntry(val name: String, val isDirectory: Boolean, val size: Long)
 
+/** An explicitly queried MLST identity, never inferred from a LIST preview. */
+data class FtpsFileObservation(
+    val name: String, val size: Long, val modifiedMillis: Long
+) {
+    val revision: String get() = "$size:$modifiedMillis"
+}
+
 /**
  * UI-only directory preview. An FTP LIST response has implementation-specific
  * parsing and is NEVER evidence for collision-free writes or destructive plans.
@@ -216,6 +223,22 @@ class FtpsSession internal constructor(private val client: FTPSClient) : AutoClo
             }
         return FtpsBrowsePreview(decoded.take(maxEntries), "LIST",
             authoritative = false, truncated = decoded.size > maxEntries)
+    }
+
+    /** Require authoritative file metadata before a future remote SAF copy. */
+    fun statFile(absoluteFile: String): FtpsFileObservation {
+        val path = FtpsPath.checked(absoluteFile)
+        require(path != "/") { "FTPS_FILE_PATH_REQUIRED" }
+        val stat = try {
+            client.mlistFile(path)
+        } catch (error: Exception) {
+            throw FtpsFailureCodes.classify("STAT", client.replyCode, error)
+        } ?: throw FtpsFailureCodes.classify("STAT", client.replyCode, null)
+        val modified = stat.timestamp?.timeInMillis
+        if (!stat.isFile || stat.size < 0L || modified == null)
+            throw IOException("FTPS_FILE_STAT_UNVERIFIED")
+        return FtpsFileObservation(FtpsPath.checkedChild(path.substringAfterLast('/')),
+            stat.size, modified)
     }
 
     fun openRead(absoluteFile: String): InputStream {

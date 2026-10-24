@@ -48,8 +48,14 @@ object FtpsLabSuite {
             check(entries.any { it.name == "synthetic.txt" && !it.isDirectory }) {
                 "Encrypted MLSD listing did not include expected synthetic entry"
             }
+            val observation = session.statFile("/synthetic.txt")
+            check(observation.name == "synthetic.txt" &&
+                observation.size == "FTPS synthetic fixture\n".toByteArray(Charsets.UTF_8).size.toLong())
             val contents = session.openRead("/synthetic.txt").use { input ->
                 input.readBytes()
+            }
+            check(session.statFile("/synthetic.txt").revision == observation.revision) {
+                "Remote file metadata changed during controlled read"
             }
             check(contents.contentEquals("FTPS synthetic fixture\n".toByteArray(Charsets.UTF_8))) {
                 "Authenticated RETR or final 226 completion failed content verification"
