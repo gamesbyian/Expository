@@ -83,8 +83,8 @@ jobs:
           if len(body) > 100_000:
               raise RuntimeError("S60_CONFIG_SIZE_LIMIT")
           source = body.decode("utf-8")
-          host = re.findall(r"^\\s*FTP_HOST:\\s*([a-zA-Z0-9.-]+)\\s*$", source, flags=re.M)
-          account = re.findall(r"^\\s*FTP_USER:\\s*([a-zA-Z0-9._-]+)\\s*$", source, flags=re.M)
+          host = re.findall(r"^\s*FTP_HOST:\s*([a-zA-Z0-9.-]+)\s*$", source, flags=re.M)
+          account = re.findall(r"^\s*FTP_USER:\s*([a-zA-Z0-9._-]+)\s*$", source, flags=re.M)
           if len(host) != 1 or len(account) != 1 or not host[0].endswith(".seedhost.eu"):
               raise RuntimeError("S60_CONFIG_REFERENCE_INVALID")
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as handle:
