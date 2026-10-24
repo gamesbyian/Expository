@@ -9,6 +9,8 @@ Expository has one routine PR validation check: Node's built-in test runner and 
 
 One change should receive the cheapest decisive tests. View significant visual diffs directly. Do not invent pass/fail art thresholds from fixture PNG hashes; use hashes for provenance and visual regression assistance. CI cannot approve visual style by itself. Missing/queued/skipped evidence is **not** a pass. On failure, read first failed step and exact source SHA before retrying.
 
+An additional opt-in **Expository Pages Surface Audit** checks the public URL against the exact local `index.html` SHA-256 and probes known public development paths with HEAD requests. Publicly served source/docs are not private secrets merely because they are also hosted by Pages. The audit is informational about path exposure but fails on unreachable or byte-mismatched app HTML; it does not publish, reconfigure Pages, or use credentials.
+
 Pages deploys root `index.html` from public main. The former private publisher's `.expository-managed` marker must remain absent; the quick PR check prevents accidentally re-enabling stale overwrite. No CI token injection or private source sync. Public fixture screenshots may exist in 7-day artifacts but not silently in the live site.
 
 ## Private GitHub API reliability regression

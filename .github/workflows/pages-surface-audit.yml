@@ -1,0 +1,17 @@
+name: Expository Pages Surface Audit
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    name: Check live Pages source and public paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Compare live Pages index and document public paths
+        run: node scripts/pages-audit.cjs

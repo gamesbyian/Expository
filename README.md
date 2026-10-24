@@ -44,6 +44,8 @@ This public repository is now the **canonical application and development source
 
 The original `.expository-managed` marker has been removed deliberately: it prevents the archived guarded publisher in the old private source from overwriting current public development. `.nojekyll` disables Jekyll transformations.
 
+For a byte-level release check, run the manual **Expository Pages Surface Audit** Action, or run `node scripts/pages-audit.cjs` with network access. It compares the deployed `index.html` with this checkout and reports whether a few already-public development paths are also served through Pages. The check does not change settings, download private content, or submit credentials. A public repository does not become private just because its development files are omitted from Pages.
+
 For development work, start at [AGENTS.md](AGENTS.md) and [the live work queue](docs/WORK-QUEUE.md). For screenshot acceptance and a standalone offline atlas, see [visual review](review/README.md) and the manual **Expository Visual Review** Action. The [weighted roadmap](FEATURE-ROADMAP.md) is the strategic feature list; it is not evidence that every item is already implemented.
 
 ## Development and verification
