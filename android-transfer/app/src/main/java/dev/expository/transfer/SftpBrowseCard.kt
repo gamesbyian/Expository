@@ -77,6 +77,7 @@ fun SftpBrowseCard() {
     var page by remember { mutableStateOf<SftpBrowsePage?>(null) }
     var pendingFile by remember { mutableStateOf<String?>(null) }
     var pendingMove by remember { mutableStateOf<String?>(null) }
+    var showRenamePreview by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Enter a known SHA-256 SSH host-key fingerprint. Unknown keys are never trusted automatically.") }
     var busy by remember { mutableStateOf(false) }
 
@@ -186,6 +187,7 @@ fun SftpBrowseCard() {
                     folder = next
                     page = it
                     pendingFile = null
+                    showRenamePreview = false
                     status = if (it.truncated) "Showing the first 200 entries. More exist; full pagination is pending."
                              else "Remote listing received; choose a file to save."
                 }.onFailure {
@@ -265,6 +267,7 @@ fun SftpBrowseCard() {
                         page = null
                         pendingFile = null
                         pendingMove = null
+                        showRenamePreview = false
                         status = "Disconnected. Remote session cleared."
                     }) { Text("Disconnect") }
                     Button(enabled = !busy, onClick = { browseTo(folder) }) { Text("Refresh") }
@@ -377,6 +380,14 @@ fun SftpBrowseCard() {
                     val parent = folder.substringBeforeLast('/', "").ifBlank { "/" }
                     browseTo(parent)
                 }) { Text("Parent folder") }
+                Button(
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    enabled = !busy && page?.truncated == false && page?.entries?.isNotEmpty() == true,
+                    onClick = { showRenamePreview = !showRenamePreview }
+                ) { Text(if (showRenamePreview) "Hide rename preview" else "Bulk rename preview…") }
+                if (showRenamePreview) page?.let { current ->
+                    RemoteRenamePreviewCard(sessionId, folder, current, !busy)
+                }
                 val entries = page?.entries.orEmpty()
                 LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
