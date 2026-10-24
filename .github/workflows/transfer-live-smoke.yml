@@ -1,7 +1,9 @@
 name: Expository Transfer manual external smoke
-# Deliberately no PR/push/schedule trigger: public demo servers must not
-# become a CI dependency and owner credentials must never reach fork PRs.
+# Maintainer-only exact PR comment commands run trusted main code, never PR-head
+# code. No automatic push, PR, or scheduled external test traffic.
 on:
+  issue_comment:
+    types: [created]
   workflow_dispatch:
     inputs:
       profile:
@@ -27,14 +29,37 @@ permissions:
 
 jobs:
   public-smoke:
-    if: ${{ !startsWith(inputs.profile, 'owner-') }}
+    if: >-
+      (github.event_name == 'workflow_dispatch' && !startsWith(inputs.profile, 'owner-')) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       github.event.comment.user.login == 'gamesbyian' &&
+       (github.event.comment.body == '/transfer-smoke rebex-explicit' ||
+        github.event.comment.body == '/transfer-smoke rebex-implicit' ||
+        github.event.comment.body == '/transfer-smoke wing-implicit'))
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
-      EXPOSITORY_SMOKE_TARGET: ${{ inputs.profile }}
+      EXPOSITORY_SMOKE_REQUEST: ${{ github.event_name == 'issue_comment' && github.event.comment.body || inputs.profile }}
       EXPOSITORY_SMOKE_SFTP_PIN: ${{ inputs.sftp_pin }}
     steps:
+      - name: Allowlist profile before running any external command
+        shell: bash
+        run: |
+          case "$EXPOSITORY_SMOKE_REQUEST" in
+            rebex-explicit|'/transfer-smoke rebex-explicit') target=rebex-explicit ;;
+            rebex-implicit|'/transfer-smoke rebex-implicit') target=rebex-implicit ;;
+            wing-implicit|'/transfer-smoke wing-implicit') target=wing-implicit ;;
+            rebex-sftp) target=rebex-sftp ;;
+            wing-sftp) target=wing-sftp ;;
+            *) echo "Unsupported public profile"; exit 2 ;;
+          esac
+          printf 'EXPOSITORY_SMOKE_TARGET=%s\n' "$target" >> "$GITHUB_ENV"
+      # issue_comment workflows always execute the reviewed default branch, never
+      # an unreviewed pull request head; explicit ref avoids event ambiguity.
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -58,16 +83,32 @@ jobs:
           esac
 
   owner-smoke:
-    if: ${{ startsWith(inputs.profile, 'owner-') }}
+    if: >-
+      (github.event_name == 'workflow_dispatch' && startsWith(inputs.profile, 'owner-')) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       github.event.comment.user.login == 'gamesbyian' &&
+       (github.event.comment.body == '/transfer-smoke owner-explicit' ||
+        github.event.comment.body == '/transfer-smoke owner-implicit'))
     runs-on: ubuntu-latest
     timeout-minutes: 12
     # Password stays a GitHub Actions secret. The owner host/account are
     # recovered from an IMMUTABLE public S60 commit with strict parsing.
     env:
-      EXPOSITORY_SMOKE_TARGET: ${{ inputs.profile }}
+      EXPOSITORY_SMOKE_REQUEST: ${{ github.event_name == 'issue_comment' && github.event.comment.body || inputs.profile }}
       EXPOSITORY_SMOKE_PASSWORD: ${{ secrets.FTP_PASSWORD }}
       EXPOSITORY_SMOKE_SFTP_PIN: ${{ inputs.sftp_pin }}
     steps:
+      - name: Allowlist private target before accessing credentials
+        shell: bash
+        run: |
+          case "$EXPOSITORY_SMOKE_REQUEST" in
+            owner-explicit|'/transfer-smoke owner-explicit') target=owner-explicit ;;
+            owner-implicit|'/transfer-smoke owner-implicit') target=owner-implicit ;;
+            owner-sftp) target=owner-sftp ;;
+            *) echo "Unsupported owner profile"; exit 2 ;;
+          esac
+          printf 'EXPOSITORY_SMOKE_TARGET=%s\n' "$target" >> "$GITHUB_ENV"
       - name: Recover publicly documented owner host/account from pinned S60
         shell: bash
         run: |
@@ -104,6 +145,8 @@ jobs:
             exit 2
           fi
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
