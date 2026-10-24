@@ -1,5 +1,6 @@
 package dev.expository.transfer.sftp
 
+import dev.expository.transfer.planner.DirectoryCreatePlan
 import org.apache.sshd.client.SshClient
 import org.apache.sshd.client.keyverifier.ServerKeyVerifier
 import org.apache.sshd.client.session.ClientSession
@@ -139,6 +140,21 @@ class SftpSession internal constructor(
         return sftp.write(path, SftpClient.OpenMode.Write,
             SftpClient.OpenMode.Create, SftpClient.OpenMode.Exclusive)
     }
+
+    /**
+     * Direct server-side MKDIR. The caller must revalidate the exact immutable
+     * directory-create plan and commit its attempt journal BEFORE this call.
+     * Server acknowledgement alone is not proof that a directory was created.
+     */
+    fun createPlannedDirectory(plan: DirectoryCreatePlan) {
+        require(plan.executable) { "BLOCKED_DIRECTORY_PLAN" }
+        val path = SftpPath.requireAbsolute(plan.absoluteTarget)
+        require(path != "/")
+        sftp.mkdir(path)
+    }
+
+    fun observeDirectory(absolutePath: String): Boolean =
+        sftp.stat(SftpPath.requireAbsolute(absolutePath)).isDirectory
 
     fun statFile(absoluteFile: String): SftpRemoteEntry {
         val path = SftpPath.requireAbsolute(absoluteFile)
