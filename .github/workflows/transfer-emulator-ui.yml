@@ -37,7 +37,9 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Real Android UI test on a disposable emulator (no network)
-        uses: reactivecircus/android-emulator-runner@v2
+        # Immutable commit behind the annotated upstream v2 release tag;
+        # no mutable tag while executing an Android VM on the runner.
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
           api-level: 35
           arch: x86_64
