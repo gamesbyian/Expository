@@ -142,8 +142,7 @@ object OperationPlanner {
         val blockers = mutableListOf<String>()
         if (sources.isEmpty()) blockers += "EMPTY_SELECTION"
         if (sources.map { it.key }.toSet().size != sources.size) blockers += "DUPLICATE_SOURCE_ID"
-        val listing = request.destinationListing?.copy(
-            siblings = request.destinationListing.siblings.toList())
+        val listing = request.destinationListing?.let { it.copy(siblings = it.siblings.toList()) }
         if (listing == null || !listing.complete || listing.revision.isBlank())
             blockers += "DESTINATION_LISTING_NOT_VERIFIED"
         else {
