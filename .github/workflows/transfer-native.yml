@@ -38,7 +38,7 @@ jobs:
         run: gradle :core:planner:scenarios :core:planner:directoryScenarios :core:planner:moveScenarios :core:engine:scenarios :core:engine:journalScenarios :core:engine:journaledCopyScenarios :adapter:ftps:scenarios :adapter:sftp:scenarios :testing:fake-endpoints:scenarios --no-daemon
   android-debug:
     # Android builds remain opt-in and non-blocking; PRs use cheap JVM evidence.
-    if: (github.event_name == 'workflow_dispatch' && inputs.build_apk) || (github.event_name == 'pull_request' && github.event.pull_request.number == 47)
+    if: (github.event_name == 'workflow_dispatch' && inputs.build_apk)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -127,7 +127,7 @@ jobs:
 
   sftp-lab:
     # Ephemeral pinned-key protocol lab, opt-in only after bootstrap proof.
-    if: (github.event_name == 'workflow_dispatch' && inputs.sftp_lab) || (github.event_name == 'pull_request' && github.event.pull_request.number == 47)
+    if: (github.event_name == 'workflow_dispatch' && inputs.sftp_lab)
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
