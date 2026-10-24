@@ -1,0 +1,102 @@
+name: Expository Transfer manual external smoke
+# Deliberately no PR/push/schedule trigger: public demo servers must not
+# become a CI dependency and owner credentials must never reach fork PRs.
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Read-only target and secure protocol (never plaintext FTP)"
+        required: true
+        type: choice
+        default: rebex-explicit
+        options:
+          - rebex-explicit
+          - rebex-implicit
+          - wing-implicit
+          - rebex-sftp
+          - wing-sftp
+          - owner-explicit
+          - owner-implicit
+          - owner-sftp
+      sftp_pin:
+        description: "For SFTP only: independently verified exact SHA256: host-key fingerprint"
+        required: false
+        type: string
+permissions:
+  contents: read
+
+jobs:
+  public-smoke:
+    if: ${{ !startsWith(inputs.profile, 'owner-') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      EXPOSITORY_SMOKE_TARGET: ${{ inputs.profile }}
+      EXPOSITORY_SMOKE_SFTP_PIN: ${{ inputs.sftp_pin }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Read-only real protocol check (bounded and no raw server logs)
+        working-directory: android-transfer
+        shell: bash
+        run: |
+          case "$EXPOSITORY_SMOKE_TARGET" in
+            rebex-explicit|rebex-implicit|wing-implicit)
+              gradle :adapter:ftps:externalSmoke --no-daemon --quiet ;;
+            rebex-sftp|wing-sftp)
+              test -n "$EXPOSITORY_SMOKE_SFTP_PIN" || {
+                echo "SFTP host-key pin required from an independently trusted source"; exit 2;
+              }
+              gradle :adapter:sftp:externalSmoke --no-daemon --quiet ;;
+            *) echo "Unsupported read-only public profile"; exit 2 ;;
+          esac
+
+  owner-smoke:
+    if: ${{ startsWith(inputs.profile, 'owner-') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    # Repository variables TRANSFER_TEST_HOST / TRANSFER_TEST_USER and repository
+    # secret FTP_PASSWORD must already exist. No plaintext FTP fallback.
+    env:
+      EXPOSITORY_SMOKE_TARGET: ${{ inputs.profile }}
+      EXPOSITORY_SMOKE_HOST: ${{ vars.TRANSFER_TEST_HOST }}
+      EXPOSITORY_SMOKE_USER: ${{ vars.TRANSFER_TEST_USER }}
+      EXPOSITORY_SMOKE_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+      EXPOSITORY_SMOKE_SFTP_PIN: ${{ inputs.sftp_pin }}
+    steps:
+      - name: Fail closed on missing private configuration
+        shell: bash
+        run: |
+          if test -z "$EXPOSITORY_SMOKE_HOST" || test -z "$EXPOSITORY_SMOKE_USER" || test -z "$EXPOSITORY_SMOKE_PASSWORD"; then
+            echo "Owner target not configured (host/user vars and FTP_PASSWORD secret required)"
+            exit 2
+          fi
+          if test "$EXPOSITORY_SMOKE_TARGET" = owner-sftp && test -z "$EXPOSITORY_SMOKE_SFTP_PIN"; then
+            echo "Independently verified SSH fingerprint required"
+            exit 2
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Owner authorized root listing only (no remote content or mutation)
+        working-directory: android-transfer
+        shell: bash
+        run: |
+          case "$EXPOSITORY_SMOKE_TARGET" in
+            owner-explicit|owner-implicit)
+              gradle :adapter:ftps:externalSmoke --no-daemon --quiet ;;
+            owner-sftp)
+              gradle :adapter:sftp:externalSmoke --no-daemon --quiet ;;
+            *) echo "Unsupported owner profile"; exit 2 ;;
+          esac
