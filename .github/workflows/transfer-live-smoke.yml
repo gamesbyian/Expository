@@ -13,6 +13,7 @@ on:
         default: rebex-explicit
         options:
           - rebex-explicit
+          - rebex-tls12
           - rebex-implicit
           - wing-implicit
           - rebex-sftp
@@ -36,6 +37,7 @@ jobs:
        github.event.comment.user.login == 'gamesbyian' &&
        (github.event.comment.body == '/transfer-smoke rebex-explicit' ||
         github.event.comment.body == '/transfer-smoke rebex-implicit' ||
+        github.event.comment.body == '/transfer-smoke rebex-tls12' ||
         github.event.comment.body == '/transfer-smoke wing-implicit'))
     runs-on: ubuntu-latest
     timeout-minutes: 12
@@ -48,6 +50,7 @@ jobs:
         run: |
           case "$EXPOSITORY_SMOKE_REQUEST" in
             rebex-explicit|'/transfer-smoke rebex-explicit') target=rebex-explicit ;;
+            rebex-tls12|'/transfer-smoke rebex-tls12') target=rebex-tls12 ;;
             rebex-implicit|'/transfer-smoke rebex-implicit') target=rebex-implicit ;;
             wing-implicit|'/transfer-smoke wing-implicit') target=wing-implicit ;;
             rebex-sftp) target=rebex-sftp ;;
@@ -72,7 +75,7 @@ jobs:
         shell: bash
         run: |
           case "$EXPOSITORY_SMOKE_TARGET" in
-            rebex-explicit|rebex-implicit|wing-implicit)
+            rebex-explicit|rebex-tls12|rebex-implicit|wing-implicit)
               gradle :adapter:ftps:externalSmoke --no-daemon --quiet ;;
             rebex-sftp|wing-sftp)
               test -n "$EXPOSITORY_SMOKE_SFTP_PIN" || {
