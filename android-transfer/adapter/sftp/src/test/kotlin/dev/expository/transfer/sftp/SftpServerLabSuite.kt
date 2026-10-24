@@ -45,6 +45,12 @@ object SftpServerLabSuite {
                 "synthetic", "synthetic-password".toCharArray())
             trusted.use { session ->
                 check("synthetic.txt" in session.list("/"))
+                val browse = session.browse("/")
+                check(!browse.truncated)
+                check(browse.entries.any { it.name == "synthetic.txt" && !it.directory })
+                val observed = session.statFile("/synthetic.txt")
+                check(observed.size == payload.toByteArray(StandardCharsets.UTF_8).size.toLong())
+                check(runCatching { session.statFile("/") }.isFailure)
                 val received = session.openRead("/synthetic.txt").use { it.readBytes() }
                 check(String(received, StandardCharsets.UTF_8) == payload)
             }
