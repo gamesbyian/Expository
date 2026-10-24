@@ -2,6 +2,7 @@ package dev.expository.transfer
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -34,7 +35,7 @@ import java.security.MessageDigest
 fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
     page: SftpBrowsePage, enabled: Boolean
 ) {
-    var selected by remember(folder) { mutableStateOf<Set<String>>(emptySet()) }
+    var selected by remember(folder, opaqueSessionId) { mutableStateOf<Set<String>>(emptySet()) }
     var mode by remember(folder) { mutableStateOf("Replace") }
     var find by remember(folder) { mutableStateOf("") }
     var value by remember(folder) { mutableStateOf("") }
@@ -121,13 +122,14 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
                     }
                 }
                 Text("Operation", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp),
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.fillMaxWidth()) {
                     listOf("Replace", "Prefix", "Suffix", "Number").forEach { option ->
-                        Button(enabled = enabled, modifier = Modifier.weight(1f),
+                        Button(enabled = enabled, modifier = Modifier.heightIn(min = 48.dp),
                             onClick = { mode = option }) {
                             Text(if (mode == option) "•" + option else option,
-                                style = MaterialTheme.typography.labelSmall)
+                                style = MaterialTheme.typography.labelMedium)
                         }
                     }
                 }
