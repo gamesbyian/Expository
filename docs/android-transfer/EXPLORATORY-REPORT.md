@@ -4,6 +4,12 @@
 
 **Mandate.** Research Android FTP/FTPS/SFTP clients and related file-transfer tools; identify what users value, recurring frustrations, engineering constraints, and mobile UX principles. The companion [product proposal](PRODUCT-PROPOSAL.md) translates findings into requirements, delivery stages and acceptance.
 
+## Critical-review update (23 October 2026)
+
+The initial market study below is desk research, not app-device benchmarking. The [adversarial review](CRITICAL-REVIEW.md) now provides the release-blocking corrections and the [implementation plan](HARDENED-IMPLEMENTATION-PLAN.md) specifies validation. Key evidence: [Android DocumentsProvider capability flags](https://developer.android.com/guide/topics/providers/create-document-provider), [Drive mobile Picker's select/open scope](https://developers.google.com/workspace/drive/picker/guides/desktop-mobile-picker), [Drive OAuth scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth), [RFC 959 remote rename limits](https://www.rfc-editor.org/rfc/rfc959), [Total Commander Android multi-rename](https://www.ghisler.com/android/help.htm).
+
+**No universal Drive Save-as guarantee** can be inferred from Android SAF. The P0 Drive destination must have a capability-tested API fallback; Share-to-Drive is not a verified copy. **No atomic-rename assumption** can be inferred from FTP RNFR/RNTO. The strongest product differentiation is now defined more rigorously as an inspectable/verified operation plan across all three pane pairings, intuitive bulk rename, native picker handoff, and Drive destination.
+
 ## 1. Executive findings
 
 1. **Winning from breadth alone is implausible.** Solid Explorer, MiXplorer, X-plore, Total Commander and Owlfiles already span dozens of protocols, archives, clouds and local operations. Expository should instead differentiate on *two moves*: extremely straightforward save/upload using Android system UI, and an optional excellent local/remote transfer workspace.

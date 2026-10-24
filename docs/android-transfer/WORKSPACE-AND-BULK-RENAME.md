@@ -2,6 +2,8 @@
 
 **Supplement to [exploratory report](EXPLORATORY-REPORT.md) and [product proposal](PRODUCT-PROPOSAL.md).** 23 October 2026. Desk research and proposed design, **not shipped**, benchmarked or tested on an Android handset.
 
+**Safety authority:** [critical review](CRITICAL-REVIEW.md) and [hardened plan](HARDENED-IMPLEMENTATION-PLAN.md) take precedence wherever older shorthand (e.g. "atomic", "verified", "same-server") is too broad. In particular, FTP rename isn't a guarantee of atomicity, only explicit **Move** may use native rename, cyclic batch updates must journal each staging transition, and the Google Drive P0 destination needs an independently verified capability or narrow-scope API adapter. The 10,000-row rename preview is a performance acceptance gate, not an assertion that it has been implemented.
+
 ## 1. Competitive signal, including the complaints
 
 | Reference | Established behavior | Relevant friction / evidence strength | Requirement to borrow or avoid |

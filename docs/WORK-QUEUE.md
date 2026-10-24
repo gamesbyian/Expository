@@ -14,6 +14,19 @@
 | E08 | In progress | Read-only manual Pages source-parity and published-path audit added; app-only publish-path migration requires verified Pages configuration and rollback plan; optional PWA only after privacy review |
 | E09 | Complete (#15; synthetic reviewed) | Size treemap from already fetched Git blob index, bounded groups with keyboard/touch list, folder/file drill-down, truncation disclosure; mobile visual atlas and actual Pixel acceptance separate |
 
+## Separate Expository Transfer exploration (not an implemented Android app)
+
+| Lane | Status | Decision or next executable gate |
+|---|---|---|
+| T00 | Critical review written, pending review/merge | Recover prior research, reconcile native Android FTP/FTPS/SFTP + all three pairings + P0 bulk rename + Google Drive; apply [release blockers](android-transfer/CRITICAL-REVIEW.md) |
+| T01 | Planned | G0: separate Android source and agent/CI/privacy contract; avoid putting writer code/credentials into public web Pages explorer |
+| T02 | Planned | G1: pure Kotlin planner, capability identities and collision graph + fault-injection fixtures |
+| T03 | Planned | G2–G5: accessible Compose fake-endpoint flow, native SAF, vetted secure protocols and durable journal |
+| T04 | Planned | G6–G8: all pane pairings, first-class compact bulk renamer, explicit Drive account/parent selection and verified upload/Docs semantics |
+| T05 | Planned | G9: signed sideload APK and independently witnessed device/protocol/Drive/a11y acceptance |
+
+Evidence truth: the Android client **has not been built, tested or signed**. Do not use web-explorer acceptance to certify a native transfer application. See [hardened plan](android-transfer/HARDENED-IMPLEMENTATION-PLAN.md).
+
 **Exclusions:** no automatic personal-data collection, server-hosted credentials, cross-project data mining, CI screenshot floods or unverified AI narration. Any extra work follows the same read-only and evidence contract.
 
 **Closure:** mark a lane complete only with merged PR, exact tests, evidence class and remaining known limitations. If a parallel agent lands the feature first, validate and retire duplicate work instead.
