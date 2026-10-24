@@ -10,7 +10,7 @@ import java.util.Locale
  * All authority identifiers are opaque. Names only enter a local digest, never CI logs.
  */
 enum class LocationKind { LOCAL_SAF, REMOTE_FTP, REMOTE_FTPS, REMOTE_SFTP, DRIVE_SAF, DRIVE_API }
-enum class Capability { READ, WRITE, RENAME, TEMP_RENAME, SERVER_COPY, PROVIDER_MOVE, DELETE_SOURCE }
+enum class Capability { READ, WRITE, CREATE_CHILD, RENAME, TEMP_RENAME, SERVER_COPY, PROVIDER_MOVE, DELETE_SOURCE }
 enum class Support { SUPPORTED, UNSUPPORTED, UNKNOWN }
 enum class ItemKind { FILE, DIRECTORY }
 enum class Operation { COPY, MOVE }
