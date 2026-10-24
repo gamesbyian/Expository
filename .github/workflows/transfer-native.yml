@@ -1,0 +1,60 @@
+name: Expository Transfer native validation
+on:
+  pull_request:
+    paths:
+      - "android-transfer/**"
+      - ".github/workflows/transfer-native.yml"
+  workflow_dispatch:
+    inputs:
+      build_apk:
+        description: "Opt-in SDK download, unsigned release / signed debug APK build"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  planner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Offline deterministic G1 synthetic scenarios
+        working-directory: android-transfer
+        run: gradle :core:planner:scenarios :testing:fake-endpoints:scenarios --no-daemon
+  android-debug:
+    # SDK/APK build is opt-in and does not consume runners on every PR update.
+    if: github.event_name == 'workflow_dispatch' && inputs.build_apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+      - name: Install scoped SDK platform
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Build developer-only signed debug APK
+        working-directory: android-transfer
+        run: gradle -PwithAndroid=true :app:assembleDebug --no-daemon
+      - name: Record artifact SHA256 (not a release signature)
+        working-directory: android-transfer
+        run: sha256sum app/build/outputs/apk/debug/app-debug.apk > app/build/outputs/apk/debug/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: expository-transfer-developer-debug-apk
+          path: |
+            android-transfer/app/build/outputs/apk/debug/app-debug.apk
+            android-transfer/app/build/outputs/apk/debug/SHA256SUMS.txt
+          retention-days: 5

@@ -1,6 +1,6 @@
 # Expository Transfer: acceptance, evidence and release ledger
 
-**Current stage:** design-only; **no native Android code, APK or device validation**. This ledger is the completion authority for Android Transfer, separate from the web Expository queue. Review [critical findings](CRITICAL-REVIEW.md), [technical plan](HARDENED-IMPLEMENTATION-PLAN.md), and [original acceptance A01–A32](PRODUCT-PROPOSAL.md).
+**Current stage:** G0/G1 engineering started on [draft PR #32](https://github.com/gamesbyian/Expository/pull/32); a Kotlin/Compose native shell and pure JVM planner exist, and a **debug-only APK compile with SHA-256 provenance is verified**, but **no physical device installation or live protocol/SAF/Drive validation**. This ledger intentionally distinguishes in-progress code from acceptance. This ledger is the completion authority for Android Transfer, separate from the web Expository queue. Review [critical findings](CRITICAL-REVIEW.md), [technical plan](HARDENED-IMPLEMENTATION-PLAN.md), and [original acceptance A01–A32](PRODUCT-PROPOSAL.md).
 
 ## Evidence classes (do not confuse them)
 
@@ -19,8 +19,8 @@ A **green browser/PWA test for the read-only Expository site does not count** fo
 
 | Gate | State | Evidence required |
 |---|---|---|
-| G0 · separate Android source, guide, lean CI | NOT STARTED | Native repo, no credentials, signed debug-build reproducibility plan |
-| G1 · pure operation plan/rename graph | NOT STARTED | Property/fuzz collision cases; plan-version identity and staged cycles |
+| G0 · separate Android source, guide, lean CI | IN PROGRESS · draft PR #32; [run #40071709212](https://github.com/gamesbyian/Expository/actions/runs/40071709212) signed debug build witnessed, separate-repo/physical proof outstanding | Native repo, no credentials, signed debug-build reproducibility plan |
+| G1 · pure operation plan/rename graph | IN PROGRESS · E1 24 planner scenarios + synthetic fixture suite green in [run #40072228508](https://github.com/gamesbyian/Expository/actions/runs/40072228508); G1 fuzz/fault proof pending | Property/fuzz collision cases; plan-version identity and staged cycles |
 | G2 · fake device and Compose journeys | NOT STARTED | Owned emulator recordings/screens, a11y labels, native picker contracts |
 | G3 · trusted FTP/FTPS/SFTP protocols | NOT STARTED | real test server fixtures, host-key/cert rejection and retry logs |
 | G4 · scoped Android SAF file/folder I/O | NOT STARTED | permission revocation, provider URI remap, nonseekable streams |
@@ -31,6 +31,14 @@ A **green browser/PWA test for the read-only Expository site does not count** fo
 | G9 · independently reviewed Android beta | NOT STARTED | signed APK, A01–A32/D01–D20/T01–T12, 200% text, TalkBack |
 
 Do not mark a gate complete unless the precise PR/commit, test run IDs, actual build/device identity (no serials/PII), screenshot/protocol artifacts and known limits are attached. The integration owner must verify the evidence exists.
+
+## Native bootstrap evidence, 24 October 2026
+
+- Draft source: [PR #32](https://github.com/gamesbyian/Expository/pull/32), Android debug-build source SHA `1329362c788eea9c028cebde95ea67f7d1f6e7a2`.
+- **Built, signed debug APK only:** [run #40071709212](https://github.com/gamesbyian/Expository/actions/runs/40071709212), job `android-debug`, artifact `expository-transfer-developer-debug-apk` (artifact #12552050075); `app-debug.apk` SHA-256 `d6301095b09f7b0f4a050ccb62e8e29c255883572db889fb56e1486a81e8528d`. SHA was independently recalculated against downloaded ZIP bytes.
+- **Pure JVM tests:** [run #40072228508](https://github.com/gamesbyian/Expository/actions/runs/40072228508) at source SHA `099e09f9054ca5a22c57a6f55b0bee4ec0e30cda`: **24 planner scenarios** and synthetic local/remote/Drive fixture cases passed, including 40-episode numbering, 500 collision cases, 10k changed-item preview, NFC descendant and snapshot/drift guards. Existing Expository checks also passed [run #40072228482](https://github.com/gamesbyian/Expository/actions/runs/40072228482).
+- **Evidence ceiling:** E1 for planners, plus a reproducible *compilation* artifact. E2 emulator UX, E3 protocol lab, E4 real Drive/device, E5 independent beta are **not obtained**. Debug keystore is ephemeral GitHub runner state, unsuitable for production upgrade identity. Existing Android application remains synthetic and cannot transfer real user files.
+- **Unresolved G0:** dedicated Android repository, independent privacy/security review, target-SDK/API-37 LAN entitlement checks, and installed-device exercise. This gate is deliberately **not marked complete**.
 
 ## Release-stopper sampling matrix
 
@@ -65,7 +73,7 @@ Do not mark a gate complete unless the precise PR/commit, test run IDs, actual b
 - [#27 · G8 real Drive/Docs provider and OAuth proof](https://github.com/gamesbyian/Expository/issues/27)
 - [#28 · G2/G6 Compose picker-first adaptive workspace](https://github.com/gamesbyian/Expository/issues/28)
 
-These issues are executable instructions, **not evidence that engineering has started**. A separate native repository should own implementation after G0, while this Expository public repo retains product/research records and the read-only web product.
+Implementation began in draft PR #32. The issue descriptions remain acceptance contracts, **not proof that either G0 or G1 has passed**. A separate native repository remains the target: the temporary self-contained `android-transfer/` Gradle root can be relocated without importing writer functionality into the read-only web application.
 
 ## Immediate next agent tasks (ordered)
 
