@@ -10,8 +10,14 @@ import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.time.Duration
 
-/** Explicit FTPS only. No plaintext/implicit fallback, data sockets require PROT P. */
-data class FtpsTarget(val host: String, val port: Int = 21) {
+/** Both modes negotiate TLS; plaintext FTP is never used as a fallback. */
+enum class FtpsMode { EXPLICIT_TLS, IMPLICIT_TLS }
+
+data class FtpsTarget(
+    val host: String,
+    val port: Int = 21,
+    val mode: FtpsMode = FtpsMode.EXPLICIT_TLS
+) {
     init {
         require(host.isNotBlank() && host.length <= 253 &&
             host.none { it.isWhitespace() || it == '/' || it == '\\' ||
@@ -45,14 +51,10 @@ object FtpsPath {
     }
 }
 
-/**
- * A single-use control connection with verified control TLS, EPSV/passive data
- * sockets, binary mode and TLS-protected data channel.
- *
- * No acceptance claim until controlled FTPS integration + Android lab runs.
- */
+/** Encrypted FTPS control/data adapter with explicit or implicit TLS. */
 object SecureFtps {
-    fun configuredClient(): FTPSClient = FTPSClient(false).apply {
+    fun configuredClient(mode: FtpsMode = FtpsMode.EXPLICIT_TLS): FTPSClient =
+        FTPSClient(mode == FtpsMode.IMPLICIT_TLS).apply {
         // Commons Net's default certificate manager validates dates but NOT CA
         // trust. Use the platform trust anchors (or explicit user-trusted store).
         // Hostname matching alone cannot authenticate an untrusted certificate.
@@ -74,12 +76,13 @@ object SecureFtps {
         require(password.isNotEmpty() && password.none { it == '\r' || it == '\n' || it == '\u0000' }) {
             "INVALID_SECRET"
         }
-        val client = configuredClient()
+        val client = configuredClient(target.mode)
         try {
             client.connect(target.host, target.port)
             client.soTimeout = 30_000
             if (!FTPReply.isPositiveCompletion(client.replyCode)) throw IOException("FTPS_WELCOME_REJECTED")
-            // Control TLS is negotiated by FTPSClient(false) before USER/PASS.
+            // Explicit mode upgrades via AUTH TLS; implicit mode starts with TLS.
+            // Both authenticate only after control TLS is established.
             if (!client.login(username, String(password))) throw IOException("FTPS_AUTH_REJECTED")
             client.execPBSZ(0L)
             client.execPROT("P") // mandatory encrypted data transfers
