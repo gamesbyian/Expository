@@ -18,11 +18,11 @@
 
 | Lane | Status | Decision or next executable gate |
 |---|---|---|
-| T00 | Critical review written, pending review/merge | Recover prior research, reconcile native Android FTP/FTPS/SFTP + all three pairings + P0 bulk rename + Google Drive; apply [release blockers](android-transfer/CRITICAL-REVIEW.md) |
-| T01 | Planned | G0: separate Android source and agent/CI/privacy contract; avoid putting writer code/credentials into public web Pages explorer |
-| T02 | Planned | G1: pure Kotlin planner, capability identities and collision graph + fault-injection fixtures |
-| T03 | Planned | G2–G5: accessible Compose fake-endpoint flow, native SAF, vetted secure protocols and durable journal |
-| T04 | Planned | G6–G8: all pane pairings, first-class compact bulk renamer, explicit Drive account/parent selection and verified upload/Docs semantics |
+| T00 | Complete (#24) | Critical review, hardened G0–G9 plan, Drive API fallback decision, release ledger; conflicting old #23 retired. No app exists yet. |
+| T01 | Open [#25](https://github.com/gamesbyian/Expository/issues/25) | G0: separate Android source, agent/CI/privacy contract, reproducible signed debug APK foundation; no writer in web Pages explorer |
+| T02 | Open [#26](https://github.com/gamesbyian/Expository/issues/26) | G1: pure Kotlin planner, capability identity, collision graph, staged cycles and journal/fault-injection fixtures |
+| T03 | Open [#28](https://github.com/gamesbyian/Expository/issues/28) | G2/G6: accessible Compose fake-endpoint and any-two-pane UX; G3–G5 protocol/SAF/queue follow G1 interfaces |
+| T04 | Open [#27](https://github.com/gamesbyian/Expository/issues/27) | G8: test Drive provider capability on physical Android, scoped API fallback and original/converted/handoff receipt semantics; renamer G7 in #26/#28 |
 | T05 | Planned | G9: signed sideload APK and independently witnessed device/protocol/Drive/a11y acceptance |
 
 Evidence truth: the Android client **has not been built, tested or signed**. Do not use web-explorer acceptance to certify a native transfer application. See [hardened plan](android-transfer/HARDENED-IMPLEMENTATION-PLAN.md).
