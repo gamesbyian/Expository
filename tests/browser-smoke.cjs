@@ -248,7 +248,7 @@ async function main(){
     assert.equal(await evaluate("document.querySelector('.image-actions button:nth-child(5)').getAttribute('aria-label')"),'Enter image fullscreen','refused browser request restores control state');
    }
   }else{
-   assert.equal(await evaluate("document.querySelector('.image-actions button:nth-child(4)').disabled"),true,'unsupported fullscreen clearly disabled')
+   assert.equal(await evaluate("document.querySelector('.image-actions button:nth-child(5)').disabled"),true,'unsupported fullscreen clearly disabled')
   }
 
 
