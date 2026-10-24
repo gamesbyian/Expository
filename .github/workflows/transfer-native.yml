@@ -7,7 +7,11 @@ on:
   workflow_dispatch:
     inputs:
       build_apk:
-        description: "Opt-in SDK download, unsigned release / signed debug APK build"
+        description: "Opt-in SDK download and signed developer debug APK"
+        type: boolean
+        default: false
+      ftps_lab:
+        description: "Opt-in isolated FTPS TLS server and read proof"
         type: boolean
         default: false
 permissions:
@@ -60,9 +64,8 @@ jobs:
           retention-days: 5
 
   ftps-lab:
-    # Single scoped verification on the owning G3 PR. Restore to manual
-    # after evidence is recorded; don't build disposable servers on every PR.
-    if: github.event_name == 'pull_request' && github.event.pull_request.number == 34
+    # Dedicated verification; do not run disposable servers on routine PRs.
+    if: github.event_name == 'workflow_dispatch' && inputs.ftps_lab
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
