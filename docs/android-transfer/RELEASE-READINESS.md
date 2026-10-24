@@ -53,6 +53,15 @@ Do not mark a gate complete unless the precise PR/commit, test run IDs, actual b
 | Device process killed after successful rename before journal ack | G5/G7 | Uncertain until stat/reconciliation; no blind replay |
 | User uses plain FTP without checking warning | G3 | Security disclosure and explicit opt-in required |
 
+## Live work entrypoints
+
+- [#25 · G0 native source and privacy/CI foundation](https://github.com/gamesbyian/Expository/issues/25)
+- [#26 · G1 deterministic planner and rename graph](https://github.com/gamesbyian/Expository/issues/26)
+- [#27 · G8 real Drive/Docs provider and OAuth proof](https://github.com/gamesbyian/Expository/issues/27)
+- [#28 · G2/G6 Compose picker-first adaptive workspace](https://github.com/gamesbyian/Expository/issues/28)
+
+These issues are executable instructions, **not evidence that engineering has started**. A separate native repository should own implementation after G0, while this Expository public repo retains product/research records and the read-only web product.
+
 ## Immediate next agent tasks (ordered)
 
 1. Establish **separate native app source** and a concise Android-specific `AGENTS.md`, security ownership and CI, with a fake server and fake SAF provider for safe automation.
