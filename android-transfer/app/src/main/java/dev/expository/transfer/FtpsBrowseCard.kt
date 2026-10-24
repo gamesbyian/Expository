@@ -40,6 +40,7 @@ import dev.expository.transfer.ftps.FtpsSession
 import dev.expository.transfer.ftps.FtpsTarget
 import dev.expository.transfer.ftps.FtpsToSafSave
 import dev.expository.transfer.ftps.SecureFtps
+import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
@@ -94,7 +95,9 @@ fun FtpsBrowseCard() {
             scope.launch {
                 val receipt = withContext(Dispatchers.IO) {
                     val active = coroutineContext[Job]
-                    FtpsToSafSave(context.contentResolver).copy(
+                    FtpsToSafSave(context.contentResolver) { digest ->
+                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                    }.copy(
                         live, sessionId, source, destination,
                         continueRequested = { active?.isActive == true }
                     )
