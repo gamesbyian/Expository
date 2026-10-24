@@ -4,7 +4,7 @@
 **Applies to:** [original landscape](EXPLORATORY-REPORT.md), [product proposal](PRODUCT-PROPOSAL.md), [three-way workspace and renamer](WORKSPACE-AND-BULK-RENAME.md), [Drive/Docs integration](GOOGLE-DRIVE-INTEGRATION.md).  
 **Decision owner:** integration / product; implementation gates in [Hardened plan](HARDENED-IMPLEMENTATION-PLAN.md).
 
-## Verdict
+**Follow-up:** [second-pass UX/architecture decisions](SECOND-PASS-DECISIONS.md) and [executable N01–N26 evidence matrix](TEST-AND-EVIDENCE-MATRIX.md) strengthen Android picker cardinality, uncertain outcomes and acceptance. This does not change the NO-GO for beta-readiness.\n\n## Verdict
 
 **Conditional GO for a small, native vertical slice; NO-GO for claiming a beta-ready client.** The research correctly identifies the market gap as transfer clarity, first-class Android file handoff, flexible two-place workspaces and a genuinely good renamer. The existing documentation is not yet a tested protocol/capability model. Some user promises exceed what Android's document providers and remote servers can guarantee. A good mock screen is not acceptance evidence.
 

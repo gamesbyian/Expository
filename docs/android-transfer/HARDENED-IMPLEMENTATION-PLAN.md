@@ -1,7 +1,7 @@
 # Expository Transfer: hardened implementation and verification plan
 
 **Planning baseline:** October 23, 2026. **Stage:** independent critical review accepted for engineering planning; no native APK or protocol implementation exists in this PR.  
-**Read before work:** [Critical review](CRITICAL-REVIEW.md), [Product proposal](PRODUCT-PROPOSAL.md), [Workspace and renamer](WORKSPACE-AND-BULK-RENAME.md), [Google Drive contract](GOOGLE-DRIVE-INTEGRATION.md).  
+**Second-pass decisions and executable proof:** [product hardening](SECOND-PASS-DECISIONS.md) and [N01–N26 test matrix](TEST-AND-EVIDENCE-MATRIX.md). These refine picker cardinality, copy-vs-move proof, Drive handoff claims and renamer acceptance without claiming implementation.\n\n**Read before work:** [Critical review](CRITICAL-REVIEW.md), [Product proposal](PRODUCT-PROPOSAL.md), [Workspace and renamer](WORKSPACE-AND-BULK-RENAME.md), [Google Drive contract](GOOGLE-DRIVE-INTEGRATION.md).  
 **Do not confuse with:** the public Expository GitHub repository explorer. That product is read-only and must remain so.
 
 ## North-star workflows, all release critical
