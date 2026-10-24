@@ -24,13 +24,17 @@ A **green browser/PWA test for the read-only Expository site does not count** fo
 | G2 · fake device and Compose journeys | IN PROGRESS · draft PR #33 adds actual one-file Local SAF→SAF picker/streaming; debug APK compiled in run #40114978482, no device evidence | Owned emulator recordings/screens, a11y labels, native picker contracts |
 | G3 · trusted FTP/FTPS/SFTP protocols | IN PROGRESS · explicit FTPS read/list E3 localhost lab passed [run #40125931787](https://github.com/gamesbyian/Expository/actions/runs/40125931787) with PKIX untrusted-cert rejection, explicit trust and PROT P list/read; SFTP host-key-pinned synthetic live read + wrong-key rejection [run #40117260270](https://github.com/gamesbyian/Expository/actions/runs/40117260270), reconfirmed after clean rebase in [run #40126372217](https://github.com/gamesbyian/Expository/actions/runs/40126372217); still no physical-device or broader protocol matrix evidence | real test server fixtures, host-key/cert rejection and retry logs |
 | G4 · scoped Android SAF file/folder I/O | IN PROGRESS · draft [PR #37](https://github.com/gamesbyian/Expository/pull/37) remote SFTP read→SAF Save As source; debug APK compiled in [run #40127485028](https://github.com/gamesbyian/Expository/actions/runs/40127485028), artifact #12573314373; E2/E4 device proof not obtained | permission revocation, provider URI remap, nonseekable streams |
-| G5 · durable queue/receipt proof | NOT STARTED | process killed at every journal phase, zero false-success |
+| G5 · durable queue/receipt proof | IN PROGRESS · [PR #38](https://github.com/gamesbyian/Expository/pull/38) atomic journal E1 and Android debug compilation [run #40128058545](https://github.com/gamesbyian/Expository/actions/runs/40128058545), not wired to transfers | process killed at every journal phase, zero false-success |
 | G6 · six directional pane cases + new-folder move | NOT STARTED | drag/action parity, same vs different server relay/move |
 | G7 · compact bulk renamer and recovery | NOT STARTED | 10k virtualized preview, swaps, crash/undo and case/Unicode |
 | G8 · P0 Drive/Docs destination and handoff | NOT STARTED | real local/remote → Drive SAF/API proof, supported-file native Google Doc creation, Docs external open, copy vs conversion vs handoff receipts; D01–D20 |
 | G9 · independently reviewed Android beta | NOT STARTED | signed APK, A01–A32/D01–D20/T01–T12, 200% text, TalkBack |
 
 Do not mark a gate complete unless the precise PR/commit, test run IDs, actual build/device identity (no serials/PII), screenshot/protocol artifacts and known limits are attached. The integration owner must verify the evidence exists.
+
+## G5 atomic attempt journal foundation, 24 October 2026
+
+[PR #38](https://github.com/gamesbyian/Expository/pull/38) adds a versioned SHA-256-integrity-checked single-attempt journal, with no filename/credential/path persistence, strict plan digest and monotonic state. Android `AtomicFile` stores records in `noBackupFilesDir`, keyed by checked digest. Twelve JVM crash/integrity synthetic cases plus APK compilation passed [run #40128058545](https://github.com/gamesbyian/Expository/actions/runs/40128058545). Interrupted ATTEMPT_RECORDED or WRITE_ACKNOWLEDGED recover UNCERTAIN and disallow blind retries. **Not G5 accepted:** app transfers do not yet invoke journal commits, and no process-kill/device reboot tests have been performed.
 
 ## G4 native remote Save As implementation checkpoint, 24 October 2026
 
