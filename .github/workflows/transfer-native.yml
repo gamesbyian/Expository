@@ -29,7 +29,9 @@ jobs:
         working-directory: android-transfer
         run: gradle :core:planner:scenarios --no-daemon
   android-debug:
-    if: github.event_name == 'workflow_dispatch' && inputs.build_apk
+    # One-time G0 source bootstrap proof on the owning draft PR.
+    # Remove this temporary PR-specific run after proving debug APK creation.
+    if: (github.event_name == 'workflow_dispatch' && inputs.build_apk) || (github.event_name == 'pull_request' && github.event.pull_request.number == 32)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
