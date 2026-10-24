@@ -127,7 +127,7 @@ jobs:
 
   sftp-lab:
     # Ephemeral pinned-key protocol lab, opt-in only after bootstrap proof.
-    if: (github.event_name == 'workflow_dispatch' && inputs.sftp_lab) || (github.event_name == 'pull_request' && github.event.pull_request.number == 46)
+    if: (github.event_name == 'workflow_dispatch' && inputs.sftp_lab)
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
