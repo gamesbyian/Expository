@@ -19,7 +19,7 @@
 | Lane | Status | Decision or next executable gate |
 |---|---|---|
 | T00 | Complete (#24) | Critical review, hardened G0–G9 plan, Drive API fallback decision, release ledger; conflicting old #23 retired. No app exists yet. |
-| T01 | Open [#25](https://github.com/gamesbyian/Expository/issues/25) | G0: separate Android source, agent/CI/privacy contract, reproducible signed debug APK foundation; no writer in web Pages explorer |
+Second-pass design hardening: [decisions](android-transfer/SECOND-PASS-DECISIONS.md) and [26-scenario test matrix](android-transfer/TEST-AND-EVIDENCE-MATRIX.md) refine G0–G9; neither document is implementation evidence.\n\n| T01 | Open [#25](https://github.com/gamesbyian/Expository/issues/25) | G0: separate Android source, agent/CI/privacy contract, reproducible signed debug APK foundation; no writer in web Pages explorer |
 | T02 | Open [#26](https://github.com/gamesbyian/Expository/issues/26) | G1: pure Kotlin planner, capability identity, collision graph, staged cycles and journal/fault-injection fixtures |
 | T03 | Open [#28](https://github.com/gamesbyian/Expository/issues/28) | G2/G6: accessible Compose fake-endpoint and any-two-pane UX; G3–G5 protocol/SAF/queue follow G1 interfaces |
 | T04 | Open [#27](https://github.com/gamesbyian/Expository/issues/27) | G8: test Drive provider capability on physical Android, scoped API fallback and original/converted/handoff receipt semantics; renamer G7 in #26/#28 |
