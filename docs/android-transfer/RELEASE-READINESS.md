@@ -1,6 +1,6 @@
 # Expository Transfer: acceptance, evidence and release ledger
 
-**Current stage:** design-only; **no native Android code, APK or device validation**. This ledger is the completion authority for Android Transfer, separate from the web Expository queue. Review [critical findings](CRITICAL-REVIEW.md), [technical plan](HARDENED-IMPLEMENTATION-PLAN.md), and [original acceptance A01–A32](PRODUCT-PROPOSAL.md).
+**Current stage:** G0/G1 engineering started on [draft PR #32](https://github.com/gamesbyian/Expository/pull/32); a Kotlin/Compose native shell and pure JVM planner exist, but **no verified APK, device or live protocol/SAF/Drive validation**. This ledger intentionally distinguishes in-progress code from acceptance. This ledger is the completion authority for Android Transfer, separate from the web Expository queue. Review [critical findings](CRITICAL-REVIEW.md), [technical plan](HARDENED-IMPLEMENTATION-PLAN.md), and [original acceptance A01–A32](PRODUCT-PROPOSAL.md).
 
 ## Evidence classes (do not confuse them)
 
@@ -19,8 +19,8 @@ A **green browser/PWA test for the read-only Expository site does not count** fo
 
 | Gate | State | Evidence required |
 |---|---|---|
-| G0 · separate Android source, guide, lean CI | NOT STARTED | Native repo, no credentials, signed debug-build reproducibility plan |
-| G1 · pure operation plan/rename graph | NOT STARTED | Property/fuzz collision cases; plan-version identity and staged cycles |
+| G0 · separate Android source, guide, lean CI | IN PROGRESS · draft PR #32; debug APK build not witnessed | Native repo, no credentials, signed debug-build reproducibility plan |
+| G1 · pure operation plan/rename graph | IN PROGRESS · synthetic E1 scenario suite in PR #32; additional fuzz/fault proof pending | Property/fuzz collision cases; plan-version identity and staged cycles |
 | G2 · fake device and Compose journeys | NOT STARTED | Owned emulator recordings/screens, a11y labels, native picker contracts |
 | G3 · trusted FTP/FTPS/SFTP protocols | NOT STARTED | real test server fixtures, host-key/cert rejection and retry logs |
 | G4 · scoped Android SAF file/folder I/O | NOT STARTED | permission revocation, provider URI remap, nonseekable streams |
@@ -65,7 +65,7 @@ Do not mark a gate complete unless the precise PR/commit, test run IDs, actual b
 - [#27 · G8 real Drive/Docs provider and OAuth proof](https://github.com/gamesbyian/Expository/issues/27)
 - [#28 · G2/G6 Compose picker-first adaptive workspace](https://github.com/gamesbyian/Expository/issues/28)
 
-These issues are executable instructions, **not evidence that engineering has started**. A separate native repository should own implementation after G0, while this Expository public repo retains product/research records and the read-only web product.
+Implementation began in draft PR #32. The issue descriptions remain acceptance contracts, **not proof that either G0 or G1 has passed**. A separate native repository remains the target: the temporary self-contained `android-transfer/` Gradle root can be relocated without importing writer functionality into the read-only web application.
 
 ## Immediate next agent tasks (ordered)
 
