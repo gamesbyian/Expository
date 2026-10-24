@@ -72,8 +72,10 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
             val location = LocationRef(
                 LocationKey(LocationKind.REMOTE_SFTP, identity,
                     "pinned-session-root", folder),
-                components, revision, mapOf(Capability.RENAME to unknown),
-                verifiedNamespace = identity, verifiedStorageDomain = identity
+                // Browsing authenticates a session but does not establish a
+                // cross-session namespace or underlying storage-domain proof.
+                // Leave both verified identities UNKNOWN in this preview-only UI.
+                components, revision, mapOf(Capability.RENAME to unknown)
             )
             val snapshot = RenameSnapshot(location,
                 rows.map { entry ->
