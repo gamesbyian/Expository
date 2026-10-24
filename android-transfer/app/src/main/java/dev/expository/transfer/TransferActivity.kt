@@ -63,7 +63,8 @@ private fun DeveloperPreview() {
     val plan = selected?.let { name ->
         OperationPlanner.transfer(
             TransferRequest(listOf(ItemRef(ItemKey("fake-session", name, "fixture-v1"),
-                fake, fake.folder, name, ItemKind.FILE)), target), 0L)
+                fake, fake.folder, name, ItemKind.FILE)), target,
+                destinationListing = DestinationListing("synthetic-listing-1", true, emptyList())), 0L)
     }
     Scaffold { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
