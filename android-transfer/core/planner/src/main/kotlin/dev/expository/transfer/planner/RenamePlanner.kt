@@ -83,7 +83,8 @@ private fun renameDigest(snapshot: RenameSnapshot, recipe: RenameRecipe): String
     val fields = mutableListOf("RENAME_V1", snapshot.location.key.kind.name,
         snapshot.location.key.authorityId, snapshot.location.key.rootId,
         snapshot.location.key.containerId, snapshot.location.key.grantId.orEmpty(),
-        snapshot.location.revision, snapshot.listingRevision, snapshot.complete.toString(),
+        snapshot.location.revision, snapshot.location.verifiedNamespace.orEmpty(),
+        snapshot.location.verifiedStorageDomain.orEmpty(), snapshot.listingRevision, snapshot.complete.toString(),
         snapshot.location.casePolicy.name, snapshot.location.folder.size.toString())
     fields += snapshot.location.folder
     for ((op, proof) in snapshot.location.capabilities.toSortedMap(compareBy { it.name })) {
@@ -145,8 +146,9 @@ object RenamePlanner {
         val targets = preview.map { nameKey(it.proposed) }
         if (targets.size != targets.toSet().size) blockers += "DUPLICATE_DESTINATIONS"
         val selected = frozen.selectionOrder.toSet()
+        val byPreviewId = preview.associateBy { it.id }
         val unchangedOrUnselected = frozen.children.filter {
-            it.id !in selected || preview.any { p -> p.id == it.id && p.original == p.proposed }
+            it.id !in selected || byPreviewId[it.id]?.let { p -> p.original == p.proposed } == true
         }.map { nameKey(it.name) }.toSet()
         if (preview.any { it.original != it.proposed && nameKey(it.proposed) in unchangedOrUnselected })
             blockers += "OCCUPIED_DESTINATION"
@@ -161,26 +163,39 @@ object RenamePlanner {
         val occupied = frozen.children.associate { nameKey(it.name) to it.id }.toMutableMap()
         val reserved = (frozen.children.map { nameKey(it.name) } + targets).toMutableSet()
         val current = pending.mapValues { it.value.original }.toMutableMap()
+        val targetOwner = pending.values.associate { nameKey(it.proposed) to it.id }
+        val ready = ArrayDeque<String>()
+        val candidatesForStage = ArrayDeque(pending.keys)
+        pending.values.forEach { row ->
+            if (nameKey(row.proposed) !in occupied) ready.addLast(row.id)
+        }
         val steps = mutableListOf<RenameStep>()
         var stageIndex = 0
         val staged = mutableSetOf<String>()
+        // O(n) graph traversal: every freed name wakes its unique waiting owner.
+        // This avoids repeated full scans at the 10k-row acceptance scale.
         while (pending.isNotEmpty()) {
-            // The one safe rename is the one whose destination is free. This
-            // naturally orders chains tail-first. A cycle needs one temp hop.
-            val available = pending.values.firstOrNull { row ->
-                val destKey = nameKey(row.proposed)
-                destKey !in occupied
-            }
-            if (available != null) {
+            val readyId = if (ready.isEmpty()) null else ready.removeFirst()
+            if (readyId != null) {
+                val available = pending[readyId] ?: continue
+                if (nameKey(available.proposed) in occupied) continue
                 val from = current.getValue(available.id)
                 steps += RenameStep(available.id, from, available.proposed, RenamePhase.COMMIT)
                 occupied.remove(nameKey(from))
                 occupied[nameKey(available.proposed)] = available.id
                 pending.remove(available.id)
+                targetOwner[nameKey(from)]?.let { if (it in pending) ready.addLast(it) }
                 continue
             }
-            val toStage = pending.values.firstOrNull { it.id !in staged }
-            if (toStage == null) {
+            var stageId: String? = null
+            while (candidatesForStage.isNotEmpty()) {
+                val candidate = candidatesForStage.removeFirst()
+                if (candidate in pending && candidate !in staged) {
+                    stageId = candidate
+                    break
+                }
+            }
+            if (stageId == null) {
                 blockers += "UNRESOLVABLE_RENAME_CYCLE"
                 break
             }
@@ -192,13 +207,14 @@ object RenamePlanner {
             do {
                 temp = ".expository-tmp-" + digest.take(12) + "-" + stageIndex++
             } while (nameKey(temp) in reserved)
-            val from = current.getValue(toStage.id)
-            steps += RenameStep(toStage.id, from, temp, RenamePhase.STAGE)
+            val from = current.getValue(stageId)
+            steps += RenameStep(stageId, from, temp, RenamePhase.STAGE)
             occupied.remove(nameKey(from))
-            occupied[nameKey(temp)] = toStage.id
+            occupied[nameKey(temp)] = stageId
             reserved += nameKey(temp)
-            current[toStage.id] = temp
-            staged += toStage.id
+            current[stageId] = temp
+            staged += stageId
+            targetOwner[nameKey(from)]?.let { if (it in pending) ready.addLast(it) }
         }
         return RenamePlan(digest, preview, if (blockers.isEmpty()) steps else emptyList(),
             blockers.distinct(), frozen.listingRevision)
