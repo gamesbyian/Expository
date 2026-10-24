@@ -21,3 +21,12 @@ tasks.register<JavaExec>("lab") {
         systemProperty("javax.net.ssl.trustStorePassword", "changeit")
     }
 }
+
+
+tasks.register<JavaExec>("externalSmoke") {
+    group = "verification"
+    description = "MANUAL ONLY: read-only FTPS external server interoperability with strict TLS"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.ftps.FtpsExternalSmokeSuite")
+}
