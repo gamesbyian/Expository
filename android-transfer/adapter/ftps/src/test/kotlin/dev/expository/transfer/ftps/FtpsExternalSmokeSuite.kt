@@ -74,10 +74,12 @@ object FtpsExternalSmokeSuite {
                     println("INFO FTPS external listing only; no arbitrary private file reads")
                 }
             }
-        } catch (_: Exception) {
-            // Stage is useful for debugging without exposing a private host,
-            // path, remote reply or exception containing a credential.
-            throw IllegalStateException("FTPS_EXTERNAL_" + stage + "_FAILED_REDACTED")
+        } catch (failure: Exception) {
+            // Explicitly surface only our safe classification. Never propagate
+            // an original IOException: network messages may contain private data.
+            val label = if (failure is FtpsSafeFailure) failure.message
+                        else "FTPS_EXTERNAL_" + stage + "_FAILED_REDACTED"
+            throw IllegalStateException(label)
         }
     }
 }
