@@ -1,0 +1,33 @@
+plugins {
+    id("com.android.application") version "8.11.1"
+    id("org.jetbrains.kotlin.android") version "2.2.20"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.2.20"
+}
+android {
+    namespace = "dev.expository.transfer"
+    compileSdk = 36
+
+    defaultConfig {
+        applicationId = "dev.expository.transfer"
+        minSdk = 26
+        targetSdk = 36
+        versionCode = 1
+        versionName = "0.0.1-dev"
+    }
+    buildTypes {
+        getByName("release") { isMinifyEnabled = false }
+    }
+    buildFeatures { compose = true }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = "17" }
+}
+dependencies {
+    implementation(project(":core:planner"))
+    implementation("androidx.activity:activity-compose:1.11.0")
+    implementation(platform("androidx.compose:compose-bom:2025.12.00"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.material3:material3")
+}
