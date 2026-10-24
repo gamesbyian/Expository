@@ -293,12 +293,18 @@ fun SftpBrowseCard() {
                                                     context.applicationContext, digest)
                                             }.move(live, opaque, selectedSource, chosenFolder)
                                         }
+                                        val destinationName = chosenFolder.trimEnd('/') +
+                                            "/" + selectedSource.substringAfterLast('/')
                                         status = when (receipt.proof) {
                                             ServerMoveProof.MOVE_OBSERVED ->
-                                                "Server-side Move observed; no payload was relayed. " +
-                                                "Destination metadata matched; contents were not rehashed."
+                                                "Move observed: " + selectedSource + " → " +
+                                                destinationName + ". No payload relayed. " +
+                                                "Destination metadata matched; bytes were not rehashed."
                                             ServerMoveProof.UNCERTAIN ->
-                                                "Move result uncertain. Inspect both source and destination before retrying."
+                                                "Move uncertain. Inspect original " + selectedSource +
+                                                " and destination " + destinationName +
+                                                " before retrying. Reason: " +
+                                                receipt.reason.replace('_', ' ')
                                             ServerMoveProof.BLOCKED ->
                                                 "Move blocked: " + receipt.reason.replace('_', ' ')
                                         }
