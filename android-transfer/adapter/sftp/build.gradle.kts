@@ -8,3 +8,11 @@ tasks.register<JavaExec>("scenarios") {
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("dev.expository.transfer.sftp.SftpSecuritySuite")
 }
+
+tasks.register<JavaExec>("lab") {
+    group = "verification"
+    description = "Ephemeral loopback SFTP handshake and host-key rotation rejection"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.sftp.SftpServerLabSuite")
+}
