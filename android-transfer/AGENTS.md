@@ -11,7 +11,7 @@ Read `../AGENTS.md`, `../docs/android-transfer/HARDENED-IMPLEMENTATION-PLAN.md`,
 - Pure planner contains no Android types or I/O. UI/drag/button only generate a reviewable immutable plan. Executor, durable queue, live adapters and receipt grades belong to later gates.
 - Unknown/stale capabilities block unsafe native moves and deletes. Copy cannot call rename. Reconciliation is mandatory for uncertain writes.
 - Google Drive Save, Docs conversion, external Open and Share handoff have different destinations, confirmation and receipt meanings.
-- G0 shell is explicitly developer-only: fake endpoints and **zero live writes**. No false claims of tested FTP, SAF, Google or Android device support.
+- The historical G0 shell was synthetic-only. Current G2/G4 code performs foreground SAF Copy and pinned SFTP Save As/Upload, with app-private journaled pre-write attempts in PR #42. Device installation, process-death recovery and provider-specific acceptance remain unproven. Do not confuse compiled APKs or synthetic server labs with real device acceptance.
 
 ## Commands
 Use Gradle 8.13 / JDK 17:
