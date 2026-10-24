@@ -59,8 +59,8 @@ review/                  owned synthetic screenshot atlas, separate physical acc
 | **G5** durable engine | Room-backed plan journal, user-confirmed intents, transfer queue, typed proof grades, UIDT/WorkManager path | Kill after every stage, reboot/cancel, metered constraints, idle/timeouts, ambiguous FTP final reply, no data loss/silent success, no destructive replay |
 | **G6** complete workspace | Every Local/Local, Local/Remote, Remote/Remote subtype; New folder + Move into it, same-server rename shortcut, cross-server relay | Six direction matrix × copy/move, single/dual portrait, landscape, accessibility action path, physical responsive review and honest metered-cost UI |
 | **G7** beta bulk rename | Preview-first compact chips + number/sort/extension lock + collision DAG + journal/uncertain/undo proposals | 40-episode UX, 500-file operations, 10k-row virtual preview, 50-item cycle failure at every step, changed sibling set blocks Apply, both SAF and server cases |
-| **G8** Drive/Docs | First real Drive provider capability matrix; if SAF path fails, dedicated OAuth Drive API for P0 original upload, scoped account folder access/resumable upload; conversion later | *Real* local→Drive and remote→Drive single/multi/folder, account switch/revocation/quota/conflict, unverified handoff separate, no duplicate on session expiry |
-| **G9** independent beta acceptance | Signed installable debug/sideload APK, usability and performance studies, threat review, reproducible release receipts | A01–A32 + D01–D12 + T01–T12 executed or explicit failures; physical Pixel, Android 14–17 emulator matrix, TalkBack/200% text, reliable journal zero silent corruption |
+| **G8** Drive/Docs | First real Drive provider capability matrix; if SAF path fails, dedicated OAuth Drive API for P0 original upload, scoped account folder access/resumable upload; P0 native Docs conversion/open for supported files with truthful proof states | *Real* local→Drive and remote→Drive single/multi/folder, account switch/revocation/quota/conflict, unverified handoff separate, no duplicate on session expiry |
+| **G9** independent beta acceptance | Signed installable debug/sideload APK, usability and performance studies, threat review, reproducible release receipts | A01–A32 + D01–D20 + T01–T12 executed or explicit failures; physical Pixel, Android 14–17 emulator matrix, TalkBack/200% text, reliable journal zero silent corruption |
 
 **Parallel execution:** after G1 immutable interfaces are approved, assign (A) protocol adapters, (B) SAF/Drive, (C) Compose interactions, (D) quality/failure-injection. One integration owner controls common contracts and merges, avoids dual ownership of core classes. Every work lane can test against the deterministic fake adapter; no real credentials in CI.
 
@@ -94,13 +94,13 @@ review/                  owned synthetic screenshot atlas, separate physical acc
 
 **Guaranteed fallback:** implement native Android OAuth authorized Drive API with `drive.file` where the flow can grant access to the specific parent file/folder (Google Picker + permission test). The current mobile Google Picker flow is fundamentally an *open/select* flow. Probe folder selection, files.create parent permissions and response with a controlled account before claiming it is a destination picker. If `drive.file` cannot authorize the chosen destination, present a truthful narrowed app-owned folder option or block and ask for deliberately reviewed wider-scope product requirements; never silently escalate to `drive` restricted scope.
 
-**Upload:** `files.create` resumable as appropriate, report created ID, parent, MIME, MD5 checksum for binary if returned, `files.get` readback and quota errors; after upload session expiry investigate whether a file exists before blindly creating another. Auth and secret retention follow Google Identity/Android security guidance. Local/remote → Drive is a P0 requirement only once real behavior verified.
+**Upload:** `files.create` resumable as appropriate, report created ID, parent, MIME, MD5 checksum for binary if returned, `files.get` readback and quota errors; after upload session expiry investigate whether a file exists before blindly creating another. Auth and secret retention follow Google Identity/Android security guidance. Local/remote → Drive and supported-file **Create Google Doc** / **Open with Google Docs** actions are P0 entry points only once real behavior verified.
 
 **Docs:** opt-in separate conversion using specific native Google MIME and live `about.importFormats` checks; preserving original is default. `Open with Google Docs` is a handoff, not conversion or a copy guarantee.
 
 Sources: [Drive narrow scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth), [mobile picker limitations](https://developers.google.com/workspace/drive/picker/guides/desktop-mobile-picker), [Drive upload/convert](https://developers.google.com/workspace/drive/api/guides/manage-uploads), [Android document provider flags](https://developer.android.com/guide/topics/providers/create-document-provider).
 
-## Release acceptance additions D01–D12
+## Release acceptance additions D01–D20
 
 - **D01:** Drive app absent: option explains API alternative, no claim SAF route works.
 - **D02:** Drive app installed but no writable SAF tree: flow selects supported API adapter, not false Save.
@@ -114,6 +114,7 @@ Sources: [Drive narrow scopes](https://developers.google.com/workspace/drive/api
 - **D10:** Cross-server move source deletion blocked until destination proof and explicit approval.
 - **D11:** Same-server remote copy must not invoke FTP RNFR/RNTO or SFTP Rename; only Move may.
 - **D12:** 10k virtualized rename preview at 200% text, stable sort, no misnumbering after scroll.
+- **D13–D20:** First-class Google Docs vs Google Drive action semantics, safe Android open/share contracts, per-pane source parity, real native Doc conversion, unverified handoffs, and multi-file recovery, as defined in [Google Drive/Docs destination UX](GOOGLE-DRIVE-INTEGRATION.md#p0-acceptance-extension-d13d20). Neither a Sharesheet launch nor a Google Drive filename display can substitute for proof of a successful copy/conversion.
 
 ## Explicit stop-ship defects
 

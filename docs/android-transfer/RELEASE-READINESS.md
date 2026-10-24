@@ -27,8 +27,8 @@ A **green browser/PWA test for the read-only Expository site does not count** fo
 | G5 · durable queue/receipt proof | NOT STARTED | process killed at every journal phase, zero false-success |
 | G6 · six directional pane cases + new-folder move | NOT STARTED | drag/action parity, same vs different server relay/move |
 | G7 · compact bulk renamer and recovery | NOT STARTED | 10k virtualized preview, swaps, crash/undo and case/Unicode |
-| G8 · P0 Google Drive verified destination | NOT STARTED | real SAF provider + Drive API OAuth fallback, copy/convert/handoff distinction |
-| G9 · independently reviewed Android beta | NOT STARTED | signed APK, A01–A32/D01–D12/T01–T12, 200% text, TalkBack |
+| G8 · P0 Drive/Docs destination and handoff | NOT STARTED | real local/remote → Drive SAF/API proof, supported-file native Google Doc creation, Docs external open, copy vs conversion vs handoff receipts; D01–D20 |
+| G9 · independently reviewed Android beta | NOT STARTED | signed APK, A01–A32/D01–D20/T01–T12, 200% text, TalkBack |
 
 Do not mark a gate complete unless the precise PR/commit, test run IDs, actual build/device identity (no serials/PII), screenshot/protocol artifacts and known limits are attached. The integration owner must verify the evidence exists.
 
@@ -48,10 +48,15 @@ Do not mark a gate complete unless the precise PR/commit, test run IDs, actual b
 | Provider lacks Drive writable tree | G8 | Verified Drive API choice or blocked; Share labeled handoff only |
 | Drive files.create result lost after upload | G8 | Reconcile file ID/upload session before creating another |
 | Create native Google Doc from unsupported MIME | G8 | Refuse or Save original; no automatic conversion |
+| `ACTION_SEND` / `ACTION_VIEW` activity opened and immediately returned | G8 | `HANDED_OFF_UNVERIFIED` / `OPENED_EXTERNALLY`; never `DESTINATION_CONFIRMED` |
+| Google Doc native conversion returned ID but no equal byte checksum | G8 | `GOOGLE_DOC_CREATED` with explicit conversion disclaimer; do not claim byte equivalence |
+| Local or FTP remote selection lacks visible Google options | G2/G8 | Fail release journey gate; both sources need first-class actions and 48dp keyboard/TalkBack alternatives |
 | Pair on 393dp with 200% text | G2/G6 | Single-pane accessible fallback, not clipped Apply |
 | Large-file transfer reports 100% on socket writes alone | G3/G5 | Transfer still VERIFYING; no Completed without allowed proof |
 | Device process killed after successful rename before journal ack | G5/G7 | Uncertain until stat/reconciliation; no blind replay |
 | User uses plain FTP without checking warning | G3 | Security disclosure and explicit opt-in required |
+
+**Google destination acceptance:** [D13–D20](GOOGLE-DRIVE-INTEGRATION.md#p0-acceptance-extension-d13d20) additionally require validated local/remote → native Docs conversion, external editor vs Sharesheet behavior, account/provider variation, and truthful receipt semantics. All are **NOT STARTED** until native Android and provider-device evidence exists.
 
 ## Live work entrypoints
 

@@ -8,11 +8,11 @@
 
 This proposal remains the product vision. For ambiguous provider operations, copy/move safety, verification, rename cycles, Drive authorization and work priority, follow the stronger constraints in **[critical review](CRITICAL-REVIEW.md)** and **[hardened implementation plan](HARDENED-IMPLEMENTATION-PLAN.md)**.
 
-**Launch-blocking priorities:** A one-screen compact bulk renamer and all three Local/Local, Local/Remote and Remote/Remote pairings stay **P0**. Local or remote **Copy to Google Drive** with a *verified destination* is also P0; if Android's picker cannot provide it, the **narrowly-scoped native Drive API fallback is P0**, not an optional P1. Simple Share-to-Drive can only report "Handed off", never "Saved". Google Docs conversion remains a separate explicit later action.
+**Launch-blocking priorities:** A one-screen compact bulk renamer and all three Local/Local, Local/Remote and Remote/Remote pairings stay **P0**. Local or remote **Copy to Google Drive** with a *verified destination* is also P0; if Android's picker cannot provide it, the **narrowly-scoped native Drive API fallback is P0**, not an optional P1. Simple Share-to-Drive can only report "Handed off", never "Saved". Google Docs **create/convert** and **open with Docs** are separate, guarded P0 initiation actions for supported document formats; neither may be confused with an original Drive upload or unverified Share handoff.
 
 A same-server **Move** may be a server-side rename after capability and identity checks; an ordinary **Copy** must not secretly rename the source. A receipt differentiates acknowledged write, destination confirmation and content-hash verification, and cross-provider source deletion is never automatic on a weak proof. Neither FTP RNFR/RNTO nor generic SFTP rename is presumed atomic or undoable.
 
-**Gate:** G0–G9 in the hardened implementation plan, A01–A32, D01–D12 and T01–T12. This document is not an implemented application or a verified Android/Google Drive capability.
+**Gate:** G0–G9 in the hardened implementation plan, A01–A32, D01–D20 and T01–T12. This document is not an implemented application or a verified Android/Google Drive capability.
 
 ## 1. Product definition
 
@@ -97,6 +97,14 @@ An external app shares image/video/document(s); Expository presents saved server
 
 A network disconnect, process kill or Android time-limit does not leave a fake “success.” Reopening Transfer shows the durable queue with exact last-known bytes/state, retry/resume eligibility and a privacy-redacted reason. Unsupported resume restarts only that file, after user-controlled collision policy. A cross-location **Move** never deletes the source unless each destination item is verified.
 
+### J8: Copy to Google Drive or create/open in Google Docs from either pane (P0)
+
+At any selected Local or Remote file, the compact **Copy / Send to…** destination sheet includes **Save to Google Drive**, **Create Google Doc** (for live-supported source MIME types), **Open with Google Docs** (when an Android handler supports the format), and **Share with app…**. These represent four distinct actions. A Google Doc is not a generic destination folder: Create converts to a native Workspace document, Open launches a compatible editor for the original document and Share delegates to another app. **None implicitly moves or deletes the source.** Users can choose Google destinations from either pane in Local/Local, Local/Remote or Remote/Remote mode, with 48dp targets and a keyboard/TalkBack equivalent.
+
+**Save to Drive** selects the account and writable folder via tested SAF or explicitly authorized Drive API `drive.file` fallback; remote files stream through the phone without a detour through public Downloads. Folder hierarchy, interruption, duplicates and result verification use the normal durable transfer queue. **Create Google Doc** requests explicit consent, checks current `about.importFormats`, uploads/converts using Drive v3, confirms the target Docs MIME/id, and warns that document fidelity can change. **Open with Docs** uses a scoped URI / `ACTION_VIEW` if an installed compatible editor exists; a Sharesheet `ACTION_SEND` handoff is distinct and cannot be marked Saved. A remote document may need a bounded, private temporary file or reliable streaming ContentProvider for the recipient to re-open. Unsupported types/folders offer Save original or another compatible app, not a fake Docs destination.
+
+Completion receipts distinguish **Saved to Drive (verified)**, **Drive write acknowledged (not yet confirmed)**, **Created Google Doc (converted)**, **Opened externally**, **Handed off (unverified)**, and **Blocked/needs permission**. [Detailed contracts and D13–D20](GOOGLE-DRIVE-INTEGRATION.md#first-class-destination-ux-initiation-from-anywhere-owner-requirement-23-october-2026).
+
 ## 3. Navigation and information architecture
 
 **Start screen:** prominent **Connect**, recently used *device-local* server profiles, **Upload**, **Browse server**, and a compact **Transfers** status. No full phone scan and no remote-content analytics.
@@ -104,7 +112,7 @@ A network disconnect, process kill or Android time-limit does not leave a fake �
 **After connecting:** a single Remote browse screen:
 - Connection pill: name, **FTPS/SFTP secure** or **FTP unencrypted**, open path.
 - Sort/filter/search, refresh, list/grid toggle, multi-select.
-- Sticky bottom action bar: **Upload**, **Save to device** (selection required), **Workspace**.
+- Sticky bottom action bar: **Upload**, **Copy / Send to…** (selection required; Device, Other pane, Google Drive, Google Docs, Other app), **Workspace**. Never put the two Google actions behind an FTP-only submenu.
 - Overflow for **Bulk rename**, Create folder, Properties, Copy remote path, Refresh, Delete with confirmation and advanced server controls; **Move to…** and **New folder** must also be discoverable without the overflow menu.
 - Persistent small transfer progress pill, expandable queue drawer.
 
@@ -127,6 +135,7 @@ A network disconnect, process kill or Android time-limit does not leave a fake �
 | P0 | Durable queue, conflict policies, cancel/retry, verified completion receipts | User trust, integrity |
 | P0 | Secure saved credentials with explicit opt-in, LAN permission, Android lifecycle compliance | Correctness/security |
 | P0 | Share-to-upload via Android share sheet | Delivers natural Android integration |
+| **P0** | Initiate **Save to Google Drive**, **Create Google Doc**, **Open with Google Docs** or clearly unverified Share from either local or remote pane | Explicit owner priority: Google destination flows must be discoverable, source-preserving and proof-graded; conversion is supported-file-only |
 | **P0** | All three two-pane pairings: Local/Local, Local/Remote, Remote/Remote, including same-server fast moves and cross-server relay | Explicit first-request requirement; no fake remote-to-remote copy |
 | **P0** | Remote New folder + Move to… inside destination picker, same-server FTP/SFTP rename when feasible | Fast remote organization without phone-mediated retransfer |
 | **P0** | Compact bulk rename with literal replace, numbering, prefix/suffix, case, locked extensions, live preview, duplicate/conflict blocking, per-item journal | Key product differentiator and initial beta requirement |
@@ -222,6 +231,8 @@ A recognizable Expository brand, but Android-native rather than an embedded web 
 The hero is a remote folder list and two conspicuous actions, not a diagram of sockets. The optional workspace feels like a pocket-sized desktop transfer client. Preserve logical hierarchy when switched between orientation/window sizes; do not insist on a fixed portrait layout.
 
 Design deliverables before code: 393px portrait home/browse, 360px compact with accessibility text, portrait stacked workspace and keyboard/gesture alternative, 16:9 landscape side-by-side, first-run connection wizard, conflict decision sheet, transfer queue/partial failure, Android picker handoff diagrams, TalkBack traversal map.
+
+The Android beta also requires the Google destination-specific **D01–D20** matrix in [the hardened plan](HARDENED-IMPLEMENTATION-PLAN.md) and [Drive/Docs contract](GOOGLE-DRIVE-INTEGRATION.md). A generic Sharesheet handoff does **not** satisfy the verified Drive destination promise, and a Google Docs conversion does not satisfy original-byte preservation. All flows must work from Local and Remote selections.
 
 ## 8. Acceptance ledger for initial beta
 
