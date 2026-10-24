@@ -7,7 +7,11 @@ on:
   workflow_dispatch:
     inputs:
       build_apk:
-        description: "Opt-in SDK download, unsigned release / signed debug APK build"
+        description: "Opt-in SDK download and signed developer debug APK"
+        type: boolean
+        default: false
+      ftps_lab:
+        description: "Opt-in isolated FTPS TLS server and read proof"
         type: boolean
         default: false
 permissions:
@@ -27,7 +31,7 @@ jobs:
           gradle-version: "8.13"
       - name: Offline deterministic G1 synthetic scenarios
         working-directory: android-transfer
-        run: gradle :core:planner:scenarios :core:engine:scenarios :testing:fake-endpoints:scenarios --no-daemon
+        run: gradle :core:planner:scenarios :core:engine:scenarios :adapter:ftps:scenarios :testing:fake-endpoints:scenarios --no-daemon
   android-debug:
     # Android builds remain opt-in and non-blocking; PRs use cheap JVM evidence.
     if: github.event_name == 'workflow_dispatch' && inputs.build_apk
@@ -58,3 +62,61 @@ jobs:
             android-transfer/app/build/outputs/apk/debug/app-debug.apk
             android-transfer/app/build/outputs/apk/debug/SHA256SUMS.txt
           retention-days: 5
+
+  ftps-lab:
+    # One-time diagnostic retry on PR #34; restore to manual after evidence.
+    if: (github.event_name == 'workflow_dispatch' && inputs.ftps_lab) || (github.event_name == 'pull_request' && github.event.pull_request.number == 34)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Install bounded synthetic FTP server dependencies
+        run: python3 -m pip install --user pyftpdlib==2.1.0 pyOpenSSL==25.3.0
+      - name: Create ephemeral SAN certificate and inert fixture
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/ftps-lab/fixture"
+          printf 'FTPS synthetic fixture\n' > "$RUNNER_TEMP/ftps-lab/fixture/synthetic.txt"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout "$RUNNER_TEMP/ftps-lab/key.pem" \
+            -out "$RUNNER_TEMP/ftps-lab/cert.pem" \
+            -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+          keytool -importcert -noprompt -alias synthetic-ftps \
+            -file "$RUNNER_TEMP/ftps-lab/cert.pem" \
+            -keystore "$RUNNER_TEMP/ftps-lab/truststore.p12" \
+            -storetype PKCS12 -storepass changeit
+      - name: Start localhost TLS-only disposable server
+        shell: bash
+        run: |
+          export FTPS_FIXTURE_ROOT="$RUNNER_TEMP/ftps-lab/fixture"
+          export FTPS_TEST_CERT="$RUNNER_TEMP/ftps-lab/cert.pem"
+          export FTPS_TEST_KEY="$RUNNER_TEMP/ftps-lab/key.pem"
+          python3 -u android-transfer/adapter/ftps/testing/ftps_server.py > "$RUNNER_TEMP/ftps-lab/server.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/ftps-lab/server.pid"
+          for attempt in $(seq 1 30); do
+            if python3 -c 'import socket; c=socket.create_connection(("127.0.0.1",2121),1); c.close()' 2>/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Synthetic FTPS server did not start"
+          if test -f "$RUNNER_TEMP/ftps-lab/server.log"; then
+            echo "--- synthetic server startup diagnostics ---"
+            cat "$RUNNER_TEMP/ftps-lab/server.log"
+            echo "--- end startup diagnostics ---"
+          fi
+          exit 1
+      - name: Reject untrusted self-signed FTPS certificate
+        working-directory: android-transfer
+        run: gradle :adapter:ftps:lab -PftpsLabMode=reject-untrusted --no-daemon
+      - name: Trust explicit lab certificate and prove encrypted file read
+        working-directory: android-transfer
+        run: gradle :adapter:ftps:lab -PftpsLabMode=trusted-read -PftpsTrustStore="$RUNNER_TEMP/ftps-lab/truststore.p12" --no-daemon
