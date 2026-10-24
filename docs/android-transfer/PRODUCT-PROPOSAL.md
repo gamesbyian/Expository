@@ -1,8 +1,18 @@
 # Expository Transfer · Android-native product proposal
 
-**Status: exploratory proposal, not approved implementation**  
+**Status: critically reviewed planning baseline; no native app or APK has been built**  
 **Date: 23 October 2026**  
 **Companion evidence:** [competitive and engineering research](EXPLORATORY-REPORT.md)
+
+## Critical-review precedence and release decision
+
+This proposal remains the product vision. For ambiguous provider operations, copy/move safety, verification, rename cycles, Drive authorization and work priority, follow the stronger constraints in **[critical review](CRITICAL-REVIEW.md)** and **[hardened implementation plan](HARDENED-IMPLEMENTATION-PLAN.md)**.
+
+**Launch-blocking priorities:** A one-screen compact bulk renamer and all three Local/Local, Local/Remote and Remote/Remote pairings stay **P0**. Local or remote **Copy to Google Drive** with a *verified destination* is also P0; if Android's picker cannot provide it, the **narrowly-scoped native Drive API fallback is P0**, not an optional P1. Simple Share-to-Drive can only report "Handed off", never "Saved". Google Docs conversion remains a separate explicit later action.
+
+A same-server **Move** may be a server-side rename after capability and identity checks; an ordinary **Copy** must not secretly rename the source. A receipt differentiates acknowledged write, destination confirmation and content-hash verification, and cross-provider source deletion is never automatic on a weak proof. Neither FTP RNFR/RNTO nor generic SFTP rename is presumed atomic or undoable.
+
+**Gate:** G0–G9 in the hardened implementation plan, A01–A32, D01–D12 and T01–T12. This document is not an implemented application or a verified Android/Google Drive capability.
 
 ## 1. Product definition
 
@@ -120,6 +130,7 @@ A network disconnect, process kill or Android time-limit does not leave a fake �
 | **P0** | All three two-pane pairings: Local/Local, Local/Remote, Remote/Remote, including same-server fast moves and cross-server relay | Explicit first-request requirement; no fake remote-to-remote copy |
 | **P0** | Remote New folder + Move to… inside destination picker, same-server FTP/SFTP rename when feasible | Fast remote organization without phone-mediated retransfer |
 | **P0** | Compact bulk rename with literal replace, numbering, prefix/suffix, case, locked extensions, live preview, duplicate/conflict blocking, per-item journal | Key product differentiator and initial beta requirement |
+| **P0** | Local/Remote → Google Drive original-file copy, verified provider or narrow OAuth API adapter; Share handoff marked unverified | Explicit destination requirement; provider availability cannot be assumed |
 | P1 | Advanced regex/chained rename, recipes, undo where safe; path bookmarking, favorite destinations, multiple server profiles, quick-connect, richer search | Advanced efficiency after safe core renamer |
 | P1 | SFTP key auth/key import, granular TLS trust review, advanced FTP passive/network troubleshooting | More demanding remote servers |
 | P1 | Read-only system `DocumentsProvider`: remote files accessible in Android Files and other apps | Highest-value post-launch integration if secure |
