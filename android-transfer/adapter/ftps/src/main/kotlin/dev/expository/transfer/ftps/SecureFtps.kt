@@ -2,6 +2,7 @@ package dev.expository.transfer.ftps
 
 import org.apache.commons.net.ftp.FTP
 import org.apache.commons.net.ftp.FTPReply
+import org.apache.commons.net.ftp.FTPFile
 import org.apache.commons.net.ftp.FTPSClient
 import org.apache.commons.net.util.TrustManagerUtils
 import java.io.FilterInputStream
@@ -126,6 +127,21 @@ object SecureFtps {
     }
 }
 
+/**
+ * MLSD represents the current/parent directory with cdir/pdir entries on some
+ * implementations. They are transport metadata, never selectable user items.
+ * Other malformed entries fail the entire listing rather than pretending
+ * a partial directory is authoritative.
+ */
+internal object FtpsMlsdEntries {
+    fun decode(files: Array<FTPFile>): List<FtpsEntry> =
+        files.asSequence()
+            .filter { it.name != "." && it.name != ".." }
+            .map {
+                FtpsEntry(FtpsPath.checkedChild(it.name ?: ""), it.isDirectory, it.size)
+            }.toList()
+}
+
 /** Single-threaded control connection. Do not start a second command mid-RETR. */
 class FtpsSession internal constructor(private val client: FTPSClient) : AutoCloseable {
     fun list(absoluteFolder: String): List<FtpsEntry> {
@@ -133,15 +149,22 @@ class FtpsSession internal constructor(private val client: FTPSClient) : AutoClo
         // is explicitly marked incomplete. A missing or failed MLSD reply must
         // never become an apparently empty, complete directory.
         val path = FtpsPath.checked(absoluteFolder)
+        // An absolute MLSD argument is not consistently implemented across FTP
+        // servers. CWD first, then ask MLSD for the *current* directory.
+        // This session is single-threaded and used for read-only browsing here.
+        val entered = try {
+            client.changeWorkingDirectory(path)
+        } catch (error: Exception) {
+            throw FtpsFailureCodes.classify("CWD", client.replyCode, error)
+        }
+        if (!entered) throw FtpsFailureCodes.classify("CWD", client.replyCode, null)
         val files = try {
-            client.mlistDir(path)
+            client.mlistDir()
         } catch (error: Exception) {
             throw FtpsFailureCodes.classify("LIST", client.replyCode, error)
         } ?: throw FtpsFailureCodes.classify("LIST", client.replyCode, null)
         return try {
-            files.map {
-                FtpsEntry(FtpsPath.checkedChild(it.name ?: ""), it.isDirectory, it.size)
-            }
+            FtpsMlsdEntries.decode(files)
         } catch (error: Exception) {
             throw FtpsFailureCodes.classify("LIST", client.replyCode, error)
         }

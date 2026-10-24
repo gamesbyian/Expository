@@ -77,8 +77,14 @@ object FtpsExternalSmokeSuite {
         } catch (failure: Exception) {
             // Explicitly surface only our safe classification. Never propagate
             // an original IOException: network messages may contain private data.
-            val label = if (failure is FtpsSafeFailure) failure.message
-                        else "FTPS_EXTERNAL_" + stage + "_FAILED_REDACTED"
+            val label = when {
+                failure is FtpsSafeFailure -> failure.message
+                failure is IllegalStateException && failure.message == "EMPTY_LISTING" ->
+                    "FTPS_EXTERNAL_LIST_EMPTY_REDACTED"
+                failure is IllegalStateException && failure.message == "SAMPLE_ABSENT" ->
+                    "FTPS_EXTERNAL_READ_SAMPLE_ABSENT_REDACTED"
+                else -> "FTPS_EXTERNAL_" + stage + "_FAILED_REDACTED"
+            }
             throw IllegalStateException(label)
         }
     }

@@ -47,6 +47,32 @@ object FtpsSecuritySuite {
                 check(runCatching { FtpsPath.checkedChild(name) }.isFailure)
             }
         }
+        checkCase("MLSD cdir and pdir are not files or fatal parsing errors") {
+            fun entry(name: String, type: Int): org.apache.commons.net.ftp.FTPFile =
+                org.apache.commons.net.ftp.FTPFile().apply {
+                    this.name = name
+                    this.type = type
+                    this.size = 42
+                }
+            val files = arrayOf(
+                entry(".", org.apache.commons.net.ftp.FTPFile.DIRECTORY_TYPE),
+                entry("..", org.apache.commons.net.ftp.FTPFile.DIRECTORY_TYPE),
+                entry("safe.txt", org.apache.commons.net.ftp.FTPFile.FILE_TYPE),
+                entry("Album", org.apache.commons.net.ftp.FTPFile.DIRECTORY_TYPE)
+            )
+            val decoded = FtpsMlsdEntries.decode(files)
+            check(decoded.map { it.name } == listOf("safe.txt", "Album"))
+            check(!decoded[0].isDirectory && decoded[1].isDirectory)
+        }
+        checkCase("malformed MLSD children cannot create a partial authoritative list") {
+            fun entry(name: String): org.apache.commons.net.ftp.FTPFile =
+                org.apache.commons.net.ftp.FTPFile().apply { this.name = name }
+            for (invalid in listOf("a/b", "..\\bad", "name\\rmore")) {
+                check(runCatching {
+                    FtpsMlsdEntries.decode(arrayOf(entry("valid"), entry(invalid)))
+                }.isFailure)
+            }
+        }
         checkCase("list failure taxonomy never leaks raw exception, path or credentials") {
             val details = "host=private.invalid user=private secret=not-for-logs /sensitive/video.mkv"
             val types = listOf(
