@@ -15,6 +15,7 @@ This is a **small enduring router**, not a dated work diary. For what to do next
 | Security, private repos, token or API changes | This guide's invariants, browser network/API logic and relevant regression tests |
 | CI or performance | [lean validation policy](docs/quality/VALIDATION.md), `tests/expository.test.cjs`, workflow YAML |
 | Repo housekeeping | [work queue](docs/WORK-QUEUE.md), ownership notes, current source/tests |
+| Android-native Expository Transfer **proposal only** | [critical review](docs/android-transfer/CRITICAL-REVIEW.md), [hardened plan](docs/android-transfer/HARDENED-IMPLEMENTATION-PLAN.md), [Drive contract](docs/android-transfer/GOOGLE-DRIVE-INTEGRATION.md). Separate app and permissions: NEVER port writer behaviors into the read-only Pages explorer |
 
 ## Non-negotiable product and security rules
 
