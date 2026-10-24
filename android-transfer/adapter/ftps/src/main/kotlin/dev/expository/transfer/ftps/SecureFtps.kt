@@ -7,6 +7,10 @@ import org.apache.commons.net.util.TrustManagerUtils
 import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
+import java.net.SocketException
+import java.net.SocketTimeoutException
+import javax.net.ssl.SSLException
+import javax.net.ssl.SSLHandshakeException
 import java.nio.charset.StandardCharsets
 import java.time.Duration
 
@@ -48,6 +52,31 @@ object FtpsPath {
             }
         }
         return absolute
+    }
+}
+
+/**
+ * Sanitized protocol failure. Numeric FTP response codes contain no server
+ * response body; no remote path, host, account or raw exception is retained.
+ * A missing response is reported as 000.
+ */
+class FtpsSafeFailure internal constructor(
+    val stage: String, val kind: String, val numericReply: Int
+) : IOException("FTPS_${stage}_${kind}_REPLY_${numericReply.toString().padStart(3, '0')}")
+
+internal object FtpsFailureCodes {
+    fun classify(stage: String, reply: Int, error: Throwable?): FtpsSafeFailure {
+        val kind = when (error) {
+            null -> "NO_DATA_CONNECTION_OR_COMMAND_REJECTED"
+            is SSLHandshakeException -> "TLS_HANDSHAKE"
+            is SSLException -> "TLS_DATA"
+            is SocketTimeoutException -> "TIMEOUT"
+            is SocketException -> "DATA_SOCKET"
+            is IOException -> "IO"
+            else -> "PARSER_OR_POLICY"
+        }
+        val numeric = if (reply in 100..599) reply else 0
+        return FtpsSafeFailure(stage, kind, numeric)
     }
 }
 
@@ -100,10 +129,21 @@ object SecureFtps {
 /** Single-threaded control connection. Do not start a second command mid-RETR. */
 class FtpsSession internal constructor(private val client: FTPSClient) : AutoCloseable {
     fun list(absoluteFolder: String): List<FtpsEntry> {
-        val files = client.mlistDir(FtpsPath.checked(absoluteFolder))
-            ?: throw IOException("MLSD_NOT_VERIFIED")
-        return files.map {
-            FtpsEntry(FtpsPath.checkedChild(it.name ?: ""), it.isDirectory, it.size)
+        // Keep MLSD as the only authoritative listing source until LIST fallback
+        // is explicitly marked incomplete. A missing or failed MLSD reply must
+        // never become an apparently empty, complete directory.
+        val path = FtpsPath.checked(absoluteFolder)
+        val files = try {
+            client.mlistDir(path)
+        } catch (error: Exception) {
+            throw FtpsFailureCodes.classify("LIST", client.replyCode, error)
+        } ?: throw FtpsFailureCodes.classify("LIST", client.replyCode, null)
+        return try {
+            files.map {
+                FtpsEntry(FtpsPath.checkedChild(it.name ?: ""), it.isDirectory, it.size)
+            }
+        } catch (error: Exception) {
+            throw FtpsFailureCodes.classify("LIST", client.replyCode, error)
         }
     }
 
