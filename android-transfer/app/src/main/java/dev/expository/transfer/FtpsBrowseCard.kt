@@ -251,17 +251,51 @@ fun FtpsBrowseCard() {
                             } else {
                                 Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
                                     onClick = {
-                                        pendingFile = fullPath
-                                        busy = true
-                                        val extension = entry.name.substringAfterLast('.', "").lowercase()
-                                        val mime = MimeTypeMap.getSingleton()
-                                            .getMimeTypeFromExtension(extension)
-                                            ?: "application/octet-stream"
-                                        saveAs.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                                            addCategory(Intent.CATEGORY_OPENABLE)
-                                            type = mime
-                                            putExtra(Intent.EXTRA_TITLE, entry.name)
-                                        })
+                                        // Verify file identity before opening Android's
+                                        // CREATE_DOCUMENT picker. Otherwise a missing
+                                        // MLST/permission could leave an empty document.
+                                        val live = session
+                                        if (live == null) {
+                                            status = "FTPS session expired. Reconnect to save."
+                                        } else {
+                                            busy = true
+                                            pendingFile = null
+                                            status = "Checking remote file metadata before Save As…"
+                                            scope.launch {
+                                                val preflight = withContext(Dispatchers.IO) {
+                                                    runCatching { live.statFile(fullPath) }
+                                                }
+                                                if (session !== live) {
+                                                    busy = false
+                                                    status = "FTPS session changed. Save canceled."
+                                                } else {
+                                                    preflight.onSuccess {
+                                                        pendingFile = fullPath
+                                                        val extension = entry.name
+                                                            .substringAfterLast('.', "").lowercase()
+                                                        val mime = MimeTypeMap.getSingleton()
+                                                            .getMimeTypeFromExtension(extension)
+                                                            ?: "application/octet-stream"
+                                                        try {
+                                                            saveAs.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                                                addCategory(Intent.CATEGORY_OPENABLE)
+                                                                type = mime
+                                                                putExtra(Intent.EXTRA_TITLE, entry.name)
+                                                            })
+                                                            status = "Choose a new Android document. No remote source changes."
+                                                        } catch (_: Exception) {
+                                                            pendingFile = null
+                                                            busy = false
+                                                            status = "Android Save As picker unavailable. Nothing was transferred."
+                                                        }
+                                                    }.onFailure {
+                                                        pendingFile = null
+                                                        busy = false
+                                                        status = "Remote file metadata unavailable. No Android document was created."
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }) { Text("Save As…") }
                             }
                         }
