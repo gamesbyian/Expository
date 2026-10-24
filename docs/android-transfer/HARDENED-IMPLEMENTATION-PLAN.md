@@ -94,13 +94,13 @@ review/                  owned synthetic screenshot atlas, separate physical acc
 
 **Guaranteed fallback:** implement native Android OAuth authorized Drive API with `drive.file` where the flow can grant access to the specific parent file/folder (Google Picker + permission test). The current mobile Google Picker flow is fundamentally an *open/select* flow. Probe folder selection, files.create parent permissions and response with a controlled account before claiming it is a destination picker. If `drive.file` cannot authorize the chosen destination, present a truthful narrowed app-owned folder option or block and ask for deliberately reviewed wider-scope product requirements; never silently escalate to `drive` restricted scope.
 
-**Upload:** `files.create` resumable as appropriate, report created ID, parent, MIME, MD5 checksum for binary if returned, `files.get` readback and quota errors; after upload session expiry investigate whether a file exists before blindly creating another. Auth and secret retention follow Google Identity/Android security guidance. Local/remote → Drive is a P0 requirement only once real behavior verified.
+**Upload:** `files.create` resumable as appropriate, report created ID, parent, MIME, MD5 checksum for binary if returned, `files.get` readback and quota errors; after upload session expiry investigate whether a file exists before blindly creating another. Auth and secret retention follow Google Identity/Android security guidance. Local/remote → Drive and supported-file **Create Google Doc** / **Open with Google Docs** actions are P0 entry points only once real behavior verified.
 
 **Docs:** opt-in separate conversion using specific native Google MIME and live `about.importFormats` checks; preserving original is default. `Open with Google Docs` is a handoff, not conversion or a copy guarantee.
 
 Sources: [Drive narrow scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth), [mobile picker limitations](https://developers.google.com/workspace/drive/picker/guides/desktop-mobile-picker), [Drive upload/convert](https://developers.google.com/workspace/drive/api/guides/manage-uploads), [Android document provider flags](https://developer.android.com/guide/topics/providers/create-document-provider).
 
-## Release acceptance additions D01–D12
+## Release acceptance additions D01–D20
 
 - **D01:** Drive app absent: option explains API alternative, no claim SAF route works.
 - **D02:** Drive app installed but no writable SAF tree: flow selects supported API adapter, not false Save.
@@ -114,6 +114,7 @@ Sources: [Drive narrow scopes](https://developers.google.com/workspace/drive/api
 - **D10:** Cross-server move source deletion blocked until destination proof and explicit approval.
 - **D11:** Same-server remote copy must not invoke FTP RNFR/RNTO or SFTP Rename; only Move may.
 - **D12:** 10k virtualized rename preview at 200% text, stable sort, no misnumbering after scroll.
+- **D13–D20:** First-class Google Docs vs Google Drive action semantics, safe Android open/share contracts, per-pane source parity, real native Doc conversion, unverified handoffs, and multi-file recovery, as defined in [Google Drive/Docs destination UX](GOOGLE-DRIVE-INTEGRATION.md#p0-acceptance-extension-d13d20). Neither a Sharesheet launch nor a Google Drive filename display can substitute for proof of a successful copy/conversion.
 
 ## Explicit stop-ship defects
 
