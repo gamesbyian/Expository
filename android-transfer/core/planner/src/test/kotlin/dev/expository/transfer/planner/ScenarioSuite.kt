@@ -103,6 +103,26 @@ object ScenarioSuite {
             check(OperationPlanner.revalidate(p, req, NOW))
             check(!OperationPlanner.revalidate(p, req.copy(destination = d.copy(revision = "rev2")), NOW))
         }
+        test("unverified SFTP preview shows proposals but never becomes a rename plan") {
+            // An authenticated session token is not proof of verified remote
+            // namespace/storage identity or a supported mutation capability.
+            val unknown = CapabilityProof(Support.UNKNOWN, "preview-only", 0L)
+            val loc = remote(namespace = null,
+                capabilities = mapOf(Capability.RENAME to unknown))
+                .copy(verifiedStorageDomain = null)
+            val snap = RenameSnapshot(loc,
+                listOf(RenameItem("a", "Episode 01.mkv", "v1", ItemKind.FILE),
+                       RenameItem("b", "Episode 02.mkv", "v1", ItemKind.FILE)),
+                listOf("a", "b"), "complete-observation-1", true)
+            val result = RenamePlanner.preview(snap,
+                RenameRecipe(listOf(RenameEdit.Prefix("New "))), NOW)
+            check(result.preview.map { it.proposed } ==
+                listOf("New Episode 01.mkv", "New Episode 02.mkv"))
+            check(!result.executable)
+            check("RENAME_CAPABILITY_NOT_PROVEN" in result.blockers)
+            check(result.steps.isEmpty())
+            check(loc.verifiedNamespace == null && loc.verifiedStorageDomain == null)
+        }
         test("N12 true A↔B swap stages safely") {
             val s = snapshot(listOf("A", "B"))
             val swap = RenamePlanner.preview(s, RenameRecipe(listOf(
