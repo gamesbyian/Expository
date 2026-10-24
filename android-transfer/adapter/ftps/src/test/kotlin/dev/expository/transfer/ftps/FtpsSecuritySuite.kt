@@ -12,7 +12,8 @@ object FtpsSecuritySuite {
             }
         }
         checkCase("TLS 1.2/1.3, no clear or SSLv3 fallback") {
-            SecureFtps.configuredClient().use { client ->
+            val client = SecureFtps.configuredClient()
+            run {
                 check(client.enabledProtocols?.toList() == listOf("TLSv1.3", "TLSv1.2"))
                 check(client.connectTimeout > 0)
                 check(client.dataTimeout.toMillis() > 0L)
