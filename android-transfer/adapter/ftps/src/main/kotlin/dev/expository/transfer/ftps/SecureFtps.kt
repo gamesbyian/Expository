@@ -86,13 +86,16 @@ class FtpsSafeFailure internal constructor(
 
 internal object FtpsFailureCodes {
     fun classify(stage: String, reply: Int, error: Throwable?): FtpsSafeFailure {
-        val kind = when (error) {
-            null -> "NO_DATA_CONNECTION_OR_COMMAND_REJECTED"
-            is SSLHandshakeException -> "TLS_HANDSHAKE"
-            is SSLException -> "TLS_DATA"
-            is SocketTimeoutException -> "TIMEOUT"
-            is SocketException -> "DATA_SOCKET"
-            is IOException -> "IO"
+        // Some FTP libraries wrap the TLS exception in an IOException.
+        // Classify only exception *types*, never message/stack/hostname/causes.
+        val chain = generateSequence(error) { it.cause }.take(6).toList()
+        val kind = when {
+            error == null -> "NO_DATA_CONNECTION_OR_COMMAND_REJECTED"
+            chain.any { it is SSLHandshakeException } -> "TLS_HANDSHAKE"
+            chain.any { it is SSLException } -> "TLS_DATA"
+            chain.any { it is SocketTimeoutException } -> "TIMEOUT"
+            chain.any { it is SocketException } -> "DATA_SOCKET"
+            chain.any { it is IOException } -> "IO"
             else -> "PARSER_OR_POLICY"
         }
         val numeric = if (reply in 100..599) reply else 0
@@ -242,8 +245,12 @@ class FtpsSession internal constructor(private val client: FTPSClient) : AutoClo
     }
 
     fun openRead(absoluteFile: String): InputStream {
-        val raw = client.retrieveFileStream(FtpsPath.checked(absoluteFile))
-            ?: throw IOException("RETR_NOT_ACCEPTED")
+        val path = FtpsPath.checked(absoluteFile)
+        val raw = try {
+            client.retrieveFileStream(path)
+        } catch (error: Exception) {
+            throw FtpsFailureCodes.classify("READ", client.replyCode, error)
+        } ?: throw FtpsFailureCodes.classify("READ", client.replyCode, null)
         // RFC 959 final completion reply is distinct from stream EOF; a failed
         // close/complete means the executor cannot advertise successful transfer.
         return object : FilterInputStream(raw) {
@@ -254,9 +261,15 @@ class FtpsSession internal constructor(private val client: FTPSClient) : AutoClo
                 var failure: IOException? = null
                 try { super.close() }
                 catch (e: IOException) { failure = e }
+                var finalError: IOException? = null
                 val completed = try { client.completePendingCommand() }
-                    catch (_: IOException) { false }
-                if (failure != null || !completed) throw IOException("FTPS_READ_COMPLETION_UNCERTAIN")
+                    catch (error: IOException) {
+                        finalError = error
+                        false
+                    }
+                if (failure != null || !completed)
+                    throw FtpsFailureCodes.classify("READ_FINAL", client.replyCode,
+                        failure ?: finalError)
             }
         }
     }
