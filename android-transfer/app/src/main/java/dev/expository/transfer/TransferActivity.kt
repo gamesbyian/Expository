@@ -75,12 +75,13 @@ private fun DeveloperPreview() {
         ) {
             item { Text("Expository Transfer", style = MaterialTheme.typography.headlineMedium) }
             item {
-                Text("Experimental Local Copy and pinned SFTP remote Save As; other remote demo is synthetic",
+                Text("Experimental Local Copy, secure SFTP and FTPS Save As; other remote demo is synthetic",
                     style = MaterialTheme.typography.bodySmall)
             }
             item { RecoveryStatusCard() }
             item { LocalCopyCard() }
             item { SftpBrowseCard() }
+            item { FtpsBrowseCard() }
             item { Text("Demo server /demo", style = MaterialTheme.typography.titleMedium) }
             items(demoFiles, key = { it.name }) { item ->
                 Card(Modifier.fillMaxWidth()) {
