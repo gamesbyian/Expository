@@ -1,7 +1,7 @@
 # Native Transfer security and Android 17 plan
 
 ## Non-negotiable boundaries
-The native app ID `dev.expository.transfer`, Android Keystore / local vault (not implemented), OAuth client (not configured) and future network permission set are independent of Expository's read-only GitHub Pages explorer. Never use or copy the web app's GitHub token. The G0 shell has **no INTERNET, account, broad-file, or local-network permissions**, no real server URLs, and no persistent files.
+The native app ID `dev.expository.transfer`, Android Keystore / local vault (not implemented), OAuth client (not configured) and future network permission set are independent of Expository's read-only GitHub Pages explorer. Never use or copy the web app's GitHub token. The G0 shell has **no INTERNET, account, broad-file, or local-network permissions**, no real server URLs, and no persistent files on its own. The G2 picker-initiated Local→Local Copy path can create a **user-chosen SAF destination document** and write bytes to it, without INTERNET, remote credentials, broad storage permissions, or source deletion. It is foreground-only and cannot recover interrupted writes; the UI warns about a possible partial document.
 
 Real FTP/SFTP credentials will be entered by the user, stored only in a device-local protected vault when implemented, never in drag payloads, scripts, receipts, GitHub Secrets, or CI artifacts. Redact authority names, paths and user filenames in telemetry; the current deterministic CI uses synthetic names only. GitHub Actions debug signing is test-only; never publish its debug keystore or present the APK as a signed release.
 
@@ -10,6 +10,10 @@ Android 17 enforces `android.permission.ACCESS_LOCAL_NETWORK` for targetSdk **37
 
 ## Provider and destructive semantics
 The Android Storage Access Framework picker returns opaque granted URIs; never manufacture filesystem paths or escalate to MANAGE_EXTERNAL_STORAGE. Persist grants only if the provider legally offers them; revoke/URI-remap stops or revalidates jobs. Remote-to-Drive copy must use verified writable SAF access or a narrowly authorized Drive API adapter; Share and external Docs opening remain unverified handoffs. Drive conversion is a separate opt-in fidelity-changing action. No source delete before destination proof and explicit confirmation.
+
+## Single-document picker execution boundary
+
+G2 only accepts `content://` URIs returned from user-initiated `ACTION_OPEN_DOCUMENT` and `ACTION_CREATE_DOCUMENT`. Android guarantees that the second action creates a new document (it may alter the displayed name), so the planner has a separate `SAF_NEW_DOCUMENT_PICKER` witness rather than fabricating a complete parent listing. This mode is restricted to one file, Copy, and a granted Local SAF destination. The app never uses `ACTION_OPEN_DOCUMENT` to target an existing file for output. Provider content URIs remain in memory only. The ContentResolver `w` mode may be provider-specific; because this target is newly created there is no intent to overwrite an older user document. On write failure, a partial/empty created document may remain; automatic deletion is intentionally out of scope. Read-back digest match proves bytes returned by that provider, not eventual Google Drive cloud synchronization. **No durable queue and no source delete.**
 
 ## Evidence
 Synthetic fixture data are **E1**, an APK compilation artifact is **build provenance**, not a device acceptance. Keep debug APK artifacts at short retention; no user data in screenshot jobs. Real device, server and OAuth tests must be opt-in with separately documented consent and scope.

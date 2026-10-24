@@ -27,7 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.expository.transfer.planner.*
 
-/** Synthetic-only native shell. Nothing here can connect to, alter or save real files. */
+/** Experimental native shell: Local→Local copy uses SAF; remote demo is synthetic only. */
 class TransferActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,9 +69,11 @@ private fun DeveloperPreview() {
     Scaffold { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
             Text("Expository Transfer", style = MaterialTheme.typography.headlineMedium)
-            Text("Developer preview · No live connections or file writes",
+            Text("Experimental local Save As · Remote browser is synthetic",
                 style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.padding(10.dp))
+            Spacer(Modifier.padding(6.dp))
+            LocalCopyCard()
+            Spacer(Modifier.padding(6.dp))
             Text("Demo server /demo", style = MaterialTheme.typography.titleMedium)
             LazyColumn(Modifier.weight(1f)) {
                 items(demoFiles, key = { it.name }) { item ->

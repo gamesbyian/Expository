@@ -27,10 +27,11 @@ jobs:
           gradle-version: "8.13"
       - name: Offline deterministic G1 synthetic scenarios
         working-directory: android-transfer
-        run: gradle :core:planner:scenarios :testing:fake-endpoints:scenarios --no-daemon
+        run: gradle :core:planner:scenarios :core:engine:scenarios :testing:fake-endpoints:scenarios --no-daemon
   android-debug:
-    # SDK/APK build is opt-in and does not consume runners on every PR update.
-    if: github.event_name == 'workflow_dispatch' && inputs.build_apk
+    # One-time G2 APK compilation proof on the owning stacked PR (#33).
+    # Revert to manual-only after the Android build has passed.
+    if: (github.event_name == 'workflow_dispatch' && inputs.build_apk) || (github.event_name == 'pull_request' && github.event.pull_request.number == 33)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:

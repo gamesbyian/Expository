@@ -243,6 +243,30 @@ object ScenarioSuite {
             check(!plan.executable && "DELETE_CONSENT_REQUIRED" in plan.blockers)
             check("DESTINATION_WRITE_NOT_PROVEN" !in plan.blockers)
         }
+        test("G2 SAF Save As witness is single-file and copy-only") {
+            val source = remote(capabilities = caps(Capability.READ))
+            val target = LocationRef(LocationKey(LocationKind.LOCAL_SAF,
+                "document-provider", "new", "created-document", "picker-grant"),
+                emptyList(), "created-v1", caps(Capability.WRITE))
+            val witness = DestinationListing("created-doc-revision", true, emptyList(),
+                DestinationWitness.SAF_NEW_DOCUMENT_PICKER)
+            val copy = OperationPlanner.transfer(TransferRequest(
+                listOf(file("Example.txt", source)), target,
+                destinationListing = witness), NOW)
+            check(copy.executable && copy.route == TransferRoute.DEVICE_RELAY)
+            check(!OperationPlanner.transfer(TransferRequest(
+                listOf(file("Example.txt", source)), target, Operation.MOVE,
+                destinationListing = witness), NOW).executable)
+            check(!OperationPlanner.transfer(TransferRequest(
+                listOf(file("Example.txt", source), file("Other.txt", source)),
+                target, destinationListing = witness), NOW).executable)
+            check(!OperationPlanner.transfer(TransferRequest(
+                listOf(file("Example.txt", source)), target,
+                destinationListing = witness.copy(siblings = listOf("oops"))), NOW).executable)
+            check(!OperationPlanner.revalidate(copy, TransferRequest(
+                listOf(file("Example.txt", source)), target,
+                destinationListing = witness.copy(witness = DestinationWitness.COMPLETE_PARENT_LISTING)), NOW))
+        }
         test("10k actual rename steps use stable order and no overwrite") {
             val names = (1..10000).map { "Test" + it.toString().padStart(5, '0') + ".txt" }
             val s = snapshot(names)
