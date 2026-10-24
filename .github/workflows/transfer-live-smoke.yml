@@ -61,20 +61,42 @@ jobs:
     if: ${{ startsWith(inputs.profile, 'owner-') }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
-    # Repository variables TRANSFER_TEST_HOST / TRANSFER_TEST_USER and repository
-    # secret FTP_PASSWORD must already exist. No plaintext FTP fallback.
+    # Password stays a GitHub Actions secret. The owner host/account are
+    # recovered from an IMMUTABLE public S60 commit with strict parsing.
     env:
       EXPOSITORY_SMOKE_TARGET: ${{ inputs.profile }}
-      EXPOSITORY_SMOKE_HOST: ${{ vars.TRANSFER_TEST_HOST }}
-      EXPOSITORY_SMOKE_USER: ${{ vars.TRANSFER_TEST_USER }}
       EXPOSITORY_SMOKE_PASSWORD: ${{ secrets.FTP_PASSWORD }}
       EXPOSITORY_SMOKE_SFTP_PIN: ${{ inputs.sftp_pin }}
     steps:
+      - name: Recover publicly documented owner host/account from pinned S60
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          import urllib.request
+
+          # Immutable S60 commit; never fetch a moving branch to route secrets.
+          url = "https://raw.githubusercontent.com/gamesbyian/S60/417fec65458c500da903184118bf701086161006/.github/workflows/ftp-inventory.yml"
+          with urllib.request.urlopen(url, timeout=12) as response:
+              body = response.read(100_001)
+          if len(body) > 100_000:
+              raise RuntimeError("S60_CONFIG_SIZE_LIMIT")
+          source = body.decode("utf-8")
+          host = re.findall(r"^\\s*FTP_HOST:\\s*([a-zA-Z0-9.-]+)\\s*$", source, flags=re.M)
+          account = re.findall(r"^\\s*FTP_USER:\\s*([a-zA-Z0-9._-]+)\\s*$", source, flags=re.M)
+          if len(host) != 1 or len(account) != 1 or not host[0].endswith(".seedhost.eu"):
+              raise RuntimeError("S60_CONFIG_REFERENCE_INVALID")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as handle:
+              handle.write("EXPOSITORY_SMOKE_HOST=" + host[0] + "\\n")
+              handle.write("EXPOSITORY_SMOKE_USER=" + account[0] + "\\n")
+          print("Pinned S60 connection metadata loaded; host and account redacted.")
+          PY
       - name: Fail closed on missing private configuration
         shell: bash
         run: |
           if test -z "$EXPOSITORY_SMOKE_HOST" || test -z "$EXPOSITORY_SMOKE_USER" || test -z "$EXPOSITORY_SMOKE_PASSWORD"; then
-            echo "Owner target not configured (host/user vars and FTP_PASSWORD secret required)"
+            echo "Owner target not configured (pinned S60 metadata and FTP_PASSWORD secret required)"
             exit 2
           fi
           if test "$EXPOSITORY_SMOKE_TARGET" = owner-sftp && test -z "$EXPOSITORY_SMOKE_SFTP_PIN"; then
