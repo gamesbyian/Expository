@@ -53,7 +53,7 @@ object SftpServerLabSuite {
                 check(runCatching { session.statFile("/") }.isFailure)
                 val received = session.openRead("/synthetic.txt").use { it.readBytes() }
                 check(String(received, StandardCharsets.UTF_8) == payload)
-                val uploadPayload = "Synthetic upload bytes\\n".replace("\\\\n", "\\n").toByteArray(StandardCharsets.UTF_8)
+                val uploadPayload = ("Synthetic upload bytes" + 10.toChar()).toByteArray(StandardCharsets.UTF_8)
                 session.openExclusiveWrite("/synthetic-upload.txt").use {
                     it.write(uploadPayload)
                 }
