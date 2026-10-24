@@ -44,6 +44,7 @@ The Expository brand is exploring a **separate, native Android FTP/FTPS/SFTP tra
 
 - [Online competitor, user-review, platform and engineering research](docs/android-transfer/EXPLORATORY-REPORT.md)
 - [Detailed product proposal, user flows, architecture, priorities and acceptance gates](docs/android-transfer/PRODUCT-PROPOSAL.md)
+- [Google Drive destination and Google Docs interoperability](docs/android-transfer/GOOGLE-DRIVE-INTEGRATION.md): local/remote to Drive, provider handoff, optional conversion
 
 ## How this site is published
 
