@@ -2,7 +2,7 @@
 
 **Status:** P0 destination requirement critically reviewed October 23, 2026. This is a design contract, **not an implemented integration or a verified Google Drive DocumentsProvider capability**. See [critical review](CRITICAL-REVIEW.md), [hardened plan](HARDENED-IMPLEMENTATION-PLAN.md).
 
-## User promise
+**Acceptance expansion:** [second-pass decisions](SECOND-PASS-DECISIONS.md) and [test matrix N17–N22](TEST-AND-EVIDENCE-MATRIX.md) add upload-session reconciliation, identity/parent proof and the explicit distinction between original Save, handoff and Docs conversion.\n\n## User promise
 
 From either a **Local** or an **FTP/FTPS/SFTP Remote** session, choose one file, many files, or folders and select **Copy to → Google Drive**. Select the Drive account and destination using familiar Android interfaces wherever the installed provider supports them. The experience must not require manually downloading into a temporary Downloads folder and then reopening Google Drive.
 
