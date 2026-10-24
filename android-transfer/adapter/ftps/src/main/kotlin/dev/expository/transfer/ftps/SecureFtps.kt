@@ -22,6 +22,13 @@ data class FtpsEntry(val name: String, val isDirectory: Boolean, val size: Long)
 
 /** Remote names are never normalized by guessing OS path semantics. */
 object FtpsPath {
+    fun checkedChild(name: String): String {
+        require(name.isNotBlank() && name != "." && name != ".." &&
+            name.toByteArray(StandardCharsets.UTF_8).size <= 255 &&
+            name.none { it == '/' || it == '\\' || it == '\u0000' ||
+                it == '\r' || it == '\n' }) { "INVALID_REMOTE_CHILD_NAME" }
+        return name
+    }
     fun checked(absolute: String): String {
         require(absolute.startsWith("/") && absolute.length <= 4096) { "PATH_MUST_BE_ABSOLUTE" }
         require(absolute.none { it == '\\' || it == '\u0000' || it == '\r' || it == '\n' }) {
@@ -59,7 +66,9 @@ object SecureFtps {
     ): FtpsSession {
         require(username.isNotBlank() && username.length <= 255 &&
             username.none { it == '\n' || it == '\r' || it == '\u0000' }) { "INVALID_USER" }
-        require(password.isNotEmpty()) { "EMPTY_SECRET" }
+        require(password.isNotEmpty() && password.none { it == '\r' || it == '\n' || it == '\u0000' }) {
+            "INVALID_SECRET"
+        }
         val client = configuredClient()
         try {
             client.connect(target.host, target.port)
@@ -85,7 +94,9 @@ class FtpsSession internal constructor(private val client: FTPSClient) : AutoClo
     fun list(absoluteFolder: String): List<FtpsEntry> {
         val files = client.mlistDir(FtpsPath.checked(absoluteFolder))
             ?: throw IOException("MLSD_NOT_VERIFIED")
-        return files.map { FtpsEntry(it.name ?: "", it.isDirectory, it.size) }
+        return files.map {
+            FtpsEntry(FtpsPath.checkedChild(it.name ?: ""), it.isDirectory, it.size)
+        }
     }
 
     fun openRead(absoluteFile: String): InputStream {
