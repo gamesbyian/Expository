@@ -26,7 +26,7 @@ Second-pass design hardening: [decisions](android-transfer/SECOND-PASS-DECISIONS
 | T03 | In progress [#28](https://github.com/gamesbyian/Expository/issues/28), merged [PR #33](https://github.com/gamesbyian/Expository/pull/33) | One-file Android ACTION_OPEN_DOCUMENT→ACTION_CREATE_DOCUMENT Copy path and pure foreground engine merged; real-device, process death, adaptive split and broader G2/G6 acceptance incomplete |
 | T04 | Open [#27](https://github.com/gamesbyian/Expository/issues/27) | G8: test Drive provider capability on physical Android, scoped API fallback and original/converted/handoff receipt semantics; renamer G7 in #26/#28 |
 | T05 | Planned | G9: signed sideload APK and independently witnessed device/protocol/Drive/a11y acceptance |
-| T06 | In progress | G3 secure explicit FTPS read/list adapter starts in isolated native source; controlled protocol lab, Android integration and SFTP host key validation outstanding |
+| T06 | In progress | G3 secure explicit FTPS read/list adapter starts in isolated native source; FTPS controlled TLS lab verified #40125931787, pinned SFTP synthetic lab #40117260270, Android integration and broad protocol matrix outstanding |
 
 Evidence truth: native Android/Compose **source now exists in draft PR #32**, with pure Kotlin scenarios exercised; a synthetic-only **signed debug APK has been built with recorded SHA256 provenance**, but **has not been installed or tested on-device**. Do not use web-explorer acceptance to certify a native transfer application. See [hardened plan](android-transfer/HARDENED-IMPLEMENTATION-PLAN.md).
 
