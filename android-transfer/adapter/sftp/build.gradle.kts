@@ -16,3 +16,12 @@ tasks.register<JavaExec>("lab") {
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("dev.expository.transfer.sftp.SftpServerLabSuite")
 }
+
+
+tasks.register<JavaExec>("externalSmoke") {
+    group = "verification"
+    description = "MANUAL ONLY: externally verified host-key pinned SFTP read-only test"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.sftp.SftpExternalSmokeSuite")
+}
