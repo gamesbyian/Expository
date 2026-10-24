@@ -7,7 +7,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -67,38 +66,45 @@ private fun DeveloperPreview() {
                 destinationListing = DestinationListing("synthetic-listing-1", true, emptyList())), 0L)
     }
     Scaffold { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
-            Text("Expository Transfer", style = MaterialTheme.typography.headlineMedium)
-            Text("Experimental local Save As · Remote browser is synthetic",
-                style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.padding(6.dp))
-            LocalCopyCard()
-            Spacer(Modifier.padding(6.dp))
-            Text("Demo server /demo", style = MaterialTheme.typography.titleMedium)
-            LazyColumn(Modifier.weight(1f)) {
-                items(demoFiles, key = { it.name }) { item ->
-                    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Row(Modifier.fillMaxWidth().padding(8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween) {
-                            Column(Modifier.weight(1f)) {
-                                Text(item.name)
-                                Text(item.size, style = MaterialTheme.typography.bodySmall)
-                            }
-                            Button(onClick = { selected = item.name }) {
-                                Text(if (selected == item.name) "Selected" else "Select")
-                            }
+        // One scroll owner: at 200% font scale or short phone heights, the
+        // picker actions and receipts never disappear behind a squeezed list.
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item { Text("Expository Transfer", style = MaterialTheme.typography.headlineMedium) }
+            item {
+                Text("Experimental local Save As · Remote browser is synthetic",
+                    style = MaterialTheme.typography.bodySmall)
+            }
+            item { LocalCopyCard() }
+            item { Text("Demo server /demo", style = MaterialTheme.typography.titleMedium) }
+            items(demoFiles, key = { it.name }) { item ->
+                Card(Modifier.fillMaxWidth()) {
+                    Row(Modifier.fillMaxWidth().padding(8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween) {
+                        Column(Modifier.weight(1f)) {
+                            Text(item.name)
+                            Text(item.size, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Button(onClick = { selected = item.name }) {
+                            Text(if (selected == item.name) "Selected" else "Select")
                         }
                     }
                 }
             }
-            if (plan == null) {
-                Text("Choose a demo file to inspect its Copy plan.")
-            } else {
-                Text("Copy proposal only", style = MaterialTheme.typography.titleMedium)
-                Text("Route: " + plan.route.name.replace('_', ' '))
-                Text("Plan: " + plan.digest.take(12) + "…")
-                Text("Execution unavailable until live adapters and confirmation exist.")
-                Button(onClick = { selected = null }) { Text("Clear selection") }
+            item {
+                if (plan == null) {
+                    Text("Choose a demo file to inspect its synthetic Copy plan.")
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Synthetic Copy proposal", style = MaterialTheme.typography.titleMedium)
+                        Text("Route: " + plan.route.name.replace('_', ' '))
+                        Text("Plan: " + plan.digest.take(12) + "…")
+                        Text("Demo execution unavailable. Live Local Copy is above.")
+                        Button(onClick = { selected = null }) { Text("Clear selection") }
+                    }
+                }
             }
         }
     }
