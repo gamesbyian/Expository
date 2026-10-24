@@ -11,7 +11,7 @@
 
 A distinct, native Android file-transfer companion within the Expository brand. Unlike the existing Expository GitHub browser, which is deliberately read-only and served as a static web app, **Expository Transfer is explicitly a user-authorized writer** to chosen remote FTP/FTPS/SFTP servers and chosen Android document destinations. It must have a separate application, credential store, permissions boundary, user experience and QA contract. Shared brand and visual language do **not** imply shared authentication or data access. No Expository cloud is needed.
 
-**P0 product rule:** Uploading or saving one item is trivially discoverable. Uploading or saving a folder is just as clear. Local/remote split-pane drag-and-drop is a deliberate, optional second mode, not a forced starting screen.
+**P0 product rule:** Uploading or saving one item is trivially discoverable. Uploading or saving a folder is just as clear. The optional **Workspace must pair any two locations: Local/Local, Local/Remote or Remote/Remote**, including two independent folders on the same server. Drag-and-drop has an explicit action alternative. **An excellent, compact, preview-first batch renamer is launch scope**, not a future “expert tool”; regex/chained recipes can arrive later. Full execution and safety specification: [workspace and renamer deep dive](WORKSPACE-AND-BULK-RENAME.md).
 
 ### Product positioning
 
@@ -59,16 +59,25 @@ This is *not* a replacement for Solid Explorer's system-file tools, MiXplorer's 
 
 **Acceptance:** handles permitted SAF document trees, including nonlocal providers where supported; correctly explains Android's restricted folder roots. Never secretly swap in `MANAGE_EXTERNAL_STORAGE` to make a failed picker appear successful.
 
-### J5: Optional local ↔ remote transfer workspace
+### J5: Optional any-two-location transfer workspace (Local/Local, Local/Remote, Remote/Remote)
 
-- Workspace opens with remote pane connected and a remembered, user-authorized local *place*, or a **Choose local folder** prompt.
+- Workspace opens with **two independently navigable locations**, initially Remote + a selected user-authorized Local place if relevant. Top-level presets **Device ↔ Server**, **Device ↔ Device**, **Server ↔ Server** establish the desired pair; each pane can change location independently. Both panes may show different directories on **the same remote server** or **two distinct servers**, or two SAF document providers. The server browser remains single-pane by default.
 - **Portrait phone:** stacked **Local** above **Remote** with 45–55% adjustable pane division, collapsible pane header, independent breadcrumbs and list scroll. When it becomes too cramped due to IME/text scale, automatically switch to one active pane with Local/Remote tabs; user can always make this choice manually.
 - **Landscape/foldable/tablet:** panels side by side, resizable and independently navigable, with active-pane outline and a visible Copy direction.
 - Select items by tap/long-press and drag onto other panel. During drag, highlight **Copy N to Remote** / **Copy N to Device** target. Drop launches **preflight**, never destructive unconfirmed move.
-- **Non-drag alternative:** prominent **Copy to → other pane** and **Save / Upload** actions. Hardware keyboard: Tab focus, Shift-select/range, copy via toolbar, Escape cancels drag. TalkBack can announce origin, target and count.
+- **Non-drag alternative:** prominent **Copy to → other pane** / **Move to → other pane** and **Save / Upload** actions. Hardware keyboard: Tab focus, Shift-select/range, copy via toolbar, Escape cancels drag. TalkBack can announce origin, target and count.
 - A separate **Move** option must explicitly describe deletion from source **after** confirmed destination completion, and require confirmation for cross-location moves.
 
-**Acceptance:** Local↔Remote both directions; 393px portrait and 360px compact layout without horizontal scroll; landscape/large screens show both panes; no hidden-only gesture; data loss never caused by an ambiguous drag.
+- **Remote organization must feel instantaneous when genuinely supported:** Select items → **Move to…** → browse destination on the same server → **New folder** (inline) → confirm. Attempt FTP RNFR/RNTO or SFTP rename on-server when available; do not download/re-upload just to reorganize one server. Refusals, cross-filesystem paths and conflicts get an explicit safe fallback, never hidden byte-relay.
+- **Cross-server remote/remote** uses two authenticated sessions and a bounded phone-mediated stream with transparent bandwidth/battery implications; no automatic FTP FXP. **Local/local** uses SAF provider-supported move only when allowed; otherwise copy/verify/delete with separate confirmation for Move.
+
+**Acceptance:** All six directional pairing cases across Local/Local, Local/Remote and Remote/Remote; 393px portrait and 360px compact layout without horizontal scroll; landscape/large screens show both panes; no hidden-only gesture; data loss never caused by an ambiguous drag. Verify same-server rename avoids transferring file payloads.
+
+### J5b: Compact bulk rename (available in both panes)
+
+Select multiple files/folders → **Rename (N)** → a one-screen sheet with operation chips **Replace**, **Number**, **Prefix/Suffix**, **Case** and **Clean up**, a clear sorting/counter control, extension-preserving default and **live Current → Proposed** row-by-row preview. Apply is blocked for duplicate proposals, conflicts with unselected siblings, invalid/reserved names and unsafe case/Unicode collisions. The same previewed plan drives execution; each rename has an inspectable receipt. The app must stage/sequence cycles such as A↔B safely or refuse and explain. **Undo is best-effort**, never advertised as a global transaction. Regex, saved recipes and multi-step chains are an advanced second increment, not prerequisites to the compact first-run experience. See [the detailed rename contract](WORKSPACE-AND-BULK-RENAME.md#4-compact-bulk-renamer-specification-worthy-of-the-brand).
+
+**Acceptance:** A user can rename 40 episode files with fixed-width numbers without entering a symbolic mask, preview changes before committing, and recover/inspect failures without losing originals. Both local SAF and remote providers are tested for capability-denied rename and changing document identity.
 
 ### J6: Receive via Android share sheet
 
@@ -86,7 +95,7 @@ A network disconnect, process kill or Android time-limit does not leave a fake �
 - Connection pill: name, **FTPS/SFTP secure** or **FTP unencrypted**, open path.
 - Sort/filter/search, refresh, list/grid toggle, multi-select.
 - Sticky bottom action bar: **Upload**, **Save to device** (selection required), **Workspace**.
-- Overflow for Rename, Create folder, Properties, Copy remote path, Refresh, Delete with confirmation, advanced server controls.
+- Overflow for **Bulk rename**, Create folder, Properties, Copy remote path, Refresh, Delete with confirmation and advanced server controls; **Move to…** and **New folder** must also be discoverable without the overflow menu.
 - Persistent small transfer progress pill, expandable queue drawer.
 
 **Main destinations:** Servers, Browse, Transfers, Settings (4 max; bottom navigation on compact screens, rail or app bar on larger screens). Workspace is a browse mode, not a fourth protocol-specific tab. Avoid tabs within tabs.
@@ -104,11 +113,14 @@ A network disconnect, process kill or Android time-limit does not leave a fake �
 | P0 | Native single/multi-file **Save** using Create Document / chosen folder | First half of core promise |
 | P0 | Native single/multi-file **Upload** using Open Document | Second half of core promise |
 | P0 | Whole folder upload and download via separate tree pickers and recursive queue | User explicitly demands folders |
-| P0 | Optional local/remote split workspace; drag/drop + accessible action alternative | User explicitly demands it |
+| P0 | Optional any-two-location workspace: Device/Device, Device/Server, Server/Server; drag/drop + accessible action alternative | User explicitly demands all three combinations; supports both transfer directions |
 | P0 | Durable queue, conflict policies, cancel/retry, verified completion receipts | User trust, integrity |
 | P0 | Secure saved credentials with explicit opt-in, LAN permission, Android lifecycle compliance | Correctness/security |
 | P0 | Share-to-upload via Android share sheet | Delivers natural Android integration |
-| P1 | Batch rename/search, path bookmarking, favorite destinations, multiple server profiles, quick-connect | Efficient repeat use |
+| **P0** | All three two-pane pairings: Local/Local, Local/Remote, Remote/Remote, including same-server fast moves and cross-server relay | Explicit first-request requirement; no fake remote-to-remote copy |
+| **P0** | Remote New folder + Move to… inside destination picker, same-server FTP/SFTP rename when feasible | Fast remote organization without phone-mediated retransfer |
+| **P0** | Compact bulk rename with literal replace, numbering, prefix/suffix, case, locked extensions, live preview, duplicate/conflict blocking, per-item journal | Key product differentiator and initial beta requirement |
+| P1 | Advanced regex/chained rename, recipes, undo where safe; path bookmarking, favorite destinations, multiple server profiles, quick-connect, richer search | Advanced efficiency after safe core renamer |
 | P1 | SFTP key auth/key import, granular TLS trust review, advanced FTP passive/network troubleshooting | More demanding remote servers |
 | P1 | Read-only system `DocumentsProvider`: remote files accessible in Android Files and other apps | Highest-value post-launch integration if secure |
 | P1 | Preview images/text/video via scoped streams, share selected remote file | Distinct Expository brand feature without wholesale file-manager bloat |
@@ -186,8 +198,8 @@ Remote `/incoming` → **Upload** → Android “Choose file(s)” → `report.p
 **D. Folder upload**  
 Remote `/incoming` → **Upload folder** → Android “Allow access to chosen folder” → review include-parent-folder toggle → Queue → Done.
 
-**E. Split-pane drag copy**  
-Workspace Local top/Remote bottom (portrait) → long press select three local photos → drag to Remote → drop target says **Copy 3 photos → /gallery** → preflight → Queue. Same outcome via selected-items toolbar **Copy to remote**. Reverse drag gives **Copy to device**.
+**E. Split-pane drag copy, all three pairings**  
+Workspace Device top/Server bottom (portrait) → long press select three local photos → drag to Server → drop target says **Copy 3 photos → /gallery** → preflight → Queue. Same outcome via selected-items toolbar **Copy to other pane**. Reverse drag copies to device. The same screen can switch either pane to another **Device folder** (Device/Device) or another **Server directory/profile** (Server/Server). Moving a remote file between folders on one server should use an on-server rename where supported; copying between different servers transparently streams through the device.
 
 **F. Overwrite danger**  
 When `report.pdf` already exists: show exact source/destination and “Keep both,” “Skip,” “Replace,” optionally “Apply to remaining.” Default is **Keep both or ask**, never silent overwrite. “Move” demands explicit additional approval.
@@ -229,11 +241,13 @@ Design deliverables before code: 393px portrait home/browse, 360px compact with 
 
 ## 9. Delivery roadmap and independent work lanes
 
+Additional required beta acceptance cases **A21–A32** for all location combinations, remote New folder+Move, bulk rename, collision cycles, staging/undo truthfulness and 10,000-row preview are specified in [Workspace and bulk rename](WORKSPACE-AND-BULK-RENAME.md#5-implementation-contracts-and-acceptance-gates). The initial A01–A20 tests alone are **not** a complete beta gate for this updated first ask.
+
 **Phase 0: protocol/storage feasibility and UI contract.** Implement a fake RemoteStorage and fake document provider with test fixtures, secure SFTP/FTPS handshake proof on local test server, Android 17 LAN permission prototype, and exact picker/drag sketches on 393px + landscape. Validate protocol library licenses, Android runtime compatibility and API provider behavior.
 
-**Phase 1: native MVP end-to-end.** Secure saved server connection + remote browser, Save single and multi/folder, Upload single/multi/folder through Android pickers, share-in upload, honest durable transfer queue and conflicts. Preserve a one-pane, one-handed default. No production secrets in CI.
+**Phase 1: native MVP end-to-end.** Secure saved server connection + remote browser, Save single and multi/folder, Upload single/multi/folder through Android pickers, share-in upload, honest durable transfer queue and conflicts. Also deliver the basic **Move to… → New folder** remote workflow and local/remote direction logic. Preserve a one-pane, one-handed default. No production secrets in CI.
 
-**Phase 2: expert transfer workspace.** Split-pane adaptive layout, long-press selection, drag/drop in either direction, precise copy/move UX, accessibility alternative, queue improvements and vetted batch tools. Beta only after A01–A20 evaluated.
+**Phase 2: beta-complete three-mode workspace and renamer.** All Local/Local, Local/Remote and Remote/Remote pairings with adaptive panes, long-press selection, drag/drop in either direction, precise server-side move vs streamed-copy UX, keyboard/TalkBack alternatives and a compact live-preview **P0 bulk renamer**. Complete A01–A32 before beta. Advanced regex/presets can follow P0 with separate acceptance.
 
 **Phase 3: remote-native ecosystem.** DocumentsProvider, previews/streaming where safe, one-way backup with dry-run, Wi-Fi/metered policies, WebDAV/SMB capability adapters. Optional Expository-brand image gallery extras last.
 
