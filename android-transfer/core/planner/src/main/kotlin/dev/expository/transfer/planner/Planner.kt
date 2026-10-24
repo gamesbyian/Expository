@@ -54,11 +54,17 @@ data class ItemRef(
     val kind: ItemKind
 )
 
+data class DestinationListing(
+    val revision: String,
+    val complete: Boolean,
+    val siblings: List<String> // user-visible names, never trust as stable identity
+)
 data class TransferRequest(
     val sources: List<ItemRef>,
     val destination: LocationRef,
     val operation: Operation = Operation.COPY,
-    val deletionAuthorized: Boolean = false
+    val deletionAuthorized: Boolean = false,
+    val destinationListing: DestinationListing? = null // default unknown fails closed
 )
 
 data class TransferPlan(
@@ -117,6 +123,8 @@ private fun validComponent(name: String): Boolean {
         name.none { it == '/' || it == '\\' || it.code < 32 || it.code == 127 }
 }
 
+private fun DestinationListing?.orEmptyNames(): List<String> = this?.siblings ?: emptyList()
+
 object OperationPlanner {
     fun transfer(request: TransferRequest, nowMillis: Long): TransferPlan {
         // Own a fresh snapshot of all input collections before computing the plan.
@@ -125,6 +133,23 @@ object OperationPlanner {
         val blockers = mutableListOf<String>()
         if (sources.isEmpty()) blockers += "EMPTY_SELECTION"
         if (sources.map { it.key }.toSet().size != sources.size) blockers += "DUPLICATE_SOURCE_ID"
+        val listing = request.destinationListing
+        if (listing == null || !listing.complete || listing.revision.isBlank())
+            blockers += "DESTINATION_LISTING_NOT_VERIFIED"
+        else {
+            val existing = listing.siblings.map {
+                Normalizer.normalize(it, Normalizer.Form.NFC).lowercase(Locale.ROOT)
+            }.toSet()
+            val incoming = sources.map {
+                Normalizer.normalize(it.name, Normalizer.Form.NFC).lowercase(Locale.ROOT)
+            }
+            if (incoming.size != incoming.toSet().size) blockers += "DUPLICATE_TARGET_NAMES"
+            if (incoming.any { it in existing }) blockers += "DESTINATION_NAME_COLLISION"
+            if (listing.siblings.any { !validComponent(it) })
+                blockers += "INVALID_DESTINATION_SIBLING"
+            if (listing.siblings.size != existing.size)
+                blockers += "AMBIGUOUS_DESTINATION_SIBLINGS"
+        }
         if (dest.key.authorityId.isBlank() || dest.key.containerId.isBlank() ||
             dest.revision.isBlank() || dest.folder.any { !validComponent(it) }) blockers += "DESTINATION_IDENTITY"
         if (!dest.supports(Capability.WRITE, nowMillis)) blockers += "DESTINATION_WRITE_NOT_PROVEN"
@@ -143,7 +168,7 @@ object OperationPlanner {
                 dest.folder.take(sourcePath.size).map { it.lowercase(Locale.ROOT) } ==
                 sourcePath.map { it.lowercase(Locale.ROOT) }) blockers += "SOURCE_TO_DESCENDANT"
         }
-        val distinctSourceLocations = sources.map { it.location.key }.distinct()
+        val distinctSourceLocations = sources.map { it.location }.distinct()
         if (distinctSourceLocations.size != 1) blockers += "MIXED_SOURCE_LOCATIONS"
         val from = sources.firstOrNull()?.location
         val sameNamespace = from != null && sameVerifiedNamespace(from, dest)
@@ -181,7 +206,9 @@ object OperationPlanner {
             && dest.folder.isEmpty()) blockers += "DESTINATION_FOLDER_UNVERIFIED"
         val hashParts = listOf("TRANSFER_V1", request.operation.name,
             request.deletionAuthorized.toString()) +
-            sources.flatMap(::itemStamp) + locationStamp(dest)
+            listOf(sources.size.toString()) + sources.flatMap(::itemStamp) + locationStamp(dest) +
+            listOf(listing?.revision.orEmpty(), listing?.complete.toString(),
+                listing?.siblings?.size.toString()) + listing.orEmptyNames()
         return TransferPlan(opaqueDigest(hashParts), if (blockers.isEmpty()) route else TransferRoute.BLOCKED,
             request.operation, blockers.distinct().toList())
     }
