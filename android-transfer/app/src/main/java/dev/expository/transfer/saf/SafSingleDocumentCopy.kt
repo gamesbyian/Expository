@@ -7,10 +7,14 @@ import dev.expository.transfer.engine.CopyReceipt
 import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.engine.CopyStreams
 import dev.expository.transfer.engine.ForegroundCopyEngine
+import dev.expository.transfer.engine.JournaledCopyEngine
+import dev.expository.transfer.engine.AtomicAttemptStorage
+import dev.expository.transfer.engine.DurableAttemptJournal
 import dev.expository.transfer.planner.*
 import java.io.FileNotFoundException
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.UUID
 
 data class SafDocumentObservation(
     val displayName: String,
@@ -26,7 +30,8 @@ data class SafDocumentObservation(
  * One-file-only SAF proof of concept. Both URI grants originate in OS picker
  * results and exist only in memory. No broad file permissions or cloud OAuth.
  */
-class SafSingleDocumentCopy(private val resolver: ContentResolver) {
+class SafSingleDocumentCopy(private val resolver: ContentResolver,
+    private val storageForPlan: ((String) -> AtomicAttemptStorage)? = null) {
     fun observe(uri: Uri): SafDocumentObservation {
         require(uri.scheme == ContentResolver.SCHEME_CONTENT)
         var displayName: String? = null
@@ -87,11 +92,12 @@ class SafSingleDocumentCopy(private val resolver: ContentResolver) {
             catch (_: Exception) {
                 return CopyReceipt("", CopyProof.BLOCKED, 0, "DOCUMENT_INSPECTION_UNAVAILABLE")
             }
-        return ForegroundCopyEngine.copy(initialPlan, {
+        val fresh = {
             // Keep the SAME expiry proof observation clock; metadata changes
             // invalidate the plan, but wall-clock time must not change its digest.
             transferPlan(source, destination, initialTime, System.currentTimeMillis())
-        }, object : CopyStreams {
+        }
+        val streams = object : CopyStreams {
             override fun openSource(): InputStream =
                 resolver.openInputStream(source) ?: throw FileNotFoundException()
             override fun openNewDestination(): OutputStream =
@@ -100,6 +106,14 @@ class SafSingleDocumentCopy(private val resolver: ContentResolver) {
                 resolver.openOutputStream(destination, "w") ?: throw FileNotFoundException()
             override fun openDestinationReadBack(): InputStream? =
                 resolver.openInputStream(destination)
-        }, continueRequested, onProgress)
+        }
+        val factory = storageForPlan ?: return ForegroundCopyEngine.copy(
+            initialPlan, fresh, streams, continueRequested, onProgress)
+        val journal = try { DurableAttemptJournal(factory(initialPlan.digest)) }
+            catch (_: Exception) {
+                return CopyReceipt(initialPlan.digest, CopyProof.BLOCKED, 0, "JOURNAL_UNAVAILABLE")
+            }
+        return JournaledCopyEngine.copy(initialPlan, fresh, streams, journal,
+            UUID.randomUUID().toString(), continueRequested, onProgress)
     }
 }

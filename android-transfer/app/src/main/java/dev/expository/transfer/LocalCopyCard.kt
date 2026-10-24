@@ -31,6 +31,7 @@ import androidx.compose.ui.semantics.semantics
 import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.engine.CopyReceipt
 import dev.expository.transfer.saf.SafSingleDocumentCopy
+import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
@@ -46,7 +47,11 @@ import kotlin.coroutines.coroutineContext
 fun LocalCopyCard() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val service = remember(context) { SafSingleDocumentCopy(context.contentResolver) }
+    val service = remember(context) {
+        SafSingleDocumentCopy(context.contentResolver) { digest ->
+            AndroidAtomicAttemptStorage(context.applicationContext, digest)
+        }
+    }
     var selected by remember { mutableStateOf<Uri?>(null) }
     var displayName by remember { mutableStateOf<String?>(null) }
     var mime by remember { mutableStateOf("application/octet-stream") }
@@ -157,7 +162,7 @@ fun LocalCopyCard() {
                     style = MaterialTheme.typography.labelMedium)
                 if (destinationName != null) Text("Destination: " + destinationName)
             }
-            Text("Experimental foreground operation. Closing the app during a copy can leave a partial document. Drive cloud synchronization and recovery are not verified.",
+            Text("Foreground copy now journals its attempt before writing. Interruption can leave a partial document requiring review. Automatic resumption and Drive cloud synchronization are not verified.",
                 style = MaterialTheme.typography.bodySmall)
         }
     }
