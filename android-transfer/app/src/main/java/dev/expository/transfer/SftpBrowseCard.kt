@@ -37,6 +37,7 @@ import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.sftp.SecureSftp
 import dev.expository.transfer.sftp.SftpBrowsePage
 import dev.expository.transfer.sftp.SftpHostKeyPin
+import dev.expository.transfer.sftp.SftpPath
 import dev.expository.transfer.sftp.SftpSession
 import dev.expository.transfer.sftp.SftpTarget
 import dev.expository.transfer.sftp.SftpToSafSave
@@ -59,6 +60,7 @@ fun SftpBrowseCard() {
     val scope = rememberCoroutineScope()
     var host by remember { mutableStateOf("") }
     var port by remember { mutableStateOf("22") }
+    var startFolder by remember { mutableStateOf("/") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var fingerprint by remember { mutableStateOf("") }
@@ -80,8 +82,10 @@ fun SftpBrowseCard() {
         val live = session
         val path = pendingFile
         if (result.resultCode != Activity.RESULT_OK || target == null) {
+            busy = false
             status = "Save As canceled. No file written by Expository."
         } else if (live == null || path == null) {
+            busy = false
             status = "Remote session expired. Destination may be an empty document; reconnect and choose again."
         } else {
             busy = true
@@ -140,22 +144,30 @@ fun SftpBrowseCard() {
 
             if (session == null) {
                 OutlinedTextField(host, { host = it }, label = { Text("SFTP host") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(port, { port = it }, label = { Text("Port") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(startFolder, { startFolder = it },
+                    label = { Text("Starting folder (absolute path)") },
+                    enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(username, { username = it }, label = { Text("Username") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(password, { password = it },
                     label = { Text("Password (session only)") },
                     visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(fingerprint, { fingerprint = it },
                     label = { Text("Trusted SSH key: SHA256:…") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !busy &&
                     host.isNotBlank() && username.isNotBlank() &&
                     password.isNotBlank() && fingerprint.isNotBlank(),
                     onClick = {
+                        val chosenHost = host.trim()
+                        val chosenPort = port.toIntOrNull() ?: -1
+                        val chosenUser = username
+                        val chosenPin = fingerprint.trim()
+                        val chosenFolder = startFolder.trim()
                         val secret = password.toCharArray()
                         password = "" // never retain the entered string for the session
                         busy = true
@@ -164,10 +176,11 @@ fun SftpBrowseCard() {
                             val result = withContext(Dispatchers.IO) {
                                 try {
                                     runCatching {
-                                        val target = SftpTarget(host, port.toIntOrNull() ?: -1,
-                                            SftpHostKeyPin(fingerprint))
-                                        val live = SecureSftp.connect(target, username, secret)
-                                        try { live to live.browse("/") }
+                                        val target = SftpTarget(chosenHost, chosenPort,
+                                            SftpHostKeyPin(chosenPin))
+                                        val root = SftpPath.requireAbsolute(chosenFolder)
+                                        val live = SecureSftp.connect(target, chosenUser, secret)
+                                        try { live to live.browse(root) }
                                         catch (e: Exception) { live.close(); throw e }
                                     }
                                 } finally { secret.fill('\u0000') }
@@ -175,7 +188,7 @@ fun SftpBrowseCard() {
                             result.onSuccess { (live, directory) ->
                                 session = live
                                 sessionId = UUID.randomUUID().toString()
-                                folder = "/"
+                                folder = chosenFolder
                                 page = directory
                                 status = "Pinned SFTP session authenticated. Select a remote file."
                             }.onFailure {
@@ -218,6 +231,7 @@ fun SftpBrowseCard() {
                                 Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
                                     onClick = {
                                         pendingFile = path
+                                        busy = true // Freeze session/navigation while Android picker owns the choice
                                         val extension = entry.name.substringAfterLast('.', "").lowercase()
                                         val mime = MimeTypeMap.getSingleton()
                                             .getMimeTypeFromExtension(extension)
