@@ -37,11 +37,14 @@ object ScenarioSuite {
     private fun assertStepsPreserveAll(snapshot: RenameSnapshot, plan: RenamePlan) {
         check(plan.executable)
         val observed = snapshot.children.associate { it.id to it.name }.toMutableMap()
+        val occupied = observed.values.map { it.lowercase(java.util.Locale.ROOT) }.toMutableSet()
         for (step in plan.steps) {
             check(observed[step.itemId] == step.from)
-            check(observed.any { it.key == step.itemId && it.value == step.from })
-            check(observed.none { it.key != step.itemId &&
-                it.value.equals(step.to, ignoreCase = true) }) { "Overwrite avoided" }
+            val fromKey = step.from.lowercase(java.util.Locale.ROOT)
+            val toKey = step.to.lowercase(java.util.Locale.ROOT)
+            check(occupied.remove(fromKey))
+            check(toKey !in occupied) { "Rename step would overwrite existing name" }
+            occupied.add(toKey)
             observed[step.itemId] = step.to
         }
         for (row in plan.preview) check(observed[row.id] == row.proposed)
