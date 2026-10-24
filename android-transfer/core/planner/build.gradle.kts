@@ -9,3 +9,11 @@ tasks.register<JavaExec>("scenarios") {
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("dev.expository.transfer.planner.ScenarioSuite")
 }
+
+tasks.register<JavaExec>("directoryScenarios") {
+    group = "verification"
+    description = "Remote create-directory immutable plan and collision checks"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.planner.DirectoryCreateSuite")
+}
