@@ -112,3 +112,21 @@ jobs:
       - name: Trust explicit lab certificate and prove encrypted file read
         working-directory: android-transfer
         run: gradle :adapter:ftps:lab -PftpsLabMode=trusted-read -PftpsTrustStore="$RUNNER_TEMP/ftps-lab/truststore.p12" --no-daemon
+
+  sftp-lab:
+    # Scoped bootstrap evidence on PR #35 only. Restore to manual-only after proof.
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 35
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Trust-approved ephemeral SFTP host fingerprint, reject changed key
+        working-directory: android-transfer
+        run: gradle :adapter:sftp:lab --no-daemon
