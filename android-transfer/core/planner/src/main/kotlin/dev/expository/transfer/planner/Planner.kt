@@ -54,10 +54,12 @@ data class ItemRef(
     val kind: ItemKind
 )
 
+enum class DestinationWitness { COMPLETE_PARENT_LISTING, SAF_NEW_DOCUMENT_PICKER }
 data class DestinationListing(
     val revision: String,
     val complete: Boolean,
-    val siblings: List<String> // user-visible names, never trust as stable identity
+    val siblings: List<String>, // user-visible names, never trust as stable identity
+    val witness: DestinationWitness = DestinationWitness.COMPLETE_PARENT_LISTING
 )
 data class TransferRequest(
     val sources: List<ItemRef>,
@@ -145,7 +147,17 @@ object OperationPlanner {
         val listing = request.destinationListing?.let { it.copy(siblings = it.siblings.toList()) }
         if (listing == null || !listing.complete || listing.revision.isBlank())
             blockers += "DESTINATION_LISTING_NOT_VERIFIED"
-        else {
+        else if (listing.witness == DestinationWitness.SAF_NEW_DOCUMENT_PICKER) {
+            // ACTION_CREATE_DOCUMENT is a user-authorized NEW document, not an
+            // enumerated writable directory. Android's picker guarantees no overwrite
+            // (it may change the resulting filename). Never use this witness for a
+            // folder, multi-item copy, Move, or non-SAF destination.
+            if (sources.size != 1 || sources.any { it.kind != ItemKind.FILE } ||
+                request.operation != Operation.COPY ||
+                dest.key.kind != LocationKind.LOCAL_SAF ||
+                dest.key.grantId.isNullOrBlank() ||
+                listing.siblings.isNotEmpty()) blockers += "INVALID_NEW_DOCUMENT_WITNESS"
+        } else {
             val existing = listing.siblings.map {
                 Normalizer.normalize(it, Normalizer.Form.NFC).lowercase(Locale.ROOT)
             }.toSet()
@@ -224,7 +236,7 @@ object OperationPlanner {
             request.deletionAuthorized.toString()) +
             listOf(sources.size.toString()) + sources.flatMap(::itemStamp) + locationStamp(dest) +
             listOf(listing?.revision.orEmpty(), listing?.complete.toString(),
-                listing?.siblings?.size.toString()) + listing.orEmptyNames()
+                listing?.witness?.name.orEmpty(), listing?.siblings?.size.toString()) + listing.orEmptyNames()
         return TransferPlan(opaqueDigest(hashParts), if (blockers.isEmpty()) route else TransferRoute.BLOCKED,
             request.operation, blockers.distinct().toList())
     }
