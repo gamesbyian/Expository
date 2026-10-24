@@ -150,6 +150,14 @@ object FtpsSecuritySuite {
                 }.isFailure)
             }
         }
+        checkCase("wrapped TLS read errors remain classifiable but redacted") {
+            val nested = java.io.IOException("server private error",
+                javax.net.ssl.SSLHandshakeException("hostname account password path"))
+            val result = FtpsFailureCodes.classify("READ", 425, nested)
+            check(result.kind == "TLS_HANDSHAKE" && result.numericReply == 425)
+            check(result.cause == null && !result.message.orEmpty().contains("password"))
+            check(result.message.orEmpty().contains("FTPS_READ_TLS_HANDSHAKE_REPLY_425"))
+        }
         checkCase("list failure taxonomy never leaks raw exception, path or credentials") {
             val details = "host=private.invalid user=private secret=not-for-logs /sensitive/video.mkv"
             val types = listOf(
