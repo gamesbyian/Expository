@@ -159,8 +159,14 @@ object OperationPlanner {
                 item.location.revision.isBlank() || item.parent.any { !validComponent(it) } ||
                 !validComponent(item.name)) blockers += "SOURCE_IDENTITY"
             if (!item.location.supports(Capability.READ, nowMillis)) blockers += "SOURCE_READ_NOT_PROVEN"
-            val matched = sameVerifiedNamespace(item.location, dest) ||
-                (item.location.key == dest.key)
+            val namespaceMayMatch = item.location.key.kind == dest.key.kind &&
+                item.location.key.rootId == dest.key.rootId &&
+                (item.location.key.authorityId == dest.key.authorityId ||
+                    (item.location.verifiedNamespace != null &&
+                    item.location.verifiedNamespace == dest.verifiedNamespace &&
+                    item.location.verifiedStorageDomain != null &&
+                    item.location.verifiedStorageDomain == dest.verifiedStorageDomain))
+            val matched = sameVerifiedNamespace(item.location, dest) || namespaceMayMatch
             // No folder can be copied or moved into itself or its own descendant.
             val sourcePath = item.parent + item.name
             if (matched && item.kind == ItemKind.DIRECTORY &&
@@ -180,7 +186,8 @@ object OperationPlanner {
 
         val route: TransferRoute = when (request.operation) {
             Operation.COPY -> when {
-                sameRemote && from!!.supports(Capability.SERVER_COPY, nowMillis) ->
+                sameRemote && from!!.supports(Capability.SERVER_COPY, nowMillis) &&
+                    dest.supports(Capability.SERVER_COPY, nowMillis) ->
                     TransferRoute.SERVER_COPY
                 else -> TransferRoute.DEVICE_RELAY
             }
