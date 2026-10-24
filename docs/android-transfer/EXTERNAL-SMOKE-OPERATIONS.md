@@ -33,14 +33,16 @@ the `SHA256:...` field. Do not learn a fingerprint from a live handshake
 and then immediately treat it as authoritative. A missing fingerprint
 blocks login. Pin changes are security events requiring confirmation.
 
-For owner testing, configure repository variables
-`TRANSFER_TEST_HOST` and `TRANSFER_TEST_USER`, plus the existing
-`FTP_PASSWORD` repository secret. The secret name is based on S60's
-workflow reference; its presence in Expository is **not confirmed by this
-document**. GitHub Actions does not expose secret values to this workflow
-unless configured in the Expository repository. Only the workflow's secret
-reference receives the password. It is not printed or sent to a public test
-server. Do not paste the password into a workflow_dispatch input.
+For owner testing, only the Expository repository secret named
+`FTP_PASSWORD` is required. The workflow recovers host and account without
+printing them from an immutable S60 source revision, commit
+`417fec65458c500da903184118bf701086161006`, then validates the
+host's expected Seedhost suffix. This prevents a moving S60 branch from
+redirecting credentials. The secret name matches S60's workflow reference;
+its actual presence in Expository is **not verifiable with the available
+GitHub connector**. Only the owner job receives the password, and it is not
+printed or sent to a public test server. Never paste a secret into a
+workflow_dispatch input.
 
 Owner tests attempt FTPS or SFTP **only**, and enumerate only the account's
 top-level directory. They do not traverse `/downloads/S60`, download private
