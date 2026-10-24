@@ -44,6 +44,7 @@ The Expository brand is exploring a **separate, native Android FTP/FTPS/SFTP tra
 
 - [Online competitor, user-review, platform and engineering research](docs/android-transfer/EXPLORATORY-REPORT.md)
 - [Detailed product proposal, user flows, architecture, priorities and acceptance gates](docs/android-transfer/PRODUCT-PROPOSAL.md)
+- [Any-two-location split workspace and preview-first bulk renamer: concrete screens, remote-move rules, failure recovery and acceptance tests](docs/android-transfer/WORKSPACE-AND-BULK-RENAME.md)
 
 ## How this site is published
 
