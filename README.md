@@ -42,6 +42,8 @@ For the feature plan and current development stages, see the [weighted feature r
 
 The Expository brand is exploring a **separate, native Android FTP/FTPS/SFTP transfer client**. This is a product proposal, **not an implemented app or permission expansion of this read-only GitHub explorer**. The first requirements are native Android **Save to device** / **Upload files or folders** using system interfaces, optional Device/Device, Device/Server and Server/Server split panes with drag-and-drop and accessible copy controls, fast same-server **Move to… → New folder** and a compact preview-first **bulk renamer**.
 
+- [Critical review: release-blocking product and filesystem assumptions](docs/android-transfer/CRITICAL-REVIEW.md)
+- [Hardened architecture, milestones, fault injection and release gates](docs/android-transfer/HARDENED-IMPLEMENTATION-PLAN.md)
 - [Online competitor, user-review, platform and engineering research](docs/android-transfer/EXPLORATORY-REPORT.md)
 - [Detailed product proposal, user flows, architecture, priorities and acceptance gates](docs/android-transfer/PRODUCT-PROPOSAL.md)
 - [Any-two-location split workspace and preview-first bulk renamer: concrete screens, remote-move rules, failure recovery and acceptance tests](docs/android-transfer/WORKSPACE-AND-BULK-RENAME.md)
