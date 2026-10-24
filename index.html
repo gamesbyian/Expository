@@ -38,7 +38,11 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 .image-viewer:fullscreen .image-actions{flex:0 0 auto}
 .image-viewer:fullscreen .image-stage{flex:1;min-height:0;max-height:none;height:auto}
 .image-viewer:fullscreen .image-stage[data-zoomed="false"]{display:grid;place-items:center}
-.image-viewer:fullscreen .image-stage[data-zoomed="false"] img{width:auto!important;height:auto!important;max-height:100%!important;max-width:100%!important}
+.image-viewer:fullscreen .image-stage[data-zoomed="false"][data-rotated="false"] img{width:auto!important;height:auto!important;max-height:100%!important;max-width:100%!important}
+.image-viewer:not(:fullscreen) .image-stage[data-rotated="true"]{height:min(62dvh,520px)}
+.image-stage[data-rotated="true"][data-zoomed="false"]{display:grid;place-items:center}
+.image-stage .image-rotation-frame{position:relative;flex:0 0 auto;overflow:visible}
+.image-stage .image-rotation-frame img{position:absolute!important;max-width:none!important;max-height:none!important;object-fit:fill!important;transform-origin:center center}
 .image-actions button{min-height:44px}
 .image-immersive-note{font-size:12px;color:var(--dim)}
 .json-tree{width:100%;max-width:100%;font:12px/1.5 ui-monospace,monospace;overflow-wrap:anywhere}.json-tree details{padding:4px 0 4px 14px;border-left:1px solid var(--stroke)}.json-tree summary{cursor:pointer;min-height:28px;color:var(--accent)}.json-tree .atom{padding:4px 0}.history-list{display:grid;gap:9px}.history-list a{display:block;border:1px solid var(--stroke);border-radius:11px;padding:10px;text-decoration:none;color:var(--text)}.history-list a:hover{border-color:var(--accent)}.history-list small{display:block;color:var(--dim)}
@@ -706,15 +710,46 @@ async function openContactSheet(){
  await Promise.all([worker(),worker(),worker()]);
 }
 function boundedZoom(value){return Math.max(1,Math.min(4,Math.round(value*100)/100))}
+function rotationMetrics(naturalWidth,naturalHeight,availableWidth,availableHeight,turn=0,zoom=1){
+ if(!Number.isFinite(naturalWidth)||!Number.isFinite(naturalHeight)||naturalWidth<=0||naturalHeight<=0)return null;
+ const angle=((Math.round(turn/90)*90)%360+360)%360,quarter=angle%180!==0;
+ const displayWidth=quarter?naturalHeight:naturalWidth,displayHeight=quarter?naturalWidth:naturalHeight;
+ const w=Math.max(1,Number(availableWidth)||1),h=Math.max(1,Number(availableHeight)||1);
+ const scale=Math.min(w/displayWidth,h/displayHeight)*Math.max(1,Math.min(4,Number(zoom)||1));
+ return {angle,frameWidth:displayWidth*scale,frameHeight:displayHeight*scale,imageWidth:naturalWidth*scale,imageHeight:naturalHeight*scale}
+}
 function imageViewer(blob,item){
  state.zoom=1;const wrap=elem('div','image-viewer'),actions=elem('div','image-actions'),stage=elem('div','image-stage'),img=elem('img');
  img.alt=item.name;img.src=blobUrl(blob);img.style.width='100%';stage.append(img);
- const minus=elem('button','pill','−'),reset=elem('button','pill','100%'),plus=elem('button','pill','+');
+ const minus=elem('button','pill','−'),reset=elem('button','pill','100%'),plus=elem('button','pill','+'),rotate=elem('button','pill','Rotate ↻');
+ rotate.type='button';rotate.setAttribute('aria-label','Rotate image 90 degrees clockwise');
  minus.setAttribute('aria-label','Zoom out image');plus.setAttribute('aria-label','Zoom in image');reset.setAttribute('aria-label','Reset image zoom');
- const update=()=>{img.style.width=Math.round(state.zoom*100)+'%';reset.textContent=Math.round(state.zoom*100)+'%';minus.disabled=state.zoom<=1;plus.disabled=state.zoom>=4;stage.style.overscrollBehavior=state.zoom>1?'contain':'auto';stage.dataset.zoomed=String(state.zoom>1)};
+ let angle=0,frame=null;
+ const update=()=>{
+  stage.dataset.rotated=String(angle!==0);
+  stage.dataset.zoomed=String(state.zoom>1);
+  reset.textContent=Math.round(state.zoom*100)+'%';minus.disabled=state.zoom<=1;plus.disabled=state.zoom>=4;
+  stage.style.overscrollBehavior=state.zoom>1?'contain':'auto';
+  rotate.textContent='Rotate ↻'+(angle?' '+angle+'°':'');
+  if(angle===0){
+   if(frame){stage.replaceChildren(img);frame=null}
+   img.style.position='static';img.style.left='';img.style.top='';img.style.transform='';
+   img.style.height='auto';img.style.width=Math.round(state.zoom*100)+'%';
+   return
+  }
+  if(!frame){frame=elem('div','image-rotation-frame');stage.replaceChildren(frame);frame.append(img)}
+  const width=stage.clientWidth||320,height=stage.clientHeight||Math.min(550,(typeof window!=='undefined'?window.innerHeight:852)*.62);
+  const m=rotationMetrics(img.naturalWidth||1,img.naturalHeight||1,width,height,angle,state.zoom);
+  frame.style.width=m.frameWidth+'px';frame.style.height=m.frameHeight+'px';
+  img.style.position='absolute';img.style.left='50%';img.style.top='50%';
+  img.style.width=m.imageWidth+'px';img.style.height=m.imageHeight+'px';
+  img.style.transform='translate(-50%, -50%) rotate('+angle+'deg)'
+ };
+ img.onload=()=>{if(angle!==0)update()};
  minus.onclick=()=>{state.zoom=boundedZoom(state.zoom-.25);update()};
  plus.onclick=()=>{state.zoom=boundedZoom(state.zoom+.25);update()};
  reset.onclick=()=>{state.zoom=1;update();stage.scrollLeft=0;stage.scrollTop=0};
+ rotate.onclick=()=>{angle=(angle+90)%360;state.zoom=1;stage.scrollLeft=0;stage.scrollTop=0;update()};
  const middle=touches=>({x:(touches[0].clientX+touches[1].clientX)/2,y:(touches[0].clientY+touches[1].clientY)/2});
  const distance=touches=>Math.hypot(touches[0].clientX-touches[1].clientX,touches[0].clientY-touches[1].clientY);
  let gesture=null,pan=null;
@@ -750,7 +785,8 @@ function imageViewer(blob,item){
   full.textContent=active?'Exit fullscreen':'Fullscreen';
   full.setAttribute('aria-label',active?'Exit image fullscreen':'Enter image fullscreen');
   full.setAttribute('aria-pressed',String(active));
-  stage.setAttribute('aria-label',active?'Fullscreen image, pinch to zoom and drag to pan':'Image preview, pinch to zoom and drag to pan');
+  stage.setAttribute('aria-label',(active?'Fullscreen image':'Image preview')+', rotated '+angle+' degrees, pinch to zoom and drag to pan');
+  if(angle!==0)update();
  };
  if(typeof document.addEventListener==='function')document.addEventListener('fullscreenchange',syncFullscreen);
  state.imageFullscreenCleanup=()=>document.removeEventListener?.('fullscreenchange',syncFullscreen);
@@ -765,7 +801,7 @@ function imageViewer(blob,item){
    syncFullscreen()
   }
  };
- actions.append(minus,reset,plus,full,elem('span','hint','Pinch to zoom or drag to pan when enlarged. The fullscreen control is browser-dependent; zoom buttons also work with keyboard and mouse.'));
+ actions.append(minus,reset,plus,rotate,full,elem('span','hint','Rotation changes display only, not the original file. Pinch or drag when enlarged; fullscreen availability depends on the browser.'));
  update();wrap.append(actions,stage);syncFullscreen();return wrap;
 }
 function jsonViewer(value){

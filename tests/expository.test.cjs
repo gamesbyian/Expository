@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl
  );
@@ -639,13 +639,47 @@ test('older PR pagination caps four pages and ignores stale results when view cl
 test('image fullscreen affordance is accessible and degrades safely without browser API',()=>{
  const {app}=boot();
  const view=app.imageViewer(new Blob(['fixture'],{type:'image/png'}),{name:'example.png',path:'example.png'});
- const actions=view.children[0],stage=view.children[1],full=actions.children[3];
+ const actions=view.children[0],stage=view.children[1],full=actions.children[4];
  assert.equal(full.textContent,'Fullscreen');
  assert.equal(full['aria-label'],'Enter image fullscreen');
  assert.equal(full.disabled,true,'unsupported fullscreen does not masquerade as active');
  assert.match(full.title,/not supported/);
- assert.equal(stage['aria-label'],'Image preview, pinch to zoom and drag to pan');
+ assert.equal(stage['aria-label'],'Image preview, rotated 0 degrees, pinch to zoom and drag to pan');
  assert.equal(app.state.zoom,1);
  app.closeImageFullscreen();
  assert.equal(app.state.imageFullscreenCleanup,null,'fullscreen listener cleaned when preview closes');
+});
+
+test('quarter-turn metrics fit rotated intrinsic geometry within the allotted image stage',()=>{
+ const {app}=boot();
+ const zero=app.rotationMetrics(800,450,360,620,0,1),quarter=app.rotationMetrics(800,450,360,620,90,1),half=app.rotationMetrics(800,450,360,620,180,1),third=app.rotationMetrics(800,450,360,620,270,1);
+ assert.equal(zero.angle,0);assert.equal(zero.frameWidth,360);
+ assert.ok(quarter.frameWidth<=360.00001&&quarter.frameHeight<=620.00001);
+ assert.ok(Math.abs(quarter.frameWidth-348.75)<0.001);
+ assert.ok(Math.abs(quarter.imageWidth-quarter.frameHeight)<0.001,'rotated intrinsic width matches frame height');
+ assert.ok(Math.abs(quarter.imageHeight-quarter.frameWidth)<0.001,'rotated intrinsic height matches frame width');
+ assert.deepEqual(third, {...quarter,angle:270});
+ assert.equal(half.frameWidth,zero.frameWidth);
+ const zoomed=app.rotationMetrics(800,450,360,620,90,2);
+ assert.equal(zoomed.frameHeight,quarter.frameHeight*2);
+ assert.equal(app.rotationMetrics(0,450,360,620,90,1),null,'invalid unloaded dimensions explicit');
+});
+test('image rotates four quarter turns without changing image bytes or leaving stale wrappers',()=>{
+ const {app}=boot();
+ const blob=new Blob(['<svg><text>original</text></svg>'],{type:'image/svg+xml'});
+ const view=app.imageViewer(blob,{name:'story.svg',path:'story.svg'});
+ const actions=view.children[0],stage=view.children[1],rot=actions.children[3],full=actions.children[4],image=stage.children[0];
+ assert.equal(full.textContent,'Fullscreen','rotation leaves fullscreen affordance available');
+ for(let n=1;n<=3;n++){
+  rot.onclick();assert.equal(stage.dataset.rotated,'true');
+  assert.equal(stage.children[0].className,'image-rotation-frame');
+  assert.equal(stage.children[0].children[0],image);
+  assert.match(image.style.transform,new RegExp('rotate\\('+(n*90)+'deg\\)'));
+  assert.equal(app.state.zoom,1,'quarter turn resets zoom for fit');
+ }
+ rot.onclick();assert.equal(stage.dataset.rotated,'false');
+ assert.equal(stage.children[0],image,'fourth turn removes wrapper');
+ assert.equal(image.style.width,'100%');
+ assert.equal(image.style.transform,'');
+ assert.equal(blob.size,32,'source bytes remain unchanged');
 });
