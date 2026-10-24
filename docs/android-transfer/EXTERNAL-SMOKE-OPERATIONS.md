@@ -18,6 +18,37 @@ The canonical [live server safety matrix](LIVE-SERVER-TESTING.md) and the native
   a mandatory externally obtained SSH SHA-256 host key. It fetches at most
   64 KiB of Rebex's known public readme if present; other profiles list only.
 
+## Trigger via pull-request comment (authorized owner only)
+
+The repository owner can trigger a live test by leaving **one exact comment**
+on any Expository PR after this workflow is merged to `main`:
+
+```text
+/transfer-smoke rebex-explicit
+/transfer-smoke rebex-implicit
+/transfer-smoke wing-implicit
+/transfer-smoke owner-explicit
+/transfer-smoke owner-implicit
+```
+
+This also allows an integration agent with GitHub PR-comment access to invoke
+the tests through the owner's connected GitHub identity. The comment creates
+an `issue_comment` event, never a scheduled or automatic PR test.
+
+**Security properties:** The event must concern a PR in this repository,
+the author must be exactly `gamesbyian`, the complete comment must match
+one allowlisted command, and Actions checks out **trusted `main` only**.
+Comment text is data in an environment variable, never interpolated as
+shell source. The public job has no owner-server credentials. The owner job
+uses the same narrowly scoped secret and pinned S60 settings as the manual
+workflow. A contributor's PR code cannot be executed with the owner's
+credentials through this trigger.
+
+SFTP remains in the manual `workflow_dispatch` path because an
+independently confirmed SSH host-key fingerprint must be supplied. Never use
+a comment to publish a server password or another secret. Live smoke runs
+must remain infrequent and are not required checks for ordinary PRs.
+
 ## Manual execution
 After merging the source branch into the default branch, open
 [Transfer manual external smoke](https://github.com/gamesbyian/Expository/actions/workflows/transfer-live-smoke.yml)
