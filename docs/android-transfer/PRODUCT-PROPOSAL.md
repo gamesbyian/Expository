@@ -2,7 +2,8 @@
 
 **Status: exploratory proposal, not approved implementation**  
 **Date: 23 October 2026**  
-**Companion evidence:** [competitive and engineering research](EXPLORATORY-REPORT.md)
+**Companion evidence:** [competitive and engineering research](EXPLORATORY-REPORT.md)  
+**Cross-provider destination requirement:** [Local/remote → Google Drive and Google Docs conversion](GOOGLE-DRIVE-INTEGRATION.md)
 
 ## 1. Product definition
 
