@@ -23,7 +23,7 @@ A **green browser/PWA test for the read-only Expository site does not count** fo
 | G1 · pure operation plan/rename graph | IN PROGRESS · E1 24 planner scenarios + synthetic fixture suite green in [run #40072228508](https://github.com/gamesbyian/Expository/actions/runs/40072228508); G1 fuzz/fault proof pending | Property/fuzz collision cases; plan-version identity and staged cycles |
 | G2 · fake device and Compose journeys | IN PROGRESS · draft PR #33 adds actual one-file Local SAF→SAF picker/streaming; debug APK compiled in run #40114978482, no device evidence | Owned emulator recordings/screens, a11y labels, native picker contracts |
 | G3 · trusted FTP/FTPS/SFTP protocols | IN PROGRESS · explicit FTPS read/list E3 localhost lab passed [run #40125931787](https://github.com/gamesbyian/Expository/actions/runs/40125931787) with PKIX untrusted-cert rejection, explicit trust and PROT P list/read; SFTP host-key-pinned synthetic live read + wrong-key rejection [run #40117260270](https://github.com/gamesbyian/Expository/actions/runs/40117260270), reconfirmed after clean rebase in [run #40126372217](https://github.com/gamesbyian/Expository/actions/runs/40126372217); still no physical-device or broader protocol matrix evidence | real test server fixtures, host-key/cert rejection and retry logs |
-| G4 · scoped Android SAF file/folder I/O | NOT STARTED | permission revocation, provider URI remap, nonseekable streams |
+| G4 · scoped Android SAF file/folder I/O | IN PROGRESS · draft [PR #37](https://github.com/gamesbyian/Expository/pull/37) remote SFTP read→SAF Save As source; debug APK compiled in [run #40127485028](https://github.com/gamesbyian/Expository/actions/runs/40127485028), artifact #12573314373; E2/E4 device proof not obtained | permission revocation, provider URI remap, nonseekable streams |
 | G5 · durable queue/receipt proof | NOT STARTED | process killed at every journal phase, zero false-success |
 | G6 · six directional pane cases + new-folder move | NOT STARTED | drag/action parity, same vs different server relay/move |
 | G7 · compact bulk renamer and recovery | NOT STARTED | 10k virtualized preview, swaps, crash/undo and case/Unicode |
@@ -31,6 +31,10 @@ A **green browser/PWA test for the read-only Expository site does not count** fo
 | G9 · independently reviewed Android beta | NOT STARTED | signed APK, A01–A32/D01–D20/T01–T12, 200% text, TalkBack |
 
 Do not mark a gate complete unless the precise PR/commit, test run IDs, actual build/device identity (no serials/PII), screenshot/protocol artifacts and known limits are attached. The integration owner must verify the evidence exists.
+
+## G4 native remote Save As implementation checkpoint, 24 October 2026
+
+Draft [PR #37](https://github.com/gamesbyian/Expository/pull/37) wires one real pinned SFTP session to an Android Compose remote browser and ACTION_CREATE_DOCUMENT, using the immutable planner, foreground stream and content-provider read-back digest. It adds standard INTERNET only; user enters a trusted fingerprint and ephemeral password. **APK compiled in [run #40127485028](https://github.com/gamesbyian/Expository/actions/runs/40127485028) at commit d723ec3, artifact #12573314373; JVM planner + live synthetic SFTP lab also passed. No emulator/physical-device or independent native flow proof.** There is no upload, durable queue, automatic source deletion or process restart guarantee, and the provider may leave an empty/partial document after an interrupted copy. E2/E4 not claimed.
 
 ## G3 SFTP host-key evidence, 24 October 2026
 

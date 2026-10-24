@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- No INTERNET, broad storage, background service, or account permissions at G0. -->
+    <!-- User-initiated pinned SFTP only. No broad storage, background or account permission. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:label="Expository Transfer (Developer Preview)"
         android:allowBackup="false"

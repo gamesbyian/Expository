@@ -18,6 +18,16 @@ android {
         getByName("release") { isMinifyEnabled = false }
     }
     buildFeatures { compose = true }
+    packaging {
+        resources {
+            // Apache MINA publishes duplicate documentation-only metadata in
+            // sshd-common/core/sftp. Preserve runtime META-INF/services entries.
+            excludes += setOf(
+                "META-INF/DEPENDENCIES", "META-INF/LICENSE", "META-INF/LICENSE.txt",
+                "META-INF/NOTICE", "META-INF/NOTICE.txt"
+            )
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -27,6 +37,7 @@ android {
 dependencies {
     implementation(project(":core:planner"))
     implementation(project(":core:engine"))
+    implementation(project(":adapter:sftp"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation(platform("androidx.compose:compose-bom:2025.12.00"))

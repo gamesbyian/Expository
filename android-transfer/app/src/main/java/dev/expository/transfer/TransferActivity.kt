@@ -74,10 +74,11 @@ private fun DeveloperPreview() {
         ) {
             item { Text("Expository Transfer", style = MaterialTheme.typography.headlineMedium) }
             item {
-                Text("Experimental local Save As · Remote browser is synthetic",
+                Text("Experimental Local Copy and pinned SFTP remote Save As; other remote demo is synthetic",
                     style = MaterialTheme.typography.bodySmall)
             }
             item { LocalCopyCard() }
+            item { SftpBrowseCard() }
             item { Text("Demo server /demo", style = MaterialTheme.typography.titleMedium) }
             items(demoFiles, key = { it.name }) { item ->
                 Card(Modifier.fillMaxWidth()) {
