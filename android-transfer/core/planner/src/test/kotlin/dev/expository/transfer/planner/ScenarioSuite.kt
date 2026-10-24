@@ -178,6 +178,71 @@ object ScenarioSuite {
             check(runCatching { j.advance(JournalState.ATTEMPT_RECORDED, "attempt-2") }.isFailure)
             check(runCatching { j.advance(JournalState.VERIFIED) }.isFailure)
         }
+        test("N13 forty-episode numbered preview freezes visible descending order") {
+            val names = (1..40).map { "Episode-" + it.toString().padStart(2, '0') + ".mkv" }
+            val sorted = names.reversed()
+            val snap = snapshot(names, sorted)
+            val recipe = RenameRecipe(listOf(RenameEdit.Number(
+                start = 1, step = 1, width = 2, prefix = true, separator = "-")))
+            val plan = RenamePlanner.preview(snap, recipe, NOW)
+            check(plan.executable && plan.preview.size == 40)
+            check(plan.preview.first().original == "Episode-40.mkv")
+            check(plan.preview.first().proposed == "01-Episode-40.mkv")
+            check(plan.preview.last().proposed == "40-Episode-01.mkv")
+            assertStepsPreserveAll(snap, plan)
+        }
+        test("500 deterministic write proposals preserve every file and reject collisions") {
+            val names = (1..500).map { "E" + it.toString().padStart(4, '0') + ".txt" }
+            val snap = snapshot(names)
+            val recipe = RenameRecipe(listOf(RenameEdit.Prefix("new-")))
+            val plan = RenamePlanner.preview(snap, recipe, NOW)
+            check(plan.executable && plan.changed == 500 && plan.steps.size == 500)
+            assertStepsPreserveAll(snap, plan)
+            for (i in 1..500) {
+                val name = names[i - 1]
+                val colliding = snapshot(listOf(name, "new-" + name), listOf(name))
+                val blocked = RenamePlanner.preview(colliding, recipe, NOW)
+                check(!blocked.executable && "OCCUPIED_DESTINATION" in blocked.blockers)
+            }
+        }
+        test("destination preflight rejects sibling overwrite and listing mutation") {
+            val src = remote()
+            val dst = remote(folder = listOf("destination"))
+            val names = mutableListOf("Existing.bin")
+            val req = TransferRequest(listOf(file("New.bin", src)), dst,
+                destinationListing = DestinationListing("rev-list-1", true, names))
+            val p = OperationPlanner.transfer(req, NOW)
+            check(p.executable)
+            names += "New.bin"
+            val stale = OperationPlanner.transfer(req, NOW)
+            check(!stale.executable && "DESTINATION_NAME_COLLISION" in stale.blockers)
+            check(!OperationPlanner.revalidate(p, req, NOW))
+        }
+        test("canonical destination listing digest distinguishes composition") {
+            val src = remote()
+            val dst = remote(folder = listOf("destination"))
+            val base = TransferRequest(listOf(file("new.txt", src)), dst,
+                destinationListing = DestinationListing("rev-list-1", true, listOf("a", "b")))
+            val alt = base.copy(destinationListing = DestinationListing("rev-list-1", true, listOf("a", "b", "")))
+            check(OperationPlanner.transfer(base, NOW).digest != OperationPlanner.transfer(alt, NOW).digest)
+            check(!OperationPlanner.transfer(alt, NOW).executable)
+        }
+        test("Unicode NFC descendant detection blocks disguised folder destination") {
+            val src = remote(folder = listOf("Downloads"))
+            val selected = directory("Caf\u00e9", src)
+            val dst = remote(folder = listOf("Downloads", "Cafe\u0301", "season-one"))
+            val plan = OperationPlanner.transfer(makeRequest(listOf(selected), dst), NOW)
+            check(!plan.executable && "SOURCE_TO_DESCENDANT" in plan.blockers)
+        }
+        test("unknown provider flags prevent unsafe move even with identical display label") {
+            val src = remote(namespace = null, capabilities = caps(Capability.READ, Capability.DELETE_SOURCE))
+            val dest = remote(folder = listOf("elsewhere"), namespace = null,
+                capabilities = caps(Capability.WRITE))
+            val plan = OperationPlanner.transfer(makeRequest(listOf(file("x", src)), dest,
+                Operation.MOVE, deletionAuthorized = false), NOW)
+            check(!plan.executable && "DELETE_CONSENT_REQUIRED" in plan.blockers)
+            check("DESTINATION_WRITE_NOT_PROVEN" !in plan.blockers)
+        }
         test("10k actual rename steps use stable order and no overwrite") {
             val names = (1..10000).map { "Test" + it.toString().padStart(5, '0') + ".txt" }
             val s = snapshot(names)
