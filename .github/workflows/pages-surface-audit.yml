@@ -1,5 +1,9 @@
 name: Expository Pages Surface Audit
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/pages-surface-audit.yml'
+      - 'scripts/pages-audit.cjs'
   workflow_dispatch:
 permissions:
   contents: read
