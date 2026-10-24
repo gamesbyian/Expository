@@ -108,14 +108,16 @@ private fun opaqueDigest(parts: List<String>): String {
 private fun locationStamp(l: LocationRef): List<String> =
     listOf(l.key.kind.name, l.key.authorityId, l.key.rootId, l.key.containerId,
         l.key.grantId.orEmpty(), l.revision, l.verifiedNamespace.orEmpty(),
-        l.verifiedStorageDomain.orEmpty(), l.casePolicy.name) +
-        l.folder + l.capabilities.toSortedMap(compareBy { it.name }).flatMap { (key, proof) ->
+        l.verifiedStorageDomain.orEmpty(), l.casePolicy.name,
+        l.folder.size.toString()) +
+        l.folder + listOf(l.capabilities.size.toString()) +
+        l.capabilities.toSortedMap(compareBy { it.name }).flatMap { (key, proof) ->
             listOf(key.name, proof.support.name, proof.observationId, proof.expiresAtMillis.toString())
         }
 
 private fun itemStamp(i: ItemRef): List<String> =
-    listOf(i.key.authorityId, i.key.opaqueItemId, i.key.version, i.kind.name, i.name) +
-        i.parent + locationStamp(i.location)
+    listOf(i.key.authorityId, i.key.opaqueItemId, i.key.version, i.kind.name, i.name,
+        i.parent.size.toString()) + i.parent + locationStamp(i.location)
 
 private fun validComponent(name: String): Boolean {
     return name.isNotBlank() && name != "." && name != ".." &&
@@ -128,12 +130,20 @@ private fun DestinationListing?.orEmptyNames(): List<String> = this?.siblings ?:
 object OperationPlanner {
     fun transfer(request: TransferRequest, nowMillis: Long): TransferPlan {
         // Own a fresh snapshot of all input collections before computing the plan.
-        val sources = request.sources.toList()
-        val dest = request.destination
+        val sources = request.sources.map { item ->
+            item.copy(parent = item.parent.toList(),
+                location = item.location.copy(
+                    folder = item.location.folder.toList(),
+                    capabilities = item.location.capabilities.toMap()))
+        }
+        val dest = request.destination.copy(
+            folder = request.destination.folder.toList(),
+            capabilities = request.destination.capabilities.toMap())
         val blockers = mutableListOf<String>()
         if (sources.isEmpty()) blockers += "EMPTY_SELECTION"
         if (sources.map { it.key }.toSet().size != sources.size) blockers += "DUPLICATE_SOURCE_ID"
-        val listing = request.destinationListing
+        val listing = request.destinationListing?.copy(
+            siblings = request.destinationListing.siblings.toList())
         if (listing == null || !listing.complete || listing.revision.isBlank())
             blockers += "DESTINATION_LISTING_NOT_VERIFIED"
         else {
@@ -171,8 +181,8 @@ object OperationPlanner {
             val sourcePath = item.parent + item.name
             if (matched && item.kind == ItemKind.DIRECTORY &&
                 dest.folder.size >= sourcePath.size &&
-                dest.folder.take(sourcePath.size).map { it.lowercase(Locale.ROOT) } ==
-                sourcePath.map { it.lowercase(Locale.ROOT) }) blockers += "SOURCE_TO_DESCENDANT"
+                dest.folder.take(sourcePath.size).map { Normalizer.normalize(it, Normalizer.Form.NFC).lowercase(Locale.ROOT) } ==
+                sourcePath.map { Normalizer.normalize(it, Normalizer.Form.NFC).lowercase(Locale.ROOT) }) blockers += "SOURCE_TO_DESCENDANT"
         }
         val distinctSourceLocations = sources.map { it.location }.distinct()
         if (distinctSourceLocations.size != 1) blockers += "MIXED_SOURCE_LOCATIONS"
