@@ -41,6 +41,7 @@ import dev.expository.transfer.sftp.SftpPath
 import dev.expository.transfer.sftp.SftpSession
 import dev.expository.transfer.sftp.SftpTarget
 import dev.expository.transfer.sftp.SftpToSafSave
+import dev.expository.transfer.sftp.SafToSftpUpload
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
@@ -50,7 +51,7 @@ import java.util.UUID
 import kotlin.coroutines.coroutineContext
 
 /**
- * First non-synthetic remote user journey: pinned SFTP -> native Save As.
+ * Foreground pinned-SFTP browse, Save As and exclusive-create Upload.
  * Ephemeral credentials/session only; deliberate no auto-trust, source delete,
  * implicit upload, background service or promise of process-death recovery.
  */
@@ -115,6 +116,54 @@ fun SftpBrowseCard() {
         }
     }
 
+
+    val chooseUpload = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val source = result.data?.data
+        val live = session
+        val directory = folder
+        val opaque = sessionId
+        if (result.resultCode != Activity.RESULT_OK || source == null) {
+            busy = false
+            status = "Upload picker canceled. No remote file created."
+        } else if (live == null || opaque.isBlank()) {
+            busy = false
+            status = "SFTP session expired. Reconnect to upload."
+        } else {
+            busy = true
+            status = "Validating remote names, then streaming one picked document to SFTP."
+            scope.launch {
+                val receipt = withContext(Dispatchers.IO) {
+                    val active = coroutineContext[Job]
+                    SafToSftpUpload(context.contentResolver).copy(
+                        live, opaque, source, directory,
+                        continueRequested = { active?.isActive == true }
+                    )
+                }
+                status = when (receipt.proof) {
+                    CopyProof.BYTES_VERIFIED ->
+                        "Upload byte verified by independent SFTP read-back (" +
+                            receipt.bytesWritten + " bytes). The local original remains."
+                    CopyProof.WRITE_ACKNOWLEDGED ->
+                        "SFTP acknowledged " + receipt.bytesWritten +
+                            " bytes, but read-back proof is unavailable. Completion not verified."
+                    CopyProof.UNCERTAIN ->
+                        "Upload uncertain or partial. A remote partial file may exist; do not retry blindly."
+                    CopyProof.BLOCKED ->
+                        "Upload blocked: filename collision, incomplete remote listing, permissions or changed source. Existing files were not overwritten."
+                }
+                // Refresh visible names only, without promoting an uncertain
+                // receipt or pretending that a successful listing proves bytes.
+                if (session === live) {
+                    val refreshed = withContext(Dispatchers.IO) {
+                        runCatching { live.browse(directory) }
+                    }
+                    refreshed.onSuccess { page = it }
+                }
+                busy = false
+            }
+        }
+    }
+
     fun browseTo(next: String) {
         val live = session ?: return
         busy = true
@@ -138,7 +187,7 @@ fun SftpBrowseCard() {
 
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("SFTP remote → Save to device", style = MaterialTheme.typography.titleMedium)
+            Text("SFTP file transfer", style = MaterialTheme.typography.titleMedium)
             Text("Experimental foreground-only path. Password and session are not saved; host-key fingerprint must be independently verified.",
                 style = MaterialTheme.typography.bodySmall)
 
@@ -209,6 +258,14 @@ fun SftpBrowseCard() {
                     Button(enabled = !busy, onClick = { browseTo(folder) }) { Text("Refresh") }
                 }
                 Text("Remote folder: " + folder)
+                Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp), onClick = {
+                    busy = true // freeze session while Android picks a local source
+                    chooseUpload.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "*/*"
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    })
+                }) { Text("Upload file here…") }
                 if (folder != "/") Button(enabled = !busy, onClick = {
                     val parent = folder.substringBeforeLast('/', "").ifBlank { "/" }
                     browseTo(parent)
