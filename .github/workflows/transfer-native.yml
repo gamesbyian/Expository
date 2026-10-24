@@ -64,8 +64,8 @@ jobs:
           retention-days: 5
 
   ftps-lab:
-    # One-time diagnostic retry on PR #34; restore to manual after evidence.
-    if: (github.event_name == 'workflow_dispatch' && inputs.ftps_lab) || (github.event_name == 'pull_request' && github.event.pull_request.number == 34)
+    # Ephemeral TLS verification, intentionally opt-in only (lean PR CI).
+    if: github.event_name == 'workflow_dispatch' && inputs.ftps_lab
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
