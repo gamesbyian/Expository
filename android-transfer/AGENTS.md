@@ -21,7 +21,12 @@ repository-owner GitHub identity, then inspect the resulting Actions run and
 record its outcome. Public profiles and owner FTPS profile allowlists, safety
 requirements, and manual SFTP fingerprint procedure are in
 [`EXTERNAL-SMOKE-OPERATIONS.md`](../docs/android-transfer/EXTERNAL-SMOKE-OPERATIONS.md).
-Normal PR CI stays synthetic and cheap. Never use these workflows for owner
+Normal PR CI stays synthetic and cheap. For local controlled protocol
+proof and a developer debug APK, post one exact PR comment as repository owner:
+`/transfer-native ftps-lab`, `/transfer-native sftp-lab`, or
+`/transfer-native apk`. These invoke `transfer-native.yml` using reviewed
+`main` only; they cannot load proposed PR code or production credentials.
+Never use these workflows for owner
 media mutation, public demo writes, load tests, or claims of Android-device
 acceptance. A triggered run is not a passed test; investigate failures, update
 source and rerun with evidence where warranted.

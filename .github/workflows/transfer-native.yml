@@ -1,5 +1,9 @@
 name: Expository Transfer native validation
+# Owner-authorized PR comments may trigger isolated labs/APK using reviewed
+# main only. No secrets in these jobs and no untrusted PR-head execution.
 on:
+  issue_comment:
+    types: [created]
   pull_request:
     paths:
       - "android-transfer/**"
@@ -22,10 +26,13 @@ permissions:
   contents: read
 jobs:
   planner:
+    if: github.event_name != 'issue_comment'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'issue_comment' && 'main' || github.ref }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -38,11 +45,18 @@ jobs:
         run: gradle :core:planner:scenarios :core:planner:directoryScenarios :core:planner:moveScenarios :core:engine:scenarios :core:engine:journalScenarios :core:engine:journaledCopyScenarios :adapter:ftps:scenarios :adapter:sftp:scenarios :testing:fake-endpoints:scenarios --no-daemon
   android-debug:
     # Android builds remain opt-in and non-blocking; PRs use cheap JVM evidence.
-    if: (github.event_name == 'workflow_dispatch' && inputs.build_apk)
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.build_apk) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       github.event.comment.user.login == 'gamesbyian' &&
+       github.event.comment.body == '/transfer-native apk')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'issue_comment' && 'main' || github.ref }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -69,11 +83,18 @@ jobs:
 
   ftps-lab:
     # Ephemeral TLS verification, intentionally opt-in only (lean PR CI).
-    if: github.event_name == 'workflow_dispatch' && inputs.ftps_lab
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.ftps_lab) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       github.event.comment.user.login == 'gamesbyian' &&
+       github.event.comment.body == '/transfer-native ftps-lab')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'issue_comment' && 'main' || github.ref }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -127,11 +148,18 @@ jobs:
 
   sftp-lab:
     # Ephemeral pinned-key protocol lab, opt-in only after bootstrap proof.
-    if: (github.event_name == 'workflow_dispatch' && inputs.sftp_lab)
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.sftp_lab) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       github.event.comment.user.login == 'gamesbyian' &&
+       github.event.comment.body == '/transfer-native sftp-lab')
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'issue_comment' && 'main' || github.ref }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
