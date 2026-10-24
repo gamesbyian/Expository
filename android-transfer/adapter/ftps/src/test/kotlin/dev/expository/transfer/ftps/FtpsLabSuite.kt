@@ -50,7 +50,7 @@ object FtpsLabSuite {
             }
             val observation = session.statFile("/synthetic.txt")
             check(observation.name == "synthetic.txt" &&
-                observation.size == "FTPS synthetic fixture\\n".toByteArray(Charsets.UTF_8).size.toLong())
+                observation.size == "FTPS synthetic fixture\n".toByteArray(Charsets.UTF_8).size.toLong())
             val contents = session.openRead("/synthetic.txt").use { input ->
                 input.readBytes()
             }
