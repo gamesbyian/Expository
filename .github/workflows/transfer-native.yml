@@ -27,7 +27,7 @@ jobs:
           gradle-version: "8.13"
       - name: Offline deterministic G1 synthetic scenarios
         working-directory: android-transfer
-        run: gradle :core:planner:scenarios --no-daemon
+        run: gradle :core:planner:scenarios :testing:fake-endpoints:scenarios --no-daemon
   android-debug:
     # SDK/APK build is opt-in and does not consume runners on every PR update.
     if: github.event_name == 'workflow_dispatch' && inputs.build_apk
