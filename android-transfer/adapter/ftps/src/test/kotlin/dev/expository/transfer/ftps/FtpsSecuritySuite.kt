@@ -18,6 +18,13 @@ object FtpsSecuritySuite {
                 check(client.dataTimeout.toMillis() > 0L)
             }
         }
+        checkCase("implicit mode retains strict TLS verifier policy") {
+            val target = FtpsTarget("example.invalid", 990, FtpsMode.IMPLICIT_TLS)
+            check(target.port == 990 && target.mode == FtpsMode.IMPLICIT_TLS)
+            val client = SecureFtps.configuredClient(target.mode)
+            check(client.isEndpointCheckingEnabled && client.isRemoteVerificationEnabled)
+            check(client.connectTimeout > 0 && client.dataTimeout.toMillis() > 0L)
+        }
         checkCase("valid but inert endpoint") {
             check(FtpsTarget("example.invalid", 21).port == 21)
         }
