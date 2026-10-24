@@ -17,3 +17,11 @@ tasks.register<JavaExec>("journalScenarios") {
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("dev.expository.transfer.engine.DurableJournalSuite")
 }
+
+tasks.register<JavaExec>("journaledCopyScenarios") {
+    group = "verification"
+    description = "Commit-before-mutation streaming and lost-ack tests"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.engine.JournaledCopySuite")
+}

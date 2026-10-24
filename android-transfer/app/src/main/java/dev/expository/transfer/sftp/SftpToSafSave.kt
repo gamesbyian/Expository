@@ -5,7 +5,9 @@ import android.net.Uri
 import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.engine.CopyReceipt
 import dev.expository.transfer.engine.CopyStreams
-import dev.expository.transfer.engine.ForegroundCopyEngine
+import dev.expository.transfer.engine.JournaledCopyEngine
+import dev.expository.transfer.engine.AtomicAttemptStorage
+import dev.expository.transfer.engine.DurableAttemptJournal
 import dev.expository.transfer.planner.*
 import dev.expository.transfer.saf.SafSingleDocumentCopy
 import java.io.FileNotFoundException
@@ -13,13 +15,15 @@ import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.UUID
 
 /**
  * One remote SFTP file -> user-created ACTION_CREATE_DOCUMENT destination.
  * Copy only. No source deletion, no public Downloads staging, no credential
  * persistence and no false claim about Google Drive cloud synchronization.
  */
-class SftpToSafSave(private val resolver: ContentResolver) {
+class SftpToSafSave(private val resolver: ContentResolver,
+    private val storageForPlan: (String) -> AtomicAttemptStorage) {
     private val observer = SafSingleDocumentCopy(resolver)
 
     fun copy(
@@ -73,7 +77,11 @@ class SftpToSafSave(private val resolver: ContentResolver) {
             catch (_: Exception) {
                 return CopyReceipt("", CopyProof.BLOCKED, 0L, "PREFLIGHT_UNAVAILABLE")
             }
-        return ForegroundCopyEngine.copy(original, { plan(System.currentTimeMillis()) },
+        val journal = try { DurableAttemptJournal(storageForPlan(original.digest)) }
+            catch (_: Exception) {
+                return CopyReceipt(original.digest, CopyProof.BLOCKED, 0L, "JOURNAL_UNAVAILABLE")
+            }
+        return JournaledCopyEngine.copy(original, { plan(System.currentTimeMillis()) },
             object : CopyStreams {
                 override fun openSource(): InputStream {
                     // Network source must still match the approved stat snapshot.
@@ -105,6 +113,6 @@ class SftpToSafSave(private val resolver: ContentResolver) {
                     resolver.openOutputStream(destination, "w") ?: throw FileNotFoundException()
                 override fun openDestinationReadBack(): InputStream? =
                     resolver.openInputStream(destination)
-            }, continueRequested, onProgress)
+            }, journal, UUID.randomUUID().toString(), continueRequested, onProgress)
     }
 }

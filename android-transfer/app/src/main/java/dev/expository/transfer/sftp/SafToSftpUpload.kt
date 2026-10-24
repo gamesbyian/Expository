@@ -5,20 +5,24 @@ import android.net.Uri
 import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.engine.CopyReceipt
 import dev.expository.transfer.engine.CopyStreams
-import dev.expository.transfer.engine.ForegroundCopyEngine
+import dev.expository.transfer.engine.JournaledCopyEngine
+import dev.expository.transfer.engine.AtomicAttemptStorage
+import dev.expository.transfer.engine.DurableAttemptJournal
 import dev.expository.transfer.planner.*
 import dev.expository.transfer.saf.SafSingleDocumentCopy
 import java.io.FileNotFoundException
 import java.io.InputStream
 import java.io.OutputStream
 import java.security.MessageDigest
+import java.util.UUID
 
 /**
  * User-picked local SAF file -> authenticated and pinned SFTP destination.
  * Strict COPY, no overwrite, append, automatic cleanup or source deletion.
  * A successful server-side close is not equal to a read-back verified receipt.
  */
-class SafToSftpUpload(private val resolver: ContentResolver) {
+class SafToSftpUpload(private val resolver: ContentResolver,
+    private val storageForPlan: (String) -> AtomicAttemptStorage) {
     private val observer = SafSingleDocumentCopy(resolver)
 
     fun copy(
@@ -89,7 +93,11 @@ class SafToSftpUpload(private val resolver: ContentResolver) {
             catch (_: Exception) {
                 return CopyReceipt("", CopyProof.BLOCKED, 0, "REMOTE_PREFLIGHT_FAILED")
             }
-        return ForegroundCopyEngine.copy(plan, {
+        val journal = try { DurableAttemptJournal(storageForPlan(plan.digest)) }
+            catch (_: Exception) {
+                return CopyReceipt(plan.digest, CopyProof.BLOCKED, 0L, "JOURNAL_UNAVAILABLE")
+            }
+        return JournaledCopyEngine.copy(plan, {
             snapshotPlan(System.currentTimeMillis())
         }, object : CopyStreams {
             override fun openSource(): InputStream {
@@ -103,6 +111,6 @@ class SafToSftpUpload(private val resolver: ContentResolver) {
                 session.openExclusiveWrite(remotePath)
             override fun openDestinationReadBack(): InputStream? =
                 session.openRead(remotePath) // can fail closed to WRITE_ACKNOWLEDGED
-        }, continueRequested, onProgress)
+        }, journal, UUID.randomUUID().toString(), continueRequested, onProgress)
     }
 }

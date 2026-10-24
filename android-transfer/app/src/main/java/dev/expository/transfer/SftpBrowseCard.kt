@@ -34,6 +34,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.expository.transfer.engine.CopyProof
+import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 import dev.expository.transfer.sftp.SecureSftp
 import dev.expository.transfer.sftp.SftpBrowsePage
 import dev.expository.transfer.sftp.SftpHostKeyPin
@@ -94,7 +95,9 @@ fun SftpBrowseCard() {
             scope.launch {
                 val receipt = withContext(Dispatchers.IO) {
                     val active = coroutineContext[Job]
-                    SftpToSafSave(context.contentResolver).copy(
+                    SftpToSafSave(context.contentResolver) { digest ->
+                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                    }.copy(
                         live, sessionId, path, target,
                         continueRequested = { active?.isActive == true }
                     )
@@ -134,7 +137,9 @@ fun SftpBrowseCard() {
             scope.launch {
                 val receipt = withContext(Dispatchers.IO) {
                     val active = coroutineContext[Job]
-                    SafToSftpUpload(context.contentResolver).copy(
+                    SafToSftpUpload(context.contentResolver) { digest ->
+                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                    }.copy(
                         live, opaque, source, directory,
                         continueRequested = { active?.isActive == true }
                     )
@@ -188,7 +193,7 @@ fun SftpBrowseCard() {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("SFTP file transfer", style = MaterialTheme.typography.titleMedium)
-            Text("Experimental foreground-only path. Password and session are not saved; host-key fingerprint must be independently verified.",
+            Text("Foreground-only journaled Copy. Password and session are not saved; host-key fingerprint must be independently verified.",
                 style = MaterialTheme.typography.bodySmall)
 
             if (session == null) {
