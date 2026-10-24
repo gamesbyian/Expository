@@ -108,7 +108,7 @@ The primary CTA on a selected file is **Copy / Send to…** with Device, Google 
 
 ## Evidence, acceptance expansion, and references
 
-Drive P0 cannot be marked delivered until **D01–D09** in [the hardened plan](HARDENED-IMPLEMENTATION-PLAN.md#release-acceptance-additions-d01d12) have been exercised against a real Android Drive provider/account and an actual Drive API OAuth client. Use a testing account; never log OAuth tokens, parent IDs or real file names in public CI.
+Drive/Docs P0 cannot be marked delivered until **D01–D20** across [the hardened plan](HARDENED-IMPLEMENTATION-PLAN.md#release-acceptance-additions-d01d20) and [the new Google destination acceptance](#p0-acceptance-extension-d13d20) have been exercised against a real Android Drive provider/account and an actual Drive API OAuth client. Use a testing account; never log OAuth tokens, parent IDs or real file names in public CI.
 
 - [Drive OAuth narrow/restricted scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth)
 - [Google Picker for mobile, folder selection and its file-open semantics](https://developers.google.com/workspace/drive/picker/guides/desktop-mobile-picker)
