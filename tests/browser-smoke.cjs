@@ -57,6 +57,11 @@ async function evaluate(expression){
  if(r.exceptionDetails)fail(r.exceptionDetails.exception?.description||r.exceptionDetails.text);
  return r.result?.value;
 }
+async function evaluateWithGesture(expression){
+ const r=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true,userGesture:true});
+ if(r.exceptionDetails)fail(r.exceptionDetails.exception?.description||r.exceptionDetails.text);
+ return r.result?.value
+}
 async function until(expression,label){
  for(let i=0;i<70;i++){
   try{if(await evaluate(expression))return}catch{}
@@ -216,6 +221,25 @@ async function main(){
   if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-pinch-393.png');
   await evaluate("document.querySelector('.image-actions button:nth-child(2)').click()");
   assert.equal(await evaluate("document.querySelector('.image-stage').style.overscrollBehavior"),'auto','fitted image permits natural page scroll');
+  const nativeFullscreen=await evaluate("document.fullscreenEnabled && typeof document.querySelector('.image-viewer').requestFullscreen==='function'");
+  if(nativeFullscreen){
+   await evaluateWithGesture("document.querySelector('.image-actions button:nth-child(4)').click()");
+   await until("Boolean(document.fullscreenElement)||document.querySelector('#status').textContent.includes('refused fullscreen')",'fullscreen response');
+   if(await evaluate("Boolean(document.fullscreenElement)")){
+    assert.equal(await evaluate("document.fullscreenElement.classList.contains('image-viewer')"),true,'only image viewer entered fullscreen');
+    assert.equal(await evaluate("document.querySelector('.image-actions button:nth-child(4)').getAttribute('aria-label')"),'Exit image fullscreen','exit visible while fullscreen');
+    assert.equal(await evaluate("document.querySelector('.image-viewer').getBoundingClientRect().height>=innerHeight-1"),true,'fullscreen preview occupies screen');
+    if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-image-fullscreen-393.png');
+    await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}))");
+    await until("document.fullscreenElement===null",'Escape exits viewer fullscreen');
+    assert.equal(await evaluate("document.querySelector('#preview').classList.contains('open')"),true,'Escape from fullscreen retains file preview');
+   }else{
+    assert.equal(await evaluate("document.querySelector('.image-actions button:nth-child(4)').getAttribute('aria-label')"),'Enter image fullscreen','refused browser request restores control state');
+   }
+  }else{
+   assert.equal(await evaluate("document.querySelector('.image-actions button:nth-child(4)').disabled"),true,'unsupported fullscreen clearly disabled')
+  }
+
 
   await evaluate("document.querySelector('#fileHistory').click()");
   await until("document.querySelector('.history-list a')?.textContent?.includes('First fixture change')",'file history loaded');
