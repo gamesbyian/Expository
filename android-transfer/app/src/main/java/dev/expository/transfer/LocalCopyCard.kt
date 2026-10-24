@@ -7,7 +7,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
@@ -24,6 +25,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.engine.CopyReceipt
 import dev.expository.transfer.saf.SafSingleDocumentCopy
@@ -125,15 +129,16 @@ fun LocalCopyCard() {
             Text("Copy a file on this device", style = MaterialTheme.typography.titleMedium)
             Text("Real Android picker → Save As. Copy only; originals remain untouched.",
                 style = MaterialTheme.typography.bodySmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(enabled = !busy, onClick = {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !busy, onClick = {
                     open.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
                         type = "*/*"
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     })
                 }) { Text("Choose file") }
-                Button(enabled = !busy && selected != null, onClick = {
+                Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !busy && selected != null, onClick = {
                     val sourceName = displayName ?: "copy.bin"
                     save.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
@@ -144,7 +149,8 @@ fun LocalCopyCard() {
                 }) { Text("Save copy…") }
             }
             if (selected != null) Text("Source: " + (displayName ?: "Selected file"))
-            Text(status, style = MaterialTheme.typography.bodyMedium)
+            Text(status, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                style = MaterialTheme.typography.bodyMedium)
             if (busy) Text("Streaming: " + transferred + " bytes (not yet verified)")
             receipt?.let {
                 Text("Receipt: " + it.proof.name + " · " + it.bytesWritten + " bytes",
