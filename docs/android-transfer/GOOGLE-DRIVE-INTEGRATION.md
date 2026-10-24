@@ -18,7 +18,7 @@ From either a **Local** or an **FTP/FTPS/SFTP Remote** session, choose one file,
 
 **P0 fallback:** Dedicated Drive upload adapter with Google OAuth, scoped to `drive.file` where a user-selected parent can truly be authorized. The Google Picker is primarily a file/folder *selection/open* interface, not a generic Save-as destination dialog: experimentally prove folder authorization and Drive `files.create(parent)` with the current mobile picker. If that narrow scope cannot write to the desired folder, offer a clearly labeled app-created folder or explicit product-level scope review. **Never silently escalate to restricted whole-Drive OAuth.** The companion is native Android and has no credential relationship with the read-only Expository web app.
 
-**P1/P2:** Explicit **Convert to Google Docs** action and **Open with Google Docs** interoperability for supported documents. No automatic conversion or overwrite. A native Google Doc is not byte-for-byte identical to the source document.
+**P0 user entry points:** **Save original to Google Drive**, **Create Google Doc (convert)** when the live API confirms a supported format, and **Open in Google Docs** when an installed compatible app handles the file. These are three separate actions and receipts. **P1:** richer Docs editing/reimport and reusable conversion preferences. No automatic conversion or overwrite. A native Google Doc is not byte-for-byte identical to the source document.
 
 ### Capability decision tree (mandatory before announcing Save)
 
@@ -46,6 +46,58 @@ Across all providers, Copy is non-destructive. **Google Drive destination Move i
 - Standard Android picker/share flows require only user-selected scoped permissions. No MANAGE_EXTERNAL_STORAGE or broad Drive OAuth scope merely for simple uploads.
 - A Google Docs conversion confirms source MIME support, format changes, target Workspace MIME, ownership, completion and failure recovery.
 - Test on physical Android, TalkBack, Android DocumentsUI/Drive provider variants, with large files and nested folders, before claiming P0 acceptance.
+
+## First-class destination UX: initiation from anywhere (owner requirement, 23 October 2026)
+
+**In scope at P0:** a local selected item, local folder, FTP/FTPS/SFTP remote item or remote folder can start **Send / Copy to…** without manually downloading to the device first. Both the simple single-pane browser and *each* pane of any-two-location Workspace expose the same intent-based action sheet. This is **not** permission to write to arbitrary Google accounts or to masquerade as a third-party app.
+
+### Visible action sheet
+
+From one selection, multi-select, or long-press:
+
+1. **Save to device** → Android Save-as / folder picker.
+2. **Copy to other pane** → preflight destination, default **Copy**, never implicit **Move**.
+3. **Save to Google Drive** → original bytes/MIME, explicitly selected account and folder, actual write/confirmation when provider/API supports it.
+4. **Create a Google Doc** → available on supported *single document* source formats only; conversion notice includes format/layout risk and selected Google account. Use a real Drive `files.create` conversion and verify the resulting native Docs MIME/id. Don't show for arbitrary directories or pretend a ZIP/image/audio will automatically become an editable word-processing document.
+5. **Open with Google Docs** → when a compatible installed document editor is advertised by Android, launch an `ACTION_VIEW` (or applicable verified edit/open contract) on a MIME-correct `content://` URI with a temporary read grant. This opens the existing format for editing/viewing, **not** a copy saved to Drive or a native Docs conversion. If unavailable, offer **Save original to Drive, then open**, and explain that the user must open it in Docs.
+6. **Share with app…** → Android Sharesheet `ACTION_SEND` / `ACTION_SEND_MULTIPLE`; can show Drive/Docs if the system resolves them. Label resulting receipt **Handed off to another app; destination unverified**. Do not pretend choosing an app guarantees import.
+
+The primary CTA on a selected file is **Copy / Send to…** with Device, Google Drive, Google Docs, and Other app as clear destinations. On 360–393dp screens display a compact bottom sheet with 48dp targets, short destination labels and a one-sentence description of each action. A long-press context menu and accessibility actions lead to the *same preflight planner*, not a separate copy engine. At 200% font size, sheet becomes scrollable/full-height, never clipped. For Google Docs the presentation is **Create native Doc** versus **Open existing format**, not a fictional Docs folder.
+
+### Source-to-destination matrix
+
+| Selected source | Save original to Drive | Create native Doc | Open with Docs | Share / handoff |
+|---|---|---|---|---|
+| Android local file (SAF `content://`) | P0, picker/API verified | P0 if MIME supported | P0 if target app supports MIME | P0, scoped URI |
+| FTP/FTPS/SFTP file | P0, bounded phone-mediated stream, no Downloads round-trip | P0 if MIME supported, conversion with separate receipt | P0 via temporary ContentProvider URI/spool if necessary | P0 using scoped temporary URI; may need bounded private staging |
+| Multiple local or remote files | P0, per-file queue + folder destination | P0 only with explicit **separate Doc for each supported document** bulk confirmation; no silent arbitrary formats | Not a guarantee; share/open per selected compatible file | P0 where target accepts `ACTION_SEND_MULTIPLE` |
+| Local/remote folder | P0 recursively when provider/API authorizes child folders | **Not a single Google Doc**; offer Save folder to Drive or document-by-document conversion | Not a folder destination | Share as ZIP only with explicit archive semantics and size limitations |
+| Local/Local or Remote/Remote split pane | Same action in either pane | Same guarded option for selected supported docs | Same content-URI/open workflow | Same explicitly unverified handoff |
+
+**The target must say what it really is:** Drive is storage; Google Docs is a document editor / native document type, not a general destination filesystem. A `pdf` or image conversion via Drive may embed an image or invoke OCR; it is not a text-preserving equivalent of the original. Check `about.importFormats` at use time and make conversion opt-in with a preview/explanation. The mobile Docs app can open/edit formats such as DOCX/ODT/TXT/RTF/HTML, but it is not proof that an arbitrary `ACTION_SEND` intent will resolve to Docs on every Android build.
+
+### Technical and proof contract
+
+- **Source adapter:** `FileSource.openStream()` produces a bounded, cancellable stream. For remote-to-Drive direct API transfer, data flows **remote server → phone → Google HTTPS API**; never server-to-Google magic, raw credential in URI, or an unrestricted publicly accessible staging URL. For Docs app handoff, provide a narrowly granted `content://` through the Android `FileProvider` or a vetted streaming `ContentProvider`. An arbitrary remote stream might not be seekable and a receiving app may re-open it after Expository loses foreground status; if a reliable seekable snapshot is necessary, transparently stage in bounded encrypted app-private space, retain the URI grant for the receiving activity lifetime, and clean it up.
+- **OAuth and folder identity:** default to narrow `drive.file`, use Google Picker only as a **user-selected access grant** and not an assumed Save dialog; check permission on intended parent using `files.create`. Resolve account+parent **before** streaming. Don't rely on a path-looking label or a remembered Drive folder name as identity; use account-scoped opaque parent/file IDs in private journal and recheck permissions after account changes.
+- **Resumable upload:** treat session URL as a bearer capability (never log or expose), persist encrypted job state if session is resumable, send chunks in 256KiB multiples except final, reconcile `308` acknowledgements, verify the final created file ID/parent/size and hash only if Drive provides a comparable checksum. A true native Docs conversion generally **does not support pre-generated file IDs**, so ambiguous create results need careful session/Drive reconciliation before another create; never blindly repeat a create that may have committed.
+- **Device/provider controls:** probe `ACTION_CREATE_DOCUMENT` for a single target file and `ACTION_OPEN_DOCUMENT_TREE` plus create/write flags for folder copies; a Drive SAF provider may not expose a writable root. Use Android FileProvider grants for shares/opens, and never expose remote credentials or private paths in Intent metadata. `ACTION_VIEW` and `ACTION_SEND` are **different**: a target editor may appear for only one.
+- **Observable receipts:** `PLANNED` → `TRANSFERRING` → `WRITE_ACKNOWLEDGED` → `DESTINATION_CONFIRMED` (and `HASH_VERIFIED` if applicable). Native Docs conversion ends `GOOGLE_DOC_CREATED` with Drive ID, final MIME and conversion disclaimer, **not** a byte-equal copy. Sharesheet/editor handoff ends `HANDED_OFF_UNVERIFIED` or `OPENED_EXTERNALLY`; neither counts as a verified Drive save. Revoke/expire grants and clean ephemeral staging without deleting a source.
+- **Conflict identity and duplicate avoidance:** before creating, show whether the exact selected parent contains a same-name item if visibility permits; otherwise state that duplicate-name detection is **unknown** rather than confidently claiming clear. On request timeout, check resumable upload/session and observed file IDs; a newly constructed native Workspace document must not be silently duplicated on an ambiguous response.
+- **No invisible feature exclusions:** if Docs is not installed, login is revoked, import MIME unsupported, or Drive selected folder lacks write permission, the relevant action must explain why and give **Save original**, **Choose another Drive folder/account**, or **Share/open via Android** as a clearly distinct alternative. An unavailable route is not a reason to request whole-Drive OAuth silently.
+
+### P0 acceptance extension (D13–D20)
+
+- **D13:** Local DOCX selected → **Create Google Doc**: explicit conversion consent, selected account/folder, verified native `application/vnd.google-apps.document` ID and readable Docs link; local source unchanged. No fabricated byte-size/checksum equality.
+- **D14:** Remote DOCX or TXT selected → same conversion without first writing to public Downloads; interrupted network, process death, drive quota and resumed session each produce accurate per-item status.
+- **D15:** Remote and local non-convertible content (binary, unknown formats, folders) → **Create Google Doc** unavailable or explicit unsupported explanation, **Save original to Drive** still available.
+- **D16:** Local and remote document → **Open with Google Docs** via an Android editor/view intent when supported; target not installed / intent resolution fails produces explicit fallback. Opened editor is not falsely marked uploaded or converted.
+- **D17:** `ACTION_SEND` to Drive/Docs and `ACTION_VIEW` to Docs must be tested independently; canceled chooser, receive-app rejection and short-lived grants never mark the transfer complete.
+- **D18:** Twenty files and nested folders local/remote → Drive verified hierarchy; before/after account switch, wrong-parent denial, offline interruption and ambiguous `files.create` do not create silent duplicates or lose originals.
+- **D19:** 393dp portrait, landscape and 200% font scale show one-tap Google destinations from either split pane, with clear selected source/target and distinct **copy vs convert vs open vs handoff** preview; TalkBack can complete without drag.
+- **D20:** Provider compatibility matrix across installed/not installed Drive and Docs, writable/nonwritable Drive SAF roots, Google Picker folder permission yes/no, expired `drive.file` authorization, and constrained quota; receipt labels match actual proof. No live private file names, IDs or tokens in public artifacts.
+
+**Primary evidence:** [Android SAF Save-as / tree behavior](https://developer.android.com/training/data-storage/shared/documents-files), [Android secure FileProvider shares](https://developer.android.com/training/secure-file-sharing), [Google Drive mobile Picker](https://developers.google.com/workspace/drive/picker/guides/desktop-mobile-picker), [Drive scope least privilege](https://developers.google.com/workspace/drive/api/guides/api-specific-auth), [Drive resumable upload, native import and pre-generated ID limitations](https://developers.google.com/workspace/drive/api/guides/manage-uploads), [Google Docs supported Android import formats](https://support.google.com/docs/answer/7068618?co=GENIE.Platform%3DAndroid&hl=en).
 
 ## Primary platform references
 
