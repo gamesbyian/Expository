@@ -47,6 +47,29 @@ object FtpsSecuritySuite {
                 check(runCatching { FtpsPath.checkedChild(name) }.isFailure)
             }
         }
+        checkCase("list failure taxonomy never leaks raw exception, path or credentials") {
+            val details = "host=private.invalid user=private secret=not-for-logs /sensitive/video.mkv"
+            val types = listOf(
+                Triple(null, 500, "NO_DATA_CONNECTION_OR_COMMAND_REJECTED"),
+                Triple(javax.net.ssl.SSLHandshakeException(details), 425, "TLS_HANDSHAKE"),
+                Triple(javax.net.ssl.SSLException(details), 522, "TLS_DATA"),
+                Triple(java.net.SocketTimeoutException(details), 0, "TIMEOUT"),
+                Triple(java.net.SocketException(details), 426, "DATA_SOCKET"),
+                Triple(java.io.IOException(details), 550, "IO"),
+                Triple(IllegalArgumentException(details), 215, "PARSER_OR_POLICY")
+            )
+            for ((failure, response, expected) in types) {
+                val result = FtpsFailureCodes.classify("LIST", response, failure)
+                check(result.kind == expected)
+                check(result.numericReply == response.coerceIn(0, 599))
+                check(result.cause == null)
+                check(!result.message.orEmpty().contains("private"))
+                check(!result.message.orEmpty().contains("/sensitive"))
+                check(!result.message.orEmpty().contains("secret"))
+                check(result.message.orEmpty().contains("FTPS_LIST_"))
+            }
+            check(FtpsFailureCodes.classify("LIST", 999, null).numericReply == 0)
+        }
         checkCase("invalid identity rejected without network") {
             check(runCatching {
                 SecureFtps.connect(FtpsTarget("example.invalid"), "\r", charArrayOf('x'))
