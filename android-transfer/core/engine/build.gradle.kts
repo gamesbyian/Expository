@@ -8,3 +8,12 @@ tasks.register<JavaExec>("scenarios") {
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("dev.expository.transfer.engine.CopyEngineSuite")
 }
+
+
+tasks.register<JavaExec>("journalScenarios") {
+    group = "verification"
+    description = "Fail-closed durable journal crash and corruption scenarios"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.engine.DurableJournalSuite")
+}
