@@ -1,0 +1,136 @@
+# Expository Transfer for Android: competitive landscape and engineering research
+
+**Exploratory report | 23 October 2026 | Evidence level: online desk research, not installed-app benchmarking**
+
+**Mandate.** Research Android FTP/FTPS/SFTP clients and related file-transfer tools; identify what users value, recurring frustrations, engineering constraints, and mobile UX principles. The companion [product proposal](PRODUCT-PROPOSAL.md) translates findings into requirements, delivery stages and acceptance.
+
+## 1. Executive findings
+
+1. **Winning from breadth alone is implausible.** Solid Explorer, MiXplorer, X-plore, Total Commander and Owlfiles already span dozens of protocols, archives, clouds and local operations. Expository should instead differentiate on *two moves*: extremely straightforward save/upload using Android system UI, and an optional excellent local/remote transfer workspace.
+2. **Android-native file access is a feature, not plumbing.** A document is selected via the Storage Access Framework (SAF); a whole directory is a separately granted tree, not a multi-file picker shortcut. Permissions from the system picker should be scoped to the user-selected item/tree, not blanket storage access.
+3. **The hardest problem is making transfers trustworthy.** Real Play reviews complain about confusing copy-versus-move behavior, partially completed files, stuck jobs, uncertain failure reasons, inaccessible error logs and stale remote listings. Design a durable, inspected transfer queue before adding sync rules or extra protocols.
+4. **Dual-pane is proven but should be optional.** It is a central strength of Solid Explorer, MiXplorer, X-plore and Total Commander; portrait users need an equally easy single-pane journey. Drag must remain an alternate to clear Upload/Save buttons.
+5. **Security and contemporary Android restrictions must shape v1.** Plain FTP is unencrypted; SFTP is not FTPS. Modern Android imposes limits on storage, background transfers and, for apps targeting Android 17, local-network access.
+
+## 2. Research method and limits
+
+Primary evidence: official Google Play app pages (feature disclosures and selected user reviews); Android Developers documentation; Apache Commons Net/SSHJ project documentation; IETF RFCs. Community evidence: dated r/androidapps discussions. Play stars and review counts are **snapshots, region-sensitive and not laboratory comparisons**. Quoted complaints are individual reviews or discussions, not universal defects or independently reproduced bugs. We have not installed competitor APKs, measured throughput, audited source security, interviewed users or inspected every paywall. Any claims requiring those tasks remain hypotheses.
+
+Useful community snapshots: [March 2025 feature comparison](https://www.reddit.com/r/androidapps/comments/1jntjxd), [December 2024 Solid/MiX/X-plore discussion](https://www.reddit.com/r/androidapps/comments/1hplbyv/), [May 2026 preferences](https://www.reddit.com/r/androidapps/comments/1t8aksz/), [October 2026 search for ad-free X-plore alternatives](https://www.reddit.com/r/androidapps/comments/1x0oijg/).
+
+## 3. Competitive review
+
+Ratings shown are approximate contemporary Play listing values, not a controlled sample.
+
+| App | Observable strengths / features | What people praise | Complaints or tradeoffs | Expository lesson |
+|---|---|---|---|---|
+| **[Solid Explorer](https://play.google.com/store/apps/details?id=pl.solidexplorer2)** | Dual-pane drag and drop; FTP/SFTP/SMB/WebDAV and clouds; archives; encryption; indexed search; preview; built-in file-sharing server; Chromebook/tablet support. ~4.5★ / 10M+ installs. | Visual polish, stability and two-pane power, echoed in [community comparisons](https://www.reddit.com/r/androidapps/comments/1t8aksz/). | Paid unlock/licence friction; modern Android storage restrictions; some users report transfer-rate differences vs MiXplorer. These are community anecdotes, not confirmed universal bugs. | Benchmark the elegance of its two-panel interaction, **not** its entire all-in-one feature surface. |
+| **[MiXplorer Silver](https://play.google.com/store/apps/details?id=com.mixplorer.silver)** | Extremely deep customization; unlimited tabs; dual panel and drag; queues/tasks; many archive formats; FTP/FTPS/SFTP, SMB and WebDAV; powerful viewers and scripting-style utilities. ~4.0★ on Silver listing. | Power users praise flexibility and batching several operations before running them. | A **28 Aug 2026 Play review** calls copy/cut/paste unintuitive and too multi-step; **19 Aug** review reports stuck transfers with insufficient explanations; **18 Sep** review objects to persistent access prompts. These three reports were not reproduced. | Keep advanced options available, not omnipresent; every job needs cancellability and a comprehensible failure receipt. |
+| **[X-plore](https://play.google.com/store/apps/details?id=com.lonelycatgames.Xplore)** | Dual-pane hierarchical tree; FTP/FTPS, optional SFTP; SMB/cloud/WebDAV; disk map; previews and media; configurable tools; Wi-Fi sharing. ~4.4★ / 10M+ installs. | Tree context, transfer between panes and tremendous range; users explicitly value the dual folders. | Dated/busy appearance for some; ads or paid/donation features irritate some users, including a [June 2025 discussion](https://www.reddit.com/r/apps/comments/1lc65x4/) and [Oct 2026 ad-free alternatives request](https://www.reddit.com/r/androidapps/comments/1x0oijg/). | Strong structure and clarity of origin/destination without forcing a permanent screen full of trees. |
+| **[Total Commander](https://play.google.com/store/apps/details?id=com.ghisler.android.TotalCommander)** + [FTP plugin](https://play.google.com/store/apps/details?id=com.ghisler.tcplugins.FTP) | Lightweight two-pane manager; long-press drag; group selection; copy/move folders; network plugins; configurable toolbar; accessibility-oriented icon labels. FTP/FTPS plugin **separate** from SFTP plugin. ~4.0★ / 10M+ installs. | Loyalty, efficiency and predictable actions. | Steeper learning curve, classic/dated interface, plugin installation/discovery overhead; community criticism of its looks is subjective. | Emulate explicit copy/move semantics and keyboard power, not plugin setup friction. |
+| **[Cx File Explorer](https://play.google.com/store/apps/details?id=com.cxinventor.file.explorer)** | Relatively straightforward Material-styled storage manager; FTP/FTPS/SFTP, SMB/WebDAV and cloud; local/remote actions, recycling and storage maps. ~4.8★ / 10M+ installs. | Ease and low learning curve; one **July 23 2026 Play review** says functionally excellent despite an ordinary-looking interface. | A **July 30** reviewer reports copy behaving like move with USB storage. This is an anecdote, but the *kind* of ambiguity can cause data loss. Also has many file-cleaner capabilities beyond transfer core. | Make copy-versus-move unambiguous, with copy as drag default. |
+| **[AndFTP](https://play.google.com/store/apps/details?id=lysesoft.andftp)** | Focused dedicated FTP/SFTP/SCP/FTPS client; saved sites; download/upload, folder sync and resume; chmod, custom commands, gallery share/intents. ~3.3★ / 5M+ installs. | It offers recognizably server-oriented controls that broad file managers may bury. | Older utilitarian UI, advertisements, and paid Pro unlock for folder sync/advanced options. Some distinctions between free/Pro vary by feature and version, check before copying. | Deliver dedicated protocol credibility but wrap it in modern Android-native file picker flows. |
+| **[Owlfiles](https://play.google.com/store/apps/details?id=com.skyjos.apps.fileexplorerfree)** / **[FE File Explorer](https://play.google.com/store/apps/details?id=com.skyjos.apps.fileexplorer)** | FTP/SFTP/SMB/WebDAV/NFS/cloud; drag/drop between locations; remote edit-in-place and media streaming; particularly interesting: Owlfiles advertises an **SAF DocumentsProvider** so other apps can open its files; FE has paid desktop/NAS depth. Owlfiles ~4.5★, FE ~4.2★. | Interoperability, accessing a remote document inside another app, remote media without importing everything. | Complexity from many protocols and pay-tier boundaries. An older Aug 2022 Owlfiles Play reviewer reported stale server listings; not independently validated. | System integration is valuable enough to justify a later **read-only DocumentsProvider** milestone, provided caching and permission lifetime are correct. |
+| **[FolderSync](https://play.google.com/store/apps/details?id=dk.tacit.android.foldersync.lite)** | One-/two-way scheduled folder sync; many clouds; FTP, FTPS, explicit FTPES, SFTP, SMB, WebDAV; automation and constraints. ~4.3★ / 1M+ installs. | Hands-off NAS backup and scheduled jobs. | A **Feb 2025 Play reviewer** praises backup but says errors were difficult to find; an **Apr 2024 reviewer** reports case-sensitive folder confusion; a **June 2026 reviewer** reports Android 17 Wi-Fi/SMB connectivity problems, blaming OS changes (not verified as general cause). Scheduling can run at imprecise times. | Build observability and case-sensitive identity first. Scheduled sync should be phase 3, after transfer correctness. |
+| **[File Manager Plus](https://play.google.com/store/apps/details?id=com.alphainventor.filemanager)** | Broad, easy-to-navigate local/cloud/NAS/FTP manager with familiar actions, photo/media support and archives. ~4.7★ / 100M+ installs. | Ease, recognizable categories and simple onboarding. | A visible Play complaint reports incomplete/corrupted copies or moves, while other reviews praise large bulk transfers. Conflicting reports call for validation, not verdict. Ads/IAP exist. | Friendly labels and clarity, but never equate “progress reached 100%” with a validated complete transfer. |
+| **[Material Files](https://play.google.com/store/apps/details?id=me.zhanghai.android.files)** / **Ghost Commander** | Community-cited contrasting approaches: focused Material visual design and traditional dual-pane/open-source file-management conventions. | Users suggest them when weary of ads/complexity. | Specific FTP/SFTP capability and maintenance must be verified separately; **do not** assume either covers all protocols. Ghost Commander's older UI may repel mainstream users. | Study interaction restraint and openness, not feature completeness. |
+
+**Overall benchmark:** For dual-pane craft, study Solid Explorer, X-plore and Total Commander; for maximal power, MiXplorer; for easy onboarding, Cx and File Manager Plus; for Android app-to-app integration, Owlfiles; for durable automation, FolderSync; for FTP-specific server controls, AndFTP. The most-loved designation is community consensus, not a defensible objective single winner.
+
+## 4. Repeated pain points and the product countermeasure
+
+| Friction evidenced in product/user material | Countermeasure | Severity |
+|---|---|---|
+| Transfer goes missing or partly completes | Persistent per-file and aggregate receipt, verify byte count and source/remote confirmation before declaring success | Critical |
+| Copy/move distinction unclear | Drag is **Copy** by default; Move is a separate confirmed action and never destroys the source before destination validation | Critical |
+| App/work interrupted, unknown progress | Durable queue, per-file resume eligibility, retry explanation and truthful state (waiting vs reconnecting vs failed) | Critical |
+| Users have to navigate the Android filesystem twice | Use native picker for upload and save; remember only explicitly selected destination grants | Critical |
+| Android filesystem permission prompts are confusing | Delay permission until action needs it; explain why; use SAF; never direct users into Android/data/obb bypasses | High |
+| Screen crowded with system tools before task | Start with remote browser + large **Save to device / Upload** actions; offer expert two-panel Workspace | High |
+| Remote list stale / sync silently conflicts | Explicit Refresh, last refreshed time, stable path + case, provider capability reporting | High |
+| Annoying ads/paywalls and doubts about data handling | No ads or telemetry; clear offline-only profile storage, security policy; disclose any paid upgrade before committing to it | High |
+| Unclear protocol/tls expectations | Plain-language FTP vs FTPS vs SFTP picker; supported configurations, certificate or host-key verification details | High |
+| Folder sync errors hard to diagnose | Audit log with *what, where, when, how much, why*, exportable redacted diagnostics | Medium |
+| Split pane unusable on a narrow screen | Single pane by default; responsive portrait stacked split view, landscape/tablet side-by-side | High |
+
+## 5. Android platform contract
+
+### System file selection and save
+
+- **Upload selected files:** `ACTION_OPEN_DOCUMENT`, `CATEGORY_OPENABLE`, MIME `*/*`, `EXTRA_ALLOW_MULTIPLE`; consume `content://` URI streams via `ContentResolver`. Do not assume a path on the device or eagerly copy cloud-provider files into local storage.
+- **Upload a folder:** `ACTION_OPEN_DOCUMENT_TREE`, then traverse only the granted tree with `DocumentsContract`/`DocumentFile`; preserve directory structure within an explicitly chosen remote folder. Tree choice may be unavailable at Android's Downloads **root** or `Android/data`/`Android/obb`; communicate that actual platform restriction.
+- **Save one remote file:** `ACTION_CREATE_DOCUMENT` with reasonable MIME + name; stream to the returned URI, never ask for full-device file access.
+- **Save many files / a folder:** `ACTION_OPEN_DOCUMENT_TREE` selects a destination parent; create children through `DocumentsContract` and stream in a bounded queue. An alternative **Save as ZIP** may use `ACTION_CREATE_DOCUMENT`, with clear size, temporary storage and archive completeness disclaimers.
+- **Share in:** support `ACTION_SEND` and `ACTION_SEND_MULTIPLE` with granted read URIs, enabling “Share → Expository Transfer → chosen remote folder.” **Share out:** ContentProvider/FileProvider URIs with temporary grants, no raw passwords/ftp URLs; only expose a temporary local copy or tightly scoped stream to receiving apps.
+- **Follow-up possibility:** implement Expository as a read-only `DocumentsProvider` so other apps can browse server files from Android's system picker. This is more complex than simply launching the picker and is **not** required for the initial upload/download promise.
+- **Avoid all-files permission for v1.** `MANAGE_EXTERNAL_STORAGE` has policy review and grants more access than these workflows need. No root, `Android/data` bypass or hidden user-file scraping.
+
+Primary: [Android shared documents and tree limits](https://developer.android.com/training/data-storage/shared/documents-files), [Intent contract](https://developer.android.com/reference/android/content/Intent), [DocumentsContract](https://developer.android.com/reference/android/provider/DocumentsContract), [DocumentFile](https://developer.android.com/reference/androidx/documentfile/provider/DocumentFile), [all-files policy](https://developer.android.com/training/data-storage/manage-all-files).
+
+### Lifecycle and permission changes, current to Android 17
+
+- Android 14 introduced **user-initiated data transfer jobs (UIDT)** for long-running explicit transfers, with ongoing notifications and system scheduling. Evaluate UIDT for lengthy user-requested jobs; WorkManager suits deferrable retry/scheduled tasks. Don't assume a plain background coroutine survives process death.
+- Android 15+ limits background `dataSync` foreground services to **six hours per 24 hours** (subject to specific activity/reset conditions). Explicit transfer state must recover if service execution ends.
+- **Important 2026 change:** For apps targeting Android 17 / SDK 37+, local LAN raw-socket access needs runtime `ACCESS_LOCAL_NETWORK` permission unless a qualifying system-mediated picker grants an alternative path. Remote Internet hosts and local LAN connections should be tested separately, as should permission denial/revocation. Asking just as the user connects to a LAN server is better than asking on first launch.
+- Build with Jetpack Compose/Material 3, adaptive window sizes, TalkBack semantics, visible focus, text scaling, **48dp minimum target** for gestures/buttons, reduced motion and no gesture-only actions.
+
+Primary: [UIDT](https://developer.android.com/develop/background-work/background-tasks/uidt), [foreground service limits](https://developer.android.com/develop/background-work/services/fgs/timeout), [Android 17 local network permission](https://developer.android.com/privacy-and-security/local-network-permission), [Compose drag/drop](https://developer.android.com/develop/ui/compose/touch-input/user-interactions/drag-and-drop), [adaptive canonical layouts](https://developer.android.com/develop/adaptive-apps/guides/canonical-layouts), [Android accessibility](https://developer.android.com/design/ui/mobile/guides/foundations/accessibility).
+
+## 6. Transfer protocol and engineering research
+
+### Protocol support, not brand confusion
+
+| Protocol | Transport/security | Operational priority |
+|---|---|---|
+| **SFTP** | SSH transport and authenticated server host key (not FTP). Port 22 typical | Preferred secure first-class option |
+| **FTPS explicit** | FTP control connection upgraded via `AUTH TLS`, with secure data channel | Preferred for FTP servers supporting explicit TLS |
+| **FTPS implicit** | TLS from connection start, conventionally port 990 | Compatibility profile for legacy sites |
+| **Plain FTP** | Password and file bytes are not protected in transit | Explicitly opt-in with a prominent warning; no automatic insecure fallback |
+| WebDAV/HTTPS, SMB | Separate network protocols | Later adapters, not aliases for FTP |
+
+### Session interoperability
+
+- Use binary file-transfer mode for files by default. FTP active/passive mode, EPSV/IPv6, NAT and server-provided PASV host addresses must be handled deliberately, not through one hardcoded setup. Favor passive/EPSV on phones and avoid silently following surprising data endpoint addresses.
+- Probe `FEAT` and prefer `MLSD/MLST` for machine-readable listings, with a tested `LIST` fallback; `SIZE`/`MDTM` and `REST` capabilities are **conditional**, not guaranteed. Normalize server timestamp/time-zone quirks and filename encoding without rewriting actual paths.
+- FTPS: authenticate **both** control and data protection according to TLS profile; validate certificate chain/hostname; no “accept any certificate” default, no downgrade to FTP when the TLS handshake fails. Make custom trust a consciously reviewed, fingerprinted decision.
+- SFTP: verify pinned/known SSH host keys and signal changes prominently. Password and supported SSH keys may be used; do not set “host key verification off” for convenience.
+- FTP libraries: Apache Commons Net offers FTPClient/FTPSClient, passive/EPSV support, restart offsets, encoding controls and low-level reply parsing. Evaluate its TLS hostname verification config explicitly. For SFTP, assess **SSHJ** or maintained **mwiede/JSch**, but run Android compatibility and crypto-provider tests before selection. Do **not** implement FTP, TLS or SSH crypto by hand.
+- No automatic write to the original destination while streaming if temporary staging and rename are supported: use unique temp names, fully close transfer, verify success/size and then rename. If atomic rename is unavailable, disclose weaker guarantees.
+- Resume only when both server and local provider support correct seek/range semantics; verify unchanged source identity/size/time or a stronger checksum where feasible. Some Android provider streams are non-seekable; never pretend resume is safe if offset access is unavailable.
+- Recursive transfers need bounded concurrency (initially 2–3), cancellation, symlink-loop policy, malicious remote name/path checks, collision detection and storage-space checks. Preserve case-sensitive filenames and Unicode as supplied.
+- Model each transfer as persistent immutable intent (source, destination, protocol/profile, revision where available) + journaled state machine: queued → resolving → transferring → verifying → committing → complete; also paused/retryable/blocked/failed/cancelled. A restart must never accidentally repeat a destructive move.
+- Download and upload bytes should be streamed, never loaded entirely into RAM. Avoid ZIP bombs and giant directory materialization; cap previews, counts, recursion depth and staging cache by product policy.
+
+Primary: [RFC 4217, FTP with TLS](https://www.rfc-editor.org/rfc/rfc4217), [RFC 3659, MLSD/size/times](https://www.rfc-editor.org/rfc/rfc3659), [RFC 2428, EPSV/IPv6/NAT](https://www.rfc-editor.org/rfc/rfc2428), [Apache Commons Net FTPClient](https://commons.apache.org/proper/commons-net/apidocs/org/apache/commons/net/ftp/FTPClient.html), [SSHJ](https://github.com/hierynomus/sshj).
+
+### Security model and quality engineering
+
+- No intermediary Expository server, accounts, trackers or transfer-log upload. Connection profiles remain local to the device; no secrets in diagnostic logs, notifications, clipboard or exported bookmarks.
+- Store saved credentials only by explicit opt-in, encrypted using an Android Keystore-backed key with a documented recovery path; avoid device-backup inclusion of raw secret files. Import/export connection settings separately from credentials unless secure encryption is explicitly requested.
+- Defend against path traversal, embedded control characters, symlink escapes, unbounded server names, malicious file sizes, spoofed certificates/keys, server timeouts, truncated FTP completion replies and data/control-channel disagreement.
+- Support Wi-Fi to mobile-network changes and offline state honestly. Do not silently retry destructive operations, nor continue on metered data if a Wi-Fi-only preference was chosen.
+- Test with multiple real FTP server implementations (vsftpd, ProFTPD, Pure-FTPd, FileZilla Server), both explicit/implicit FTPS, OpenSSH SFTP, Android virtual DocumentsProviders, case-colliding names, Unicode, no space, network flaps, background kill/reboot, corrupt/truncated connections and hundreds/thousands of recursive children.
+- Include a **fake local transfer engine** for reproducible no-credential UI acceptance, plus container integration servers for protocol conformance and separate physical-Android acceptance. Never put private production credentials or server listings in test fixtures or CI artifacts.
+
+## 7. Established mobile UX principles applied
+
+1. **Show the user's destination before initiating a write.** File row select → unmistakable **Save to device** / **Upload here** → Android picker → preflight summary → transfer, with destination and source visible throughout.
+2. **Adaptive single/dual pane.** Portrait compact window defaults to one active pane; optional split mode stacks Local (top) and Remote (bottom) with adjustable divider and clearly marked **↕ Copy to** affordances. Landscape/tablet shows side-by-side. Do not force rotation or make the two small panes simultaneously mandatory.
+3. **Actions and gestures agree.** Drag between panes defaults to Copy; show a drop target with direction and item count. Button/action-sheet alternative does the same operation, including TalkBack and keyboard use. Move is always explicit and confirmed. No hidden swipe needed.
+4. **One precise status vocabulary.** queued, scanning, running, paused, needs permission, waiting for network, verifying, completed, partial completion, failed. Distinguish source read, network, and destination write errors. Accessible live updates without noisy per-byte speech.
+5. **Progress is inspectable.** Total jobs, per-file and aggregate bytes, ETA only when credible, transfer speed, retry count, latest safe error, persistent notification and history.
+6. **Conflict handling in context.** Same-name file prompt offers Skip, Keep both, Replace (where safe), Apply to remaining. No auto overwrite or silent merge. Prefer thumbnails/size/time preview when metadata trustworthy.
+7. **Accessibility and one-hand reach.** 48dp controls, semantic pane labels, clear focused destination, large bottom task actions, safe inset, list density setting, high contrast, scalable type, TalkBack selection count.
+8. **Trust is visual.** FTP insecure marker, TLS/SSH connection identity, destination breadcrumb, source-to-target arrow, whether original files will remain, meaningful completion receipts.
+
+Primary UX sources: [Android navigation patterns](https://developer.android.com/design/ui/mobile/guides/layout-and-content/layout-and-nav-patterns), [adaptive layout guidance](https://developer.android.com/design/ui/mobile/guides/layout-and-content/adapt-layout), [drag/drop Compose](https://developer.android.com/develop/ui/compose/touch-input/user-interactions/drag-and-drop), [accessibility](https://developer.android.com/design/ui/mobile/guides/foundations/accessibility).
+
+## 8. Conclusions and unresolved research
+
+**Best pattern to borrow:** Solid Explorer's comprehensible panel-to-panel model + Cx's approachable presentation + Owlfiles' system-document integration + MiXplorer/FolderSync's durable task philosophy + Total Commander's unambiguous copy/move vocabulary. The original product's north star remains a two-action handoff via Android's own file interfaces.
+
+**Technical spikes before commitment:** credential storage/Keystore and Android 17 LAN permission on target SDK 37, Commons Net FTPS certificate/data-channel behavior, SFTP library support on target min SDK and server key formats, SAF folder recursion/case/rename behaviors, Android UIDT API lifecycle, and a two-pane Compose drag scenario on a 393px screen.
+
+**What research has *not* established:** objective performance ranks, confirmed app-wide bugs from individual reviews, protocol interoperability on the owner's server, Play pricing at purchase time, or physical phone ergonomics. Validate those empirically.
+
+Next: implement the [companion product proposal](PRODUCT-PROPOSAL.md), starting with fake-server native picker and transfer-queue acceptance before adding live credentials.
