@@ -37,6 +37,16 @@ Ratings shown are approximate contemporary Play listing values, not a controlled
 
 **Overall benchmark:** For dual-pane craft, study Solid Explorer, X-plore and Total Commander; for maximal power, MiXplorer; for easy onboarding, Cx and File Manager Plus; for Android app-to-app integration, Owlfiles; for durable automation, FolderSync; for FTP-specific server controls, AndFTP. The most-loved designation is community consensus, not a defensible objective single winner.
 
+## 3a. Focused follow-up: split-pane and batch-renaming requirements
+
+The original competitive survey covered general dual-pane and transfer features but did not establish the complete **Local/Local, Local/Remote and Remote/Remote** location matrix or treat bulk renaming as a core user journey. [This detailed comparative/engineering follow-up](WORKSPACE-AND-BULK-RENAME.md) closes that gap. The research sources and judgments remain desk research only.
+
+**Rename precedents.** [Total Commander's official Android help](https://www.ghisler.com/android/help.htm) documents its Multi-Rename Tool: counters, original-name/extension placeholders, dates, replacement rules, regex and immediate result preview before writing. [MiXplorer users describe confusion with counters and filename templates](https://www.reddit.com/r/androidapps/comments/pp7x4p/), including accidentally obtaining suffixes like `01(1)` when they intended `01, 02`; a [separate question about removing parentheses](https://www.reddit.com/r/androidapps/comments/1clawbd) illustrates discovery friction. These are **small qualitative examples**, not measured failure rates. One [Solid Explorer user](https://www.reddit.com/r/androidapps/comments/hiu2r7) requested chained reusable rename transforms. Consequently, **simple visible actions + live preview + deterministic sort/counter + safely locked extensions + explicit advanced regex** are more useful for v1 than a mini scripting language.
+
+**Pairing distinction.** X-plore, Total Commander, Solid Explorer and MiXplorer demonstrate that dual-pane workflows are loved by power users, but a split screen alone is insufficient. Each pane must represent independently authorized device storage or remote servers; remote/remote **on the same server** should generally exploit a fast on-server rename/move when supported, while **two different remote servers** require a bounded device-mediated relay rather than a magically instant command. On Android, SAF providers advertise optional `FLAG_SUPPORTS_RENAME` and `FLAG_SUPPORTS_MOVE`, so local/local actions must inspect capabilities rather than assume all locations are ordinary filesystems. [Android DocumentsContract flags](https://developer.android.com/reference/android/provider/DocumentsContract.Document), [FTP rename RNFR/RNTO](https://www.rfc-editor.org/rfc/rfc959), [Compose drag/drop](https://developer.android.com/develop/ui/compose/touch-input/user-interactions/drag-and-drop).
+
+**User-facing consequence.** **Remote New folder → Move to…**, **all three split pairings**, and a **compact preview-first bulk renamer** are P0 requirements. No drag-only paths, implicit source deletion, invisible regex masks, faux atomic multi-rename, unsafe filesystem case assumptions or credentials in drag payloads. Precise acceptance A21–A32 and rename collision/undo planning are detailed in the companion [deep dive](WORKSPACE-AND-BULK-RENAME.md).
+
 ## 4. Repeated pain points and the product countermeasure
 
 | Friction evidenced in product/user material | Countermeasure | Severity |
@@ -127,7 +137,7 @@ Primary UX sources: [Android navigation patterns](https://developer.android.com/
 
 ## 8. Conclusions and unresolved research
 
-**Best pattern to borrow:** Solid Explorer's comprehensible panel-to-panel model + Cx's approachable presentation + Owlfiles' system-document integration + MiXplorer/FolderSync's durable task philosophy + Total Commander's unambiguous copy/move vocabulary. The original product's north star remains a two-action handoff via Android's own file interfaces.
+**Best pattern to borrow:** Solid Explorer's comprehensible panel-to-panel model + Cx's approachable presentation + Owlfiles' system-document integration + MiXplorer/FolderSync's durable task philosophy + Total Commander's explicit copy/move vocabulary and live-preview multi-renamer. Expand from Local/Remote into an honest **any-two-locations** transfer model, and make fast on-server remote reorganization a distinctive advantage. The original product's north star remains a two-action handoff via Android's own file interfaces.
 
 **Technical spikes before commitment:** credential storage/Keystore and Android 17 LAN permission on target SDK 37, Commons Net FTPS certificate/data-channel behavior, SFTP library support on target min SDK and server key formats, SAF folder recursion/case/rename behaviors, Android UIDT API lifecycle, and a two-pane Compose drag scenario on a 393px screen.
 
