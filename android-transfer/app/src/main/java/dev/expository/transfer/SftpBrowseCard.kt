@@ -43,6 +43,8 @@ import dev.expository.transfer.sftp.SftpSession
 import dev.expository.transfer.sftp.SftpTarget
 import dev.expository.transfer.sftp.SftpToSafSave
 import dev.expository.transfer.sftp.SafToSftpUpload
+import dev.expository.transfer.sftp.SftpNewFolder
+import dev.expository.transfer.sftp.FolderCreateProof
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
@@ -69,6 +71,7 @@ fun SftpBrowseCard() {
     var session by remember { mutableStateOf<SftpSession?>(null) }
     var sessionId by remember { mutableStateOf("") }
     var folder by remember { mutableStateOf("/") }
+    var newFolderName by remember { mutableStateOf("") }
     var page by remember { mutableStateOf<SftpBrowsePage?>(null) }
     var pendingFile by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf("Enter a known SHA-256 SSH host-key fingerprint. Unknown keys are never trusted automatically.") }
@@ -263,6 +266,47 @@ fun SftpBrowseCard() {
                     Button(enabled = !busy, onClick = { browseTo(folder) }) { Text("Refresh") }
                 }
                 Text("Remote folder: " + folder)
+                OutlinedTextField(newFolderName, { newFolderName = it },
+                    label = { Text("New folder name") }, singleLine = true,
+                    enabled = !busy, modifier = Modifier.fillMaxWidth())
+                Button(enabled = !busy && newFolderName.isNotBlank() &&
+                    page?.truncated != true,
+                    modifier = Modifier.heightIn(min = 48.dp), onClick = {
+                        val live = session
+                        if (live != null) {
+                            val chosenParent = folder
+                            val chosenName = newFolderName
+                            val chosenSessionId = sessionId
+                            busy = true
+                            status = "Revalidating destination, then creating on SFTP…"
+                            scope.launch {
+                                val receipt = withContext(Dispatchers.IO) {
+                                    SftpNewFolder { digest ->
+                                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                                    }.create(live, chosenSessionId, chosenParent, chosenName)
+                                }
+                                status = when (receipt.proof) {
+                                    FolderCreateProof.DIRECTORY_CONFIRMED ->
+                                        "Server confirms new directory. No payload relayed."
+                                    FolderCreateProof.WRITE_ACKNOWLEDGED ->
+                                        "MKDIR was acknowledged, but verification was unavailable. Review before retrying."
+                                    FolderCreateProof.UNCERTAIN ->
+                                        "Directory creation uncertain. Check the server before retrying."
+                                    FolderCreateProof.BLOCKED ->
+                                        "Folder creation blocked: " + receipt.reason.replace('_', ' ')
+                                }
+                                if (session === live) {
+                                    val refreshed = withContext(Dispatchers.IO) {
+                                        runCatching { live.browse(chosenParent) }
+                                    }
+                                    refreshed.onSuccess { page = it }
+                                    if (receipt.proof == FolderCreateProof.DIRECTORY_CONFIRMED)
+                                        newFolderName = ""
+                                }
+                                busy = false
+                            }
+                        }
+                    }) { Text("Create folder") }
                 Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp), onClick = {
                     busy = true // freeze session while Android picks a local source
                     chooseUpload.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
