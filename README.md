@@ -38,6 +38,13 @@ Expository is **read-only**, uses direct requests to the GitHub API, and has no 
 
 For the feature plan and current development stages, see the [weighted feature roadmap](FEATURE-ROADMAP.md). Not every planned item is implemented.
 
+## Expository family: Android Transfer exploration
+
+The Expository brand is exploring a **separate, native Android FTP/FTPS/SFTP transfer client**. This is a product proposal, **not an implemented app or permission expansion of this read-only GitHub explorer**. The first requirements are native Android **Save to device** / **Upload files or folders** using system interfaces, plus an optional local↔remote split view with drag-and-drop and equivalent accessible copy controls.
+
+- [Online competitor, user-review, platform and engineering research](docs/android-transfer/EXPLORATORY-REPORT.md)
+- [Detailed product proposal, user flows, architecture, priorities and acceptance gates](docs/android-transfer/PRODUCT-PROPOSAL.md)
+
 ## How this site is published
 
 This public repository is now the **canonical application and development source**. The earlier `gamesbyian/general-purpose/tools/expository/` version is preservation/bootstrap history, not a second active development lane. The Pages deployment continues to use root `index.html` only. Public agent instructions, synthetic test fixtures and visual review scripts live beside it; no personal repository content or credentials are included.
