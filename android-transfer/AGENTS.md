@@ -13,6 +13,19 @@ Read `../AGENTS.md`, `../docs/android-transfer/HARDENED-IMPLEMENTATION-PLAN.md`,
 - Google Drive Save, Docs conversion, external Open and Share handoff have different destinations, confirmation and receipt meanings.
 - G0 shell is explicitly developer-only: fake endpoints and **zero live writes**. No false claims of tested FTP, SAF, Google or Android device support.
 
+## Workflow autonomy and real-server evidence
+Agents may trigger the repository's opt-in workflows after reviewing their
+security and scope. For a bounded read-only FTPS interoperability check, add
+one exact `/transfer-smoke <profile>` comment to a PR using the connected
+repository-owner GitHub identity, then inspect the resulting Actions run and
+record its outcome. Public profiles and owner FTPS profile allowlists, safety
+requirements, and manual SFTP fingerprint procedure are in
+[`EXTERNAL-SMOKE-OPERATIONS.md`](../docs/android-transfer/EXTERNAL-SMOKE-OPERATIONS.md).
+Normal PR CI stays synthetic and cheap. Never use these workflows for owner
+media mutation, public demo writes, load tests, or claims of Android-device
+acceptance. A triggered run is not a passed test; investigate failures, update
+source and rerun with evidence where warranted.
+
 ## Commands
 Use Gradle 8.13 / JDK 17:
 `gradle :core:planner:scenarios --no-daemon` from this directory, no Android SDK necessary.
