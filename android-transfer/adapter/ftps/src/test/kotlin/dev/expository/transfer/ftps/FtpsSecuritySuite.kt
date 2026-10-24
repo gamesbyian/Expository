@@ -47,6 +47,51 @@ object FtpsSecuritySuite {
                 check(runCatching { FtpsPath.checkedChild(name) }.isFailure)
             }
         }
+        checkCase("empty MLSD permits LIST preview but never mutation witness") {
+            fun file(name: String): org.apache.commons.net.ftp.FTPFile =
+                org.apache.commons.net.ftp.FTPFile().apply {
+                    this.name = name
+                    this.type = org.apache.commons.net.ftp.FTPFile.FILE_TYPE
+                    this.size = 4
+                }
+            var cwd = ""
+            var listCalled = false
+            val client = object : org.apache.commons.net.ftp.FTPSClient(false) {
+                override fun changeWorkingDirectory(pathname: String): Boolean {
+                    cwd = pathname
+                    return true
+                }
+                override fun mlistDir(): Array<org.apache.commons.net.ftp.FTPFile> = emptyArray()
+                override fun listFiles(): Array<org.apache.commons.net.ftp.FTPFile> {
+                    listCalled = true
+                    return arrayOf(file("first.txt"), file("second.txt"), file("third.txt"))
+                }
+            }
+            FtpsSession(client).use { session ->
+                val result = session.browseReadOnly("/data", 2)
+                check(cwd == "/data" && listCalled)
+                check(result.method == "LIST" && !result.authoritative)
+                check(result.truncated && result.entries.size == 2)
+            }
+        }
+        checkCase("TLS data error never degrades to legacy LIST") {
+            var listCalled = false
+            val client = object : org.apache.commons.net.ftp.FTPSClient(false) {
+                override fun changeWorkingDirectory(pathname: String): Boolean = true
+                override fun mlistDir(): Array<org.apache.commons.net.ftp.FTPFile> {
+                    throw javax.net.ssl.SSLHandshakeException("private host and credentials")
+                }
+                override fun listFiles(): Array<org.apache.commons.net.ftp.FTPFile> {
+                    listCalled = true
+                    return emptyArray()
+                }
+            }
+            val error = runCatching {
+                FtpsSession(client).use { it.browseReadOnly("/data") }
+            }.exceptionOrNull()
+            check(error is FtpsSafeFailure && error.kind == "TLS_HANDSHAKE")
+            check(!listCalled)
+        }
         checkCase("MLSD cdir and pdir are not files or fatal parsing errors") {
             fun entry(name: String, type: Int): org.apache.commons.net.ftp.FTPFile =
                 org.apache.commons.net.ftp.FTPFile().apply {

@@ -32,6 +32,18 @@ data class FtpsTarget(
 }
 data class FtpsEntry(val name: String, val isDirectory: Boolean, val size: Long)
 
+/**
+ * UI-only directory preview. An FTP LIST response has implementation-specific
+ * parsing and is NEVER evidence for collision-free writes or destructive plans.
+ * Complete here means only within a bounded UI page, not a mutation witness.
+ */
+data class FtpsBrowsePreview(
+    val entries: List<FtpsEntry>,
+    val method: String,
+    val authoritative: Boolean,
+    val truncated: Boolean
+)
+
 /** Remote names are never normalized by guessing OS path semantics. */
 object FtpsPath {
     fun checkedChild(name: String): String {
@@ -168,6 +180,42 @@ class FtpsSession internal constructor(private val client: FTPSClient) : AutoClo
         } catch (error: Exception) {
             throw FtpsFailureCodes.classify("LIST", client.replyCode, error)
         }
+    }
+
+    /**
+     * A read-only compatibility view. Use verified MLSD if populated. On
+     * empty MLSD or explicit command-unsupported replies alone, try legacy
+     * LIST without treating its parsed result as authoritative. A TLS,
+     * timeout, permissions or unknown data-channel failure is never retried.
+     */
+    fun browseReadOnly(absoluteFolder: String, maxEntries: Int = 200): FtpsBrowsePreview {
+        require(maxEntries in 1..200)
+        val result = runCatching { list(absoluteFolder) }
+        val entries = result.getOrNull()
+        if (entries != null && entries.isNotEmpty()) {
+            return FtpsBrowsePreview(entries.take(maxEntries),
+                "MLSD", authoritative = true, truncated = entries.size > maxEntries)
+        }
+        val failure = result.exceptionOrNull()
+        if (failure != null) {
+            val unsupported = failure is FtpsSafeFailure &&
+                failure.stage == "LIST" &&
+                failure.kind == "NO_DATA_CONNECTION_OR_COMMAND_REJECTED" &&
+                failure.numericReply in listOf(500, 502, 504)
+            if (!unsupported) throw failure
+        }
+        // list() already changed to this checked directory. No command is
+        // issued after TLS/socket failure or a denied CWD.
+        val raw = try { client.listFiles() }
+            catch (error: Exception) {
+                throw FtpsFailureCodes.classify("LIST_PREVIEW", client.replyCode, error)
+            } ?: throw FtpsFailureCodes.classify("LIST_PREVIEW", client.replyCode, null)
+        val decoded = try { FtpsMlsdEntries.decode(raw) }
+            catch (error: Exception) {
+                throw FtpsFailureCodes.classify("LIST_PREVIEW", client.replyCode, error)
+            }
+        return FtpsBrowsePreview(decoded.take(maxEntries), "LIST",
+            authoritative = false, truncated = decoded.size > maxEntries)
     }
 
     fun openRead(absoluteFile: String): InputStream {

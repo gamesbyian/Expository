@@ -48,9 +48,14 @@ object FtpsExternalSmokeSuite {
             SecureFtps.connect(FtpsTarget(p.host, p.port, p.mode),
                 p.username, p.password.toCharArray()).use { session ->
                 stage = "LIST"
-                val entries = session.list(FtpsPath.checked(p.root))
+                val preview = session.browseReadOnly(FtpsPath.checked(p.root))
+                val entries = preview.entries
                 check(entries.isNotEmpty()) { "EMPTY_LISTING" }
-                println("PASS FTPS external authenticated protected MLSD count=" + entries.size)
+                println("PASS FTPS external authenticated protected browse method=" +
+                    preview.method + " authoritative=" + preview.authoritative +
+                    " count=" + entries.size + " truncated=" + preview.truncated)
+                // A legacy LIST preview can show file names to a human, but
+                // is not proof of a complete conflict-free destination.
                 val sample = p.sample
                 if (sample != null) {
                     check(entries.any { it.name == sample.substringAfterLast('/') && !it.isDirectory }) {
