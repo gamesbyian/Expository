@@ -14,6 +14,10 @@ on:
         description: "Opt-in isolated FTPS TLS server and read proof"
         type: boolean
         default: false
+      sftp_lab:
+        description: "Opt-in SFTP pinned-key live synthetic lab"
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -31,7 +35,7 @@ jobs:
           gradle-version: "8.13"
       - name: Offline deterministic G1 synthetic scenarios
         working-directory: android-transfer
-        run: gradle :core:planner:scenarios :core:engine:scenarios :adapter:ftps:scenarios :testing:fake-endpoints:scenarios --no-daemon
+        run: gradle :core:planner:scenarios :core:engine:scenarios :adapter:ftps:scenarios :adapter:sftp:scenarios :testing:fake-endpoints:scenarios --no-daemon
   android-debug:
     # Android builds remain opt-in and non-blocking; PRs use cheap JVM evidence.
     if: github.event_name == 'workflow_dispatch' && inputs.build_apk
@@ -120,3 +124,21 @@ jobs:
       - name: Trust explicit lab certificate and prove encrypted file read
         working-directory: android-transfer
         run: gradle :adapter:ftps:lab -PftpsLabMode=trusted-read -PftpsTrustStore="$RUNNER_TEMP/ftps-lab/truststore.p12" --no-daemon
+
+  sftp-lab:
+    # Ephemeral pinned-key protocol lab, opt-in only after bootstrap proof.
+    if: github.event_name == 'workflow_dispatch' && inputs.sftp_lab
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Trust-approved ephemeral SFTP host fingerprint, reject changed key
+        working-directory: android-transfer
+        run: gradle :adapter:sftp:lab --no-daemon

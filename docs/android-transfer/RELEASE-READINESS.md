@@ -22,7 +22,7 @@ A **green browser/PWA test for the read-only Expository site does not count** fo
 | G0 · separate Android source, guide, lean CI | IN PROGRESS · draft PR #32; [run #40071709212](https://github.com/gamesbyian/Expository/actions/runs/40071709212) signed debug build witnessed, separate-repo/physical proof outstanding | Native repo, no credentials, signed debug-build reproducibility plan |
 | G1 · pure operation plan/rename graph | IN PROGRESS · E1 24 planner scenarios + synthetic fixture suite green in [run #40072228508](https://github.com/gamesbyian/Expository/actions/runs/40072228508); G1 fuzz/fault proof pending | Property/fuzz collision cases; plan-version identity and staged cycles |
 | G2 · fake device and Compose journeys | IN PROGRESS · draft PR #33 adds actual one-file Local SAF→SAF picker/streaming; debug APK compiled in run #40114978482, no device evidence | Owned emulator recordings/screens, a11y labels, native picker contracts |
-| G3 · trusted FTP/FTPS/SFTP protocols | IN PROGRESS · explicit FTPS read/list E3 localhost lab passed [run #40125931787](https://github.com/gamesbyian/Expository/actions/runs/40125931787) with PKIX untrusted-cert rejection, explicit trust and PROT P list/read; still no physical-device or broader protocol matrix evidence | real test server fixtures, host-key/cert rejection and retry logs |
+| G3 · trusted FTP/FTPS/SFTP protocols | IN PROGRESS · explicit FTPS read/list E3 localhost lab passed [run #40125931787](https://github.com/gamesbyian/Expository/actions/runs/40125931787) with PKIX untrusted-cert rejection, explicit trust and PROT P list/read; SFTP host-key-pinned synthetic live read + wrong-key rejection [run #40117260270](https://github.com/gamesbyian/Expository/actions/runs/40117260270), reconfirmed after clean rebase in [run #40126372217](https://github.com/gamesbyian/Expository/actions/runs/40126372217); still no physical-device or broader protocol matrix evidence | real test server fixtures, host-key/cert rejection and retry logs |
 | G4 · scoped Android SAF file/folder I/O | NOT STARTED | permission revocation, provider URI remap, nonseekable streams |
 | G5 · durable queue/receipt proof | NOT STARTED | process killed at every journal phase, zero false-success |
 | G6 · six directional pane cases + new-folder move | NOT STARTED | drag/action parity, same vs different server relay/move |
@@ -31,6 +31,10 @@ A **green browser/PWA test for the read-only Expository site does not count** fo
 | G9 · independently reviewed Android beta | NOT STARTED | signed APK, A01–A32/D01–D20/T01–T12, 200% text, TalkBack |
 
 Do not mark a gate complete unless the precise PR/commit, test run IDs, actual build/device identity (no serials/PII), screenshot/protocol artifacts and known limits are attached. The integration owner must verify the evidence exists.
+
+## G3 SFTP host-key evidence, 24 October 2026
+
+[PR #35](https://github.com/gamesbyian/Expository/pull/35) was reconstructed as one clean commit [6666f54](https://github.com/gamesbyian/Expository/commit/6666f540e0e3e550b4c59d21d2011697cb7c0ef4) atop the merged FTPS security fix to eliminate duplicate FTPS history. Apache MINA pinned SSH public key verification requires an explicit SHA-256 pin; an unrecognized key never auto-accepts. Original [run #40117260270](https://github.com/gamesbyian/Expository/actions/runs/40117260270) and rebased [run #40126372217](https://github.com/gamesbyian/Expository/actions/runs/40126372217) passed the ephemeral localhost SFTP correct-key authentication/directory/file-read and changed-key rejection. This is bounded **E3 for that SFTP fixture**, not Android/device acceptance, TOFU UI, recovery or G3 completion.
 
 ## G3 explicit FTPS evidence, 24 October 2026
 
