@@ -9,6 +9,7 @@ import org.apache.sshd.sftp.client.SftpClient
 import org.apache.sshd.sftp.client.SftpClientFactory
 import java.io.IOException
 import java.io.InputStream
+import java.io.OutputStream
 import java.nio.charset.StandardCharsets
 import java.security.PublicKey
 
@@ -124,6 +125,19 @@ class SftpSession internal constructor(
                     a.isDirectory, a.size, a.modifyTime?.toMillis())
             }.toList()
         return SftpBrowsePage(entries.take(maxEntries), entries.size > maxEntries)
+    }
+
+    /**
+     * Exclusive create, never truncate, append or replace an existing file.
+     * Caller must have a fresh, immutable COPY plan before this mutation.
+     * SFTP status on close is only a write ACK; independent readback decides
+     * whether source and destination contents are equal.
+     */
+    fun openExclusiveWrite(absoluteFile: String): OutputStream {
+        val path = SftpPath.requireAbsolute(absoluteFile)
+        require(path != "/") { "NOT_A_FILE" }
+        return sftp.write(path, SftpClient.OpenMode.Write,
+            SftpClient.OpenMode.Create, SftpClient.OpenMode.Exclusive)
     }
 
     fun statFile(absoluteFile: String): SftpRemoteEntry {

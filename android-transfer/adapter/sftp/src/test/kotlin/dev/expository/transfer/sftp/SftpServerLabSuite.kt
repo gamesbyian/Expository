@@ -53,6 +53,19 @@ object SftpServerLabSuite {
                 check(runCatching { session.statFile("/") }.isFailure)
                 val received = session.openRead("/synthetic.txt").use { it.readBytes() }
                 check(String(received, StandardCharsets.UTF_8) == payload)
+                val uploadPayload = ("Synthetic upload bytes" + 10.toChar()).toByteArray(StandardCharsets.UTF_8)
+                session.openExclusiveWrite("/synthetic-upload.txt").use {
+                    it.write(uploadPayload)
+                }
+                check(session.statFile("/synthetic-upload.txt").size == uploadPayload.size.toLong())
+                val readBack = session.openRead("/synthetic-upload.txt").use { it.readBytes() }
+                check(readBack.contentEquals(uploadPayload))
+                check(runCatching {
+                    session.openExclusiveWrite("/synthetic.txt").use { it.write(byteArrayOf(0)) }
+                }.isFailure) { "Exclusive write must never overwrite existing file" }
+                check(session.openRead("/synthetic.txt").use { it.readBytes() }
+                    .contentEquals(payload.toByteArray(StandardCharsets.UTF_8)))
+                println("PASS SFTP LAB exclusive new upload/read-back and existing-file refusal")
             }
             println("PASS SFTP LAB trusted host fingerprint + authenticated directory read")
             val refused = runCatching {
@@ -64,6 +77,7 @@ object SftpServerLabSuite {
         } finally {
             runCatching { sshd.stop(true) }
             runCatching { Files.deleteIfExists(tmp.resolve("synthetic.txt")) }
+            runCatching { Files.deleteIfExists(tmp.resolve("synthetic-upload.txt")) }
             runCatching { Files.deleteIfExists(tmp) }
         }
     }
