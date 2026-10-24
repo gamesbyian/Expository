@@ -3,6 +3,7 @@ package dev.expository.transfer.ftps
 import org.apache.commons.net.ftp.FTP
 import org.apache.commons.net.ftp.FTPReply
 import org.apache.commons.net.ftp.FTPSClient
+import org.apache.commons.net.util.TrustManagerUtils
 import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
@@ -52,6 +53,10 @@ object FtpsPath {
  */
 object SecureFtps {
     fun configuredClient(): FTPSClient = FTPSClient(false).apply {
+        // Commons Net's default certificate manager validates dates but NOT CA
+        // trust. Use the platform trust anchors (or explicit user-trusted store).
+        // Hostname matching alone cannot authenticate an untrusted certificate.
+        setTrustManager(TrustManagerUtils.getDefaultTrustManager(null))
         setEndpointCheckingEnabled(true) // Commons Net's default is FALSE
         setRemoteVerificationEnabled(true)
         setEnabledProtocols(arrayOf("TLSv1.3", "TLSv1.2"))
