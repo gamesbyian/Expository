@@ -47,9 +47,9 @@ jobs:
         with:
           gradle-version: "8.13"
           cache-read-only: true
-      - name: Compile selected PR head developer-only Android APK
+      - name: Compile selected PR head app and instrumentation test APKs
         working-directory: android-transfer
-        run: gradle -PwithAndroid=true :app:assembleDebug --no-daemon
+        run: gradle -PwithAndroid=true :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon
       - name: Record source and debug APK SHA256
         working-directory: android-transfer
         shell: bash
@@ -58,11 +58,18 @@ jobs:
         run: |
           printf '%s  source-commit\n' "$SOURCE_SHA" > app/build/outputs/apk/debug/SOURCE-SHA.txt
           sha256sum app/build/outputs/apk/debug/app-debug.apk > app/build/outputs/apk/debug/SHA256SUMS.txt
+          mapfile -t test_apks < <(find app/build/outputs/apk/androidTest -type f -name '*androidTest*.apk' | sort)
+          if [ "${#test_apks[@]}" -ne 1 ]; then
+            echo "Expected exactly one compiled instrumentation APK"
+            exit 2
+          fi
+          sha256sum "${test_apks[0]}" >> app/build/outputs/apk/debug/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: expository-transfer-pr-${{ github.event.issue.number }}-debug
           path: |
             android-transfer/app/build/outputs/apk/debug/app-debug.apk
+            android-transfer/app/build/outputs/apk/androidTest/**/*.apk
             android-transfer/app/build/outputs/apk/debug/SHA256SUMS.txt
             android-transfer/app/build/outputs/apk/debug/SOURCE-SHA.txt
           retention-days: 5
