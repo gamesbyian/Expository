@@ -25,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.expository.transfer.planner.*
+import dev.expository.transfer.journal.RecoveryStatusCard
 
 /** Experimental native shell: Local→Local copy uses SAF; remote demo is synthetic only. */
 class TransferActivity : ComponentActivity() {
@@ -77,6 +78,7 @@ private fun DeveloperPreview() {
                 Text("Experimental Local Copy and pinned SFTP remote Save As; other remote demo is synthetic",
                     style = MaterialTheme.typography.bodySmall)
             }
+            item { RecoveryStatusCard() }
             item { LocalCopyCard() }
             item { SftpBrowseCard() }
             item { Text("Demo server /demo", style = MaterialTheme.typography.titleMedium) }
