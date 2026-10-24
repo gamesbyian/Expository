@@ -37,6 +37,8 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 .image-viewer:fullscreen{box-sizing:border-box;width:100%;height:100%;max-width:none;padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));background:var(--bg);color:var(--text);overflow:hidden}
 .image-viewer:fullscreen .image-actions{flex:0 0 auto}
 .image-viewer:fullscreen .image-stage{flex:1;min-height:0;max-height:none;height:auto}
+.image-viewer:fullscreen .image-stage[data-zoomed="false"]{display:grid;place-items:center}
+.image-viewer:fullscreen .image-stage[data-zoomed="false"] img{width:auto!important;height:auto!important;max-height:100%!important;max-width:100%!important}
 .image-actions button{min-height:44px}
 .image-immersive-note{font-size:12px;color:var(--dim)}
 .json-tree{width:100%;max-width:100%;font:12px/1.5 ui-monospace,monospace;overflow-wrap:anywhere}.json-tree details{padding:4px 0 4px 14px;border-left:1px solid var(--stroke)}.json-tree summary{cursor:pointer;min-height:28px;color:var(--accent)}.json-tree .atom{padding:4px 0}.history-list{display:grid;gap:9px}.history-list a{display:block;border:1px solid var(--stroke);border-radius:11px;padding:10px;text-decoration:none;color:var(--text)}.history-list a:hover{border-color:var(--accent)}.history-list small{display:block;color:var(--dim)}
@@ -709,7 +711,7 @@ function imageViewer(blob,item){
  img.alt=item.name;img.src=blobUrl(blob);img.style.width='100%';stage.append(img);
  const minus=elem('button','pill','−'),reset=elem('button','pill','100%'),plus=elem('button','pill','+');
  minus.setAttribute('aria-label','Zoom out image');plus.setAttribute('aria-label','Zoom in image');reset.setAttribute('aria-label','Reset image zoom');
- const update=()=>{img.style.width=Math.round(state.zoom*100)+'%';reset.textContent=Math.round(state.zoom*100)+'%';minus.disabled=state.zoom<=1;plus.disabled=state.zoom>=4;stage.style.overscrollBehavior=state.zoom>1?'contain':'auto'};
+ const update=()=>{img.style.width=Math.round(state.zoom*100)+'%';reset.textContent=Math.round(state.zoom*100)+'%';minus.disabled=state.zoom<=1;plus.disabled=state.zoom>=4;stage.style.overscrollBehavior=state.zoom>1?'contain':'auto';stage.dataset.zoomed=String(state.zoom>1)};
  minus.onclick=()=>{state.zoom=boundedZoom(state.zoom-.25);update()};
  plus.onclick=()=>{state.zoom=boundedZoom(state.zoom+.25);update()};
  reset.onclick=()=>{state.zoom=1;update();stage.scrollLeft=0;stage.scrollTop=0};
