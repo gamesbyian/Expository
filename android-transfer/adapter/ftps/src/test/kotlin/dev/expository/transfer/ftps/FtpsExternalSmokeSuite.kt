@@ -50,17 +50,28 @@ object FtpsExternalSmokeSuite {
                 stage = "LIST"
                 val preview = session.browseReadOnly(FtpsPath.checked(p.root))
                 val entries = preview.entries
-                check(entries.isNotEmpty()) { "EMPTY_LISTING" }
-                println("PASS FTPS external authenticated protected browse method=" +
-                    preview.method + " authoritative=" + preview.authoritative +
-                    " count=" + entries.size + " truncated=" + preview.truncated)
-                // A legacy LIST preview can show file names to a human, but
-                // is not proof of a complete conflict-free destination.
                 val sample = p.sample
+                if (entries.isEmpty()) {
+                    // Some public demo servers do not enumerate their advertised
+                    // sample directory. A known published file can be checked
+                    // independently with authoritative MLST before RETR.
+                    check(sample != null) { "EMPTY_LISTING" }
+                    println("INFO FTPS external directory enumeration empty; MLST probe required")
+                } else {
+                    println("PASS FTPS external authenticated protected browse method=" +
+                        preview.method + " authoritative=" + preview.authoritative +
+                        " count=" + entries.size + " truncated=" + preview.truncated)
+                }
+                // Never use a LIST preview as a complete write-conflict witness.
                 if (sample != null) {
-                    check(entries.any { it.name == sample.substringAfterLast('/') && !it.isDirectory }) {
-                        "SAMPLE_ABSENT"
+                    if (entries.isNotEmpty()) {
+                        check(entries.any {
+                            it.name == sample.substringAfterLast('/') && !it.isDirectory
+                        }) { "SAMPLE_ABSENT" }
                     }
+                    stage = "STAT"
+                    val observed = session.statFile(FtpsPath.checked(sample))
+                    check(observed.size in 1..65_536L) { "SAMPLE_SIZE_BOUND_EXCEEDED" }
                     stage = "READ"
                     var received = 0
                     session.openRead(FtpsPath.checked(sample)).use { input ->
@@ -72,6 +83,10 @@ object FtpsExternalSmokeSuite {
                             received += n
                             check(received <= 65_536) { "SAMPLE_SIZE_BOUND_EXCEEDED" }
                         }
+                    }
+                    check(received.toLong() == observed.size) { "SAMPLE_READ_SIZE_MISMATCH" }
+                    check(session.statFile(FtpsPath.checked(sample)).revision == observed.revision) {
+                        "SAMPLE_REMOTE_REVISION_CHANGED"
                     }
                     check(received > 0) { "EMPTY_SAMPLE" }
                     println("PASS FTPS external bounded RETR + final completion bytes=" + received)
