@@ -18,6 +18,18 @@ object FtpsSecuritySuite {
                 check(client.dataTimeout.toMillis() > 0L)
             }
         }
+        checkCase("TLS 1.2 compatibility is explicit without disabling certificate or hostname checks") {
+            val target = FtpsTarget("example.invalid", 21,
+                FtpsMode.EXPLICIT_TLS, FtpsTlsPolicy.TLS12_ONLY)
+            check(target.tlsPolicy == FtpsTlsPolicy.TLS12_ONLY)
+            check(FtpsTarget("example.invalid").tlsPolicy == FtpsTlsPolicy.MODERN)
+            for (policy in FtpsTlsPolicy.entries) {
+                val client = SecureFtps.configuredClient(FtpsMode.EXPLICIT_TLS, policy)
+                check(client.isEndpointCheckingEnabled)
+                check(client.isRemoteVerificationEnabled)
+                check(client.connectTimeout > 0 && client.dataTimeout.toMillis() > 0L)
+            }
+        }
         checkCase("implicit mode retains strict TLS verifier policy") {
             val target = FtpsTarget("example.invalid", 990, FtpsMode.IMPLICIT_TLS)
             check(target.port == 990 && target.mode == FtpsMode.IMPLICIT_TLS)
