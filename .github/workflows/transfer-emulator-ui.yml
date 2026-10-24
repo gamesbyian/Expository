@@ -1,0 +1,58 @@
+name: Expository Transfer opt-in Android emulator smoke
+# Only an owner PR comment may start this resource-heavy test. Checkout is
+# always reviewed main; no server passwords or PR-head execution.
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+jobs:
+  emulator-ui:
+    if: >-
+      github.event.issue.pull_request != null &&
+      github.event.comment.user.login == 'gamesbyian' &&
+      github.event.comment.body == '/transfer-native emulator'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+      - name: Install app compile SDK
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+          cache-read-only: true
+      - name: Enable KVM access on Linux runner
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Real Android UI test on a disposable emulator (no network)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: cd android-transfer && gradle -PwithAndroid=true :app:connectedDebugAndroidTest --no-daemon
+      - name: Publish sanitized synthetic Android test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: expository-transfer-emulator-ui-report
+          path: |
+            android-transfer/app/build/reports/androidTests/connected/**
+            android-transfer/app/build/outputs/androidTest-results/connected/**
+          retention-days: 5
+          if-no-files-found: ignore
