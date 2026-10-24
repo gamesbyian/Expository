@@ -22,8 +22,8 @@ A **green browser/PWA test for the read-only Expository site does not count** fo
 | G0 · separate Android source, guide, lean CI | IN PROGRESS · draft PR #32; [run #40071709212](https://github.com/gamesbyian/Expository/actions/runs/40071709212) signed debug build witnessed, separate-repo/physical proof outstanding | Native repo, no credentials, signed debug-build reproducibility plan |
 | G1 · pure operation plan/rename graph | IN PROGRESS · E1 24 planner scenarios + synthetic fixture suite green in [run #40072228508](https://github.com/gamesbyian/Expository/actions/runs/40072228508); G1 fuzz/fault proof pending | Property/fuzz collision cases; plan-version identity and staged cycles |
 | G2 · fake device and Compose journeys | IN PROGRESS · draft PR #33 adds actual one-file Local SAF→SAF picker/streaming; debug APK compiled in run #40114978482, no device evidence | Owned emulator recordings/screens, a11y labels, native picker contracts |
-| G3 · trusted FTP/FTPS/SFTP protocols | IN PROGRESS · external [Seedhost explicit FTPS directory read](https://github.com/gamesbyian/Expository/actions/runs/40138103066) (13 entries, credentials masked) and independent [Wing implicit FTPS list](https://github.com/gamesbyian/Expository/actions/runs/40137448557) (2 entries) passed. Controlled [FTPS PKIX rejection and protected read](https://github.com/gamesbyian/Expository/actions/runs/40138215570), [SFTP verified-pin/wrong-key rejection](https://github.com/gamesbyian/Expository/actions/runs/40138224419) also passed. [Rebex explicit MLSD was empty](https://github.com/gamesbyian/Expository/actions/runs/40138100488); browser-only LIST fallback in PR #52 requires independent proof, must not be used as a complete write witness. No actual external download or Android/device acceptance | broader protocol matrix, real on-device remote browse, stream recovery, server compatibility |
-| G4 · scoped Android SAF file/folder I/O | IN PROGRESS · draft [PR #37](https://github.com/gamesbyian/Expository/pull/37) remote SFTP read→SAF Save As source; debug APK compiled in [run #40127485028](https://github.com/gamesbyian/Expository/actions/runs/40127485028), artifact #12573314373; E2/E4 device proof not obtained | permission revocation, provider URI remap, nonseekable streams |
+| G3 · trusted FTP/FTPS/SFTP protocols | IN PROGRESS · real [Seedhost explicit FTPS listing](https://github.com/gamesbyian/Expository/actions/runs/40138103066) (13 entries) and independent [Wing implicit FTPS](https://github.com/gamesbyian/Expository/actions/runs/40137448557) (2 entries) succeeded. Controlled [FTPS untrusted certificate reject + trusted encrypted MLST/list/file read](https://github.com/gamesbyian/Expository/actions/runs/40139120011) and [SFTP verified-key rejection/read](https://github.com/gamesbyian/Expository/actions/runs/40138224419) succeeded. Rebex explicit FTPS returned empty MLSD/LIST and a subsequent known-sample RETR final reply 425 [#40139577482](https://github.com/gamesbyian/Expository/actions/runs/40139577482), tracked in #54; strict certificate validation, PROT P and no insecure fallback remain mandatory. Native FTPS browsing compiled #40139897851; no physical-device protocol acceptance | Android test/device evidence, wide server matrix, source-verified external download and recovery |
+| G4 · scoped Android SAF file/folder I/O | IN PROGRESS · native SFTP remote file Save As/exclusive Upload compiled; [merged FTPS browse + journaled single-file SAF Save As PR #55](https://github.com/gamesbyian/Expository/pull/55) adds source MLST revalidation and provider readback, built as an **actual PR-head APK** in [#40139897851](https://github.com/gamesbyian/Expository/actions/runs/40139897851), artifact #12578501191. No physical Android or real SAF provider transfer has passed acceptance | E2/E4 provider, permission revocation, interruptions/process death, nonseekable streams, folders and multi-file |
 | G5 · durable queue/receipt proof | IN PROGRESS · merged #38 and journal integration [PR #42](https://github.com/gamesbyian/Expository/pull/42), 12+8 synthetic tests and Android APK compilation [run #40135499036](https://github.com/gamesbyian/Expository/actions/runs/40135499036), no device process-kill proof | process killed at every journal phase, zero false-success |
 | G6 · six directional pane cases + new-folder move | IN PROGRESS · [PR #46](https://github.com/gamesbyian/Expository/pull/46) journaled direct SFTP New Folder, nine E1 planner cases + E3 synthetic MKDIR/post-stat/duplicate refusal and debug APK [run #40136358327](https://github.com/gamesbyian/Expository/actions/runs/40136358327) | same-server one-file Move in [PR #47](https://github.com/gamesbyian/Expository/pull/47) with 8 E1 planner and synthetic E3 collision/payload-preservation cases [run #40137145475](https://github.com/gamesbyian/Expository/actions/runs/40137145475), plus Android APK compile [run #40137278521](https://github.com/gamesbyian/Expository/actions/runs/40137278521); split pane six directions and physical Android/provider/interruption proof still missing |
 | G7 · compact bulk renamer and recovery | NOT STARTED | 10k virtualized preview, swaps, crash/undo and case/Unicode |
@@ -118,3 +118,24 @@ Implementation began in draft PR #32. The issue descriptions remain acceptance c
 ## Release rule
 
 The badge `Beta ready` is prohibited while any P0 gate is NOT STARTED, UNSUPPORTED or UNCERTAIN. No feature is accepted because it is attractive in a mock. The strong product promise is a **correct and inspectable change to user-authorized files**.
+
+## 24 October: external FTPS interoperability and PR-head Android proof
+
+The first real external secure browsing acceptance passed on both the owner's
+Seedhost account and an independent Wing demo server. Credentials remained in
+Actions secrets and owner identifiers were masked. These tests enumerated
+remote directory entries only; they did not download user files or mutate
+the S60 media tree. Rebex's public demo presented different behavior:
+MLSD and the conservative LIST preview returned empty, MLST found the known
+sample, but the protected RETR final reply was 425. This remains open in
+[issue #54](https://github.com/gamesbyian/Expository/issues/54), potentially
+related to TLS session resumption, without claiming that cause is proved.
+
+Owner-comment GitHub Actions now supports controlled FTPS and SFTP labs,
+mainline developer debug APKs and a separate PR-head build without checkout
+credentials or private server secrets. The first FTPS Android PR-head build
+failed with a missing private journal provider; commit `5e0dc7f` corrected
+it, and [run #40139897851](https://github.com/gamesbyian/Expository/actions/runs/40139897851)
+then compiled the actual PR code and published an APK. This is build
+provenance, **not** E2 emulator, E4 physical device or production release
+acceptance. G3 and G4 remain **IN PROGRESS**.
