@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import dev.expository.transfer.planner.*
 import dev.expository.transfer.journal.RecoveryStatusCard
 
-/** Experimental native shell: Local→Local copy uses SAF; remote demo is synthetic only. */
+/** Android-native picker-first transfer shell; synthetic planner stays isolated in Demo. */
 class TransferActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
