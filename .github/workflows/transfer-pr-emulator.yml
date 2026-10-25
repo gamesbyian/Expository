@@ -11,7 +11,8 @@ jobs:
     if: >-
       github.event.issue.pull_request != null &&
       github.event.comment.user.login == 'gamesbyian' &&
-      github.event.comment.body == '/transfer-native emulator-pr'
+      (github.event.comment.body == '/transfer-native emulator-pr' ||
+       startsWith(github.event.comment.body, '/transfer-native emulator-pr '))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -31,6 +32,24 @@ jobs:
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "Pinned a reviewed-repository PR commit for emulator execution."
+      - name: Select a safe optional test class
+        shell: bash
+        env:
+          REQUEST: ${{ github.event.comment.body }}
+        run: |
+          set -euo pipefail
+          if [[ "$REQUEST" == "/transfer-native emulator-pr" ]]; then
+            echo "TARGET_TEST_CLASS=" >> "$GITHUB_ENV"
+            echo "Full Android instrumentation suite selected."
+          else
+            name="${REQUEST#'/transfer-native emulator-pr '}"
+            case "$name" in
+              AndroidContentProviderCopyTest|FtpsUiSmokeTest|LocalPickerCancelSmokeTest|LocalPickerPositiveCopyTest|LocalPickerSourceSelectionTest|RenamePreviewUiSmokeTest|WorkspaceNavigationUiTest|RecoveryRefreshUiTest|RecoveryIndexFailurePolicyTest) ;;
+              *) echo "Unsupported test selection"; exit 2 ;;
+            esac
+            printf 'TARGET_TEST_CLASS=dev.expository.transfer.%s\\n' "$name" >> "$GITHUB_ENV"
+            echo "A single approved instrumentation class selected."
+          fi
       - uses: actions/checkout@v4
         with:
           ref: ${{ steps.source.outputs.sha }}
@@ -52,7 +71,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Execute all synthetic Android instrumentation tests against the PR
+      - name: Execute scoped or full synthetic Android tests against the PR
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
           api-level: 35
@@ -61,7 +80,13 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
-          script: cd android-transfer && gradle -PwithAndroid=true :app:connectedDebugAndroidTest --no-daemon
+          script: |
+            cd android-transfer
+            if [ -z "$TARGET_TEST_CLASS" ]; then
+              gradle -PwithAndroid=true :app:connectedDebugAndroidTest --no-daemon
+            else
+              gradle -PwithAndroid=true -Pandroid.testInstrumentationRunnerArguments.class="$TARGET_TEST_CLASS" :app:connectedDebugAndroidTest --no-daemon
+            fi
       - name: Publish synthetic report and tested SHA
         if: always()
         shell: bash
