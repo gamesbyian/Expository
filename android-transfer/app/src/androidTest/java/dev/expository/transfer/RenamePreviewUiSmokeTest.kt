@@ -1,6 +1,11 @@
 package dev.expository.transfer
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -29,7 +34,12 @@ class RenamePreviewUiSmokeTest {
         )
         rule.setContent {
             MaterialTheme {
-                RemoteRenamePreviewCard("synthetic-session", "/test", observed, true)
+                // The production card is hosted by a scrollable app LazyColumn.
+                // Reproduce an outer scroll owner, rather than trapping its
+                // nested bounded preview list outside the test viewport.
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    RemoteRenamePreviewCard("synthetic-session", "/test", observed, true)
+                }
             }
         }
         rule.onNodeWithText("Bulk rename preview").assertExists()
@@ -40,9 +50,11 @@ class RenamePreviewUiSmokeTest {
         rule.onNodeWithText("Apply disabled.", substring = true).assertExists()
         // The GUI must expose the existing immutable case-edit recipe, but it
         // cannot advertise an executable server rename or overwrite.
-        rule.onNodeWithText("Uppercase").performClick()
+        rule.onNodeWithText("Uppercase").performScrollTo().performClick()
+        rule.onNodeWithText("Proposed changes:", substring = true).performScrollTo()
         rule.onNodeWithText("EPISODE 01.mkv").assertExists()
-        rule.onNodeWithText("Lowercase").performClick()
+        rule.onNodeWithText("Lowercase").performScrollTo().performClick()
+        rule.onNodeWithText("Proposed changes:", substring = true).performScrollTo()
         rule.onNodeWithText("episode 01.mkv").assertExists()
         rule.onNodeWithText("Apply disabled.", substring = true).assertExists()
     }
