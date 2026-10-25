@@ -34,6 +34,14 @@ It requires Android SDK/network access during runner setup but makes no FTP
 connections itself. Never call this physical Pixel, TalkBack, real file
 picker/provider, or release acceptance.
 
+For a **real API 35 emulator test of an unmerged same-repository PR**, use
+the exact owner-authored comment `/transfer-native emulator-pr` on that PR.
+The separately reviewed `.github/workflows/transfer-pr-emulator.yml`
+resolves a fixed PR SHA, rejects forks, checks out with no persisted token,
+and executes all Android instrumentation tests without server secrets.
+Review exact SHA and report artifact before merging. This remains E2,
+not physical device E4 or Drive acceptance.
+
 For a **focused compile of the actual code on an unmerged PR**, comment
 `/transfer-native apk-pr` on that PR. The separate
 `.github/workflows/transfer-pr-apk.yml` resolves and verifies an immutable
