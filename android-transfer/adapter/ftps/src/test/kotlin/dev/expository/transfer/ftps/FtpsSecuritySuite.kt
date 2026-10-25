@@ -91,6 +91,28 @@ object FtpsSecuritySuite {
             }
             check(result.isFailure && result.exceptionOrNull()?.message == "FTPS_FILE_STAT_UNVERIFIED")
         }
+        checkCase("truncated MLSD preview is never authoritative") {
+            fun file(name: String): org.apache.commons.net.ftp.FTPFile =
+                org.apache.commons.net.ftp.FTPFile().apply {
+                    this.name = name
+                    this.type = org.apache.commons.net.ftp.FTPFile.FILE_TYPE
+                    this.size = 10
+                }
+            val client = object : org.apache.commons.net.ftp.FTPSClient(false) {
+                override fun changeWorkingDirectory(pathname: String): Boolean = true
+                override fun mlistDir(): Array<org.apache.commons.net.ftp.FTPFile> =
+                    arrayOf(file("one"), file("two"), file("three"))
+            }
+            FtpsSession(client).use { session ->
+                val short = session.browseReadOnly("/folder", maxEntries = 2)
+                check(short.method == "MLSD" && short.truncated)
+                check(!short.authoritative)
+                check(short.entries.map { it.name } == listOf("one", "two"))
+                val whole = session.browseReadOnly("/folder", maxEntries = 3)
+                check(!whole.truncated && whole.authoritative)
+                check(whole.entries.size == 3)
+            }
+        }
         checkCase("empty MLSD permits LIST preview but never mutation witness") {
             fun file(name: String): org.apache.commons.net.ftp.FTPFile =
                 org.apache.commons.net.ftp.FTPFile().apply {
