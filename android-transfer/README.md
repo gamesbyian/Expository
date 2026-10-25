@@ -1,6 +1,6 @@
 # Expository Transfer · first native implementation
 
-The web Expository explorer remains **strictly read-only**. G2's first *live file* capability in stacked PR #33 is **one device document → another user-created SAF document** using the system picker, no existing-file overwrite or source deletion. Android debug APK compilation passed [run #40114978482](https://github.com/gamesbyian/Expository/actions/runs/40114978482), SHA-256 `50bfdf1f65b22f3b372ccacc9bb6b9d4911a234b7eb7229610d9dbb5d9a951df`. Physical-device and provider testing remain pending. This is a separate native Kotlin/Compose Gradle project under `android-transfer/`, portable to a dedicated Android repository. It is the first **actual source code** beyond the G0–G9 product plan, and is deliberately not a working file-transfer app yet.
+The web Expository explorer remains **strictly read-only**. Expository Transfer is a separate Kotlin/Compose Android-native developer preview under `android-transfer/`, portable to a dedicated repo. The first real local SAF Copy came from [merged PR #33](https://github.com/gamesbyian/Expository/pull/33) and is now joined by secure SFTP and FTPS file operations. Actual API 35 emulator tests verify synthetic local MediaStore provider copying, cancellation and the system Open Document picker cancel path ([six-test run #40154825166](https://github.com/gamesbyian/Expository/actions/runs/40154825166)). **A complete user-picked Save As, real Google Drive provider, physical device and signed beta remain unverified.** The app is functional experimental code, not yet release-ready.
 
 - `core/planner`: pure JVM module. Immutable transfer and rename proposals, explicit capability proofs, source/destination identity, SHA-256 digest, same-namespace Move fast path only, conservative case/Unicode collisions, temporary-hop rename graph, journal state guard. No I/O.
 - `app`: native Kotlin/Compose developer preview with real Local SAF Copy, pinned SFTP browse + SAF Save As/exclusive Upload and now **FTPS explicit/implicit TLS browse → one user-created SAF file Save As**. The new FTPS path checks MLST metadata, journals attempts and verifies provider bytes when possible, compiled in [PR-head Android run #40139897851](https://github.com/gamesbyian/Expository/actions/runs/40139897851). INTERNET only; no broad storage, saved account or remote password; physical Android/provider proof remains pending. This developer UI also contains a **non-destructive SFTP bulk rename preview** (merged [#59](https://github.com/gamesbyian/Expository/pull/59)), with server-side Apply disabled until journaled rename execution is verified.
@@ -44,6 +44,21 @@ marked pending and cleaned up by their exact URIs. This is E2 real emulator
 provider evidence **without launching either system document picker** and
 without using private files, a cloud account, remote server or physical
 device. The signed developer debug APK is not a production release.
+
+## First actual Android system picker interaction (E2)
+
+[PR #75](https://github.com/gamesbyian/Expository/pull/75) added a
+nondestructive UI Automator check of the actual Android
+`ACTION_OPEN_DOCUMENT` system picker. A checked-out immutable PR head was
+compiled (run #40154800622), then [API 35 emulator run
+#40154825166](https://github.com/gamesbyian/Expository/actions/runs/40154825166)
+passed six tests. Its new scenario opens the system picker, presses Back,
+observes the cancelled result in Expository, and verifies that Save copy
+remains disabled without a selected source. The test opens no personal file
+and performs no document write. PR #76 introduced the reusable trusted-main
+owner-comment `/transfer-native emulator-pr` workflow for this premerge
+evidence. Real source URI grants, save-picker completion, cloud providers
+and physical Android remain unverified.
 
 ## Next functional slice
 Wire both simple browse actions and split workspace to the same immutable plan; implement real SAF file picker/tree behavior with capability probes and typed non-success receipts; then secure SFTP/FTPS connectors and durable journal. Real Google Drive/Docs P0 remains independently gated by actual account/provider behavior.
