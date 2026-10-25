@@ -1,6 +1,7 @@
 package dev.expository.transfer
 
 import android.app.Activity
+import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -165,6 +166,31 @@ fun LocalCopyCard() {
                         putExtra(Intent.EXTRA_TITLE, sourceName)
                     })
                 }) { Text("Save copy…") }
+                Button(
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    enabled = !busy && selected != null,
+                    onClick = {
+                        val source = selected ?: return@Button
+                        // Sharesheet resolves access only for the user-selected
+                        // destination app. No internal copies, implicit upload,
+                        // source mutation or broad storage permissions.
+                        val outbound = Intent(Intent.ACTION_SEND).apply {
+                            type = mime.takeUnless { it.isBlank() || it == "*/*" }
+                                ?: "application/octet-stream"
+                            putExtra(Intent.EXTRA_STREAM, source)
+                            clipData = ClipData.newUri(context.contentResolver,
+                                "Selected document", source)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        try {
+                            context.startActivity(Intent.createChooser(outbound,
+                                "Share selected document"))
+                            status = "Android Sharesheet opened. Expository did not copy or upload this file."
+                        } catch (_: Exception) {
+                            status = "No sharing app accepted this document. Source remains unchanged."
+                        }
+                    }
+                ) { Text("Share…") }
             }
             if (selected != null) Text("Source: " + (displayName ?: "Selected file"))
             Text(status, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
