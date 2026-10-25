@@ -296,6 +296,31 @@ object ScenarioSuite {
             check(p.steps.none { it.phase == RenamePhase.STAGE })
             assertStepsPreserveAll(s, p)
             check(p.digest == RenamePlanner.preview(s, recipe, NOW).digest)
+            // Exercise *numbered* proposals with reverse visible selection,
+            // rather than only a prefix with source-order selection.
+            val reversed = names.reversed()
+            val ordered = snapshot(names, reversed)
+            val numbering = RenameRecipe(listOf(RenameEdit.Number(
+                start = 1, step = 1, width = 5, separator = "-", prefix = true
+            )))
+            val numbered = RenamePlanner.preview(ordered, numbering, NOW)
+            check(numbered.executable && numbered.steps.size == 10000)
+            check(numbered.preview.first().original == "Test10000.txt")
+            check(numbered.preview.first().proposed == "00001-Test10000.txt")
+            check(numbered.preview.last().proposed == "10000-Test00001.txt")
+            assertStepsPreserveAll(ordered, numbered)
+            // A source version change must invalidate the entire frozen plan
+            // before any executor could treat its write proposal as current.
+            val changed = ordered.copy(children = ordered.children.mapIndexed { index, row ->
+                if (index == 0) row.copy(version = "changed") else row
+            })
+            check(!RenamePlanner.revalidate(numbered, changed, numbering, NOW))
+            // A not-selected destination collision cannot be ignored simply
+            // because a large preview has ten thousand other safe rows.
+            val collided = snapshot(names + "00001-Test10000.txt", reversed)
+            val unsafe = RenamePlanner.preview(collided, numbering, NOW)
+            check(!unsafe.executable && "OCCUPIED_DESTINATION" in unsafe.blockers)
+            check(unsafe.steps.isEmpty())
         }
         println("PASS scenarios=" + cases + " evidence=E1 synthetic only")
     }
