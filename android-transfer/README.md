@@ -45,5 +45,20 @@ provider evidence **without launching either system document picker** and
 without using private files, a cloud account, remote server or physical
 device. The signed developer debug APK is not a production release.
 
+## First actual Android system picker interaction (E2)
+
+[PR #75](https://github.com/gamesbyian/Expository/pull/75) added a
+nondestructive UI Automator check of the actual Android
+`ACTION_OPEN_DOCUMENT` system picker. A checked-out immutable PR head was
+compiled (run #40154800622), then [API 35 emulator run
+#40154825166](https://github.com/gamesbyian/Expository/actions/runs/40154825166)
+passed six tests. Its new scenario opens the system picker, presses Back,
+observes the cancelled result in Expository, and verifies that Save copy
+remains disabled without a selected source. The test opens no personal file
+and performs no document write. PR #76 introduced the reusable trusted-main
+owner-comment `/transfer-native emulator-pr` workflow for this premerge
+evidence. Real source URI grants, save-picker completion, cloud providers
+and physical Android remain unverified.
+
 ## Next functional slice
 Wire both simple browse actions and split workspace to the same immutable plan; implement real SAF file picker/tree behavior with capability probes and typed non-success receipts; then secure SFTP/FTPS connectors and durable journal. Real Google Drive/Docs P0 remains independently gated by actual account/provider behavior.
