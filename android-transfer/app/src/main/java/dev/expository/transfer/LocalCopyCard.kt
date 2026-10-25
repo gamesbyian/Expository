@@ -32,6 +32,7 @@ import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.engine.CopyReceipt
 import dev.expository.transfer.saf.SafSingleDocumentCopy
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
@@ -78,6 +79,7 @@ fun LocalCopyCard() {
             transferred = 0L
             receipt = null
             scope.launch {
+                try {
                 val copyReceipt = withContext(Dispatchers.IO) {
                     val job = coroutineContext[Job]
                     var lastProgress = 0L
@@ -107,8 +109,14 @@ fun LocalCopyCard() {
                         "Copy blocked before writing. The picker may already have created an empty document."
                 }
                 transferred = copyReceipt.bytesWritten
-                continueCopy = null
-                busy = false
+                } catch (_: CancellationException) {
+                    status = "Copy interrupted. Review the created document before trying again."
+                } catch (_: Exception) {
+                    status = "Copy outcome uncertain. Review the created document before trying again."
+                } finally {
+                    continueCopy = null
+                    busy = false
+                }
             }
         }
     }
