@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -53,6 +54,8 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
         "Number" -> RenameRecipe(listOf(RenameEdit.Number(
             start = 1L, step = 1L, width = 2, separator = " ", prefix = numberAtFront
         )), extensionLocked)
+        "Uppercase" -> RenameRecipe(listOf(RenameEdit.ChangeCase(upper = true)), extensionLocked)
+        "Lowercase" -> RenameRecipe(listOf(RenameEdit.ChangeCase(upper = false)), extensionLocked)
         else -> RenameRecipe(listOf(RenameEdit.Replace(find, value)), extensionLocked)
     }
     val preview = remember(rows, selectedExisting, recipe, folder, opaqueSessionId, blocked) {
@@ -132,7 +135,8 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.fillMaxWidth()) {
-                    listOf("Replace", "Prefix", "Suffix", "Number").forEach { option ->
+                    listOf("Replace", "Prefix", "Suffix", "Number",
+                        "Uppercase", "Lowercase").forEach { option ->
                         Button(enabled = enabled, modifier = Modifier.heightIn(min = 48.dp),
                             onClick = { mode = option }) {
                             Text(if (mode == option) "•" + option else option,
@@ -145,7 +149,7 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
                         singleLine = true, enabled = enabled,
                         label = { Text("Find") })
                 }
-                if (mode != "Number") {
+                if (mode == "Replace" || mode == "Prefix" || mode == "Suffix") {
                     OutlinedTextField(value, { value = it },
                         modifier = Modifier.fillMaxWidth(), singleLine = true,
                         enabled = enabled, label = {
@@ -173,7 +177,7 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
                         style = MaterialTheme.typography.bodyMedium)
                     // Virtualized bounded rows. Preserve selection order in the
                     // snapshot; proposed numbering follows this exact order.
-                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 250.dp)) {
+                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 250.dp).testTag("rename-preview-results")) {
                         items(plan.preview, key = { it.id }) { row ->
                             Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                                 Text(row.original, style = MaterialTheme.typography.bodySmall)
