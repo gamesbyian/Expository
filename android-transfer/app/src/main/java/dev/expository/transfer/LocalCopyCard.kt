@@ -38,6 +38,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * First real, user-initiated file operation: Android picker -> Save As picker.
@@ -58,6 +59,7 @@ fun LocalCopyCard() {
     var destinationName by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf("Select a file to copy to another location.") }
     var busy by remember { mutableStateOf(false) }
+    var continueCopy by remember { mutableStateOf<AtomicBoolean?>(null) }
     var transferred by remember { mutableLongStateOf(0L) }
     var receipt by remember { mutableStateOf<CopyReceipt?>(null) }
 
@@ -69,6 +71,8 @@ fun LocalCopyCard() {
         } else if (sourceUri == null) {
             status = "Source grant expired. Choose the file again. The created destination may be empty."
         } else {
+            val permit = AtomicBoolean(true)
+            continueCopy = permit
             busy = true
             status = "Copying through Android's document providers. Keep the app open."
             transferred = 0L
@@ -78,7 +82,7 @@ fun LocalCopyCard() {
                     val job = coroutineContext[Job]
                     var lastProgress = 0L
                     service.copy(sourceUri, targetUri,
-                        continueRequested = { job?.isActive == true },
+                        continueRequested = { permit.get() && job?.isActive == true },
                         onProgress = { bytes ->
                             if (bytes - lastProgress >= 1024L * 1024L) {
                                 lastProgress = bytes
@@ -103,6 +107,7 @@ fun LocalCopyCard() {
                         "Copy blocked before writing. The picker may already have created an empty document."
                 }
                 transferred = copyReceipt.bytesWritten
+                continueCopy = null
                 busy = false
             }
         }
@@ -157,6 +162,16 @@ fun LocalCopyCard() {
             Text(status, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 style = MaterialTheme.typography.bodyMedium)
             if (busy) Text("Streaming: " + transferred + " bytes (not yet verified)")
+            if (continueCopy != null) {
+                Button(
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    enabled = continueCopy?.get() == true,
+                    onClick = {
+                        continueCopy?.set(false)
+                        status = "Cancellation requested. The destination may contain a partial file."
+                    }
+                ) { Text(if (continueCopy?.get() == true) "Cancel copy" else "Stopping…") }
+            }
             receipt?.let {
                 Text("Receipt: " + it.proof.name + " · " + it.bytesWritten + " bytes",
                     style = MaterialTheme.typography.labelMedium)
