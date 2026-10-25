@@ -33,5 +33,17 @@ invocation is not a passing runtime/device verdict.
 ## Evidence honesty
 Pure JVM scenarios support **E1**; the opt-in FTPS localhost server suite separately provides narrowly scoped **E3** proof. G0 native Android compile and debug signing are proven by [GitHub Actions run #40071709212](https://github.com/gamesbyian/Expository/actions/runs/40071709212), source SHA `1329362c788eea9c028cebde95ea67f7d1f6e7a2` and APK SHA256 `d6301095b09f7b0f4a050ccb62e8e29c255883572db889fb56e1486a81e8528d`. This does **not** satisfy dedicated repository, device, or independent privacy proof. Android picker code exists but lacks E2/E4 device acceptance; no device screenshots, TalkBack review, physical protocol/Drive acceptance, persistent executor, production server test or installed beta is claimed. Do not mark G1 complete until performance/fuzz and crash-reconciliation coverage meet the release ledger.
 
+## Android provider acceptance (synthetic, no personal files)
+
+[Run #40153876798](https://github.com/gamesbyian/Expository/actions/runs/40153876798)
+executed five API 35 instrumented tests, including two that copy and
+interrupt actual app-owned Android MediaStore `content://` streams. They
+verify destination byte readback, original preservation, and the persisted
+`VERIFIED` / `UNCERTAIN` AtomicFile journal states. Fixture documents are
+marked pending and cleaned up by their exact URIs. This is E2 real emulator
+provider evidence **without launching either system document picker** and
+without using private files, a cloud account, remote server or physical
+device. The signed developer debug APK is not a production release.
+
 ## Next functional slice
 Wire both simple browse actions and split workspace to the same immutable plan; implement real SAF file picker/tree behavior with capability probes and typed non-success receipts; then secure SFTP/FTPS connectors and durable journal. Real Google Drive/Docs P0 remains independently gated by actual account/provider behavior.
