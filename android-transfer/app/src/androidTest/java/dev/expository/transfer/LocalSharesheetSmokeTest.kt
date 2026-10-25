@@ -62,13 +62,34 @@ class LocalSharesheetSmokeTest {
                     .fetchSemanticsNodes().isNotEmpty()
             }
             compose.onNodeWithText("Share…").assertIsEnabled().performClick()
-            // The app reports opening its Android chooser before any external
-            // recipient is selected. Do not click a third-party share target.
-            val chooser = device.wait(Until.hasObject(By.text("Share selected document")), 12_000L) ||
-                device.wait(Until.hasObject(By.text("Sharing link")), 3_000L) ||
-                device.wait(Until.hasObject(By.text("Nearby Share")), 3_000L)
-            assertTrue("Android Sharesheet must be present", chooser)
+            // Android 15 may render a collapsed Sharesheet without the
+            // caller's custom title, a "Sharing link" label or Nearby Share.
+            // An actual platform resolver window is stronger evidence than
+            // guessing its localized/variant content labels.
+            val resolverPackages = setOf(
+                "android", "com.android.intentresolver", "com.google.android.intentresolver"
+            )
+            val visibleResolver = device.wait(
+                Until.hasObject(By.pkg("com.android.intentresolver")), 5_000L
+            ) || device.wait(
+                Until.hasObject(By.pkg("com.google.android.intentresolver")), 2_000L
+            ) || device.wait(
+                Until.hasObject(By.text("Share selected document")), 2_000L
+            ) || device.wait(
+                Until.hasObject(By.res("android:id/chooser_list")), 2_000L
+            )
+            val foreground = device.currentPackageName ?: "none"
+            assertTrue(
+                "Android resolver missing; foreground=" + foreground,
+                visibleResolver || foreground in resolverPackages
+            )
+            // Do not choose any recipient: no third-party delivery is tested.
             device.pressBack()
+            compose.waitUntil(10_000L) {
+                compose.onAllNodesWithText("Android Sharesheet opened.", substring = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("Share…").assertIsEnabled()
             assertArrayEquals("Share cancellation must preserve source", bytes,
                 resolver.openInputStream(uri)!!.use { it.readBytes() })
         } finally {
