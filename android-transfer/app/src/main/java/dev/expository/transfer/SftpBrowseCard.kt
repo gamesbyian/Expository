@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -47,12 +48,14 @@ import dev.expository.transfer.sftp.SftpNewFolder
 import dev.expository.transfer.sftp.FolderCreateProof
 import dev.expository.transfer.sftp.SftpSameServerMove
 import dev.expository.transfer.sftp.ServerMoveProof
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -80,6 +83,9 @@ fun SftpBrowseCard() {
     var showRenamePreview by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Enter a known SHA-256 SSH host-key fingerprint. Unknown keys are never trusted automatically.") }
     var busy by remember { mutableStateOf(false) }
+    var transferred by remember { mutableLongStateOf(0L) }
+    var continueCopy by remember { mutableStateOf<AtomicBoolean?>(null) }
+    var transferKind by remember { mutableStateOf("") }
 
     val ownedSession = session
     DisposableEffect(ownedSession) {
@@ -97,18 +103,25 @@ fun SftpBrowseCard() {
             busy = false
             status = "Remote session expired. Destination may be an empty document; reconnect and choose again."
         } else {
+            val permit = AtomicBoolean(true)
+            continueCopy = permit
+            transferKind = "Download"
+            transferred = 0L
             busy = true
             status = "Streaming remote file to Android's chosen document. Keep Expository open."
             scope.launch {
+                try {
                 val receipt = withContext(Dispatchers.IO) {
                     val active = coroutineContext[Job]
                     SftpToSafSave(context.contentResolver) { digest ->
                         AndroidAtomicAttemptStorage(context.applicationContext, digest)
                     }.copy(
                         live, sessionId, path, target,
-                        continueRequested = { active?.isActive == true }
+                        continueRequested = { permit.get() && active?.isActive == true },
+                        onProgress = { bytes -> transferred = bytes }
                     )
                 }
+                transferred = receipt.bytesWritten
                 status = when (receipt.proof) {
                     CopyProof.BYTES_VERIFIED ->
                         "Saved: provider read-back SHA-256 matched the authenticated SFTP stream (" +
@@ -121,7 +134,15 @@ fun SftpBrowseCard() {
                     CopyProof.BLOCKED ->
                         "Transfer blocked by preflight or missing permission. The picker may have created an empty document."
                 }
-                busy = false
+                } catch (_: CancellationException) {
+                    status = "Download interrupted. Destination may contain a partial document."
+                } catch (_: Exception) {
+                    status = "Download outcome uncertain. Inspect the destination."
+                } finally {
+                    continueCopy = null
+                    transferKind = ""
+                    busy = false
+                }
             }
         }
     }
@@ -139,18 +160,25 @@ fun SftpBrowseCard() {
             busy = false
             status = "SFTP session expired. Reconnect to upload."
         } else {
+            val permit = AtomicBoolean(true)
+            continueCopy = permit
+            transferKind = "Upload"
+            transferred = 0L
             busy = true
             status = "Validating remote names, then streaming one picked document to SFTP."
             scope.launch {
+                try {
                 val receipt = withContext(Dispatchers.IO) {
                     val active = coroutineContext[Job]
                     SafToSftpUpload(context.contentResolver) { digest ->
                         AndroidAtomicAttemptStorage(context.applicationContext, digest)
                     }.copy(
                         live, opaque, source, directory,
-                        continueRequested = { active?.isActive == true }
+                        continueRequested = { permit.get() && active?.isActive == true },
+                        onProgress = { bytes -> transferred = bytes }
                     )
                 }
+                transferred = receipt.bytesWritten
                 status = when (receipt.proof) {
                     CopyProof.BYTES_VERIFIED ->
                         "Upload byte verified by independent SFTP read-back (" +
@@ -171,7 +199,15 @@ fun SftpBrowseCard() {
                     }
                     refreshed.onSuccess { page = it }
                 }
-                busy = false
+                } catch (_: CancellationException) {
+                    status = "Upload interrupted. A remote partial may remain; do not retry blindly."
+                } catch (_: Exception) {
+                    status = "Upload outcome uncertain. Inspect the remote destination."
+                } finally {
+                    continueCopy = null
+                    transferKind = ""
+                    busy = false
+                }
             }
         }
     }
@@ -431,6 +467,18 @@ fun SftpBrowseCard() {
                 }
                 if (page?.truncated == true) Text("Directory truncated at 200 items. No unseen item is selectable.",
                     style = MaterialTheme.typography.bodySmall)
+            }
+            if (continueCopy != null) {
+                Text(transferKind + ": " + transferred + " bytes written (not verified)",
+                    style = MaterialTheme.typography.bodySmall)
+                Button(
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    enabled = continueCopy?.get() == true,
+                    onClick = {
+                        continueCopy?.set(false)
+                        status = "Cancellation requested. A partial destination may remain; no automatic retry."
+                    }
+                ) { Text(if (continueCopy?.get() == true) "Cancel transfer" else "Stopping…") }
             }
             Text(status, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 style = MaterialTheme.typography.bodySmall)
