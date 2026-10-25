@@ -1,0 +1,78 @@
+package dev.expository.transfer
+
+import android.content.ContentValues
+import android.net.Uri
+import android.provider.MediaStore
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import java.util.UUID
+
+/**
+ * Android Sharesheet launch/cancel only on disposable API 35 emulator.
+ * This does not assert a share recipient received or saved the document.
+ */
+@RunWith(AndroidJUnit4::class)
+class LocalSharesheetSmokeTest {
+    @get:Rule val compose = createAndroidComposeRule<TransferActivity>()
+
+    @Test fun sharePickerSelectedSyntheticFileAndDismissWithoutMutation() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val name = "expository-share-" + UUID.randomUUID().toString().take(12) + ".txt"
+        val bytes = "Synthetic Expository Sharesheet fixture\n".toByteArray(Charsets.UTF_8)
+        val uri: Uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                put(MediaStore.MediaColumns.IS_PENDING, 0)
+            }) ?: error("SHARE_TEST_SOURCE_INSERT_FAILED")
+        try {
+            resolver.openOutputStream(uri, "wt")!!.use { it.write(bytes) }
+            compose.onNodeWithText("Choose file").performClick()
+            val picker = device.wait(
+                Until.hasObject(By.pkg("com.google.android.documentsui")), 12_000L
+            ) || device.wait(
+                Until.hasObject(By.pkg("com.android.documentsui")), 6_000L
+            ) || device.wait(Until.hasObject(By.text("Recent")), 4_000L)
+            assertTrue("System document selector must open", picker)
+            var entry = device.wait(Until.findObject(By.text(name)), 6_000L)
+            if (entry == null) {
+                (device.findObject(By.desc("Show roots"))
+                    ?: device.findObject(By.descContains("navigation")))?.click()
+                device.wait(Until.findObject(By.text("Downloads")), 8_000L)?.click()
+                entry = device.wait(Until.findObject(By.text(name)), 12_000L)
+            }
+            requireNotNull(entry) { "SYNTHETIC_SHARE_SOURCE_NOT_VISIBLE" }.click()
+            compose.waitUntil(15_000L) {
+                compose.onAllNodesWithText("File selected.", substring = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("Share…").assertIsEnabled().performClick()
+            // The app reports opening its Android chooser before any external
+            // recipient is selected. Do not click a third-party share target.
+            val chooser = device.wait(Until.hasObject(By.text("Share selected document")), 12_000L) ||
+                device.wait(Until.hasObject(By.text("Sharing link")), 3_000L) ||
+                device.wait(Until.hasObject(By.text("Nearby Share")), 3_000L)
+            assertTrue("Android Sharesheet must be present", chooser)
+            device.pressBack()
+            assertArrayEquals("Share cancellation must preserve source", bytes,
+                resolver.openInputStream(uri)!!.use { it.readBytes() })
+        } finally {
+            resolver.delete(uri, null, null)
+        }
+    }
+}
