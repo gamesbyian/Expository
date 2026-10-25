@@ -47,7 +47,7 @@ jobs:
               AndroidContentProviderCopyTest|FtpsUiSmokeTest|LocalPickerCancelSmokeTest|LocalPickerPositiveCopyTest|LocalPickerSourceSelectionTest|RenamePreviewUiSmokeTest|WorkspaceNavigationUiTest|RecoveryRefreshUiTest|RecoveryIndexFailurePolicyTest) ;;
               *) echo "Unsupported test selection"; exit 2 ;;
             esac
-            printf 'TARGET_TEST_CLASS=dev.expository.transfer.%s\\n' "$name" >> "$GITHUB_ENV"
+            printf 'TARGET_TEST_CLASS=dev.expository.transfer.%s\n' "$name" >> "$GITHUB_ENV"
             echo "A single approved instrumentation class selected."
           fi
       - uses: actions/checkout@v4
