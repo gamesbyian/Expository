@@ -37,7 +37,9 @@ class LocalPickerCancelSmokeTest {
           || device.wait(Until.hasObject(By.text("Downloads")), 3_000L)
         assertTrue("Android picker not visible; foreground=" +
             (device.currentPackageName ?: "none"), picker)
-        assertTrue("Back should dismiss the external picker", device.pressBack())
+        // UiDevice.pressBack()'s boolean reports key injection success,
+        // not the resulting Activity state on every emulator build.
+        device.pressBack()
         compose.waitUntil(15_000L) {
             compose.onAllNodesWithText("File selection canceled.")
                 .fetchSemanticsNodes().isNotEmpty()
