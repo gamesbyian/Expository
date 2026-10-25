@@ -113,12 +113,18 @@ fun SftpBrowseCard() {
                 try {
                 val receipt = withContext(Dispatchers.IO) {
                     val active = coroutineContext[Job]
+                    var lastDisplayed = 0L
                     SftpToSafSave(context.contentResolver) { digest ->
                         AndroidAtomicAttemptStorage(context.applicationContext, digest)
                     }.copy(
                         live, sessionId, path, target,
                         continueRequested = { permit.get() && active?.isActive == true },
-                        onProgress = { bytes -> transferred = bytes }
+                        onProgress = { bytes ->
+                            if (bytes - lastDisplayed >= 256L * 1024L) {
+                                lastDisplayed = bytes
+                                transferred = bytes
+                            }
+                        }
                     )
                 }
                 transferred = receipt.bytesWritten
@@ -170,12 +176,18 @@ fun SftpBrowseCard() {
                 try {
                 val receipt = withContext(Dispatchers.IO) {
                     val active = coroutineContext[Job]
+                    var lastDisplayed = 0L
                     SafToSftpUpload(context.contentResolver) { digest ->
                         AndroidAtomicAttemptStorage(context.applicationContext, digest)
                     }.copy(
                         live, opaque, source, directory,
                         continueRequested = { permit.get() && active?.isActive == true },
-                        onProgress = { bytes -> transferred = bytes }
+                        onProgress = { bytes ->
+                            if (bytes - lastDisplayed >= 256L * 1024L) {
+                                lastDisplayed = bytes
+                                transferred = bytes
+                            }
+                        }
                     )
                 }
                 transferred = receipt.bytesWritten
