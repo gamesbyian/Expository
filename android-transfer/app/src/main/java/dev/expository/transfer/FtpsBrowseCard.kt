@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -41,12 +42,14 @@ import dev.expository.transfer.ftps.FtpsTarget
 import dev.expository.transfer.ftps.FtpsToSafSave
 import dev.expository.transfer.ftps.SecureFtps
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -70,6 +73,8 @@ fun FtpsBrowseCard() {
     var page by remember { mutableStateOf<FtpsBrowsePreview?>(null) }
     var pendingFile by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var transferred by remember { mutableLongStateOf(0L) }
+    var continueCopy by remember { mutableStateOf<AtomicBoolean?>(null) }
     var status by remember {
         mutableStateOf("FTPS requires a trusted TLS certificate and encrypted data channel. No plaintext fallback.")
     }
@@ -90,31 +95,53 @@ fun FtpsBrowseCard() {
             busy = false
             status = "Session expired. The picker may have created an empty document."
         } else {
+            val permit = AtomicBoolean(true)
+            continueCopy = permit
+            transferred = 0L
             busy = true
             status = "Copying via TLS to the selected Android document. Keep the app open."
             scope.launch {
-                val receipt = withContext(Dispatchers.IO) {
-                    val active = coroutineContext[Job]
-                    FtpsToSafSave(context.contentResolver) { digest ->
-                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
-                    }.copy(
-                        live, sessionId, source, destination,
-                        continueRequested = { active?.isActive == true }
-                    )
+                try {
+                    val receipt = withContext(Dispatchers.IO) {
+                        val active = coroutineContext[Job]
+                        var lastDisplay = 0L
+                        FtpsToSafSave(context.contentResolver) { digest ->
+                            AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                        }.copy(
+                            live, sessionId, source, destination,
+                            continueRequested = { permit.get() && active?.isActive == true },
+                            onProgress = { bytes ->
+                                // Progress is written bytes, never proof of completion.
+                                if (bytes - lastDisplay >= 256L * 1024L) {
+                                    lastDisplay = bytes
+                                    transferred = bytes
+                                }
+                            }
+                        )
+                    }
+                    transferred = receipt.bytesWritten
+                    status = when (receipt.proof) {
+                        CopyProof.BYTES_VERIFIED ->
+                            "Saved: destination read-back SHA-256 matches the FTPS stream (" +
+                            receipt.bytesWritten + " bytes). Cloud sync is unverified."
+                        CopyProof.WRITE_ACKNOWLEDGED ->
+                            "Android acknowledged " + receipt.bytesWritten +
+                            " bytes, but read-back is unavailable."
+                        CopyProof.UNCERTAIN ->
+                            "Transfer stopped or uncertain. The created document may be partial."
+                        CopyProof.BLOCKED ->
+                            "Transfer blocked by metadata or permission checks. The picker may have created an empty document."
+                    }
+                } catch (_: CancellationException) {
+                    // If the screen goes away, the durable attempt is reviewed
+                    // at next launch rather than silently restarted.
+                    status = "Copy interrupted. Inspect the document before trying again."
+                } catch (_: Exception) {
+                    status = "Transfer outcome uncertain. Inspect the document before trying again."
+                } finally {
+                    continueCopy = null
+                    busy = false
                 }
-                status = when (receipt.proof) {
-                    CopyProof.BYTES_VERIFIED ->
-                        "Saved: destination read-back SHA-256 matches the FTPS stream (" +
-                        receipt.bytesWritten + " bytes). Cloud sync is unverified."
-                    CopyProof.WRITE_ACKNOWLEDGED ->
-                        "Android acknowledged " + receipt.bytesWritten +
-                        " bytes, but read-back is unavailable."
-                    CopyProof.UNCERTAIN ->
-                        "Transfer uncertain or partial. A destination document may remain."
-                    CopyProof.BLOCKED ->
-                        "Transfer blocked by metadata or permission checks. The picker may have created an empty document."
-                }
-                busy = false
             }
         }
     }
@@ -303,6 +330,18 @@ fun FtpsBrowseCard() {
                 }
                 if (page?.truncated == true) Text("Showing at most 200 entries. No hidden entry is selectable.",
                     style = MaterialTheme.typography.bodySmall)
+            }
+            if (continueCopy != null) {
+                Text("Written: " + transferred + " bytes (not yet verified)",
+                    style = MaterialTheme.typography.bodySmall)
+                Button(
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    enabled = continueCopy?.get() == true,
+                    onClick = {
+                        continueCopy?.set(false)
+                        status = "Cancellation requested. The destination may contain a partial file."
+                    }
+                ) { Text(if (continueCopy?.get() == true) "Cancel copy" else "Stopping…") }
             }
             Text(status, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 style = MaterialTheme.typography.bodySmall)
