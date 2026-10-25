@@ -1,5 +1,8 @@
 package dev.expository.transfer
 
+import android.content.ContentValues
+import android.provider.MediaStore
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -14,6 +17,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.UUID
 
 /**
  * Executes Android's actual ACTION_OPEN_DOCUMENT picker and cancels without
@@ -47,4 +51,54 @@ class LocalPickerCancelSmokeTest {
         compose.onNodeWithText("File selection canceled.").assertExists()
         compose.onNodeWithText("Save copy…").assertIsNotEnabled()
     }
+    /** Re-select then cancel: the previously granted URI must not remain active. */
+    @Test fun cancelReplacementPickerCannotShareStalePriorFile() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val name = "expository-reselection-" + UUID.randomUUID().toString().take(10) + ".txt"
+        val source = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                put(MediaStore.MediaColumns.IS_PENDING, 0)
+            }) ?: error("RESELECTION_FIXTURE_INSERT_FAILED")
+        try {
+            resolver.openOutputStream(source, "wt")!!.use {
+                it.write("Synthetic reselection-only data\\n".toByteArray())
+            }
+            compose.onNodeWithText("Choose file").performClick()
+            var item = device.wait(Until.findObject(By.text(name)), 8_000L)
+            if (item == null) {
+                (device.findObject(By.desc("Show roots"))
+                    ?: device.findObject(By.descContains("navigation")))?.click()
+                device.wait(Until.findObject(By.text("Downloads")), 8_000L)?.click()
+                item = device.wait(Until.findObject(By.text(name)), 12_000L)
+            }
+            requireNotNull(item) { "RESELECTION_FIXTURE_NOT_VISIBLE" }.click()
+            compose.waitUntil(15_000L) {
+                compose.onAllNodesWithText("File selected.", substring = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("Share…").assertIsEnabled()
+            compose.onNodeWithText("Save copy…").assertIsEnabled()
+
+            compose.onNodeWithText("Choose file").performClick()
+            val picker = device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")),
+                12_000L) || device.wait(Until.hasObject(By.pkg("com.android.documentsui")),
+                3_000L) || device.wait(Until.hasObject(By.text("Recent")), 3_000L) ||
+                device.wait(Until.hasObject(By.text("Downloads")), 3_000L)
+            assertTrue("Replacement picker did not appear", picker)
+            device.pressBack()
+            compose.waitUntil(15_000L) {
+                compose.onAllNodesWithText("File selection canceled.")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("Share…").assertIsNotEnabled()
+            compose.onNodeWithText("Save copy…").assertIsNotEnabled()
+        } finally {
+            resolver.delete(source, null, null)
+        }
+    }
+
 }
