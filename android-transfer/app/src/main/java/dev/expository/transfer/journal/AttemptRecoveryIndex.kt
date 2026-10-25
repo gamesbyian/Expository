@@ -37,11 +37,12 @@ object AttemptRecoveryIndex {
 
     fun recover(context: Context): RecoveryCounts {
         val names = context.noBackupFilesDir.listFiles()?.map { it.name }
+            ?: throw IOException("JOURNAL_DIRECTORY_UNREADABLE")
         val digests = journalDigests(names)
         var uncertain = 0
         var verified = 0
         var notStarted = 0
-        var damaged = malformedJournalCount(names!!)
+        var damaged = malformedJournalCount(names)
 
         for (digest in digests) {
             try {
