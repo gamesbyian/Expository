@@ -6,6 +6,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -52,9 +54,11 @@ class RenamePreviewUiSmokeTest {
         // cannot advertise an executable server rename or overwrite.
         rule.onNodeWithText("Uppercase").performScrollTo().performClick()
         rule.onNodeWithText("Proposed changes:", substring = true).performScrollTo()
+        rule.onNodeWithTag("rename-preview-results").performScrollToIndex(0)
         rule.onNodeWithText("EPISODE 01.mkv").assertExists()
         rule.onNodeWithText("Lowercase").performScrollTo().performClick()
         rule.onNodeWithText("Proposed changes:", substring = true).performScrollTo()
+        rule.onNodeWithTag("rename-preview-results").performScrollToIndex(0)
         rule.onNodeWithText("episode 01.mkv").assertExists()
         rule.onNodeWithText("Apply disabled.", substring = true).assertExists()
     }
