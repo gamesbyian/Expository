@@ -55,11 +55,11 @@ class RenamePreviewUiSmokeTest {
         rule.onNodeWithText("Uppercase").performScrollTo().performClick()
         rule.onNodeWithText("Proposed changes:", substring = true).performScrollTo()
         rule.onNodeWithTag("rename-preview-results").performScrollToIndex(0)
-        rule.onNodeWithText("EPISODE 01.mkv").assertExists()
+        rule.onNodeWithText("→ EPISODE 01.mkv").assertExists()
         rule.onNodeWithText("Lowercase").performScrollTo().performClick()
         rule.onNodeWithText("Proposed changes:", substring = true).performScrollTo()
         rule.onNodeWithTag("rename-preview-results").performScrollToIndex(0)
-        rule.onNodeWithText("episode 01.mkv").assertExists()
+        rule.onNodeWithText("→ episode 01.mkv").assertExists()
         rule.onNodeWithText("Apply disabled.", substring = true).assertExists()
     }
 
