@@ -6,6 +6,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,8 +23,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.expository.transfer.planner.*
 import dev.expository.transfer.journal.RecoveryStatusCard
@@ -35,6 +40,11 @@ class TransferActivity : ComponentActivity() {
             MaterialTheme { Surface { DeveloperPreview() } }
         }
     }
+}
+
+/** A single visible connection surface also disposes inactive secure sessions. */
+private enum class TransferWorkspace(val title: String) {
+    LOCAL("Local"), SFTP("SFTP"), FTPS("FTPS"), DEMO("Demo")
 }
 
 private data class DemoFile(val name: String, val size: String)
@@ -66,47 +76,75 @@ private fun DeveloperPreview() {
                 fake, fake.folder, name, ItemKind.FILE)), target,
                 destinationListing = DestinationListing("synthetic-listing-1", true, emptyList())), 0L)
     }
+    var workspace by remember { mutableStateOf(TransferWorkspace.LOCAL) }
     Scaffold { padding ->
-        // One scroll owner: at 200% font scale or short phone heights, the
-        // picker actions and receipts never disappear behind a squeezed list.
+        // One outer scroll owner. Only the active connection form is composed;
+        // switching away disposes its ephemeral session and credentials.
         LazyColumn(
             Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item { Text("Expository Transfer", style = MaterialTheme.typography.headlineMedium) }
             item {
-                Text("Experimental Local Copy, secure SFTP and FTPS Save As; other remote demo is synthetic",
+                Text("Choose where to work. Remote transfers require verified encrypted connections.",
                     style = MaterialTheme.typography.bodySmall)
             }
-            item { RecoveryStatusCard() }
-            item { LocalCopyCard() }
-            item { SftpBrowseCard() }
-            item { FtpsBrowseCard() }
-            item { Text("Demo server /demo", style = MaterialTheme.typography.titleMedium) }
-            items(demoFiles, key = { it.name }) { item ->
-                Card(Modifier.fillMaxWidth()) {
-                    Row(Modifier.fillMaxWidth().padding(8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween) {
-                        Column(Modifier.weight(1f)) {
-                            Text(item.name)
-                            Text(item.size, style = MaterialTheme.typography.bodySmall)
-                        }
-                        Button(onClick = { selected = item.name }) {
-                            Text(if (selected == item.name) "Selected" else "Select")
+            item {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    TransferWorkspace.entries.forEach { choice ->
+                        Button(
+                            modifier = Modifier.heightIn(min = 48.dp).semantics {
+                                stateDescription = if (workspace == choice) "Selected" else "Not selected"
+                            },
+                            onClick = { workspace = choice }
+                        ) {
+                            Text(if (workspace == choice) "✓ " + choice.title else choice.title)
                         }
                     }
                 }
             }
-            item {
-                if (plan == null) {
-                    Text("Choose a demo file to inspect its synthetic Copy plan.")
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Synthetic Copy proposal", style = MaterialTheme.typography.titleMedium)
-                        Text("Route: " + plan.route.name.replace('_', ' '))
-                        Text("Plan: " + plan.digest.take(12) + "…")
-                        Text("Demo execution unavailable. Live Local Copy is above.")
-                        Button(onClick = { selected = null }) { Text("Clear selection") }
+            item { RecoveryStatusCard() }
+            when (workspace) {
+                TransferWorkspace.LOCAL -> item { LocalCopyCard() }
+                TransferWorkspace.SFTP -> item { SftpBrowseCard() }
+                TransferWorkspace.FTPS -> item { FtpsBrowseCard() }
+                TransferWorkspace.DEMO -> {
+                    item {
+                        Text("Synthetic planner demo only", style = MaterialTheme.typography.titleMedium)
+                        Text("Nothing in this section connects to a server or changes files.",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    items(demoFiles, key = { it.name }) { entry ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Row(Modifier.fillMaxWidth().padding(8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(entry.name)
+                                    Text(entry.size, style = MaterialTheme.typography.bodySmall)
+                                }
+                                Button(onClick = { selected = entry.name }) {
+                                    Text(if (selected == entry.name) "Selected" else "Select")
+                                }
+                            }
+                        }
+                    }
+                    item {
+                        if (plan == null) {
+                            Text("Choose a demo file to inspect its synthetic Copy plan.")
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Synthetic Copy proposal",
+                                    style = MaterialTheme.typography.titleMedium)
+                                Text("Route: " + plan.route.name.replace('_', ' '))
+                                Text("Plan: " + plan.digest.take(12) + "…")
+                                Text("Demo execution unavailable; switch to Local, SFTP or FTPS.")
+                                Button(onClick = { selected = null }) { Text("Clear selection") }
+                            }
+                        }
                     }
                 }
             }
