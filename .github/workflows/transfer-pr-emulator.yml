@@ -80,13 +80,9 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
-          script: |
-            cd android-transfer
-            if [ -z "$TARGET_TEST_CLASS" ]; then
-              gradle -PwithAndroid=true :app:connectedDebugAndroidTest --no-daemon
-            else
-              gradle -PwithAndroid=true -Pandroid.testInstrumentationRunnerArguments.class="$TARGET_TEST_CLASS" :app:connectedDebugAndroidTest --no-daemon
-            fi
+          # The runner invokes one script string via sh -c; do not use a
+          # multi-line if block. The optional class was already allowlisted.
+          script: cd android-transfer && gradle -PwithAndroid=true ${TARGET_TEST_CLASS:+-Pandroid.testInstrumentationRunnerArguments.class=$TARGET_TEST_CLASS} :app:connectedDebugAndroidTest --no-daemon
       - name: Publish synthetic report and tested SHA
         if: always()
         shell: bash
