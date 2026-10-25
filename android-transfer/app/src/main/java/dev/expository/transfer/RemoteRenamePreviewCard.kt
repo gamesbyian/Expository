@@ -53,6 +53,8 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
         "Number" -> RenameRecipe(listOf(RenameEdit.Number(
             start = 1L, step = 1L, width = 2, separator = " ", prefix = numberAtFront
         )), extensionLocked)
+        "Uppercase" -> RenameRecipe(listOf(RenameEdit.ChangeCase(upper = true)), extensionLocked)
+        "Lowercase" -> RenameRecipe(listOf(RenameEdit.ChangeCase(upper = false)), extensionLocked)
         else -> RenameRecipe(listOf(RenameEdit.Replace(find, value)), extensionLocked)
     }
     val preview = remember(rows, selectedExisting, recipe, folder, opaqueSessionId, blocked) {
@@ -132,7 +134,8 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.fillMaxWidth()) {
-                    listOf("Replace", "Prefix", "Suffix", "Number").forEach { option ->
+                    listOf("Replace", "Prefix", "Suffix", "Number",
+                        "Uppercase", "Lowercase").forEach { option ->
                         Button(enabled = enabled, modifier = Modifier.heightIn(min = 48.dp),
                             onClick = { mode = option }) {
                             Text(if (mode == option) "•" + option else option,
@@ -145,7 +148,7 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
                         singleLine = true, enabled = enabled,
                         label = { Text("Find") })
                 }
-                if (mode != "Number") {
+                if (mode == "Replace" || mode == "Prefix" || mode == "Suffix") {
                     OutlinedTextField(value, { value = it },
                         modifier = Modifier.fillMaxWidth(), singleLine = true,
                         enabled = enabled, label = {
