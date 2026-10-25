@@ -38,6 +38,13 @@ class RenamePreviewUiSmokeTest {
         rule.onNodeWithText("Selection: 2 / 2").assertExists()
         rule.onNodeWithText("Proposed changes:", substring = true).assertExists()
         rule.onNodeWithText("Apply disabled.", substring = true).assertExists()
+        // The GUI must expose the existing immutable case-edit recipe, but it
+        // cannot advertise an executable server rename or overwrite.
+        rule.onNodeWithText("Uppercase").performClick()
+        rule.onNodeWithText("EPISODE 01.mkv").assertExists()
+        rule.onNodeWithText("Lowercase").performClick()
+        rule.onNodeWithText("episode 01.mkv").assertExists()
+        rule.onNodeWithText("Apply disabled.", substring = true).assertExists()
     }
 
     @Test fun incompleteDirectoryCannotBecomeRenamePreview() {
