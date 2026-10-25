@@ -58,6 +58,19 @@ class LocalPickerPositiveCopyTest {
             return null
         }
 
+        fun pickerIsVisible(): Boolean {
+            // Some emulator images expose DocumentsUI through a system shell
+            // package rather than the historical DocumentsUI package name.
+            // A structural DocumentsUI root label also counts, but a return
+            // to our own Activity never does.
+            val byPackage =
+                device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")), 12_000L) ||
+                device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 3_000L)
+            if (byPackage) return true
+            return device.wait(Until.hasObject(By.text("Recent")), 3_000L) ||
+                device.wait(Until.hasObject(By.text("Downloads")), 3_000L)
+        }
+
         fun enterDownloadsRoot() {
             val roots = device.findObject(By.desc("Show roots"))
                 ?: device.findObject(By.descContains("navigation"))
@@ -69,9 +82,8 @@ class LocalPickerPositiveCopyTest {
         try {
             resolver.openOutputStream(source, "wt")!!.use { it.write(bytes) }
             compose.onNodeWithText("Choose file").performClick()
-            assertTrue("Android Open Document picker must appear",
-                device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")), 15_000L)
-                    || device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 5_000L))
+            assertTrue("Android Open Document picker missing; foreground=" +
+                (device.currentPackageName ?: "none"), pickerIsVisible())
             var item = device.wait(Until.findObject(By.text(sourceName)), 5_000L)
             if (item == null) {
                 enterDownloadsRoot()
@@ -83,9 +95,8 @@ class LocalPickerPositiveCopyTest {
                     .fetchSemanticsNodes().isNotEmpty()
             }
             compose.onNodeWithText("Save copy…").performClick()
-            assertTrue("Android Create Document picker must appear",
-                device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")), 15_000L)
-                    || device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 5_000L))
+            assertTrue("Android Create Document picker missing; foreground=" +
+                (device.currentPackageName ?: "none"), pickerIsVisible())
             // Create only a fresh, random, test-owned document. Never overwrite.
             enterDownloadsRoot()
             val nameField = device.wait(
