@@ -31,12 +31,18 @@ object AttemptRecoveryIndex {
         }.distinct()
     }
 
+    /** Other app-private files are irrelevant; malformed journal records are not. */
+    internal fun malformedJournalCount(names: List<String>): Int =
+        names.count { it.startsWith("transfer_attempt_") && !filePattern.matches(it) }
+
     fun recover(context: Context): RecoveryCounts {
-        val digests = journalDigests(context.noBackupFilesDir.listFiles()?.map { it.name })
+        val names = context.noBackupFilesDir.listFiles()?.map { it.name }
+        val digests = journalDigests(names)
         var uncertain = 0
         var verified = 0
         var notStarted = 0
-        var damaged = 0
+        var damaged = malformedJournalCount(names!!)
+
         for (digest in digests) {
             try {
                 when (DurableAttemptJournal(
