@@ -48,6 +48,16 @@ and executes all Android instrumentation tests without server secrets.
 Review exact SHA and report artifact before merging. This remains E2,
 not physical device E4 or Drive acceptance.
 
+For faster, independently scoped **same-repository PR-head Android runtime**
+proof, comment `/transfer-native emulator-pr <ClassName>` where `ClassName`
+is one of the explicitly allowlisted instrumentation suites in
+`.github/workflows/transfer-pr-emulator.yml` (for example,
+`RenamePreviewUiSmokeTest` or `AndroidContentProviderCopyTest`).
+Without a class suffix, `/transfer-native emulator-pr` continues to run
+the **full** suite. Exact immutable PR SHA is checked out without persisted
+GitHub credentials or owner server secrets. Record which scope ran and
+never cite a scoped pass as a green full regression.
+
 For a **focused compile of the actual code on an unmerged PR**, comment
 `/transfer-native apk-pr` on that PR. The separate
 `.github/workflows/transfer-pr-apk.yml` resolves and verifies an immutable
