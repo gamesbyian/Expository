@@ -28,8 +28,12 @@ proof and a developer debug APK, post one exact PR comment as repository owner:
 `main` only; they cannot load proposed PR code or production credentials.
 For opt-in E2 Android emulator Compose interaction evidence (no remote
 credentials), add the exact owner-authored PR comment `/transfer-native emulator`.
-This executes the small native FTPS selector test on a disposable API 35
-emulator against trusted `main` and uploads synthetic JUnit results.
+This executes the current synthetic native suite on a disposable API 35
+emulator against trusted `main`: FTPS/SFTP Compose controls plus real Android
+MediaStore provider copy/interruption tests. [Run #40153876798](https://github.com/gamesbyian/Expository/actions/runs/40153876798)
+passed five tests; actual DocumentsUI picker navigation remains a separate
+unaccepted workflow until a specifically observed run succeeds. The job
+uploads sanitized JUnit reports.
 It requires Android SDK/network access during runner setup but makes no FTP
 connections itself. Never call this physical Pixel, TalkBack, real file
 picker/provider, or release acceptance.
