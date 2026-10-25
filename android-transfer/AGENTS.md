@@ -31,8 +31,10 @@ credentials), add the exact owner-authored PR comment `/transfer-native emulator
 This executes the current synthetic native suite on a disposable API 35
 emulator against trusted `main`: FTPS/SFTP Compose controls plus real Android
 MediaStore provider copy/interruption tests. [Run #40153876798](https://github.com/gamesbyian/Expository/actions/runs/40153876798)
-passed five tests; actual DocumentsUI picker navigation remains a separate
-unaccepted workflow until a specifically observed run succeeds. The job
+passed five provider/UI cases; [premerge emulator run #40154825166](https://github.com/gamesbyian/Expository/actions/runs/40154825166)
+then passed six tests including actual DocumentsUI ACTION_OPEN_DOCUMENT launch
+and safe cancellation. **Positive file selection, ACTION_CREATE_DOCUMENT
+completion and physical device remain unaccepted.** The job
 uploads sanitized JUnit reports.
 It requires Android SDK/network access during runner setup but makes no FTP
 connections itself. Never call this physical Pixel, TalkBack, real file
