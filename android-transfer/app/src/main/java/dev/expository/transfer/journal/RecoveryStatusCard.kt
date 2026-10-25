@@ -3,13 +3,16 @@ package dev.expository.transfer.journal
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Card
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -27,7 +30,10 @@ fun RecoveryStatusCard() {
     val context = LocalContext.current.applicationContext
     var status by remember { mutableStateOf<RecoveryCounts?>(null) }
     var unreadable by remember { mutableStateOf(false) }
-    LaunchedEffect(context) {
+    var refreshSerial by remember { mutableIntStateOf(0) }
+    LaunchedEffect(context, refreshSerial) {
+        status = null
+        unreadable = false
         val result = withContext(Dispatchers.IO) {
             runCatching { AttemptRecoveryIndex.recover(context) }
         }
@@ -53,6 +59,10 @@ fun RecoveryStatusCard() {
             )
             Text("Automatic resume and remote destination reconciliation are not implemented.",
                 style = MaterialTheme.typography.bodySmall)
+            Button(
+                modifier = Modifier.heightIn(min = 48.dp),
+                onClick = { refreshSerial++ }
+            ) { Text("Refresh transfer status") }
         }
     }
 }
