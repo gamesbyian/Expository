@@ -24,6 +24,9 @@ class RecoveryIndexFailurePolicyTest {
                 "transfer_attempt_invalid", "other_app_file")
         )
         assertEquals(listOf(digest), index)
+        assertEquals(1, AttemptRecoveryIndex.malformedJournalCount(
+            listOf("transfer_attempt_invalid", "unrelated_file",
+                "transfer_attempt_" + digest + ".new")))
         assertEquals(emptyList<String>(), AttemptRecoveryIndex.journalDigests(emptyList()))
     }
 }
