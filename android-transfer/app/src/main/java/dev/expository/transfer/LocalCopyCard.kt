@@ -151,6 +151,15 @@ fun LocalCopyCard() {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !busy, onClick = {
+                    // A cancelled replacement must never leave the previous URI
+                    // actionable under a misleading "selection canceled" status.
+                    // In-memory grants are not carried into the next pick attempt.
+                    selected = null
+                    displayName = null
+                    destinationName = null
+                    receipt = null
+                    mime = "application/octet-stream"
+                    status = "Choose a file in Android's picker."
                     open.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
                         type = "*/*"
