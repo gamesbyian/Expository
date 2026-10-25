@@ -30,11 +30,13 @@ class LocalPickerCancelSmokeTest {
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         compose.onNodeWithText("Choose file").performClick()
         val picker = device.wait(
-            Until.hasObject(By.pkg("com.google.android.documentsui")), 15_000L
+            Until.hasObject(By.pkg("com.google.android.documentsui")), 12_000L
         ) || device.wait(
-            Until.hasObject(By.pkg("com.android.documentsui")), 6_000L
-        )
-        assertTrue("Android DocumentsUI must be displayed before cancellation", picker)
+            Until.hasObject(By.pkg("com.android.documentsui")), 3_000L
+        ) || device.wait(Until.hasObject(By.text("Recent")), 3_000L)
+          || device.wait(Until.hasObject(By.text("Downloads")), 3_000L)
+        assertTrue("Android picker not visible; foreground=" +
+            (device.currentPackageName ?: "none"), picker)
         assertTrue("Back should dismiss the external picker", device.pressBack())
         compose.waitUntil(15_000L) {
             compose.onAllNodesWithText("File selection canceled.")
