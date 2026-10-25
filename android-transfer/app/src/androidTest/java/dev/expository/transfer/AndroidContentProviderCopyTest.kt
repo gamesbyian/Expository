@@ -7,6 +7,8 @@ import android.provider.MediaStore
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.expository.transfer.engine.CopyProof
+import dev.expository.transfer.engine.DurableAttemptJournal
+import dev.expository.transfer.planner.JournalState
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 import dev.expository.transfer.saf.SafSingleDocumentCopy
 import org.junit.Assert.assertArrayEquals
@@ -67,6 +69,11 @@ class AndroidContentProviderCopyTest {
             assertEquals("receipt=" + result.reason, CopyProof.BYTES_VERIFIED, result.proof)
             assertEquals(bytes.size.toLong(), result.bytesWritten)
             assertTrue(result.planDigest.matches(Regex("[0-9a-f]{64}")))
+            val verifiedJournal = DurableAttemptJournal(
+                AndroidAtomicAttemptStorage(context.applicationContext, result.planDigest)
+            ).recoverAfterRestart()
+            assertEquals("app-private journal remains verified after reopening",
+                JournalState.VERIFIED, verifiedJournal?.state)
             assertArrayEquals(bytes, read(target))
             assertArrayEquals("source must never be deleted or changed", bytes, read(source))
 
@@ -95,6 +102,11 @@ class AndroidContentProviderCopyTest {
                 }
             )
             assertEquals("receipt=" + receipt.reason, CopyProof.UNCERTAIN, receipt.proof)
+            val uncertainJournal = DurableAttemptJournal(
+                AndroidAtomicAttemptStorage(context.applicationContext, receipt.planDigest)
+            ).recoverAfterRestart()
+            assertEquals("interrupted operation must remain review-required across re-open",
+                JournalState.UNCERTAIN, uncertainJournal?.state)
             assertTrue(receipt.bytesWritten > 0L)
             assertTrue(receipt.bytesWritten < bytes.size.toLong())
             assertArrayEquals("source must survive interruption", bytes, read(source))
