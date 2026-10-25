@@ -10,6 +10,7 @@ import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.engine.DurableAttemptJournal
 import dev.expository.transfer.planner.JournalState
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
+import dev.expository.transfer.journal.AttemptRecoveryIndex
 import dev.expository.transfer.saf.SafSingleDocumentCopy
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -63,6 +64,7 @@ class AndroidContentProviderCopyTest {
         val source = createPendingFixture()
         val target = createPendingFixture()
         try {
+            val before = AttemptRecoveryIndex.recover(context.applicationContext)
             val bytes = ByteArray(131_179) { i -> ((i * 37 + 13) and 0xFF).toByte() }
             write(source, bytes)
             val result = service().copy(source, target, continueRequested = { true })
@@ -74,6 +76,9 @@ class AndroidContentProviderCopyTest {
             ).recoverAfterRestart()
             assertEquals("app-private journal remains verified after reopening",
                 JournalState.VERIFIED, verifiedJournal?.state)
+            val recovered = AttemptRecoveryIndex.recover(context.applicationContext)
+            assertTrue("startup index must discover new verified receipt",
+                recovered.verifiedReceipts >= before.verifiedReceipts + 1)
             assertArrayEquals(bytes, read(target))
             assertArrayEquals("source must never be deleted or changed", bytes, read(source))
 
@@ -91,6 +96,7 @@ class AndroidContentProviderCopyTest {
         val source = createPendingFixture()
         val target = createPendingFixture()
         try {
+            val before = AttemptRecoveryIndex.recover(context.applicationContext)
             val bytes = ByteArray(262_207) { i -> ((i * 17 + 5) and 0xFF).toByte() }
             write(source, bytes)
             val permit = AtomicBoolean(true)
@@ -107,6 +113,9 @@ class AndroidContentProviderCopyTest {
             ).recoverAfterRestart()
             assertEquals("interrupted operation must remain review-required across re-open",
                 JournalState.UNCERTAIN, uncertainJournal?.state)
+            val recovered = AttemptRecoveryIndex.recover(context.applicationContext)
+            assertTrue("startup index must require review of newly interrupted attempt",
+                recovered.requiresReview >= before.requiresReview + 1)
             assertTrue(receipt.bytesWritten > 0L)
             assertTrue(receipt.bytesWritten < bytes.size.toLong())
             assertArrayEquals("source must survive interruption", bytes, read(source))
