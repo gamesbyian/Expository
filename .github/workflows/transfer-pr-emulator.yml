@@ -44,7 +44,7 @@ jobs:
           else
             name="${REQUEST#'/transfer-native emulator-pr '}"
             case "$name" in
-              AndroidContentProviderCopyTest|FtpsUiSmokeTest|LocalPickerCancelSmokeTest|LocalPickerPositiveCopyTest|LocalPickerSourceSelectionTest|RenamePreviewUiSmokeTest|WorkspaceNavigationUiTest|RecoveryRefreshUiTest|RecoveryIndexFailurePolicyTest) ;;
+              AndroidContentProviderCopyTest|FtpsUiSmokeTest|LocalPickerCancelSmokeTest|LocalPickerPositiveCopyTest|LocalPickerSourceSelectionTest|LocalSharesheetSmokeTest|RenamePreviewUiSmokeTest|WorkspaceNavigationUiTest|RecoveryRefreshUiTest|RecoveryIndexFailurePolicyTest) ;;
               *) echo "Unsupported test selection"; exit 2 ;;
             esac
             printf 'TARGET_TEST_CLASS=dev.expository.transfer.%s\n' "$name" >> "$GITHUB_ENV"
