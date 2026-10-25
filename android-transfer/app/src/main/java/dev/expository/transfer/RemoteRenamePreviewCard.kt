@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -176,7 +177,7 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
                         style = MaterialTheme.typography.bodyMedium)
                     // Virtualized bounded rows. Preserve selection order in the
                     // snapshot; proposed numbering follows this exact order.
-                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 250.dp)) {
+                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 250.dp).testTag("rename-preview-results")) {
                         items(plan.preview, key = { it.id }) { row ->
                             Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                                 Text(row.original, style = MaterialTheme.typography.bodySmall)
