@@ -11,6 +11,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.Until
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertTrue
@@ -71,12 +72,43 @@ class LocalPickerPositiveCopyTest {
                 device.wait(Until.hasObject(By.text("Downloads")), 3_000L)
         }
 
+        fun clickByText(text: String, stage: String) {
+            repeat(5) {
+                val obj = device.wait(Until.findObject(By.text(text)), 3_000L)
+                if (obj != null) {
+                    try {
+                        obj.click()
+                        return
+                    } catch (_: StaleObjectException) {
+                        device.waitForIdle(300L)
+                    }
+                }
+            }
+            error(stage + "_ACTION_STALE_OR_MISSING")
+        }
+
+        fun editFreshDocumentName() {
+            repeat(5) {
+                val field = device.wait(Until.findObject(By.clazz("android.widget.EditText")),
+                    3_000L)
+                if (field != null) {
+                    try {
+                        field.text = targetName
+                        return
+                    } catch (_: StaleObjectException) {
+                        device.waitForIdle(300L)
+                    }
+                }
+            }
+            error("CREATE_DOCUMENT_EDIT_FIELD_STALE")
+        }
+
         fun enterDownloadsRoot() {
             val roots = device.findObject(By.desc("Show roots"))
                 ?: device.findObject(By.descContains("navigation"))
             roots?.click()
-            val root = device.wait(Until.findObject(By.text("Downloads")), 8_000L)
-            root?.click()
+            if (device.wait(Until.hasObject(By.text("Downloads")), 8_000L))
+                clickByText("Downloads", "DOWNLOADS_ROOT")
         }
 
         try {
@@ -89,7 +121,8 @@ class LocalPickerPositiveCopyTest {
                 enterDownloadsRoot()
                 item = device.wait(Until.findObject(By.text(sourceName)), 12_000L)
             }
-            requireNotNull(item) { "SYNTHETIC_SOURCE_NOT_VISIBLE_IN_PICKER" }.click()
+            requireNotNull(item) { "SYNTHETIC_SOURCE_NOT_VISIBLE_IN_PICKER" }
+            clickByText(sourceName, "SOURCE_PICKER")
             compose.waitUntil(15_000L) {
                 compose.onAllNodesWithText("File selected.", substring = true)
                     .fetchSemanticsNodes().isNotEmpty()
@@ -99,14 +132,10 @@ class LocalPickerPositiveCopyTest {
                 (device.currentPackageName ?: "none"), pickerIsVisible())
             // Create only a fresh, random, test-owned document. Never overwrite.
             enterDownloadsRoot()
-            val nameField = device.wait(
-                Until.findObject(By.clazz("android.widget.EditText")), 10_000L
-            ) ?: error("CREATE_DOCUMENT_FILENAME_FIELD_NOT_FOUND")
-            nameField.text = targetName
-            val save = device.wait(Until.findObject(By.text("Save")), 10_000L)
-                ?: device.wait(Until.findObject(By.text("SAVE")), 3_000L)
-                ?: error("CREATE_DOCUMENT_SAVE_ACTION_NOT_FOUND")
-            save.click()
+            editFreshDocumentName()
+            val saveText = if (device.wait(Until.hasObject(By.text("Save")), 5_000L))
+                "Save" else "SAVE"
+            clickByText(saveText, "CREATE_DOCUMENT_SAVE")
             compose.waitUntil(30_000L) {
                 compose.onAllNodesWithText("Receipt: BYTES_VERIFIED", substring = true)
                     .fetchSemanticsNodes().isNotEmpty()
