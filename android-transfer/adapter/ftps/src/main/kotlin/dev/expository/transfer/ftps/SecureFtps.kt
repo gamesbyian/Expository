@@ -49,7 +49,9 @@ data class FtpsFileObservation(
 /**
  * UI-only directory preview. An FTP LIST response has implementation-specific
  * parsing and is NEVER evidence for collision-free writes or destructive plans.
- * Complete here means only within a bounded UI page, not a mutation witness.
+ * "authoritative" is FALSE on truncated MLSD or legacy LIST. It is still
+ * UI metadata rather than a complete mutation witness, which must be
+ * separately observed under the immutable planner's strict preflight.
  */
 data class FtpsBrowsePreview(
     val entries: List<FtpsEntry>,
@@ -216,7 +218,8 @@ class FtpsSession internal constructor(private val client: FTPSClient) : AutoClo
         val entries = result.getOrNull()
         if (entries != null && entries.isNotEmpty()) {
             return FtpsBrowsePreview(entries.take(maxEntries),
-                "MLSD", authoritative = true, truncated = entries.size > maxEntries)
+                "MLSD", authoritative = entries.size <= maxEntries,
+                truncated = entries.size > maxEntries)
         }
         val failure = result.exceptionOrNull()
         if (failure != null) {
