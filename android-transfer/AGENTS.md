@@ -11,7 +11,7 @@ Read `../AGENTS.md`, `../docs/android-transfer/HARDENED-IMPLEMENTATION-PLAN.md`,
 - Pure planner contains no Android types or I/O. UI/drag/button only generate a reviewable immutable plan. Executor, durable queue, live adapters and receipt grades belong to later gates.
 - Unknown/stale capabilities block unsafe native moves and deletes. Copy cannot call rename. Reconciliation is mandatory for uncertain writes.
 - Google Drive Save, Docs conversion, external Open and Share handoff have different destinations, confirmation and receipt meanings.
-- The historical G0 shell was synthetic-only. Current G2/G4 code performs foreground SAF Copy and pinned SFTP Save As/Upload, with app-private journaled pre-write attempts in PR #42. Device installation, process-death recovery and provider-specific acceptance remain unproven. Do not confuse compiled APKs or synthetic server labs with real device acceptance.
+- The historical G0 shell was synthetic-only. Current G2/G4 code performs foreground SAF Copy and pinned SFTP Save As/Upload, with app-private journaled pre-write attempts merged in PR #42. Scoped local Android Open/Save, outbound Open/Share and incoming one-file Share are present; upload-to-SFTP requires explicit user action and a pinned authenticated session. Device installation, process-death recovery and provider-specific acceptance remain unproven. Do not confuse compiled APKs or synthetic server labs with real device acceptance.
 
 ## Workflow autonomy and real-server evidence
 Agents may trigger the repository's opt-in workflows after reviewing their
@@ -39,8 +39,7 @@ and selected-document Sharesheet launch/cancel [#40246907565](https://github.com
 **Physical devices, real Google Drive/Docs recipients, external provider grants
 and full emulator-suite regression remain unaccepted.** Runs upload sanitized reports.
 It requires Android SDK/network access during runner setup but makes no FTP
-connections itself. Never call this physical Pixel, TalkBack, real file
-picker/provider, or release acceptance.
+connections itself. Never call this physical Pixel, TalkBack, Google Drive/Docs provider, authenticated Android SFTP upload, or release acceptance. The specific emulator tests do exercise the real Android DocumentsUI picker and disposable local MediaStore content.
 
 For a **real API 35 emulator test of an unmerged same-repository PR**, use
 the exact owner-authored comment `/transfer-native emulator-pr` on that PR.
