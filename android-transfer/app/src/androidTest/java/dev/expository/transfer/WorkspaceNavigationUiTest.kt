@@ -50,6 +50,41 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("Copy a file on this device").assertExists()
         compose.onNodeWithText("Sample episode.mkv").assertDoesNotExist()
     }
+    @Test fun dualModeHasRealIndependentDevicePanesButNoImplicitTransfer() {
+        compose.onNodeWithText("✓ Single view").assertExists()
+        compose.onNodeWithText("Dual view").performClick()
+        compose.onNodeWithText("✓ Dual view").assertExists()
+        compose.onNodeWithText("Dual-location workspace").assertExists()
+
+        compose.onNodeWithText("Device ↔ Device").performClick()
+        compose.onNodeWithText("Location A · Device").assertExists()
+        compose.onNodeWithText("Choose folder").assertExists()
+        compose.onNodeWithText("Selected: 0").assertExists()
+        compose.onNodeWithText("Pane B · LOCAL").performClick()
+        compose.onNodeWithText("Location B · Device").assertExists()
+        compose.onNodeWithText("Selected: 0").assertExists()
+        // Swapping preserves the separately chosen navigation slot, and
+        // changes which pane is focused on a phone-width screen.
+        compose.onNodeWithText("Swap A and B").performClick()
+        compose.onNodeWithText("Location A · Device").assertExists()
+
+        compose.onNodeWithText("Device ↔ Server").performClick()
+        compose.onNodeWithText("Pane B · SFTP").performClick()
+        compose.onNodeWithText("Location B · SFTP").assertExists()
+        compose.onNodeWithText("Secure remote dual-pane connection pending.",
+            substring = true).assertExists()
+        compose.onNodeWithText("Copy A → B, Copy B → A and Move are unavailable",
+            substring = true).assertExists()
+        compose.onNodeWithText("Single view").performClick()
+        compose.onNodeWithText("✓ Single view").assertExists()
+        compose.onNodeWithText("Copy a file on this device").assertExists()
+        compose.onNodeWithText("SFTP").performClick()
+        compose.onNodeWithText("SFTP file transfer").assertExists()
+        compose.onNodeWithText("Dual view").performClick()
+        compose.onNodeWithText("✓ Dual view").assertExists()
+        compose.onNodeWithText("Location B · SFTP").assertExists()
+    }
+
     @Test fun incomingShareOffersSftpDestinationWithoutSilentUpload() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val resolver = context.contentResolver
