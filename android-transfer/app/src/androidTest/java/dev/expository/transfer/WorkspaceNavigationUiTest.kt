@@ -73,7 +73,9 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("Location B · SFTP").assertExists()
         compose.onNodeWithText("Secure remote dual-pane connection pending.",
             substring = true).assertExists()
-        compose.onNodeWithText("Copy A → B, Copy B → A and Move are unavailable",
+        compose.onNodeWithText("Copy A → B…").assertIsNotEnabled()
+        compose.onNodeWithText("Copy B → A…").assertIsNotEnabled()
+        compose.onNodeWithText("Move and remote cross-pane transfers are unavailable.",
             substring = true).assertExists()
         compose.onNodeWithText("Single view").performClick()
         compose.onNodeWithText("✓ Single view").assertExists()

@@ -22,6 +22,7 @@ import dev.expository.transfer.planner.BrowseEndpoint
 import dev.expository.transfer.planner.DualPairing
 import dev.expository.transfer.planner.TransferWorkspaceState
 import dev.expository.transfer.planner.WorkspacePane
+import dev.expository.transfer.saf.TreeCopyPreflight
 
 /**
  * UI for two independently configured locations.
@@ -29,7 +30,7 @@ import dev.expository.transfer.planner.WorkspacePane
  * Local trees are backed by real read-scoped Android DocumentsProviders.
  * Remote dual endpoints intentionally require a future pinned-auth session
  * controller; the existing working remote *single* screen remains accessible.
- * No dual-view action mutates either location.
+ * Only explicit, journaled and verified local→local Copy can mutate the destination.
  */
 @Composable
 internal fun DualWorkspaceCard(
@@ -44,12 +45,19 @@ internal fun DualWorkspaceCard(
     onFocus: (WorkspacePane) -> Unit,
     onPick: (WorkspacePane) -> Unit,
     onNavigate: (WorkspacePane, List<TreeCrumb>) -> Unit,
-    onSelect: (WorkspacePane, TreeEntry) -> Unit
+    onSelect: (WorkspacePane, TreeEntry) -> Unit,
+    busy: Boolean,
+    copyStatus: String,
+    proposedCopy: TreeCopyPreflight?,
+    onCopy: (WorkspacePane) -> Unit,
+    onConfirmCopy: () -> Unit,
+    onCancelCopy: () -> Unit,
+    onStopCopy: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Dual-location workspace", style = MaterialTheme.typography.titleLarge)
         Text(
-            "A and B retain separate locations and selections. Device folders are live, read-only SAF views; remote dual connections and cross-pane transfer execution are not yet available.",
+            "A and B retain separate locations and selections. One-file Device-to-Device Copy requires explicit preflight, a writable folder grant and confirmation. Remote dual connections and Move are not yet available.",
             style = MaterialTheme.typography.bodySmall
         )
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -59,11 +67,11 @@ internal fun DualWorkspaceCard(
                 DualPairing.LOCAL_REMOTE to "Device ↔ Server",
                 DualPairing.REMOTE_REMOTE to "Server ↔ Server"
             )) {
-                Button(modifier = Modifier.heightIn(min = 48.dp),
+                Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !busy,
                     onClick = { onPreset(pairing) }) { Text(title) }
             }
         }
-        Button(modifier = Modifier.heightIn(min = 48.dp),
+        Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !busy,
             onClick = onSwap) { Text("Swap A and B") }
 
         @Composable
@@ -77,6 +85,7 @@ internal fun DualWorkspaceCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     for (endpoint in BrowseEndpoint.entries) {
                         Button(
+                            enabled = !busy,
                             modifier = Modifier.heightIn(min = 48.dp).semantics {
                                 stateDescription = if (pane.endpoint == endpoint)
                                     "Selected" else "Not selected"
@@ -91,6 +100,7 @@ internal fun DualWorkspaceCard(
                         label = "Location " + which.name,
                         state = tree,
                         scroll = scroll,
+                        enabled = !busy,
                         onPick = { onPick(which) },
                         onOpen = { entry ->
                             onNavigate(which, tree.crumbs +
@@ -121,6 +131,7 @@ internal fun DualWorkspaceCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     for (pane in listOf(WorkspacePane.A, WorkspacePane.B)) {
                         Button(
+                            enabled = !busy,
                             modifier = Modifier.heightIn(min = 48.dp).semantics {
                                 stateDescription =
                                     if (workspace.activeDual == pane) "Selected"
@@ -146,7 +157,45 @@ internal fun DualWorkspaceCard(
                 }
             }
         }
-        Text("Copy A → B, Copy B → A and Move are unavailable until both endpoints have fresh capabilities, complete destination listings and the same reviewed journaled executor.",
+        val bothLocal = workspace.a.endpoint == BrowseEndpoint.LOCAL &&
+            workspace.b.endpoint == BrowseEndpoint.LOCAL
+        val readyA = bothLocal && a.selected.size == 1 && a.treeUri != null &&
+            b.treeUri != null && b.canWrite && a.complete && b.complete
+        val readyB = bothLocal && b.selected.size == 1 && b.treeUri != null &&
+            a.treeUri != null && a.canWrite && a.complete && b.complete
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Button(enabled = !busy && proposedCopy == null && readyA,
+                modifier = Modifier.heightIn(min = 48.dp),
+                onClick = { onCopy(WorkspacePane.A) }) { Text("Copy A → B…") }
+            Button(enabled = !busy && proposedCopy == null && readyB,
+                modifier = Modifier.heightIn(min = 48.dp),
+                onClick = { onCopy(WorkspacePane.B) }) { Text("Copy B → A…") }
+        }
+        if (proposedCopy != null) {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Review Device Copy", style = MaterialTheme.typography.titleMedium)
+                    Text("File: " + proposedCopy.sourceName)
+                    Text("Route: Device → Device · Copy original; never delete source")
+                    Text("Plan: " + proposedCopy.plan.digest.take(12) + "…")
+                    Text("A new destination document will be created only after plan revalidation and a durable attempt journal. No overwrite. On partial failure the destination may need inspection.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = onConfirmCopy) { Text("Confirm Copy") }
+                        Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = onCancelCopy) { Text("Cancel proposal") }
+                    }
+                }
+            }
+        }
+        if (busy) Button(onClick = onStopCopy, modifier = Modifier.heightIn(min = 48.dp)) {
+            Text("Cancel transfer")
+        }
+        Text(copyStatus, style = MaterialTheme.typography.bodySmall)
+        Text("Move and remote cross-pane transfers are unavailable. Folder listings may be incomplete, and no write starts before explicit reviewed confirmation.",
             style = MaterialTheme.typography.bodySmall)
     }
 }
