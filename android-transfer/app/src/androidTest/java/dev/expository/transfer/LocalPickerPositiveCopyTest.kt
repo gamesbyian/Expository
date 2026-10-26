@@ -284,13 +284,21 @@ class LocalPickerPositiveCopyTest {
             }
             check(saved) { "RACE_SAVE_ACTION_STALE" }
             compose.waitUntil(20_000L) {
-                // Composition is paused while DocumentsUI owns the screen.
-                // Transiently absent semantics are not themselves a failure.
+                // The blocked-result status is intentionally transient: the
+                // deferred Compose effect for incoming Share B may immediately
+                // replace it with the new source's ordinary display status.
+                // Neither status may authorize a copy of frozen source A.
                 runCatching {
                     compose.onAllNodesWithText("Source selection changed while Save As was open.",
-                        substring = true).fetchSemanticsNodes().isNotEmpty()
+                        substring = true).fetchSemanticsNodes().isNotEmpty() ||
+                    compose.onAllNodesWithText("Source: " + bName)
+                        .fetchSemanticsNodes().isNotEmpty()
                 }.getOrDefault(false)
             }
+            compose.waitForIdle()
+            assertTrue("A stale picker may not start a foreground streaming job",
+                compose.onAllNodesWithText("Streaming:", substring = true)
+                    .fetchSemanticsNodes().isEmpty())
             assertTrue("An accidental copy cannot produce a success receipt",
                 compose.onAllNodesWithText("Receipt: BYTES_VERIFIED", substring = true)
                     .fetchSemanticsNodes().isEmpty())
