@@ -217,4 +217,82 @@ class LocalSharesheetSmokeTest {
         }
     }
 
+    @Test fun androidInboundShareToNewSaveDocumentVerifiesCopiedBytes() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val tag = UUID.randomUUID().toString().take(10)
+        val srcName = "expository-inboundcopy-" + tag + ".txt"
+        val targetName = "expository-inbound-saved-" + tag + ".txt"
+        val bytes = ByteArray(131_099) { i -> ((i * 29 + 3) and 255).toByte() }
+        val source = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, srcName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                put(MediaStore.MediaColumns.IS_PENDING, 0)
+            }) ?: error("INBOUND_COPY_SOURCE_INSERT_FAILED")
+        fun findTarget(): Uri? {
+            resolver.query(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.MediaColumns._ID),
+                "${MediaStore.MediaColumns.DISPLAY_NAME}=?",
+                arrayOf(targetName), null)?.use { rows ->
+                if (rows.moveToFirst()) {
+                    return Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        rows.getLong(0).toString())
+                }
+            }
+            return null
+        }
+        try {
+            resolver.openOutputStream(source, "wt")!!.use { it.write(bytes) }
+            compose.activity.startActivity(
+                Intent(compose.activity, TransferActivity::class.java).apply {
+                    action = Intent.ACTION_SEND
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_STREAM, source)
+                    clipData = ClipData.newUri(resolver, "Synthetic inbound copy", source)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                }
+            )
+            compose.waitUntil(15_000L) {
+                compose.onAllNodesWithText("Document received from Android Share.",
+                    substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("Save copy…").performClick()
+            val picker = device.wait(
+                Until.hasObject(By.pkg("com.google.android.documentsui")), 12_000L
+            ) || device.wait(
+                Until.hasObject(By.pkg("com.android.documentsui")), 3_000L
+            ) || device.wait(Until.hasObject(By.text("Save")), 3_000L) ||
+                device.currentPackageName == "android"
+            assertTrue("Android Create Document picker must open", picker)
+            (device.findObject(By.desc("Show roots"))
+                ?: device.findObject(By.descContains("navigation")))?.click()
+            device.wait(Until.findObject(By.text("Downloads")), 8_000L)?.click()
+            val field = device.wait(Until.findObject(By.clazz("android.widget.EditText")),
+                10_000L) ?: error("INBOUND_SAVE_FIELD_NOT_FOUND")
+            field.text = targetName
+            (device.wait(Until.findObject(By.text("Save")), 5_000L)
+                ?: device.wait(Until.findObject(By.text("SAVE")), 3_000L)
+                ?: error("INBOUND_SAVE_BUTTON_NOT_FOUND")).click()
+            compose.waitUntil(30_000L) {
+                compose.onAllNodesWithText("Receipt: BYTES_VERIFIED", substring = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("Destination: " + targetName).assertExists()
+            assertArrayEquals("incoming share source must be preserved", bytes,
+                resolver.openInputStream(source)!!.use { it.readBytes() })
+            // SAF may not expose this new URI in MediaStore; if it does,
+            // independently verify the mirrored bytes too.
+            findTarget()?.let { target ->
+                assertArrayEquals(bytes,
+                    resolver.openInputStream(target)!!.use { it.readBytes() })
+            }
+        } finally {
+            findTarget()?.let { resolver.delete(it, null, null) }
+            resolver.delete(source, null, null)
+        }
+    }
+
 }
