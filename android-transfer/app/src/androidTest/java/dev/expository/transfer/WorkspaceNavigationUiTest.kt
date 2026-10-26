@@ -26,6 +26,132 @@ import java.util.UUID
 class WorkspaceNavigationUiTest {
     @get:Rule val compose = createAndroidComposeRule<TransferActivity>()
 
+    /**
+     * True E2 journey: two Android system-picked folder grants, two disposable
+     * MediaStore-owned subfolders, Copy through DocumentsContract.createDocument
+     * and readback. No server, personal files, fake success banner, or cloud.
+     */
+    @Test fun twoRealSystemPickedTreesCopyExactBytesAndPreserveSource() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        val device = androidx.test.uiautomator.UiDevice.getInstance(
+            InstrumentationRegistry.getInstrumentation())
+        val suffix = UUID.randomUUID().toString().take(10)
+        val sourceDir = "Expository-source-" + suffix
+        val destDir = "Expository-target-" + suffix
+        val sourceName = "expository-from-" + suffix + ".txt"
+        val markerName = "expository-marker-" + suffix + ".txt"
+        val content = ByteArray(131_099) { i -> ((i * 41 + 11) and 255).toByte() }
+        fun fixture(name: String, dir: String, bytes: ByteArray): Uri {
+            val item = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH,
+                        "Download/" + dir + "/")
+                    put(MediaStore.MediaColumns.IS_PENDING, 0)
+                }) ?: error("TREE_FIXTURE_INSERT_FAILED")
+            resolver.openOutputStream(item, "wt")!!.use { it.write(bytes) }
+            return item
+        }
+        fun findTarget(): Uri? {
+            resolver.query(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.MediaColumns._ID),
+                "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND " +
+                    "${MediaStore.MediaColumns.RELATIVE_PATH}=?",
+                arrayOf(sourceName, "Download/" + destDir + "/"), null)?.use { cursor ->
+                if (cursor.moveToFirst())
+                    return Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        cursor.getLong(0).toString())
+            }
+            return null
+        }
+        fun tapText(label: String, stage: String) {
+            repeat(5) {
+                val obj = device.wait(androidx.test.uiautomator.Until.findObject(
+                    androidx.test.uiautomator.By.text(label)), 2_500L)
+                if (obj != null && runCatching { obj.click() }.isSuccess) return
+                device.waitForIdle(250L)
+            }
+            error(stage + "_MISSING")
+        }
+        fun tapOneOf(labels: List<String>, stage: String): Boolean {
+            for (name in labels) {
+                val obj = device.wait(androidx.test.uiautomator.Until.findObject(
+                    androidx.test.uiautomator.By.text(name)), 1_500L)
+                if (obj != null && runCatching { obj.click() }.isSuccess) return true
+            }
+            return false
+        }
+        fun pickFolder(folder: String) {
+            compose.onNodeWithText("Choose folder").performClick()
+            val pickerVisible = device.wait(androidx.test.uiautomator.Until.hasObject(
+                androidx.test.uiautomator.By.pkg("com.google.android.documentsui")), 12_000L) ||
+                device.wait(androidx.test.uiautomator.Until.hasObject(
+                    androidx.test.uiautomator.By.pkg("com.android.documentsui")), 3_000L)
+            assertTrue("Android DocumentsUI must own tree-picker step", pickerVisible)
+            val roots = device.findObject(androidx.test.uiautomator.By.desc("Show roots"))
+                ?: device.findObject(androidx.test.uiautomator.By.descContains("navigation"))
+            roots?.click()
+            if (device.wait(androidx.test.uiautomator.Until.hasObject(
+                    androidx.test.uiautomator.By.text("Downloads")), 8_000L)) {
+                tapText("Downloads", "TREE_DOWNLOADS_ROOT")
+            }
+            tapText(folder, "TREE_SUBFOLDER")
+            assertTrue("The test's synthetic subfolder must be selectable",
+                tapOneOf(listOf("Use this folder", "USE THIS FOLDER"),
+                    "TREE_USE_THIS_FOLDER"))
+            // Stock Android asks for an additional grant confirmation. Other
+            // providers can return directly; do not invent a grant if absent.
+            tapOneOf(listOf("Allow", "ALLOW"), "TREE_ALLOW_GRANT")
+            compose.waitUntil(25_000L) {
+                compose.onAllNodesWithText("Folder opened. Scoped Android browser",
+                    substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+        }
+
+        val source = fixture(sourceName, sourceDir, content)
+        val marker = fixture(markerName, destDir, byteArrayOf(7, 11, 17))
+        try {
+            compose.onNodeWithText("Dual view").performClick()
+            compose.onNodeWithText("Device ↔ Device").performClick()
+            pickFolder(sourceDir)
+            compose.onNodeWithText(sourceName).assertExists()
+            compose.onNodeWithText("Select").performClick()
+            compose.onNodeWithText("Selected: 1").assertExists()
+            compose.onNodeWithText("Pane B · LOCAL").performClick()
+            pickFolder(destDir)
+            compose.onNodeWithText(markerName).assertExists()
+            val before = dev.expository.transfer.journal.AttemptRecoveryIndex.recover(context)
+            compose.onNodeWithText("Copy A → B…").performClick()
+            compose.waitUntil(30_000L) {
+                compose.onAllNodesWithText("Review Device Copy").fetchSemanticsNodes()
+                    .isNotEmpty()
+            }
+            compose.onNodeWithText("Confirm Copy").performClick()
+            compose.waitUntil(45_000L) {
+                compose.onAllNodesWithText("Copy verified:", substring = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            val after = dev.expository.transfer.journal.AttemptRecoveryIndex.recover(context)
+            assertTrue("One new byte-verified copy receipt required",
+                after.verifiedReceipts >= before.verifiedReceipts + 1)
+            org.junit.Assert.assertArrayEquals(
+                "Source must remain byte-identical", content,
+                resolver.openInputStream(source)!!.use { it.readBytes() })
+            findTarget()?.let { result ->
+                org.junit.Assert.assertArrayEquals(
+                    "MediaStore mirror must also be exact if indexed", content,
+                    resolver.openInputStream(result)!!.use { it.readBytes() })
+            }
+        } finally {
+            if (device.currentPackageName != context.packageName) device.pressBack()
+            findTarget()?.let { runCatching { resolver.delete(it, null, null) } }
+            resolver.delete(marker, null, null)
+            resolver.delete(source, null, null)
+        }
+    }
+
     @Test fun secureWorkspacesStayDistinctAndSyntheticFilesRequireDemoTab() {
         compose.onNodeWithText("✓ Local").assertExists()
         compose.onNodeWithText("Copy a file on this device").assertExists()
