@@ -201,9 +201,9 @@ class LocalSharesheetSmokeTest {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
             }
-            // Exercise Activity's same-instance incoming-share callback
-            // without launching a second Activity that outlives ComposeRule.
-            compose.runOnUiThread { compose.activity.onNewIntent(inbound) }
+            // Ingest a real scoped share payload without creating any
+            // artificial Android activity lifecycle transitions.
+            compose.runOnUiThread { compose.activity.ingestIncomingShare(inbound) }
             compose.waitUntil(15_000L) {
                 compose.onAllNodesWithText("Document received from Android Share.",
                     substring = true).fetchSemanticsNodes().isNotEmpty()
@@ -254,7 +254,7 @@ class LocalSharesheetSmokeTest {
                 clipData = ClipData.newUri(resolver, "Synthetic inbound copy", source)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            compose.runOnUiThread { compose.activity.onNewIntent(inbound) }
+            compose.runOnUiThread { compose.activity.ingestIncomingShare(inbound) }
             compose.waitUntil(15_000L) {
                 compose.onAllNodesWithText("Document received from Android Share.",
                     substring = true).fetchSemanticsNodes().isNotEmpty()
