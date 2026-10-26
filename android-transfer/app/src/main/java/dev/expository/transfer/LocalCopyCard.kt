@@ -180,6 +180,24 @@ fun LocalCopyCard() {
                     enabled = !busy && selected != null,
                     onClick = {
                         val source = selected ?: return@Button
+                        try {
+                            val outbound = LocalDocumentHandoff.openWith(
+                                context.contentResolver, source, mime
+                            )
+                            context.startActivity(Intent.createChooser(
+                                outbound, "Open selected document"
+                            ))
+                            status = "Android app chooser launched. Opening externally is not a copy, upload or Docs conversion."
+                        } catch (_: Exception) {
+                            status = "No compatible external editor opened this document. Choose another app or save a copy."
+                        }
+                    }
+                ) { Text("Open with…") }
+                Button(
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    enabled = !busy && selected != null,
+                    onClick = {
+                        val source = selected ?: return@Button
                         // Sharesheet resolves access only for the user-selected
                         // destination app. No internal copies, implicit upload,
                         // source mutation or broad storage permissions.
@@ -220,6 +238,7 @@ fun LocalCopyCard() {
                     style = MaterialTheme.typography.labelMedium)
                 if (destinationName != null) Text("Destination: " + destinationName)
             }
+            Text("Open with uses the system's compatible apps, including Docs if installed. It does not create a Google Doc or verify an upload.", style = MaterialTheme.typography.bodySmall)
             Text("Foreground copy now journals its attempt before writing. Interruption can leave a partial document requiring review. Automatic resumption and Drive cloud synchronization are not verified.",
                 style = MaterialTheme.typography.bodySmall)
         }
