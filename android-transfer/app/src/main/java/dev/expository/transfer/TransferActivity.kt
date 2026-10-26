@@ -233,6 +233,8 @@ private fun DeveloperPreview(
             ))
             return
         }
+        // A new OS-picked tree invalidates any previous Copy approval.
+        proposedCopy = null
         // No takePersistableUriPermission; no serialized grants or implicit
         // access after process recreation. User can explicitly choose again.
         readTree(which, uri, listOf(TreeCrumb(rootId, "Chosen folder")),
