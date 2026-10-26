@@ -1,6 +1,6 @@
 # Expository Transfer: adversarial product and engineering review
 
-**Review date:** 23 October 2026 · **Status:** review decisions for the Android-native companion; **not working Android code**  
+**Review date:** 23 October 2026 · **Status:** historical adversarial *design* review. Native implementation now exists; this review itself is not implementation or acceptance evidence. See [current contract](CURRENT-CONTRACT.md) and [release ledger](RELEASE-READINESS.md).  
 **Applies to:** [original landscape](EXPLORATORY-REPORT.md), [product proposal](PRODUCT-PROPOSAL.md), [three-way workspace and renamer](WORKSPACE-AND-BULK-RENAME.md), [Drive/Docs integration](GOOGLE-DRIVE-INTEGRATION.md).  
 **Decision owner:** integration / product; implementation gates in [Hardened plan](HARDENED-IMPLEMENTATION-PLAN.md).
 

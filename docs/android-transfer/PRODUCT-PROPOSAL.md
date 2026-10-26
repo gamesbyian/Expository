@@ -1,6 +1,6 @@
 # Expository Transfer · Android-native product proposal
 
-**Status: critically reviewed planning baseline; no native app or APK has been built**  
+**Status: original critically reviewed product vision (23 October 2026); native Kotlin/Compose and developer debug APK have since been built. Current implementation evidence is in the [release ledger](RELEASE-READINESS.md) and requirements in the [current contract](CURRENT-CONTRACT.md).**  
 **Date: 23 October 2026**  
 **Companion evidence:** [competitive and engineering research](EXPLORATORY-REPORT.md)
 

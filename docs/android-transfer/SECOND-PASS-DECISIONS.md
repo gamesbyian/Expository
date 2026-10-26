@@ -1,6 +1,6 @@
 # Expository Transfer: second-pass design decisions
 
-**23 October 2026. Status: proposal and acceptance rules, not implemented Android software.** This supplements [the existing critical review](CRITICAL-REVIEW.md), [hardened plan](HARDENED-IMPLEMENTATION-PLAN.md), [workspace/renamer specification](WORKSPACE-AND-BULK-RENAME.md) and [Google Drive contract](GOOGLE-DRIVE-INTEGRATION.md). The previous session's documents are present on main.
+**23 October 2026 design baseline. Status: these are proposed acceptance rules, while native Android code has subsequently shipped as a developer preview.** See [current contract](CURRENT-CONTRACT.md) and [release ledger](RELEASE-READINESS.md) for actual scope/proof. This supplements [the existing critical review](CRITICAL-REVIEW.md), [hardened plan](HARDENED-IMPLEMENTATION-PLAN.md), [workspace/renamer specification](WORKSPACE-AND-BULK-RENAME.md) and [Google Drive contract](GOOGLE-DRIVE-INTEGRATION.md). The previous session's documents are present on main.
 
 ## Product decision
 
@@ -32,4 +32,4 @@ The bulk renamer's 393dp sheet shows operation chips (Replace, Number, Prefix/su
 - [Android background data-transfer choices](https://developer.android.com/develop/background-work/background-tasks/data-transfer-options): select user-initiated transfer jobs or deferrable work by actual conditions; no indefinite background uptime promise.
 - Existing [adversarial review](CRITICAL-REVIEW.md) defines stricter proof-grade and retry rules, which still take precedence.
 
-**No code, APK, Drive authorization, protocol interop, phone test or visual acceptance is implied by this proposal.** Engineering ownership continues in #25–#28.
+**This design document alone supplies no code, APK, Drive authorization, protocol interop, phone test or visual acceptance proof.** Later native APK and controlled-protocol tests are separately linked in the [release ledger](RELEASE-READINESS.md); Drive delivery, physical acceptance and complete workspace remain unverified. Engineering ownership continues in #25–#28.
