@@ -14,7 +14,8 @@ import android.net.Uri
 internal object ScopedUploadPicker {
     const val MAX_DOCUMENTS = 12
 
-    fun documents(result: Intent?): List<Uri>? = try {
+    fun documents(result: Intent?): List<Uri>? {
+        return try {
         val clips = result?.clipData
         val uris = if (clips != null) {
             if (clips.itemCount !in 1..MAX_DOCUMENTS) return null
@@ -29,9 +30,9 @@ internal object ScopedUploadPicker {
                     it.authority.isNullOrBlank()
             }) null
         else uris
-    } catch (_: RuntimeException) {
-        // Malformed Parcelable or provider-controlled ClipData is rejected
-        // without dispatching a remote write.
-        null
+        } catch (_: RuntimeException) {
+            // Malformed parcelled picker data cannot trigger any remote write.
+            null
+        }
     }
 }
