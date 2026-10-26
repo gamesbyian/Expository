@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.expository.transfer.planner.*
 import dev.expository.transfer.journal.RecoveryStatusCard
+import java.util.concurrent.atomic.AtomicLong
 
 /** Android-native picker-first transfer shell; synthetic planner stays isolated in Demo. */
 data class IncomingShareRequest(
@@ -43,7 +44,14 @@ data class IncomingShareRequest(
 
 /** Inbound user share is transient; source URIs are never persisted. */
 class TransferActivity : ComponentActivity() {
+    companion object {
+        // Multiple Activity instances can exist while DocumentsUI is on top.
+        // Share changes invalidate old picker requests across this process.
+        private val processShareEpoch = AtomicLong(0L)
+    }
     private var nextShareSequence = 0L
+    /** Synchronous, process-wide and never persisted across launches. */
+    val incomingShareEpoch: Long get() = processShareEpoch.get()
     private val pendingShare = mutableStateOf<IncomingShareRequest?>(null)
 
     /** Isolated share ingestion: OS lifecycle delegates to this method. */
@@ -51,6 +59,7 @@ class TransferActivity : ComponentActivity() {
         if (inbound.action != Intent.ACTION_SEND &&
             inbound.action != Intent.ACTION_SEND_MULTIPLE) return
         nextShareSequence++
+        processShareEpoch.incrementAndGet()
         pendingShare.value = IncomingShareRequest(
             if (inbound.action == Intent.ACTION_SEND) IncomingShareParser.parse(inbound)
                 else null,
@@ -65,7 +74,9 @@ class TransferActivity : ComponentActivity() {
         if (intent?.action == Intent.ACTION_SEND ||
             intent?.action == Intent.ACTION_SEND_MULTIPLE) ingestIncomingShare(intent)
         setContent {
-            MaterialTheme { Surface { DeveloperPreview(pendingShare.value) } }
+            MaterialTheme { Surface {
+                DeveloperPreview(pendingShare.value) { incomingShareEpoch }
+            } }
         }
     }
 
@@ -89,7 +100,9 @@ private val demoFiles = listOf(
 )
 
 @Composable
-private fun DeveloperPreview(incomingShare: IncomingShareRequest?) {
+private fun DeveloperPreview(
+    incomingShare: IncomingShareRequest?, currentShareEpoch: () -> Long
+) {
     var selected by androidx.compose.runtime.remember { mutableStateOf<String?>(null) }
     val proof = CapabilityProof(Support.SUPPORTED, "synthetic-only", Long.MAX_VALUE)
     val fake = LocationRef(
@@ -150,7 +163,9 @@ private fun DeveloperPreview(incomingShare: IncomingShareRequest?) {
             }
             item { RecoveryStatusCard() }
             when (workspace) {
-                TransferWorkspace.LOCAL -> item { LocalCopyCard(incomingShare) }
+                TransferWorkspace.LOCAL -> item {
+                    LocalCopyCard(incomingShare, currentShareEpoch)
+                }
                 TransferWorkspace.SFTP -> item { SftpBrowseCard(incomingShare) }
                 TransferWorkspace.FTPS -> item { FtpsBrowseCard() }
                 TransferWorkspace.DEMO -> {
