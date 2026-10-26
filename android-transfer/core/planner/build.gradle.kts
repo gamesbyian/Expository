@@ -25,3 +25,11 @@ tasks.register<JavaExec>("moveScenarios") {
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("dev.expository.transfer.planner.SftpMoveSuite")
 }
+
+tasks.register<JavaExec>("workspaceScenarios") {
+    group = "verification"
+    description = "Pure E1 single/dual independent workspace navigation and plan parity"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.planner.WorkspaceStateSuite")
+}
