@@ -2,6 +2,7 @@ package dev.expository.transfer
 
 import android.content.ClipData
 import android.content.ContentValues
+import android.net.Uri
 import android.content.Intent
 import android.provider.MediaStore
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -11,6 +12,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -78,6 +81,51 @@ class WorkspaceNavigationUiTest {
         } finally {
             resolver.delete(source, null, null)
         }
+    }
+
+
+    /** Android intent parsing is bounded before any authenticated mutation. */
+    @Test fun scopedUploadPickerAcceptsOneOrManyAndRejectsUnsafeBatches() {
+        val a = Uri.parse("content://synthetic.example/a")
+        val b = Uri.parse("content://synthetic.example/b")
+        assertEquals(listOf(a),
+            ScopedUploadPicker.documents(Intent().apply { data = a }))
+        assertNull(ScopedUploadPicker.documents(null))
+        assertNull(ScopedUploadPicker.documents(Intent().apply {
+            data = Uri.parse("file:///unsafe/path")
+        }))
+        assertNull(ScopedUploadPicker.documents(Intent().apply {
+            data = Uri.parse("content:///no-authority")
+        }))
+
+        val two = ClipData.newRawUri("Synthetic", a).apply {
+            addItem(ClipData.Item(b))
+        }
+        assertEquals(listOf(a, b), ScopedUploadPicker.documents(Intent().apply {
+            data = a
+            clipData = two
+        }))
+        assertNull("Duplicate picker URIs cannot upload twice",
+            ScopedUploadPicker.documents(Intent().apply {
+                clipData = ClipData.newRawUri("Synthetic", a).apply {
+                    addItem(ClipData.Item(a))
+                }
+            }))
+        assertNull("Mixed content/file schemes are invalid",
+            ScopedUploadPicker.documents(Intent().apply {
+                clipData = ClipData.newRawUri("Synthetic", a).apply {
+                    addItem(ClipData.Item(Uri.parse("file:///unsafe")))
+                }
+            }))
+        val max = ClipData.newRawUri("Synthetic", a)
+        (1 until ScopedUploadPicker.MAX_DOCUMENTS).forEach { i ->
+            max.addItem(ClipData.Item(Uri.parse("content://synthetic.example/" + i)))
+        }
+        assertEquals(ScopedUploadPicker.MAX_DOCUMENTS,
+            ScopedUploadPicker.documents(Intent().apply { clipData = max })?.size)
+        max.addItem(ClipData.Item(Uri.parse("content://synthetic.example/overflow")))
+        assertNull("Oversized batches must fail before the first upload",
+            ScopedUploadPicker.documents(Intent().apply { clipData = max }))
     }
 
 }

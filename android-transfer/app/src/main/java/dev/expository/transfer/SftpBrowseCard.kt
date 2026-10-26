@@ -154,68 +154,124 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
     }
 
 
-    fun uploadSource(source: Uri) {
+    /**
+     * One foreground upload batch from Android's scoped file picker.
+     * Bounded preflight checks every source and the complete destination
+     * listing before any mutation. Each file still gets its own immutable
+     * journaled, exclusive-create and read-back-verified operation.
+     * This is deliberately not an atomic multi-file transaction.
+     */
+    fun uploadSources(sources: List<Uri>) {
         val live = session
         val directory = folder
         val opaque = sessionId
         if (live == null || opaque.isBlank()) {
             busy = false
             status = "SFTP session expired. Reconnect to upload."
-        } else {
-            val permit = AtomicBoolean(true)
-            continueCopy = permit
-            transferKind = "Upload"
-            transferred = 0L
-            busy = true
-            status = "Validating remote names, then streaming one picked document to SFTP."
-            scope.launch {
-                try {
-                val receipt = withContext(Dispatchers.IO) {
-                    val active = coroutineContext[Job]
-                    var lastDisplayed = 0L
-                    SafToSftpUpload(context.contentResolver) { digest ->
-                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
-                    }.copy(
-                        live, opaque, source, directory,
-                        continueRequested = { permit.get() && active?.isActive == true },
-                        onProgress = { bytes ->
-                            if (bytes - lastDisplayed >= 256L * 1024L) {
-                                lastDisplayed = bytes
-                                transferred = bytes
-                            }
+            return
+        }
+        if (sources.isEmpty() || sources.size > ScopedUploadPicker.MAX_DOCUMENTS ||
+            sources.any { it.scheme != android.content.ContentResolver.SCHEME_CONTENT } ||
+            sources.distinct().size != sources.size) {
+            busy = false
+            status = "Select 1–12 distinct Android documents. No remote upload started."
+            return
+        }
+        val permit = AtomicBoolean(true)
+        continueCopy = permit
+        transferKind = "Upload"
+        transferred = 0L
+        busy = true
+        status = "Checking all selected documents and remote filename collisions."
+        scope.launch {
+            var verified = 0
+            var verifiedBytes = 0L
+            try {
+                // Batch-wide safety check first. Per-file copy then revalidates
+                // under its existing write-ahead journal before opening a
+                // destination with exclusive-create semantics.
+                val ready = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val observer = dev.expository.transfer.saf.SafSingleDocumentCopy(
+                            context.contentResolver)
+                        val names = sources.map {
+                            SftpPath.validateChild(observer.observe(it).displayName)
                         }
-                    )
+                        val listing = live.browse(directory)
+                        require(!listing.truncated) { "TRUNCATED_LISTING" }
+                        require(names.distinct().size == names.size) {
+                            "DUPLICATE_SOURCE_NAME"
+                        }
+                        val occupied = listing.entries.map { it.name }.toSet()
+                        require(names.none { it in occupied }) {
+                            "REMOTE_NAME_OCCUPIED"
+                        }
+                    }.isSuccess
                 }
-                transferred = receipt.bytesWritten
-                status = when (receipt.proof) {
-                    CopyProof.BYTES_VERIFIED ->
-                        "Upload byte verified by independent SFTP read-back (" +
-                            receipt.bytesWritten + " bytes). The local original remains."
-                    CopyProof.WRITE_ACKNOWLEDGED ->
-                        "SFTP acknowledged " + receipt.bytesWritten +
-                            " bytes, but read-back proof is unavailable. Completion not verified."
-                    CopyProof.UNCERTAIN ->
-                        "Upload uncertain or partial. A remote partial file may exist; do not retry blindly."
-                    CopyProof.BLOCKED ->
-                        "Upload blocked: filename collision, incomplete remote listing, permissions or changed source. Existing files were not overwritten."
+                if (!ready) {
+                    status = "Upload blocked before writing: unreadable source, duplicate filename, occupied destination or incomplete remote listing."
+                    return@launch
                 }
-                // Refresh visible names only, without promoting an uncertain
-                // receipt or pretending that a successful listing proves bytes.
+                val uploader = SafToSftpUpload(context.contentResolver) { digest ->
+                    AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                }
+                for ((index, source) in sources.withIndex()) {
+                    if (!permit.get()) {
+                        status = "Upload canceled after " + verified +
+                            " verified file(s). Inspect any partial destination."
+                        break
+                    }
+                    status = "Uploading document " + (index + 1) + " of " +
+                        sources.size + " with independent remote read-back."
+                    val receipt = withContext(Dispatchers.IO) {
+                        val active = coroutineContext[Job]
+                        var lastDisplayed = 0L
+                        uploader.copy(live, opaque, source, directory,
+                            continueRequested = {
+                                permit.get() && active?.isActive == true
+                            },
+                            onProgress = { bytes ->
+                                if (bytes - lastDisplayed >= 256L * 1024L) {
+                                    lastDisplayed = bytes
+                                    transferred = verifiedBytes + bytes
+                                }
+                            }
+                        )
+                    }
+                    transferred = verifiedBytes + receipt.bytesWritten
+                    if (receipt.proof != CopyProof.BYTES_VERIFIED) {
+                        status = when (receipt.proof) {
+                            CopyProof.WRITE_ACKNOWLEDGED ->
+                                "Stopped after " + verified + " verified file(s): the current upload was acknowledged but not byte-verified. Inspect it before retrying."
+                            CopyProof.UNCERTAIN ->
+                                "Stopped after " + verified + " verified file(s): an uncertain or partial remote file may remain. Do not retry blindly."
+                            CopyProof.BLOCKED ->
+                                "Stopped after " + verified + " verified file(s): the next upload was blocked by changed names, permissions or preflight."
+                            CopyProof.BYTES_VERIFIED -> error("unreachable")
+                        }
+                        break
+                    }
+                    verified++
+                    verifiedBytes += receipt.bytesWritten
+                    if (verified == sources.size)
+                        status = "All " + verified + " document(s) byte-verified by independent SFTP read-back. Original sources remain untouched."
+                }
                 if (session === live) {
                     val refreshed = withContext(Dispatchers.IO) {
                         runCatching { live.browse(directory) }
                     }
                     refreshed.onSuccess { page = it }
                 }
-                } catch (_: CancellationException) {
-                    status = "Upload interrupted. A remote partial may remain; do not retry blindly."
-                } catch (_: Exception) {
-                    status = "Upload outcome uncertain. Inspect the remote destination."
-                } finally {
-                    continueCopy = null
-                    transferKind = ""
-                    busy = false
-                }
+            } catch (_: CancellationException) {
+                status = "Upload interrupted after " + verified +
+                    " verified file(s). Review the remote destination before retrying."
+            } catch (_: Exception) {
+                status = "Upload outcome uncertain after " + verified +
+                    " verified file(s). Inspect the remote destination."
+            } finally {
+                continueCopy = null
+                transferKind = ""
+                busy = false
             }
         }
     }
@@ -223,11 +279,16 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
     val chooseUpload = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        val source = result.data?.data
-        if (result.resultCode != Activity.RESULT_OK || source == null) {
+        if (result.resultCode != Activity.RESULT_OK) {
             busy = false
             status = "Upload picker canceled. No remote file created."
-        } else uploadSource(source)
+        } else {
+            val sources = ScopedUploadPicker.documents(result.data)
+            if (sources == null || sources.isEmpty()) {
+                busy = false
+                status = "Upload selection invalid or exceeds 12 documents. Nothing uploaded."
+            } else uploadSources(sources)
+        }
     }
 
     fun browseTo(next: String) {
@@ -431,9 +492,12 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                     chooseUpload.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
                         type = "*/*"
+                        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     })
-                }) { Text("Upload file here…") }
+                }) { Text("Upload files here…") }
+                Text("Choose up to 12 files. Each is copied separately; the batch stops on the first unverified result. Earlier verified uploads remain.",
+                    style = MaterialTheme.typography.bodySmall)
                 val sharedFile = incomingShare?.payload?.uri
                 if (sharedFile != null) {
                     Text("Android shared document available. No upload starts until tapped.",
@@ -441,7 +505,7 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                     Button(
                         enabled = !busy && session != null && sessionId.isNotBlank(),
                         modifier = Modifier.heightIn(min = 48.dp),
-                        onClick = { uploadSource(sharedFile) }
+                        onClick = { uploadSources(listOf(sharedFile)) }
                     ) { Text("Upload shared file here") }
                 }
                 if (folder != "/") Button(enabled = !busy, onClick = {
