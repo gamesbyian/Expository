@@ -16,7 +16,9 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.Until
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import dev.expository.transfer.journal.AttemptRecoveryIndex
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -239,19 +241,19 @@ class LocalPickerPositiveCopyTest {
             // Simulate a second app sharing a different file while the picker
             // is still open. The selection revision must invalidate A's
             // frozen Save As request rather than substituting B's bytes.
+            val epochBeforeShare = compose.activity.incomingShareEpoch
             compose.runOnUiThread { compose.activity.ingestIncomingShare(send(requireNotNull(b))) }
             // DocumentsUI can STOP Expository's Activity: Compose semantics
             // disappear while the picker owns the screen. Do not require a
             // recomposition here. The Activity-level epoch must independently
             // invalidate the frozen source when the result comes back.
-            // DocumentsUI replaces accessibility nodes while it navigates;
-            // always reacquire a fresh node after StaleObjectException.
-            runCatching {
-                (device.findObject(By.desc("Show roots"))
-                    ?: device.findObject(By.descContains("navigation")))?.click()
-            }
-            // Keep the initial Save As editor: switching roots on some API 35
-            // images replaces the filename field with a browsing screen.
+            // Keep the Save As filename editor intact. Opening DocumentsUI's
+            // navigation drawer can replace it with a root browser, leaving
+            // no EditText and producing a fixture-only failure.
+            val journalBefore = AttemptRecoveryIndex.recover(context)
+            val epochAfterShare = compose.activity.incomingShareEpoch
+            assertTrue("Second Share must invalidate the frozen picker synchronously",
+                epochAfterShare > epochBeforeShare)
             var renamed = false
             repeat(5) {
                 if (!renamed) {
@@ -283,19 +285,14 @@ class LocalPickerPositiveCopyTest {
                 }
             }
             check(saved) { "RACE_SAVE_ACTION_STALE" }
-            compose.waitUntil(20_000L) {
-                // The blocked-result status is intentionally transient: the
-                // deferred Compose effect for incoming Share B may immediately
-                // replace it with the new source's ordinary display status.
-                // Neither status may authorize a copy of frozen source A.
-                runCatching {
-                    compose.onAllNodesWithText("Source selection changed while Save As was open.",
-                        substring = true).fetchSemanticsNodes().isNotEmpty() ||
-                    compose.onAllNodesWithText("Source: " + bName)
-                        .fetchSemanticsNodes().isNotEmpty()
-                }.getOrDefault(false)
-            }
+            // Wait for the system picker to finish rather than searching for
+            // transient Compose status text: the incoming Share's deferred
+            // observation can legitimately overwrite the stale-picker label.
+            assertTrue("Save As must return to Expository before evidence is read",
+                device.wait(Until.hasObject(By.text("Copy a file on this device")), 20_000L))
             compose.waitForIdle()
+            assertEquals("Stale picker must not create any new attempted transfer",
+                journalBefore, AttemptRecoveryIndex.recover(context))
             assertTrue("A stale picker may not start a foreground streaming job",
                 compose.onAllNodesWithText("Streaming:", substring = true)
                     .fetchSemanticsNodes().isEmpty())
