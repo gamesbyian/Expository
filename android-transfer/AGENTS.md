@@ -33,9 +33,11 @@ emulator against trusted `main`: FTPS/SFTP Compose controls plus real Android
 MediaStore provider copy/interruption tests. [Run #40153876798](https://github.com/gamesbyian/Expository/actions/runs/40153876798)
 passed five provider/UI cases; [premerge emulator run #40154825166](https://github.com/gamesbyian/Expository/actions/runs/40154825166)
 then passed six tests including actual DocumentsUI ACTION_OPEN_DOCUMENT launch
-and safe cancellation. **Positive file selection, ACTION_CREATE_DOCUMENT
-completion and physical device remain unaccepted.** The job
-uploads sanitized JUnit reports.
+and safe cancellation. Later scoped API 35 acceptance passed a positive
+Open→Create provider-copy journey [#40160714516](https://github.com/gamesbyian/Expository/actions/runs/40160714516)
+and selected-document Sharesheet launch/cancel [#40246907565](https://github.com/gamesbyian/Expository/actions/runs/40246907565).
+**Physical devices, real Google Drive/Docs recipients, external provider grants
+and full emulator-suite regression remain unaccepted.** Runs upload sanitized reports.
 It requires Android SDK/network access during runner setup but makes no FTP
 connections itself. Never call this physical Pixel, TalkBack, real file
 picker/provider, or release acceptance.
