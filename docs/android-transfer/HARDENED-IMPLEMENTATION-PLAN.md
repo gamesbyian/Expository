@@ -1,6 +1,6 @@
 # Expository Transfer: hardened implementation and verification plan
 
-**Planning baseline:** October 23, 2026. **Stage:** independent critical review accepted for engineering planning; no native APK or protocol implementation exists in this PR.  
+**Original design baseline:** October 23, 2026. **Reconciled:** October 26, 2026. **Current implementation:** native Kotlin/Compose source and scoped E1/E2/E3 tests now exist; this file remains the **target architecture and acceptance plan**, not a claim every module or gate is complete. Check the [current contract](CURRENT-CONTRACT.md), [live queue](../../android-transfer/WORK-QUEUE.md) and [release ledger](RELEASE-READINESS.md) before implementing.  
 **Second-pass decisions and executable proof:** [product hardening](SECOND-PASS-DECISIONS.md) and [N01–N26 test matrix](TEST-AND-EVIDENCE-MATRIX.md). These refine picker cardinality, copy-vs-move proof, Drive handoff claims and renamer acceptance without claiming implementation.\n\n**Read before work:** [Critical review](CRITICAL-REVIEW.md), [Product proposal](PRODUCT-PROPOSAL.md), [Workspace and renamer](WORKSPACE-AND-BULK-RENAME.md), [Google Drive contract](GOOGLE-DRIVE-INTEGRATION.md).  
 **Do not confuse with:** the public Expository GitHub repository explorer. That product is read-only and must remain so.
 
@@ -16,7 +16,9 @@
 
 ## Package and module boundaries
 
-**Recommended source:** separate native Android repository (candidate `gamesbyian/Expository-Transfer`), linked by brand to Expository. Do **not** add Android credentials, build jobs or a writer feature to the static read-only Pages app.
+**Current source:** `android-transfer/` is a separate native Gradle root within this public repo, deliberately isolated from the read-only Pages `index.html`. A future dedicated native repository is a **migration proposal**, not a prerequisite to advancing independently testable app code. Do not duplicate development across repos or move it without an approved ownership, CI, identity and history migration.
+
+**Below is the long-term logical module target, not today's directory tree:**
 
 ```text
 android-app/             Kotlin, Jetpack Compose, adaptive Material 3 screens
