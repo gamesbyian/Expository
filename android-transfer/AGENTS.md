@@ -16,7 +16,7 @@ Expository Transfer is the **Android-native** writing app under `android-transfe
 - No `MANAGE_EXTERNAL_STORAGE`, guessed SAF filesystem paths, assumed persistent URI grants, trust-all certificates, ignored SFTP host key, automatic plaintext FTP fallback or hidden Google OAuth scope expansion. Android target currently 36; test Android 17 LAN `ACCESS_LOCAL_NETWORK` before upgrading target to 37.
 - UI, picker, drag and accessibility actions produce the same immutable, reviewed operation plan. Revalidate right before mutation; journal before changes. Copy preserves originals. **Never optimize Copy into remote rename.** Same-server Move requires verified authority/capability; cross-authority Move needs verified Copy then separately approved source deletion.
 - On ambiguous write/rename/commit/Drive create **stop and reconcile**, never auto-retry or delete unknown staged data. Receipts may claim `CONTENT_HASH_VERIFIED` only on real comparable content proof; Share/External Open are handoffs, not Drive/Docs saves.
-- The existing `TransferActivity` switches Local/SFTP/FTPS *cards*. It is **not** the promised independent Local/Local, Local/Remote, Remote/Remote pane workspace. SFTP rename currently previews only. Do not relabel either as delivered.
+- The required UX offers a **permanent full-featured single-location browser by default** and an **optional dual-location view** (Local/Local, Local/Remote, Remote/Remote); responsive A/B tabs in dual view are not the single-location mode. The existing `TransferActivity` switches Local/SFTP/FTPS *cards*. It is **not** the promised first-class single/dual workspace. SFTP rename currently previews only. Do not relabel either as delivered.
 
 ## Implement, verify, integrate
 
