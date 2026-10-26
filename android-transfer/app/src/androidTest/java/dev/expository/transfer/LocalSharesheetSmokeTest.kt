@@ -270,15 +270,18 @@ class LocalSharesheetSmokeTest {
             assertTrue("Android Create Document picker must open", picker)
             // DocumentsUI frequently rebinds nodes while switching roots.
             // Acquire a fresh UiObject2 before each mutation.
+            var rootsOpened = false
             repeat(3) {
-                val roots = device.findObject(By.desc("Show roots"))
-                    ?: device.findObject(By.descContains("navigation"))
-                if (roots != null) {
-                    try {
-                        roots.click()
-                        return@repeat
-                    } catch (_: StaleObjectException) {
-                        device.waitForIdle(300L)
+                if (!rootsOpened) {
+                    val roots = device.findObject(By.desc("Show roots"))
+                        ?: device.findObject(By.descContains("navigation"))
+                    if (roots != null) {
+                        try {
+                            roots.click()
+                            rootsOpened = true
+                        } catch (_: StaleObjectException) {
+                            device.waitForIdle(300L)
+                        }
                     }
                 }
             }
