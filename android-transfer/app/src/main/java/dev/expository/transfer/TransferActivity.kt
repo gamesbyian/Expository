@@ -42,8 +42,11 @@ class TransferActivity : ComponentActivity() {
     private var nextShareSequence = 0L
     private val pendingShare = mutableStateOf<IncomingShareRequest?>(null)
 
-    private fun captureShare(inbound: Intent?) {
-        if (inbound?.action != Intent.ACTION_SEND) return
+    /** Shared ingestion path for launch, real onNewIntent and isolated UI tests.
+     * Tests call this instead of inventing a framework lifecycle transition.
+     */
+    fun ingestIncomingShare(inbound: Intent) {
+        if (inbound.action != Intent.ACTION_SEND) return
         nextShareSequence++
         pendingShare.value = IncomingShareRequest(
             IncomingShareParser.parse(inbound), nextShareSequence
@@ -52,7 +55,7 @@ class TransferActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        captureShare(intent)
+        if (intent?.action == Intent.ACTION_SEND) ingestIncomingShare(intent)
         setContent {
             MaterialTheme { Surface { DeveloperPreview(pendingShare.value) } }
         }
@@ -61,7 +64,7 @@ class TransferActivity : ComponentActivity() {
     public override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        captureShare(intent)
+        ingestIncomingShare(intent)
     }
 }
 
