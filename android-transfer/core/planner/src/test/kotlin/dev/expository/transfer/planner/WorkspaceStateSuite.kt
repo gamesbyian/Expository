@@ -63,6 +63,17 @@ object WorkspaceStateSuite {
         check(state.single.current?.selected?.single()?.key == candidate.key)
         check(state.a.current?.selected?.single()?.key == candidate.key)
         check(state.b == previousB)
+        check(state.a.current?.location?.capabilities?.isEmpty() == true)
+        val staleHistory = state.copyProposal(WorkspacePane.A,
+            DestinationListing("complete-destination-1", true, emptyList()), NOW)
+        check(staleHistory != null && !staleHistory.executable)
+        check("SOURCE_READ_NOT_PROVEN" in staleHistory.blockers)
+        // A fresh provider observation clears old file versions. The user
+        // explicitly reselects before any capable plan can be proposed.
+        state = state.update(WorkspacePane.A, state.a.visit(local))
+        check(state.a.current?.selected?.isEmpty() == true)
+        state = state.update(WorkspacePane.A, state.a.select(candidate))
+        check(state.a.current?.firstVisibleIndex == 22)
 
         // Both the future drag path and accessible button produce the exact
         // same immutable Copy plan, with no write and no Move shortcut.
@@ -112,6 +123,11 @@ object WorkspaceStateSuite {
         expectRejected { state.a.select(item(localOther, "other-authority")) }
         expectRejected { state.a.scroll(-1) }
         expectRejected { state.a.scroll(0, -1) }
+        // Even an identical weak observation revision cannot prove the old
+        // selected versions survived a refresh. Scroll can survive safely.
+        val refreshed = state.a.visit(local)
+        check(refreshed.current?.selected?.isEmpty() == true)
+        check(refreshed.current?.firstVisibleIndex == 22)
         val staleVersion = observed(LocationKind.LOCAL_SAF, "opaque-local", "/Inbox", "rev-2")
         check(state.a.visit(staleVersion).current?.selected?.isEmpty() == true)
 

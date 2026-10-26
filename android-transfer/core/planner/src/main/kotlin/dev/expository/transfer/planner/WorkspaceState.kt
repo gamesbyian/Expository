@@ -62,23 +62,24 @@ data class BrowsePaneState(
             return BrowsePaneState(endpoint, fresh)
         }
         if (old.location.key == observed.key && old.location.folder == observed.folder) {
-            // A refreshed listing may retain the scroll anchor, but stale
-            // selected versions/capability witnesses must be discarded.
-            return copy(current = if (old.location == observed) old
-                else fresh.copy(firstVisibleIndex = old.firstVisibleIndex,
-                    firstVisibleOffset = old.firstVisibleOffset))
+            // Any explicit refresh must clear selected versions, even if a
+            // provider repeats weak or unchanged directory metadata. The
+            // scroll anchor is UI-only and may safely be retained.
+            return copy(current = fresh.copy(
+                firstVisibleIndex = old.firstVisibleIndex,
+                firstVisibleOffset = old.firstVisibleOffset))
         }
         return copy(current = fresh, back = (back + old).takeLast(MAX_NAV_HISTORY),
             forward = emptyList())
     }
 
     fun back(): BrowsePaneState = if (back.isEmpty()) this else copy(
-        current = back.last(), back = back.dropLast(1),
+        current = back.last().withoutProof(), back = back.dropLast(1),
         forward = (listOfNotNull(current) + forward).take(MAX_NAV_HISTORY)
     )
 
     fun forward(): BrowsePaneState = if (forward.isEmpty()) this else copy(
-        current = forward.first(),
+        current = forward.first().withoutProof(),
         back = (back + listOfNotNull(current)).takeLast(MAX_NAV_HISTORY),
         forward = forward.drop(1)
     )
@@ -106,6 +107,21 @@ data class BrowsePaneState(
     fun clearSelection(): BrowsePaneState =
         copy(current = current?.copy(selected = emptyList()))
 }
+
+/**
+ * Back/forward restores visible selections for continuity but never restores
+ * authority to mutate. Re-observe the directory, reselect and replan first.
+ */
+private fun FolderVisit.withoutProof(): FolderVisit =
+    copy(
+        location = location.copy(capabilities = emptyMap()),
+        // Selected items independently contain LocationRef snapshots. If those
+        // are left untouched, OperationPlanner can still see old READ proofs
+        // despite the pane's location having been invalidated.
+        selected = selected.map { item ->
+            item.copy(location = item.location.copy(capabilities = emptyMap()))
+        }
+    )
 
 private fun LocationRef.freeze(): LocationRef =
     copy(folder = folder.toList(), capabilities = capabilities.toMap())
