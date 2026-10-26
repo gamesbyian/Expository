@@ -170,22 +170,32 @@ data class TransferWorkspaceState(
     )
 
     /**
-     * Both accessible buttons and future drag targets call this SAME
-     * immutable Copy proposal. This has no side effects; a real executor must
-     * separately check the complete destination listing and revalidate.
+     * A and B are symmetrical. This builds immutable plans only; adapters
+     * must obtain fresh capabilities/listings, display preflight, journal,
+     * and revalidate before any write or source deletion.
      */
-    fun copyProposal(source: WorkspacePane, destinationListing: DestinationListing?,
-        nowMillis: Long): TransferPlan? {
+    private fun propose(source: WorkspacePane, destinationListing: DestinationListing?,
+        operation: Operation, deletionAuthorized: Boolean, nowMillis: Long): TransferPlan? {
         if (view != WorkspaceView.DUAL || source == WorkspacePane.SINGLE) return null
         val origin = pane(source).current ?: return null
         val other = if (source == WorkspacePane.A) WorkspacePane.B else WorkspacePane.A
         val destination = pane(other).current?.location ?: return null
         if (origin.selected.isEmpty()) return null
         return OperationPlanner.transfer(
-            TransferRequest(origin.selected, destination,
-                destinationListing = destinationListing), nowMillis)
+            TransferRequest(origin.selected, destination, operation,
+                deletionAuthorized, destinationListing), nowMillis)
     }
+
+    /** Button and drag must yield the identical, non-destructive Copy plan. */
+    fun copyProposal(source: WorkspacePane, destinationListing: DestinationListing?,
+        nowMillis: Long): TransferPlan? =
+        propose(source, destinationListing, Operation.COPY, false, nowMillis)
 
     fun dragCopyProposal(source: WorkspacePane, destinationListing: DestinationListing?,
         nowMillis: Long): TransferPlan? = copyProposal(source, destinationListing, nowMillis)
+
+    /** Explicit Move only: cross-authority deletion always needs separate consent. */
+    fun moveProposal(source: WorkspacePane, destinationListing: DestinationListing?,
+        nowMillis: Long, deletionAuthorized: Boolean = false): TransferPlan? =
+        propose(source, destinationListing, Operation.MOVE, deletionAuthorized, nowMillis)
 }
