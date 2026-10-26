@@ -8,6 +8,8 @@ package dev.expository.transfer.planner
  * Adapters own authenticated sessions and must observe/revalidate a location
  * before issuing any operation. A back-stack entry is never a fresh proof.
  */
+private const val MAX_NAV_HISTORY = 64
+
 enum class WorkspaceView { SINGLE, DUAL }
 enum class WorkspacePane { SINGLE, A, B }
 enum class DualPairing { LOCAL_LOCAL, LOCAL_REMOTE, REMOTE_REMOTE }
@@ -66,16 +68,18 @@ data class BrowsePaneState(
                 else fresh.copy(firstVisibleIndex = old.firstVisibleIndex,
                     firstVisibleOffset = old.firstVisibleOffset))
         }
-        return copy(current = fresh, back = back + old, forward = emptyList())
+        return copy(current = fresh, back = (back + old).takeLast(MAX_NAV_HISTORY),
+            forward = emptyList())
     }
 
     fun back(): BrowsePaneState = if (back.isEmpty()) this else copy(
         current = back.last(), back = back.dropLast(1),
-        forward = listOfNotNull(current) + forward
+        forward = (listOfNotNull(current) + forward).take(MAX_NAV_HISTORY)
     )
 
     fun forward(): BrowsePaneState = if (forward.isEmpty()) this else copy(
-        current = forward.first(), back = back + listOfNotNull(current),
+        current = forward.first(),
+        back = (back + listOfNotNull(current)).takeLast(MAX_NAV_HISTORY),
         forward = forward.drop(1)
     )
 
