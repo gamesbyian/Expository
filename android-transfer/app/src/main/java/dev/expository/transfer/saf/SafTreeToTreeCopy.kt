@@ -1,0 +1,202 @@
+package dev.expository.transfer.saf
+
+import android.content.ContentResolver
+import android.net.Uri
+import android.provider.DocumentsContract
+import dev.expository.transfer.LocalTreeReader
+import dev.expository.transfer.engine.AtomicAttemptStorage
+import dev.expository.transfer.engine.CopyProof
+import dev.expository.transfer.engine.CopyReceipt
+import dev.expository.transfer.engine.CopyStreams
+import dev.expository.transfer.engine.DurableAttemptJournal
+import dev.expository.transfer.engine.JournaledCopyEngine
+import dev.expository.transfer.planner.*
+import java.io.FileNotFoundException
+import java.io.InputStream
+import java.io.OutputStream
+import java.security.MessageDigest
+import java.util.UUID
+
+/** A frozen, scoped OS-picked folder pair. No source deletion is possible. */
+data class TreeCopyRequest(
+    val sourceTree: Uri,
+    val sourceFolderId: String,
+    val sourceDocumentId: String,
+    val expectedSourceName: String,
+    val targetTree: Uri,
+    val targetFolderId: String,
+    val targetWriteGranted: Boolean
+)
+
+data class TreeCopyPreflight(
+    val request: TreeCopyRequest,
+    val plan: TransferPlan,
+    val issuedMillis: Long,
+    val sourceName: String,
+    val sourceMime: String
+)
+
+/**
+ * A single-file, explicit, foreground SAF tree → tree COPY.
+ *
+ * Requires a read-granted source, write-granted target, authoritative bounded
+ * sibling listing and DocumentsProvider FLAG_DIR_SUPPORTS_CREATE. Plan is
+ * re-observed immediately before opening the source. JournaledCopyEngine
+ * commits its private attempt record before calling createDocument, and never
+ * retries ambiguous create/stream/verification. No overwrite or source delete.
+ */
+class SafTreeToTreeCopy(
+    private val resolver: ContentResolver,
+    private val storageForPlan: (String) -> AtomicAttemptStorage
+) {
+    private val observer = SafSingleDocumentCopy(resolver)
+
+    private fun hash(parts: List<String>): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        for (part in parts) {
+            val value = part.toByteArray(Charsets.UTF_8)
+            md.update(value.size.toString().toByteArray(Charsets.US_ASCII))
+            md.update(':'.code.toByte())
+            md.update(value)
+        }
+        return md.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun document(tree: Uri, documentId: String): Uri {
+        require(LocalTreeReader.validTree(tree) && documentId.isNotBlank())
+        return DocumentsContract.buildDocumentUriUsingTree(tree, documentId)
+    }
+
+    /** Provider reported support is necessary, not assumed from picker flags. */
+    private fun targetCanCreate(request: TreeCopyRequest): Boolean {
+        if (!request.targetWriteGranted) return false
+        val uri = document(request.targetTree, request.targetFolderId)
+        val columns = arrayOf(
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_FLAGS
+        )
+        return resolver.query(uri, columns, null, null, null)?.use { cursor ->
+            if (!cursor.moveToFirst()) return@use false
+            val mimeIndex = cursor.getColumnIndexOrThrow(
+                DocumentsContract.Document.COLUMN_MIME_TYPE)
+            val flagsIndex = cursor.getColumnIndexOrThrow(
+                DocumentsContract.Document.COLUMN_FLAGS)
+            cursor.getString(mimeIndex) == DocumentsContract.Document.MIME_TYPE_DIR &&
+                cursor.getInt(flagsIndex) and
+                    DocumentsContract.Document.FLAG_DIR_SUPPORTS_CREATE != 0
+        } == true
+    }
+
+    private data class Observation(val plan: TransferPlan,
+        val sourceName: String, val sourceMime: String)
+
+    private fun observePlan(request: TreeCopyRequest, issued: Long,
+        now: Long): Observation {
+        require(LocalTreeReader.validTree(request.sourceTree) &&
+            LocalTreeReader.validTree(request.targetTree) &&
+            request.sourceFolderId.isNotBlank() &&
+            request.sourceDocumentId.isNotBlank() &&
+            request.targetFolderId.isNotBlank() &&
+            request.expectedSourceName.isNotBlank() &&
+            targetCanCreate(request))
+        val source = document(request.sourceTree, request.sourceDocumentId)
+        val metadata = observer.observe(source)
+        require(metadata.displayName == request.expectedSourceName &&
+            metadata.mimeType != DocumentsContract.Document.MIME_TYPE_DIR)
+        val siblings = LocalTreeReader.list(resolver, request.targetTree,
+            request.targetFolderId)
+        val revision = hash(siblings.children.flatMap {
+            listOf(it.documentId, it.title, it.directory.toString(),
+                it.bytes?.toString().orEmpty())
+        })
+        val proof = CapabilityProof(Support.SUPPORTED,
+            "scoped-provider-observation", issued + 60_000)
+        val from = LocationRef(
+            LocationKey(LocationKind.LOCAL_SAF,
+                request.sourceTree.authority.orEmpty(),
+                LocalTreeReader.rootId(request.sourceTree),
+                request.sourceFolderId, request.sourceTree.toString()),
+            listOf(hash(listOf(request.sourceFolderId)).take(32)),
+            metadata.revision,
+            mapOf(Capability.READ to proof)
+        )
+        val target = LocationRef(
+            LocationKey(LocationKind.LOCAL_SAF,
+                request.targetTree.authority.orEmpty(),
+                LocalTreeReader.rootId(request.targetTree),
+                request.targetFolderId, request.targetTree.toString()),
+            listOf(hash(listOf(request.targetFolderId)).take(32)),
+            revision,
+            mapOf(Capability.WRITE to proof, Capability.CREATE_CHILD to proof)
+        )
+        val item = ItemRef(
+            ItemKey(from.key.authorityId, request.sourceDocumentId, metadata.revision),
+            from, from.folder, metadata.displayName, ItemKind.FILE
+        )
+        val plan = OperationPlanner.transfer(
+            TransferRequest(listOf(item), target, Operation.COPY,
+                destinationListing = DestinationListing(
+                    revision, siblings.complete, siblings.children.map { it.title })),
+            now
+        )
+        return Observation(plan, metadata.displayName, metadata.mimeType)
+    }
+
+    /** Called before presenting an explicit Confirm Copy action. */
+    fun prepare(request: TreeCopyRequest): TreeCopyPreflight? {
+        val issued = System.currentTimeMillis()
+        return runCatching { observePlan(request, issued, issued) }.getOrNull()
+            ?.takeIf { it.plan.executable }
+            ?.let { TreeCopyPreflight(
+                request, it.plan, issued, it.sourceName, it.sourceMime) }
+    }
+
+    fun copy(
+        confirmed: TreeCopyPreflight,
+        continueRequested: () -> Boolean,
+        onProgress: (Long) -> Unit = {}
+    ): CopyReceipt {
+        val initial = confirmed.plan
+        if (!initial.executable || initial.operation != Operation.COPY ||
+            initial.route != TransferRoute.DEVICE_RELAY)
+            return CopyReceipt(initial.digest, CopyProof.BLOCKED, 0,
+                "UNAPPROVED_OR_UNSUPPORTED_PLAN")
+        val request = confirmed.request
+        val journal = try {
+            DurableAttemptJournal(storageForPlan(initial.digest))
+        } catch (_: Exception) {
+            return CopyReceipt(initial.digest, CopyProof.BLOCKED, 0,
+                "JOURNAL_UNAVAILABLE")
+        }
+        var created: Uri? = null
+        val streams = object : CopyStreams {
+            override fun openSource(): InputStream =
+                resolver.openInputStream(document(request.sourceTree,
+                    request.sourceDocumentId)) ?: throw FileNotFoundException()
+            override fun openNewDestination(): OutputStream {
+                val parent = document(request.targetTree, request.targetFolderId)
+                // ONLY after a durable attempt exists. createDocument never
+                // selects an existing destination and never overwrites one.
+                val uri = DocumentsContract.createDocument(resolver, parent,
+                    confirmed.sourceMime, confirmed.sourceName)
+                    ?: throw FileNotFoundException()
+                created = uri
+                return resolver.openOutputStream(uri, "w") ?: throw FileNotFoundException()
+            }
+            override fun openDestinationReadBack(): InputStream? =
+                created?.let { resolver.openInputStream(it) }
+        }
+        return JournaledCopyEngine.copy(
+            initial,
+            currentPlan = {
+                observePlan(request, confirmed.issuedMillis,
+                    System.currentTimeMillis()).plan
+            },
+            streams = streams,
+            journal = journal,
+            attemptId = UUID.randomUUID().toString(),
+            continueRequested = continueRequested,
+            onProgress = onProgress
+        )
+    }
+}
