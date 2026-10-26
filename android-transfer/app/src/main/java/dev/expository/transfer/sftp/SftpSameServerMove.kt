@@ -30,11 +30,16 @@ class SftpSameServerMove(private val storageForPlan: (String) -> AtomicAttemptSt
             catch (_: Exception) {
                 return ServerMoveReceipt("", ServerMoveProof.BLOCKED, "INVALID_DESTINATION_PATH")
             }
-        if (source == "/" || destFolder == "/" || source.substringBeforeLast('/', "") == destFolder)
-            return ServerMoveReceipt("", ServerMoveProof.BLOCKED, "INVALID_OR_UNVERIFIED_TARGET")
         val sourceParent = source.substringBeforeLast('/', "").ifBlank { "/" }
+        // Root is a valid destination, but moving a file into its existing
+        // parent (including root -> root) must not become a no-op receipt.
+        if (source == "/" || sourceParent == destFolder)
+            return ServerMoveReceipt("", ServerMoveProof.BLOCKED, "INVALID_OR_UNVERIFIED_TARGET")
         val name = source.substringAfterLast('/')
-        val destination = destFolder + "/" + SftpPath.validateChild(name)
+        val destination = try { SftpPath.childPath(destFolder, name) }
+            catch (_: IllegalArgumentException) {
+                return ServerMoveReceipt("", ServerMoveProof.BLOCKED, "INVALID_DESTINATION_CHILD")
+            }
         val issueTime = System.currentTimeMillis()
 
         fun plan(now: Long): TransferPlan {

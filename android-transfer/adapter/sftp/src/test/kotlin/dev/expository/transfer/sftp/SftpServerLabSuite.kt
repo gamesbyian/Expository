@@ -103,7 +103,21 @@ object SftpServerLabSuite {
                 check(runCatching { session.statFile("/move-source.txt") }.isFailure)
                 check(session.openRead("/new-dir/move-source.txt").use { it.readBytes() }
                     .contentEquals(sourceBytes))
-                println("PASS SFTP LAB no-overwrite server-side Move, source gone, destination bytes equal")
+                check(SftpPath.childPath("/", "move-source.txt") == "/move-source.txt")
+                check(runCatching { SftpPath.childPath("/", "..") }.isFailure)
+                // Moving back to root must be legal, collision guarded and
+                // byte-preserving. No separate delete or client file relay.
+                check(runCatching {
+                    session.movePlannedFile(movePlan, "/new-dir/move-source.txt", "/synthetic.txt")
+                }.isFailure) { "Root collision must retain both files" }
+                check(session.openRead("/new-dir/move-source.txt").use { it.readBytes() }
+                    .contentEquals(sourceBytes))
+                session.movePlannedFile(movePlan, "/new-dir/move-source.txt",
+                    SftpPath.childPath("/", "move-source.txt"))
+                check(runCatching { session.statFile("/new-dir/move-source.txt") }.isFailure)
+                check(session.openRead("/move-source.txt").use { it.readBytes() }
+                    .contentEquals(sourceBytes))
+                println("PASS SFTP LAB no-overwrite Move out/back to root, unchanged bytes")
             }
             println("PASS SFTP LAB trusted host fingerprint + authenticated directory read")
             val refused = runCatching {
@@ -117,6 +131,7 @@ object SftpServerLabSuite {
             runCatching { Files.deleteIfExists(tmp.resolve("synthetic.txt")) }
             runCatching { Files.deleteIfExists(tmp.resolve("synthetic-upload.txt")) }
             runCatching { Files.deleteIfExists(tmp.resolve("new-dir/move-source.txt")) }
+            runCatching { Files.deleteIfExists(tmp.resolve("move-source.txt")) }
             runCatching { Files.deleteIfExists(tmp.resolve("new-dir")) }
             runCatching { Files.deleteIfExists(tmp) }
         }
