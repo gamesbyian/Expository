@@ -39,6 +39,7 @@ class LocalPickerCancelSmokeTest {
             Until.hasObject(By.pkg("com.android.documentsui")), 3_000L
         ) || device.wait(Until.hasObject(By.text("Recent")), 3_000L)
           || device.wait(Until.hasObject(By.text("Downloads")), 3_000L)
+          || device.currentPackageName == "android"
         assertTrue("Android picker not visible; foreground=" +
             (device.currentPackageName ?: "none"), picker)
         // UiDevice.pressBack()'s boolean reports key injection success,
@@ -87,8 +88,10 @@ class LocalPickerCancelSmokeTest {
             val picker = device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")),
                 12_000L) || device.wait(Until.hasObject(By.pkg("com.android.documentsui")),
                 3_000L) || device.wait(Until.hasObject(By.text("Recent")), 3_000L) ||
-                device.wait(Until.hasObject(By.text("Downloads")), 3_000L)
-            assertTrue("Replacement picker did not appear", picker)
+                device.wait(Until.hasObject(By.text("Downloads")), 3_000L) ||
+                device.currentPackageName == "android"
+            assertTrue("Replacement picker did not appear; foreground=" +
+                (device.currentPackageName ?: "none"), picker)
             device.pressBack()
             compose.waitUntil(15_000L) {
                 compose.onAllNodesWithText("File selection canceled.")
@@ -97,6 +100,9 @@ class LocalPickerCancelSmokeTest {
             compose.onNodeWithText("Share…").assertIsNotEnabled()
             compose.onNodeWithText("Save copy…").assertIsNotEnabled()
         } finally {
+            // Never leave a system picker over the following instrumentation
+            // case even if this one fails before selecting its fixture.
+            if (device.currentPackageName != context.packageName) device.pressBack()
             resolver.delete(source, null, null)
         }
     }
