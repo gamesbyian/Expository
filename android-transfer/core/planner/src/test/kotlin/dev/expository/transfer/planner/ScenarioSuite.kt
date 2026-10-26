@@ -66,6 +66,31 @@ object ScenarioSuite {
             val p = OperationPlanner.transfer(makeRequest(listOf(file("A.mkv", l)), dst, Operation.MOVE), NOW)
             check(p.executable && p.route == TransferRoute.VERIFIED_REMOTE_RENAME)
         }
+        test("verified SFTP root accepts native Move with complete collision-free listing") {
+            val source = remote(folder = listOf("Archive"))
+            val rootDraft = remote(folder = emptyList())
+            // The root folder is [] but its authenticated container ID is
+            // nonblank; an empty path is not an unidentified authority.
+            val root = rootDraft.copy(key = rootDraft.key.copy(containerId = "/"))
+            val request = makeRequest(listOf(file("episode.mkv", source)), root, Operation.MOVE)
+            val plan = OperationPlanner.transfer(request, NOW)
+            check(plan.executable && plan.route == TransferRoute.VERIFIED_REMOTE_RENAME)
+            check(OperationPlanner.revalidate(plan, request, NOW))
+            check(!OperationPlanner.revalidate(plan, request.copy(
+                destinationListing = DestinationListing("changed", true, emptyList())), NOW))
+            check(!OperationPlanner.transfer(request.copy(
+                destinationListing = DestinationListing(
+                    "incomplete-root", false, emptyList())), NOW).executable)
+            check("DESTINATION_NAME_COLLISION" in OperationPlanner.transfer(request.copy(
+                destinationListing = DestinationListing(
+                    "root-with-collision", true, listOf("episode.mkv"))), NOW).blockers)
+            val noRootIdentity = root.copy(key = root.key.copy(rootId = ""))
+            val denied = OperationPlanner.transfer(request.copy(
+                destination = noRootIdentity), NOW)
+            check(!denied.executable && "DESTINATION_IDENTITY" in denied.blockers)
+            val copy = OperationPlanner.transfer(request.copy(operation = Operation.COPY), NOW)
+            check(copy.executable && copy.route == TransferRoute.DEVICE_RELAY)
+        }
         test("N07 equal display labels distinct namespaces do not native-move") {
             val a = remote(namespace = "auth-1")
             val b = remote(namespace = "auth-2")
