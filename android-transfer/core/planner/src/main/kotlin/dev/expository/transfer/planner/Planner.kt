@@ -171,11 +171,13 @@ object OperationPlanner {
             if (listing.siblings.size != existing.size)
                 blockers += "AMBIGUOUS_DESTINATION_SIBLINGS"
         }
-        if (dest.key.authorityId.isBlank() || dest.key.containerId.isBlank() ||
+        if (dest.key.authorityId.isBlank() || dest.key.rootId.isBlank() ||
+            dest.key.containerId.isBlank() ||
             dest.revision.isBlank() || dest.folder.any { !validComponent(it) }) blockers += "DESTINATION_IDENTITY"
         if (!dest.supports(Capability.WRITE, nowMillis)) blockers += "DESTINATION_WRITE_NOT_PROVEN"
         for (item in sources) {
             if (item.key.authorityId != item.location.key.authorityId ||
+                item.location.key.rootId.isBlank() ||
                 item.key.opaqueItemId.isBlank() || item.key.version.isBlank() ||
                 item.location.revision.isBlank() || item.parent.any { !validComponent(it) } ||
                 !validComponent(item.name)) blockers += "SOURCE_IDENTITY"
@@ -228,10 +230,10 @@ object OperationPlanner {
                 }
             }
         }
-        // Native Move requires the same parent namespace and a named destination; a
-        // command ack alone can never be treated as completion by the future executor.
-        if ((route == TransferRoute.VERIFIED_REMOTE_RENAME || route == TransferRoute.VERIFIED_PROVIDER_MOVE)
-            && dest.folder.isEmpty()) blockers += "DESTINATION_FOLDER_UNVERIFIED"
+        // An authenticated, named root is a valid destination (folder = []).
+        // Its authority/root/container, capabilities, complete sibling listing
+        // and namespace must still be proven. A path length check must not
+        // make the real server root unusable for a safe native Move.
         val hashParts = listOf("TRANSFER_V1", request.operation.name,
             request.deletionAuthorized.toString()) +
             listOf(sources.size.toString()) + sources.flatMap(::itemStamp) + locationStamp(dest) +
