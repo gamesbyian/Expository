@@ -33,7 +33,8 @@ data class TreeCopyPreflight(
     val plan: TransferPlan,
     val issuedMillis: Long,
     val sourceName: String,
-    val sourceMime: String
+    val sourceMime: String,
+    val existingDestinationIds: Set<String>
 )
 
 /**
@@ -88,7 +89,8 @@ class SafTreeToTreeCopy(
     }
 
     private data class Observation(val plan: TransferPlan,
-        val sourceName: String, val sourceMime: String)
+        val sourceName: String, val sourceMime: String,
+        val existingDestinationIds: Set<String>)
 
     private fun observePlan(request: TreeCopyRequest, issued: Long,
         now: Long): Observation {
@@ -139,7 +141,8 @@ class SafTreeToTreeCopy(
                     revision, siblings.complete, siblings.children.map { it.title })),
             now
         )
-        return Observation(plan, metadata.displayName, metadata.mimeType)
+        return Observation(plan, metadata.displayName, metadata.mimeType,
+            siblings.children.map { it.documentId }.toSet())
     }
 
     /** Called before presenting an explicit Confirm Copy action. */
@@ -148,7 +151,8 @@ class SafTreeToTreeCopy(
         return runCatching { observePlan(request, issued, issued) }.getOrNull()
             ?.takeIf { it.plan.executable }
             ?.let { TreeCopyPreflight(
-                request, it.plan, issued, it.sourceName, it.sourceMime) }
+                request, it.plan, issued, it.sourceName, it.sourceMime,
+                it.existingDestinationIds.toSet()) }
     }
 
     fun copy(
@@ -180,6 +184,19 @@ class SafTreeToTreeCopy(
                 val uri = DocumentsContract.createDocument(resolver, parent,
                     confirmed.sourceMime, confirmed.sourceName)
                     ?: throw FileNotFoundException()
+                // An untrustworthy or nonconforming provider could return an
+                // old URI for a "create" request. Before opening ANY output
+                // stream, reject a wrong authority, prior sibling identity or
+                // the source identity. The durable attempt stays UNCERTAIN if
+                // create itself was ambiguous; no automatic retry/delete.
+                val id = DocumentsContract.getDocumentId(uri)
+                if (uri.scheme != ContentResolver.SCHEME_CONTENT ||
+                    uri.authority != request.targetTree.authority ||
+                    id.isBlank() || id in confirmed.existingDestinationIds ||
+                    (uri.authority == request.sourceTree.authority &&
+                        id == request.sourceDocumentId)) {
+                    throw FileNotFoundException("CREATED_DOCUMENT_IDENTITY_UNSAFE")
+                }
                 created = uri
                 return resolver.openOutputStream(uri, "w") ?: throw FileNotFoundException()
             }
