@@ -76,7 +76,7 @@ object IncomingShareParser {
             if (extras != null && extras != incoming) return null
             val mime = intent.type?.takeUnless {
                 it.isBlank() || it == "*/*" ||
-                    it.contains('\\n') || it.contains('\\r')
+                    it.contains('\n') || it.contains('\r')
             }
             incoming.map { IncomingShare(it, mime) }
         } catch (_: RuntimeException) {
