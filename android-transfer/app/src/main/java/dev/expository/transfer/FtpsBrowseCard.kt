@@ -72,6 +72,7 @@ fun FtpsBrowseCard() {
     var folder by remember { mutableStateOf("/") }
     var page by remember { mutableStateOf<FtpsBrowsePreview?>(null) }
     var pendingFile by remember { mutableStateOf<String?>(null) }
+    var pendingSaveWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
     var busy by remember { mutableStateOf(false) }
     var transferred by remember { mutableLongStateOf(0L) }
     var continueCopy by remember { mutableStateOf<AtomicBoolean?>(null) }
@@ -88,12 +89,16 @@ fun FtpsBrowseCard() {
         val destination = result.data?.data
         val live = session
         val source = pendingFile
+        val witness = pendingSaveWitness
+        pendingFile = null
+        pendingSaveWitness = null
         if (result.resultCode != Activity.RESULT_OK || destination == null) {
             busy = false
             status = "Save As canceled. No file written by Expository."
-        } else if (live == null || source == null) {
+        } else if (live == null || source == null ||
+            witness?.matches(sessionId, folder, source) != true) {
             busy = false
-            status = "Session expired. The picker may have created an empty document."
+            status = "FTPS session, folder or remote file changed during Save As. No copy started; the picker may have created an empty document."
         } else {
             val permit = AtomicBoolean(true)
             continueCopy = permit
@@ -159,6 +164,7 @@ fun FtpsBrowseCard() {
                     folder = next
                     page = it
                     pendingFile = null
+                    pendingSaveWitness = null
                     status = if (it.method == "LIST")
                         "Compatibility LIST preview. Incomplete metadata cannot authorize changes."
                     else if (it.truncated)
@@ -253,6 +259,7 @@ fun FtpsBrowseCard() {
                         sessionId = ""
                         page = null
                         pendingFile = null
+                        pendingSaveWitness = null
                         status = "Disconnected. Session and credentials cleared."
                     }) { Text("Disconnect") }
                     Button(enabled = !busy, onClick = { browseTo(folder) }) { Text("Refresh") }
@@ -287,6 +294,7 @@ fun FtpsBrowseCard() {
                                         } else {
                                             busy = true
                                             pendingFile = null
+                                            pendingSaveWitness = null
                                             status = "Checking remote file metadata before Save As…"
                                             scope.launch {
                                                 val preflight = withContext(Dispatchers.IO) {
@@ -298,6 +306,7 @@ fun FtpsBrowseCard() {
                                                 } else {
                                                     preflight.onSuccess {
                                                         pendingFile = fullPath
+                                                        pendingSaveWitness = RemotePickerWitness(sessionId, folder, fullPath)
                                                         val extension = entry.name
                                                             .substringAfterLast('.', "").lowercase()
                                                         val mime = MimeTypeMap.getSingleton()
@@ -312,11 +321,13 @@ fun FtpsBrowseCard() {
                                                             status = "Choose a new Android document. No remote source changes."
                                                         } catch (_: Exception) {
                                                             pendingFile = null
+                                                            pendingSaveWitness = null
                                                             busy = false
                                                             status = "Android Save As picker unavailable. Nothing was transferred."
                                                         }
                                                     }.onFailure {
                                                         pendingFile = null
+                                                        pendingSaveWitness = null
                                                         busy = false
                                                         status = "Remote file metadata unavailable. No Android document was created."
                                                     }
