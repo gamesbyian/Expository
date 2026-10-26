@@ -40,6 +40,7 @@ internal data class LocalTreeBrowseState(
     val crumbs: List<TreeCrumb> = emptyList(),
     val entries: List<TreeEntry> = emptyList(),
     val selected: Set<String> = emptySet(),
+    val canWrite: Boolean = false,
     val loading: Boolean = false,
     val complete: Boolean = false,
     val generation: Long = 0L,
@@ -125,6 +126,7 @@ internal fun LocalTreePane(
     label: String,
     state: LocalTreeBrowseState,
     scroll: LazyListState,
+    enabled: Boolean = true,
     onPick: () -> Unit,
     onOpen: (TreeEntry) -> Unit,
     onParent: () -> Unit,
@@ -137,12 +139,12 @@ internal fun LocalTreePane(
             Text("$label · Device", style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
-                    enabled = !state.loading,
+                    enabled = enabled && !state.loading,
                     modifier = Modifier.heightIn(min = 48.dp),
                     onClick = onPick
                 ) { Text(if (state.treeUri == null) "Choose folder" else "Change folder") }
                 if (state.treeUri != null) {
-                    Button(enabled = !state.loading,
+                    Button(enabled = enabled && !state.loading,
                         modifier = Modifier.heightIn(min = 48.dp),
                         onClick = onRefresh) { Text("Refresh") }
                 }
@@ -153,7 +155,7 @@ internal fun LocalTreePane(
                 style = MaterialTheme.typography.bodySmall
             )
             if (state.crumbs.size > 1) {
-                Button(enabled = !state.loading,
+                Button(enabled = enabled && !state.loading,
                     modifier = Modifier.heightIn(min = 48.dp),
                     onClick = onParent) { Text("Parent folder") }
             }
@@ -165,6 +167,9 @@ internal fun LocalTreePane(
                 Text("Listing incomplete: some files may be hidden. No transfer is authorized.",
                     style = MaterialTheme.typography.bodySmall)
             }
+            Text("Destination creation: " + (if (state.canWrite)
+                "folder grant supports write; capability rechecked before Copy"
+                else "read-only grant"), style = MaterialTheme.typography.bodySmall)
             Text("Selected: " + state.selected.size,
                 style = MaterialTheme.typography.bodySmall)
             LazyColumn(
@@ -184,7 +189,7 @@ internal fun LocalTreePane(
                             )
                         }
                         Button(
-                            enabled = !state.loading,
+                            enabled = enabled && !state.loading,
                             modifier = Modifier.heightIn(min = 48.dp).semantics {
                                 stateDescription = if (!entry.directory &&
                                     entry.documentId in state.selected) "Selected" else "Not selected"
