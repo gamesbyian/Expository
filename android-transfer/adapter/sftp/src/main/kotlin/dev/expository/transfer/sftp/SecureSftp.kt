@@ -61,6 +61,13 @@ object SftpPath {
                 it == '\r' || it == '\n' }) { "INVALID_SFTP_CHILD" }
         return name
     }
+
+    /** Canonical single-child path, including the server root without // or .. */
+    fun childPath(absoluteParent: String, childName: String): String {
+        val parent = requireAbsolute(absoluteParent)
+        val child = validateChild(childName)
+        return requireAbsolute(if (parent == "/") "/$child" else "$parent/$child")
+    }
 }
 
 object SecureSftp {
