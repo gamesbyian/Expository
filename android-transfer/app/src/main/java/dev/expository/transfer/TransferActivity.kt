@@ -44,6 +44,12 @@ import androidx.compose.ui.unit.dp
 import dev.expository.transfer.planner.*
 import dev.expository.transfer.journal.RecoveryStatusCard
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicBoolean
+import dev.expository.transfer.saf.TreeCopyRequest
+import dev.expository.transfer.saf.TreeCopyPreflight
+import dev.expository.transfer.saf.SafTreeToTreeCopy
+import dev.expository.transfer.engine.CopyProof
+import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 
 /** Android-native picker-first transfer shell; synthetic planner stays isolated in Demo. */
 data class IncomingShareRequest(
@@ -142,6 +148,11 @@ private fun DeveloperPreview(
     var treeB by remember { mutableStateOf(LocalTreeBrowseState()) }
     var scrollA by remember { mutableStateOf(LazyListState()) }
     var scrollB by remember { mutableStateOf(LazyListState()) }
+    var proposedCopy by remember { mutableStateOf<TreeCopyPreflight?>(null) }
+    var copyBusy by remember { mutableStateOf(false) }
+    var copyStatus by remember { mutableStateOf(
+        "Choose two writable/readable device folders, then select one source file for Copy.") }
+    var copyPermit by remember { mutableStateOf<AtomicBoolean?>(null) }
 
     fun tree(which: WorkspacePane): LocalTreeBrowseState =
         if (which == WorkspacePane.A) treeA else treeB
@@ -150,12 +161,14 @@ private fun DeveloperPreview(
         if (which == WorkspacePane.A) treeA = next else treeB = next
     }
 
-    fun readTree(which: WorkspacePane, uri: Uri, crumbs: List<TreeCrumb>) {
+    fun readTree(which: WorkspacePane, uri: Uri, crumbs: List<TreeCrumb>,
+        writeGranted: Boolean = tree(which).canWrite) {
         if (!LocalTreeReader.validTree(uri) || crumbs.isEmpty() ||
             model.pane(which).endpoint != BrowseEndpoint.LOCAL) return
         val nextGeneration = tree(which).generation + 1L
         replaceTree(which, LocalTreeBrowseState(
             treeUri = uri, crumbs = crumbs, loading = true,
+            canWrite = writeGranted,
             generation = nextGeneration, status = "Reading this Android folder…"
         ))
         scope.launch {
@@ -174,7 +187,7 @@ private fun DeveloperPreview(
                     entries = listing.children, complete = listing.complete,
                     selected = emptySet(), loading = false,
                     status = if (listing.complete)
-                        "Folder opened. Read-only browser; " +
+                        "Folder opened. Scoped Android browser; " +
                             listing.children.size + " visible items."
                     else "More than 200 items or ambiguous provider rows; listing incomplete."
                 ))
@@ -222,7 +235,8 @@ private fun DeveloperPreview(
         }
         // No takePersistableUriPermission; no serialized grants or implicit
         // access after process recreation. User can explicitly choose again.
-        readTree(which, uri, listOf(TreeCrumb(rootId, "Chosen folder")))
+        readTree(which, uri, listOf(TreeCrumb(rootId, "Chosen folder")),
+            writeGranted = grant and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0)
     }
 
     val treePickerA = rememberLauncherForActivityResult(
@@ -232,7 +246,8 @@ private fun DeveloperPreview(
 
     fun launchTreePicker(which: WorkspacePane) {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         }
         runCatching {
             if (which == WorkspacePane.A) treePickerA.launch(intent)
@@ -245,6 +260,7 @@ private fun DeveloperPreview(
     }
 
     fun changeEndpoint(which: WorkspacePane, endpoint: BrowseEndpoint) {
+        proposedCopy = null
         if (model.pane(which).endpoint != endpoint) {
             model = model.update(which, model.pane(which).endpoint(endpoint))
             replaceTree(which, LocalTreeBrowseState())
@@ -252,6 +268,7 @@ private fun DeveloperPreview(
     }
 
     fun choosePair(pair: DualPairing) {
+        proposedCopy = null
         val next = model.preset(pair)
         if (model.a.endpoint != next.a.endpoint) treeA = LocalTreeBrowseState()
         if (model.b.endpoint != next.b.endpoint) treeB = LocalTreeBrowseState()
@@ -259,6 +276,7 @@ private fun DeveloperPreview(
     }
 
     fun toggleTreeSelection(which: WorkspacePane, entry: TreeEntry) {
+        proposedCopy = null
         val current = tree(which)
         if (current.loading || current.treeUri == null || entry.directory ||
             current.entries.none { it.documentId == entry.documentId }) return
@@ -274,8 +292,90 @@ private fun DeveloperPreview(
         replaceTree(which, current.toggle(entry))
     }
 
+
+    fun requestDeviceCopy(sourcePane: WorkspacePane) {
+        if (copyBusy || proposedCopy != null || model.view != WorkspaceView.DUAL) return
+        val from = tree(sourcePane)
+        val destinationPane = if (sourcePane == WorkspacePane.A)
+            WorkspacePane.B else WorkspacePane.A
+        val to = tree(destinationPane)
+        val selectedId = from.selected.singleOrNull() ?: return
+        val file = from.entries.singleOrNull {
+            it.documentId == selectedId && !it.directory
+        } ?: return
+        if (model.pane(sourcePane).endpoint != BrowseEndpoint.LOCAL ||
+            model.pane(destinationPane).endpoint != BrowseEndpoint.LOCAL ||
+            !from.complete || !to.complete || !to.canWrite) {
+            copyStatus = "Copy blocked: both folders and a writable destination grant are required."
+            return
+        }
+        val request = TreeCopyRequest(
+            from.treeUri ?: return, from.folderId ?: return,
+            selectedId, file.title,
+            to.treeUri ?: return, to.folderId ?: return, to.canWrite
+        )
+        val sourceGeneration = from.generation
+        val destinationGeneration = to.generation
+        copyBusy = true
+        copyStatus = "Checking scoped source, destination provider create authority and collisions…"
+        scope.launch {
+            val candidate = withContext(Dispatchers.IO) {
+                SafTreeToTreeCopy(context.contentResolver) { digest ->
+                    AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                }.prepare(request)
+            }
+            if (tree(sourcePane).generation != sourceGeneration ||
+                tree(destinationPane).generation != destinationGeneration ||
+                tree(sourcePane).selected != setOf(selectedId) ||
+                model.pane(sourcePane).endpoint != BrowseEndpoint.LOCAL ||
+                model.pane(destinationPane).endpoint != BrowseEndpoint.LOCAL) {
+                proposedCopy = null
+                copyStatus = "Folder or selected source changed during preflight. No file was created."
+            } else if (candidate == null) {
+                proposedCopy = null
+                copyStatus = "Copy preflight refused: incomplete listing, collision, permission or provider capability. No file was created."
+            } else {
+                proposedCopy = candidate
+                copyStatus = "Review the one-file Copy plan. No destination has been created."
+            }
+            copyBusy = false
+        }
+    }
+
+    fun confirmDeviceCopy() {
+        val pending = proposedCopy ?: return
+        if (copyBusy || model.view != WorkspaceView.DUAL) return
+        proposedCopy = null
+        val permit = AtomicBoolean(true)
+        copyPermit = permit
+        copyBusy = true
+        copyStatus = "Copying to a newly created Android provider document. Keep Expository open."
+        scope.launch {
+            val receipt = withContext(Dispatchers.IO) {
+                SafTreeToTreeCopy(context.contentResolver) { digest ->
+                    AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                }.copy(pending, continueRequested = { permit.get() })
+            }
+            copyStatus = when (receipt.proof) {
+                CopyProof.BYTES_VERIFIED ->
+                    "Copy verified: Android destination readback SHA-256 matched " +
+                        receipt.bytesWritten + " source bytes. Cloud sync not confirmed. Refresh destination."
+                CopyProof.WRITE_ACKNOWLEDGED ->
+                    "Provider acknowledged " + receipt.bytesWritten +
+                        " bytes but readback was unavailable; completion unverified. Inspect destination."
+                CopyProof.UNCERTAIN ->
+                    "Copy uncertain or partial. Source was not deleted. Inspect destination before retry."
+                CopyProof.BLOCKED ->
+                    "Copy blocked by changed permissions, listing or source metadata. No transfer stream started."
+            }
+            copyPermit = null
+            copyBusy = false
+        }
+    }
+
     var workspace by remember { mutableStateOf(TransferWorkspace.LOCAL) }
     LaunchedEffect(incomingShare?.sequence) {
+        proposedCopy = null
         // An incoming Share must never silently dispose an active SFTP or
         // FTPS session, potentially interrupting a transfer in progress.
         // First launch starts in Local anyway; a synthetic Demo can reset.
@@ -297,13 +397,18 @@ private fun DeveloperPreview(
             item {
                 FlowRow(modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { model = model.view(WorkspaceView.SINGLE) },
+                    Button(enabled = !copyBusy,
+                        onClick = {
+                            proposedCopy = null
+                            model = model.view(WorkspaceView.SINGLE)
+                        },
                         modifier = Modifier.heightIn(min = 48.dp).semantics {
                             stateDescription = if (model.view == WorkspaceView.SINGLE)
                                 "Selected" else "Not selected"
                         }) { Text(if (model.view == WorkspaceView.SINGLE)
                             "✓ Single view" else "Single view") }
-                    Button(onClick = { model = model.view(WorkspaceView.DUAL) },
+                    Button(enabled = !copyBusy,
+                        onClick = { model = model.view(WorkspaceView.DUAL) },
                         modifier = Modifier.heightIn(min = 48.dp).semantics {
                             stateDescription = if (model.view == WorkspaceView.DUAL)
                                 "Selected" else "Not selected"
@@ -385,6 +490,7 @@ private fun DeveloperPreview(
                         onPreset = ::choosePair,
                         onEndpoint = ::changeEndpoint,
                         onSwap = {
+                            proposedCopy = null
                             model = model.swap()
                             val oldTree = treeA
                             treeA = treeB
@@ -394,11 +500,22 @@ private fun DeveloperPreview(
                             scrollB = oldScroll
                         },
                         onFocus = { model = model.showDual(it) },
-                        onPick = ::launchTreePicker,
+                        onPick = {
+                            proposedCopy = null
+                            launchTreePicker(it)
+                        },
                         onNavigate = { which, crumbs ->
+                            proposedCopy = null
                             tree(which).treeUri?.let { readTree(which, it, crumbs) }
                         },
-                        onSelect = ::toggleTreeSelection
+                        onSelect = ::toggleTreeSelection,
+                        busy = copyBusy,
+                        copyStatus = copyStatus,
+                        proposedCopy = proposedCopy,
+                        onCopy = ::requestDeviceCopy,
+                        onConfirmCopy = ::confirmDeviceCopy,
+                        onCancelCopy = { proposedCopy = null },
+                        onStopCopy = { copyPermit?.set(false) }
                     )
                 }
             }
