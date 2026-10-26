@@ -3,6 +3,16 @@ package dev.expository.transfer
 
 import android.os.Bundle
 import android.content.Intent
+import android.app.Activity
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -123,6 +133,147 @@ private fun DeveloperPreview(
                 fake, fake.folder, name, ItemKind.FILE)), target,
                 destinationListing = DestinationListing("synthetic-listing-1", true, emptyList())), 0L)
     }
+    // Workspace view choice and Android tree grants live only in composition
+    // memory. Never persist URI authority names, document IDs or selections.
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var model by remember { mutableStateOf(TransferWorkspaceState()) }
+    var treeA by remember { mutableStateOf(LocalTreeBrowseState()) }
+    var treeB by remember { mutableStateOf(LocalTreeBrowseState()) }
+    var scrollA by remember { mutableStateOf(LazyListState()) }
+    var scrollB by remember { mutableStateOf(LazyListState()) }
+
+    fun tree(which: WorkspacePane): LocalTreeBrowseState =
+        if (which == WorkspacePane.A) treeA else treeB
+
+    fun replaceTree(which: WorkspacePane, next: LocalTreeBrowseState) {
+        if (which == WorkspacePane.A) treeA = next else treeB = next
+    }
+
+    fun readTree(which: WorkspacePane, uri: Uri, crumbs: List<TreeCrumb>) {
+        if (!LocalTreeReader.validTree(uri) || crumbs.isEmpty() ||
+            model.pane(which).endpoint != BrowseEndpoint.LOCAL) return
+        val nextGeneration = tree(which).generation + 1L
+        replaceTree(which, LocalTreeBrowseState(
+            treeUri = uri, crumbs = crumbs, loading = true,
+            generation = nextGeneration, status = "Reading this Android folder…"
+        ))
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { LocalTreeReader.list(
+                    context.contentResolver, uri, crumbs.last().documentId) }
+            }
+            val current = tree(which)
+            // A slow provider response must never populate a different account,
+            // selected tree, endpoint, pane or newer folder visit.
+            if (current.generation != nextGeneration || current.treeUri != uri ||
+                current.crumbs != crumbs ||
+                model.pane(which).endpoint != BrowseEndpoint.LOCAL) return@launch
+            result.onSuccess { listing ->
+                replaceTree(which, current.copy(
+                    entries = listing.children, complete = listing.complete,
+                    selected = emptySet(), loading = false,
+                    status = if (listing.complete)
+                        "Folder opened. Read-only browser; " +
+                            listing.children.size + " visible items."
+                    else "More than 200 items or ambiguous provider rows; listing incomplete."
+                ))
+                val location = LocationRef(
+                    LocationKey(LocationKind.LOCAL_SAF,
+                        uri.authority.orEmpty(), LocalTreeReader.rootId(uri),
+                        crumbs.last().documentId, uri.toString()),
+                    crumbs.map { it.title },
+                    "preview-only-" + nextGeneration,
+                    emptyMap() // Never fabricate a writable capability.
+                )
+                model = model.update(which, model.pane(which).visit(location))
+            }.onFailure {
+                replaceTree(which, current.copy(
+                    loading = false, complete = false, selected = emptySet(),
+                    entries = emptyList(),
+                    status = "Android provider could not list this folder. Re-select or refresh; no file was changed."
+                ))
+                model = model.update(which, model.pane(which).clearSelection())
+            }
+        }
+    }
+
+    fun pickerResult(which: WorkspacePane,
+        result: androidx.activity.result.ActivityResult) {
+        val uri = result.data?.data
+        val grant = result.data?.flags ?: 0
+        if (result.resultCode != Activity.RESULT_OK || uri == null) {
+            // Cancellation leaves the existing working pane intact.
+            return
+        }
+        if (!LocalTreeReader.validTree(uri) ||
+            grant and Intent.FLAG_GRANT_READ_URI_PERMISSION == 0) {
+            replaceTree(which, tree(which).copy(
+                status = "Android did not grant a readable folder. No data accessed."
+            ))
+            return
+        }
+        val rootId = runCatching { LocalTreeReader.rootId(uri) }.getOrNull()
+        if (rootId == null) {
+            replaceTree(which, tree(which).copy(
+                status = "Android returned an invalid folder tree. No data accessed."
+            ))
+            return
+        }
+        // No takePersistableUriPermission; no serialized grants or implicit
+        // access after process recreation. User can explicitly choose again.
+        readTree(which, uri, listOf(TreeCrumb(rootId, "Chosen folder")))
+    }
+
+    val treePickerA = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()) { pickerResult(WorkspacePane.A, it) }
+    val treePickerB = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()) { pickerResult(WorkspacePane.B, it) }
+
+    fun launchTreePicker(which: WorkspacePane) {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching {
+            if (which == WorkspacePane.A) treePickerA.launch(intent)
+            else treePickerB.launch(intent)
+        }.onFailure {
+            replaceTree(which, tree(which).copy(
+                status = "Android folder picker unavailable. No data accessed."
+            ))
+        }
+    }
+
+    fun changeEndpoint(which: WorkspacePane, endpoint: BrowseEndpoint) {
+        if (model.pane(which).endpoint != endpoint) {
+            model = model.update(which, model.pane(which).endpoint(endpoint))
+            replaceTree(which, LocalTreeBrowseState())
+        }
+    }
+
+    fun choosePair(pair: DualPairing) {
+        val next = model.preset(pair)
+        if (model.a.endpoint != next.a.endpoint) treeA = LocalTreeBrowseState()
+        if (model.b.endpoint != next.b.endpoint) treeB = LocalTreeBrowseState()
+        model = next
+    }
+
+    fun toggleTreeSelection(which: WorkspacePane, entry: TreeEntry) {
+        val current = tree(which)
+        if (current.loading || current.treeUri == null || entry.directory ||
+            current.entries.none { it.documentId == entry.documentId }) return
+        val location = model.pane(which).current?.location ?: return
+        val item = ItemRef(
+            ItemKey(location.key.authorityId, entry.documentId,
+                "unverified-browser-only"),
+            location, location.folder, entry.title, ItemKind.FILE
+        )
+        val updated = runCatching { model.pane(which).select(item) }.getOrNull()
+            ?: return
+        model = model.update(which, updated)
+        replaceTree(which, current.toggle(entry))
+    }
+
     var workspace by remember { mutableStateOf(TransferWorkspace.LOCAL) }
     LaunchedEffect(incomingShare?.sequence) {
         // An incoming Share must never silently dispose an active SFTP or
@@ -143,6 +294,24 @@ private fun DeveloperPreview(
                 Text("Choose where to work. Remote transfers require verified encrypted connections.",
                     style = MaterialTheme.typography.bodySmall)
             }
+            item {
+                FlowRow(modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { model = model.view(WorkspaceView.SINGLE) },
+                        modifier = Modifier.heightIn(min = 48.dp).semantics {
+                            stateDescription = if (model.view == WorkspaceView.SINGLE)
+                                "Selected" else "Not selected"
+                        }) { Text(if (model.view == WorkspaceView.SINGLE)
+                            "✓ Single view" else "Single view") }
+                    Button(onClick = { model = model.view(WorkspaceView.DUAL) },
+                        modifier = Modifier.heightIn(min = 48.dp).semantics {
+                            stateDescription = if (model.view == WorkspaceView.DUAL)
+                                "Selected" else "Not selected"
+                        }) { Text(if (model.view == WorkspaceView.DUAL)
+                            "✓ Dual view" else "Dual view") }
+                }
+            }
+            if (model.view == WorkspaceView.SINGLE) {
             item {
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
@@ -202,6 +371,35 @@ private fun DeveloperPreview(
                             }
                         }
                     }
+                }
+            }
+            } else {
+                item { RecoveryStatusCard() }
+                item {
+                    DualWorkspaceCard(
+                        workspace = model,
+                        a = treeA,
+                        b = treeB,
+                        aScroll = scrollA,
+                        bScroll = scrollB,
+                        onPreset = ::choosePair,
+                        onEndpoint = ::changeEndpoint,
+                        onSwap = {
+                            model = model.swap()
+                            val oldTree = treeA
+                            treeA = treeB
+                            treeB = oldTree
+                            val oldScroll = scrollA
+                            scrollA = scrollB
+                            scrollB = oldScroll
+                        },
+                        onFocus = { model = model.showDual(it) },
+                        onPick = ::launchTreePicker,
+                        onNavigate = { which, crumbs ->
+                            tree(which).treeUri?.let { readTree(which, it, crumbs) }
+                        },
+                        onSelect = ::toggleTreeSelection
+                    )
                 }
             }
         }
