@@ -165,6 +165,8 @@ private fun DeveloperPreview(
         writeGranted: Boolean = tree(which).canWrite) {
         if (!LocalTreeReader.validTree(uri) || crumbs.isEmpty() ||
             model.pane(which).endpoint != BrowseEndpoint.LOCAL) return
+        // Refresh and navigation invalidate a reviewed destination snapshot.
+        proposedCopy = null
         val nextGeneration = tree(which).generation + 1L
         replaceTree(which, LocalTreeBrowseState(
             treeUri = uri, crumbs = crumbs, loading = true,
@@ -318,6 +320,10 @@ private fun DeveloperPreview(
         )
         val sourceGeneration = from.generation
         val destinationGeneration = to.generation
+        val sourceTree = from.treeUri
+        val destinationTree = to.treeUri
+        val sourceFolder = from.folderId
+        val destinationFolder = to.folderId
         copyBusy = true
         copyStatus = "Checking scoped source, destination provider create authority and collisions…"
         scope.launch {
@@ -328,6 +334,10 @@ private fun DeveloperPreview(
             }
             if (tree(sourcePane).generation != sourceGeneration ||
                 tree(destinationPane).generation != destinationGeneration ||
+                tree(sourcePane).treeUri != sourceTree ||
+                tree(destinationPane).treeUri != destinationTree ||
+                tree(sourcePane).folderId != sourceFolder ||
+                tree(destinationPane).folderId != destinationFolder ||
                 tree(sourcePane).selected != setOf(selectedId) ||
                 model.pane(sourcePane).endpoint != BrowseEndpoint.LOCAL ||
                 model.pane(destinationPane).endpoint != BrowseEndpoint.LOCAL) {
