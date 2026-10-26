@@ -27,6 +27,9 @@ object IncomingShareParser {
         // A malformed parcel must reject the share, never crash the process.
         val (stream, clipped) = try {
             val stream = extraStream(intent)
+            // A present but malformed or wrong-typed EXTRA_STREAM must not
+            // silently be ignored in favor of unrelated ClipData.
+            if (intent.hasExtra(Intent.EXTRA_STREAM) && stream == null) return null
             val clips = intent.clipData
             if (clips != null && clips.itemCount != 1) return null
             Pair(stream, clips?.getItemAt(0)?.uri)
@@ -56,6 +59,7 @@ object IncomingShareParser {
             val extras = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
                 intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
             else intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+            if (intent.hasExtra(Intent.EXTRA_STREAM) && extras == null) return null
             val clip = intent.clipData
             val clipped = if (clip != null) {
                 if (clip.itemCount !in 1..MAX_SHARED_DOCUMENTS) return null

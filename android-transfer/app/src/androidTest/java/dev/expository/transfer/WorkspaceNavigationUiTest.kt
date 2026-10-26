@@ -225,5 +225,29 @@ class WorkspaceNavigationUiTest {
             shareEpochUnchanged(before, after))
         assertTrue(shareEpochUnchanged(after, after))
     }
+    @Test fun malformedPresentShareExtrasCannotFallbackToClipData() {
+        val valid = Uri.parse("content://synthetic.example/granted")
+        val clipped = ClipData.newRawUri("Synthetic", valid)
+        val single = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            clipData = clipped
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        assertEquals(valid, IncomingShareParser.parse(single)?.uri)
+        single.putExtra(Intent.EXTRA_STREAM, "wrong-type-extra")
+        assertNull("Invalid EXTRA_STREAM must not silently substitute ClipData",
+            IncomingShareParser.parse(single))
+
+        val multiple = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "text/plain"
+            clipData = clipped
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        assertEquals(listOf(valid),
+            IncomingShareParser.parseMultiple(multiple)?.map { it.uri })
+        multiple.putExtra(Intent.EXTRA_STREAM, "wrong-type-list")
+        assertNull("Invalid stream list must not silently substitute ClipData",
+            IncomingShareParser.parseMultiple(multiple))
+    }
 
 }
