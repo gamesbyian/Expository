@@ -65,6 +65,10 @@ fun LocalCopyCard(incomingShare: IncomingShareRequest? = null) {
     var continueCopy by remember { mutableStateOf<AtomicBoolean?>(null) }
     var transferred by remember { mutableLongStateOf(0L) }
     var receipt by remember { mutableStateOf<CopyReceipt?>(null) }
+    var selectionRevision by remember { mutableLongStateOf(0L) }
+    var openPickerRevision by remember { mutableLongStateOf(-1L) }
+    var savePickerRevision by remember { mutableLongStateOf(-1L) }
+    var frozenSaveSource by remember { mutableStateOf<Uri?>(null) }
 
     LaunchedEffect(incomingShare?.sequence) {
         val request = incomingShare ?: return@LaunchedEffect
@@ -72,8 +76,10 @@ fun LocalCopyCard(incomingShare: IncomingShareRequest? = null) {
             status = "A file was shared while a copy was active. Finish the current transfer and share again."
             return@LaunchedEffect
         }
-        // Incoming share replaces the previous picker selection, including
-        // on unsupported/malformed SEND requests. Never retain stale grants.
+        // Invalidate both in-flight picker results and asynchronous metadata
+        // observations before accepting a newly shared source.
+        val incomingRevision = selectionRevision + 1L
+        selectionRevision = incomingRevision
         selected = null
         displayName = null
         destinationName = null
@@ -86,6 +92,7 @@ fun LocalCopyCard(incomingShare: IncomingShareRequest? = null) {
             val observation = withContext(Dispatchers.IO) {
                 runCatching { service.observe(candidate.uri) }.getOrNull()
             }
+            if (selectionRevision != incomingRevision) return@LaunchedEffect
             if (observation == null) {
                 status = "Cannot read the shared document. Choose it with Android's file picker."
             } else {
@@ -99,12 +106,16 @@ fun LocalCopyCard(incomingShare: IncomingShareRequest? = null) {
     }
 
     val save = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val sourceUri = selected
+        val sourceUri = frozenSaveSource
+        val originalRevision = savePickerRevision
+        frozenSaveSource = null
+        savePickerRevision = -1L
         val targetUri = result.data?.data
         if (result.resultCode != Activity.RESULT_OK || targetUri == null) {
             status = "Save As canceled. No transfer started."
-        } else if (sourceUri == null) {
-            status = "Source grant expired. Choose the file again. The created destination may be empty."
+        } else if (sourceUri == null || sourceUri != selected ||
+            originalRevision != selectionRevision) {
+            status = "Source selection changed while Save As was open. No copy started. The picker may have created an empty document."
         } else {
             val permit = AtomicBoolean(true)
             continueCopy = permit
@@ -155,6 +166,12 @@ fun LocalCopyCard(incomingShare: IncomingShareRequest? = null) {
         }
     }
     val open = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val launchedRevision = openPickerRevision
+        openPickerRevision = -1L
+        if (launchedRevision != selectionRevision) {
+            status = "Old file-picker result ignored because the selection changed."
+            return@rememberLauncherForActivityResult
+        }
         val uri = result.data?.data
         if (result.resultCode != Activity.RESULT_OK || uri == null) {
             status = "File selection canceled."
@@ -168,7 +185,8 @@ fun LocalCopyCard(incomingShare: IncomingShareRequest? = null) {
                 val observation = withContext(Dispatchers.IO) {
                     runCatching { service.observe(uri) }.getOrNull()
                 }
-                if (selected == uri && observation != null) {
+                if (selectionRevision == launchedRevision &&
+                    selected == uri && observation != null) {
                     displayName = observation.displayName
                     mime = observation.mimeType
                 }
@@ -187,6 +205,8 @@ fun LocalCopyCard(incomingShare: IncomingShareRequest? = null) {
                     // A cancelled replacement must never leave the previous URI
                     // actionable under a misleading "selection canceled" status.
                     // In-memory grants are not carried into the next pick attempt.
+                    selectionRevision += 1L
+                    openPickerRevision = selectionRevision
                     selected = null
                     displayName = null
                     destinationName = null
@@ -200,6 +220,9 @@ fun LocalCopyCard(incomingShare: IncomingShareRequest? = null) {
                     })
                 }) { Text("Choose file") }
                 Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !busy && selected != null, onClick = {
+                    val source = selected ?: return@Button
+                    frozenSaveSource = source
+                    savePickerRevision = selectionRevision
                     val sourceName = displayName ?: "copy.bin"
                     save.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
