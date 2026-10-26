@@ -59,6 +59,22 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
 
 /**
+ * Immutable identity and location of an Android picker launch. OS pickers can
+ * outlive the composing screen, so their result must never silently adopt a
+ * newly connected server, folder, or selected remote file.
+ */
+internal data class RemotePickerWitness(
+    val sessionId: String,
+    val folder: String,
+    val file: String? = null
+) {
+    fun matches(currentSessionId: String, currentFolder: String,
+        currentFile: String? = null): Boolean =
+        sessionId.isNotBlank() && sessionId == currentSessionId &&
+        folder == currentFolder && file == currentFile
+}
+
+/**
  * Foreground pinned-SFTP browse, Save As and exclusive-create Upload.
  * Ephemeral credentials/session only; deliberate no auto-trust, source delete,
  * implicit upload, background service or promise of process-death recovery.
@@ -79,6 +95,8 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
     var newFolderName by remember { mutableStateOf("") }
     var page by remember { mutableStateOf<SftpBrowsePage?>(null) }
     var pendingFile by remember { mutableStateOf<String?>(null) }
+    var pendingSaveWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
+    var pendingUploadWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
     var pendingMove by remember { mutableStateOf<String?>(null) }
     var showRenamePreview by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Enter a known SHA-256 SSH host-key fingerprint. Unknown keys are never trusted automatically.") }
@@ -96,12 +114,16 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
         val target = result.data?.data
         val live = session
         val path = pendingFile
+        val witness = pendingSaveWitness
+        pendingFile = null
+        pendingSaveWitness = null
         if (result.resultCode != Activity.RESULT_OK || target == null) {
             busy = false
             status = "Save As canceled. No file written by Expository."
-        } else if (live == null || path == null) {
+        } else if (live == null || path == null ||
+            witness?.matches(sessionId, folder, path) != true) {
             busy = false
-            status = "Remote session expired. Destination may be an empty document; reconnect and choose again."
+            status = "Remote file, folder or session changed during Save As. No copy started. The picker may have created an empty document."
         } else {
             val permit = AtomicBoolean(true)
             continueCopy = permit
@@ -279,9 +301,14 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
     val chooseUpload = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
+        val witness = pendingUploadWitness
+        pendingUploadWitness = null
         if (result.resultCode != Activity.RESULT_OK) {
             busy = false
             status = "Upload picker canceled. No remote file created."
+        } else if (session == null || witness?.matches(sessionId, folder) != true) {
+            busy = false
+            status = "Remote folder or session changed during file selection. No upload started."
         } else {
             val sources = ScopedUploadPicker.documents(result.data)
             if (sources == null || sources.isEmpty()) {
@@ -489,6 +516,7 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                     }) { Text("Create folder") }
                 Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp), onClick = {
                     busy = true // freeze session while Android picks a local source
+                    pendingUploadWitness = RemotePickerWitness(sessionId, folder)
                     chooseUpload.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
                         type = "*/*"
@@ -539,6 +567,7 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                                     Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
                                         onClick = {
                                             pendingFile = path
+                                            pendingSaveWitness = RemotePickerWitness(sessionId, folder, path)
                                             busy = true
                                             val extension = entry.name.substringAfterLast('.', "").lowercase()
                                             val mime = MimeTypeMap.getSingleton()
