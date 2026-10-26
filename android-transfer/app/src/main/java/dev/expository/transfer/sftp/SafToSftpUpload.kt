@@ -17,7 +17,7 @@ import java.security.MessageDigest
 import java.util.UUID
 
 /**
- * User-picked local SAF file -> authenticated and pinned SFTP destination.
+ * User-granted Android content document -> authenticated pinned SFTP destination.
  * Strict COPY, no overwrite, append, automatic cleanup or source deletion.
  * A successful server-side close is not equal to a read-back verified receipt.
  */
@@ -60,7 +60,7 @@ class SafToSftpUpload(private val resolver: ContentResolver,
             val names = siblings.joinToString("\n").toByteArray(Charsets.UTF_8)
             val listingDigest = MessageDigest.getInstance("SHA-256").digest(names)
                 .joinToString("") { "%02x".format(it) }
-            val read = CapabilityProof(Support.SUPPORTED, "android-open-document-picker",
+            val read = CapabilityProof(Support.SUPPORTED, "android-scoped-content-grant",
                 proofTime + 60_000)
             val write = CapabilityProof(Support.SUPPORTED,
                 "authenticated-sftp-exclusive-create", proofTime + 60_000)

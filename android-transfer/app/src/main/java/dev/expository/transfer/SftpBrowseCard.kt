@@ -64,7 +64,7 @@ import kotlin.coroutines.coroutineContext
  * implicit upload, background service or promise of process-death recovery.
  */
 @Composable
-fun SftpBrowseCard() {
+fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var host by remember { mutableStateOf("") }
@@ -154,15 +154,11 @@ fun SftpBrowseCard() {
     }
 
 
-    val chooseUpload = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val source = result.data?.data
+    fun uploadSource(source: Uri) {
         val live = session
         val directory = folder
         val opaque = sessionId
-        if (result.resultCode != Activity.RESULT_OK || source == null) {
-            busy = false
-            status = "Upload picker canceled. No remote file created."
-        } else if (live == null || opaque.isBlank()) {
+        if (live == null || opaque.isBlank()) {
             busy = false
             status = "SFTP session expired. Reconnect to upload."
         } else {
@@ -224,6 +220,16 @@ fun SftpBrowseCard() {
         }
     }
 
+    val chooseUpload = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val source = result.data?.data
+        if (result.resultCode != Activity.RESULT_OK || source == null) {
+            busy = false
+            status = "Upload picker canceled. No remote file created."
+        } else uploadSource(source)
+    }
+
     fun browseTo(next: String) {
         val live = session ?: return
         busy = true
@@ -253,6 +259,10 @@ fun SftpBrowseCard() {
                 style = MaterialTheme.typography.bodySmall)
 
             if (session == null) {
+                if (incomingShare?.payload != null) {
+                    Text("Shared document ready. Connect to a trusted SFTP server, then choose a destination folder and explicitly upload.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
                 OutlinedTextField(host, { host = it }, label = { Text("SFTP host") },
                     enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(port, { port = it }, label = { Text("Port") },
@@ -424,6 +434,16 @@ fun SftpBrowseCard() {
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     })
                 }) { Text("Upload file here…") }
+                val sharedFile = incomingShare?.payload?.uri
+                if (sharedFile != null) {
+                    Text("Android shared document available. No upload starts until tapped.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Button(
+                        enabled = !busy && session != null && sessionId.isNotBlank(),
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        onClick = { uploadSource(sharedFile) }
+                    ) { Text("Upload shared file here") }
+                }
                 if (folder != "/") Button(enabled = !busy, onClick = {
                     val parent = folder.substringBeforeLast('/', "").ifBlank { "/" }
                     browseTo(parent)

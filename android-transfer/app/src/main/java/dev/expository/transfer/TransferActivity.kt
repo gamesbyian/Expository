@@ -42,9 +42,7 @@ class TransferActivity : ComponentActivity() {
     private var nextShareSequence = 0L
     private val pendingShare = mutableStateOf<IncomingShareRequest?>(null)
 
-    /** Shared ingestion path for launch, real onNewIntent and isolated UI tests.
-     * Tests call this instead of inventing a framework lifecycle transition.
-     */
+    /** Isolated share ingestion: OS lifecycle delegates to this method. */
     fun ingestIncomingShare(inbound: Intent) {
         if (inbound.action != Intent.ACTION_SEND) return
         nextShareSequence++
@@ -104,7 +102,11 @@ private fun DeveloperPreview(incomingShare: IncomingShareRequest?) {
     }
     var workspace by remember { mutableStateOf(TransferWorkspace.LOCAL) }
     LaunchedEffect(incomingShare?.sequence) {
-        if (incomingShare != null) workspace = TransferWorkspace.LOCAL
+        // An incoming Share must never silently dispose an active SFTP or
+        // FTPS session, potentially interrupting a transfer in progress.
+        // First launch starts in Local anyway; a synthetic Demo can reset.
+        if (incomingShare != null && workspace == TransferWorkspace.DEMO)
+            workspace = TransferWorkspace.LOCAL
     }
     Scaffold { padding ->
         // One outer scroll owner. Only the active connection form is composed;
@@ -139,7 +141,7 @@ private fun DeveloperPreview(incomingShare: IncomingShareRequest?) {
             item { RecoveryStatusCard() }
             when (workspace) {
                 TransferWorkspace.LOCAL -> item { LocalCopyCard(incomingShare) }
-                TransferWorkspace.SFTP -> item { SftpBrowseCard() }
+                TransferWorkspace.SFTP -> item { SftpBrowseCard(incomingShare) }
                 TransferWorkspace.FTPS -> item { FtpsBrowseCard() }
                 TransferWorkspace.DEMO -> {
                     item {
