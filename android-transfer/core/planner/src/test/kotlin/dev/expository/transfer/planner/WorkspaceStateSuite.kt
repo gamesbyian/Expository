@@ -122,6 +122,17 @@ object WorkspaceStateSuite {
         check(state.b.endpoint == BrowseEndpoint.LOCAL && state.b.current == null)
         check(state.single.current?.location == local)
 
+        // Unbounded browsing cannot retain an unbounded private path/history.
+        var deep = BrowsePaneState(BrowseEndpoint.LOCAL).visit(local)
+        repeat(300) { number ->
+            deep = deep.visit(observed(LocationKind.LOCAL_SAF,
+                "opaque-local", "/folder-" + number))
+        }
+        check(deep.back.size == 64)
+        repeat(64) { deep = deep.back() }
+        check(deep.back.isEmpty())
+        check(deep.forward.size == 64)
+
         // No selection can be resurrected by targeting a different session.
         check(BrowsePaneState(BrowseEndpoint.SFTP).visit(sftp).endpoint(BrowseEndpoint.FTPS)
             .current == null)
