@@ -94,7 +94,7 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("SFTP file transfer").assertExists()
         compose.onNodeWithText("Dual view").performClick()
         compose.onNodeWithText("✓ Dual view").assertExists()
-        compose.onNodeWithText("Location B · SFTP").assertExists()
+        compose.onNodeWithText("Location A · SFTP").assertExists()
     }
 
     @Test fun incomingShareOffersSftpDestinationWithoutSilentUpload() {
