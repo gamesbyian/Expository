@@ -77,6 +77,16 @@ object WorkspaceStateSuite {
         check(state.copyProposal(WorkspacePane.A,
             DestinationListing("collision", true, listOf(candidate.name)), NOW)?.executable == false)
         check(state.copyProposal(WorkspacePane.SINGLE, listing, NOW) == null)
+        // A Move button can propose a route, but a cross-authority Move
+        // may never delete without explicit consent and source capability.
+        val refusedMove = state.moveProposal(WorkspacePane.A, listing, NOW)
+        check(refusedMove != null && !refusedMove.executable)
+        check("DELETE_CONSENT_REQUIRED" in refusedMove.blockers)
+        check("DELETE_CAPABILITY_NOT_PROVEN" in refusedMove.blockers)
+        check(state.moveProposal(WorkspacePane.A, listing, NOW,
+            deletionAuthorized = true)?.executable == false)
+        check(state.moveProposal(WorkspacePane.B, listing, NOW) == null)
+
 
         // Swap moves each entire identity/path/selection/history, not just
         // text labels. Active A/B tab follows the actual observed location.
@@ -132,6 +142,30 @@ object WorkspaceStateSuite {
         repeat(64) { deep = deep.back() }
         check(deep.back.isEmpty())
         check(deep.forward.size == 64)
+
+        // A verified same-server Move may use the remote rename route,
+        // while Copy between the same locations remains a byte-copy plan.
+        val renameProof = CapabilityProof(Support.SUPPORTED, "remote-rename-observed",
+            NOW + 10_000L)
+        val remoteFrom = sftp.copy(
+            key = sftp.key.copy(containerId = "remote-source"),
+            folder = listOf("source"), capabilities = caps() +
+                (Capability.RENAME to renameProof))
+        val remoteTo = sftp.copy(
+            key = sftp.key.copy(containerId = "remote-target"),
+            folder = listOf("target"), capabilities = caps() +
+                (Capability.RENAME to renameProof))
+        val remoteState = TransferWorkspaceState(view = WorkspaceView.DUAL,
+            a = BrowsePaneState(BrowseEndpoint.SFTP).visit(remoteFrom)
+                .select(item(remoteFrom, "remote-item")),
+            b = BrowsePaneState(BrowseEndpoint.SFTP).visit(remoteTo))
+        val nativeMove = remoteState.moveProposal(WorkspacePane.A, listing, NOW)
+        check(nativeMove != null && nativeMove.executable)
+        check(nativeMove.operation == Operation.MOVE &&
+            nativeMove.route == TransferRoute.VERIFIED_REMOTE_RENAME)
+        check(remoteState.copyProposal(WorkspacePane.A, listing, NOW)?.route ==
+            TransferRoute.DEVICE_RELAY)
+        check(remoteState.swap().moveProposal(WorkspacePane.B, listing, NOW) == nativeMove)
 
         // No selection can be resurrected by targeting a different session.
         check(BrowsePaneState(BrowseEndpoint.SFTP).visit(sftp).endpoint(BrowseEndpoint.FTPS)
