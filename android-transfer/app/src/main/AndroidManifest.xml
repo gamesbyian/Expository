@@ -13,10 +13,11 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Android user-directed single-document shares, read-only grant.
-                 No ACTION_SEND_MULTIPLE or broad storage permission. -->
+            <!-- User-directed Android single/multi-document shares with scoped
+                 read grants only. No broad storage permission. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="*/*" />
             </intent-filter>

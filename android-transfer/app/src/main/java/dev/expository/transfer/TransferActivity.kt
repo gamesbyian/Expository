@@ -35,7 +35,11 @@ import dev.expository.transfer.planner.*
 import dev.expository.transfer.journal.RecoveryStatusCard
 
 /** Android-native picker-first transfer shell; synthetic planner stays isolated in Demo. */
-data class IncomingShareRequest(val payload: IncomingShare?, val sequence: Long)
+data class IncomingShareRequest(
+    val payload: IncomingShare?,
+    val sequence: Long,
+    val batch: List<IncomingShare>? = null
+)
 
 /** Inbound user share is transient; source URIs are never persisted. */
 class TransferActivity : ComponentActivity() {
@@ -44,16 +48,22 @@ class TransferActivity : ComponentActivity() {
 
     /** Isolated share ingestion: OS lifecycle delegates to this method. */
     fun ingestIncomingShare(inbound: Intent) {
-        if (inbound.action != Intent.ACTION_SEND) return
+        if (inbound.action != Intent.ACTION_SEND &&
+            inbound.action != Intent.ACTION_SEND_MULTIPLE) return
         nextShareSequence++
         pendingShare.value = IncomingShareRequest(
-            IncomingShareParser.parse(inbound), nextShareSequence
+            if (inbound.action == Intent.ACTION_SEND) IncomingShareParser.parse(inbound)
+                else null,
+            nextShareSequence,
+            if (inbound.action == Intent.ACTION_SEND_MULTIPLE)
+                IncomingShareParser.parseMultiple(inbound) else null
         )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (intent?.action == Intent.ACTION_SEND) ingestIncomingShare(intent)
+        if (intent?.action == Intent.ACTION_SEND ||
+            intent?.action == Intent.ACTION_SEND_MULTIPLE) ingestIncomingShare(intent)
         setContent {
             MaterialTheme { Surface { DeveloperPreview(pendingShare.value) } }
         }

@@ -13,6 +13,7 @@ import android.os.Build
 data class IncomingShare(val uri: Uri, val suggestedMime: String?)
 
 object IncomingShareParser {
+    const val MAX_SHARED_DOCUMENTS = 12
     // minSdk=26. The typed Parcelable overload requires API 33.
     @Suppress("DEPRECATION")
     private fun extraStream(intent: Intent): Uri? =
@@ -41,4 +42,42 @@ object IncomingShareParser {
         }
         return IncomingShare(uri, mime)
     }
+    /**
+     * Android ACTION_SEND_MULTIPLE is only accepted as a bounded set of
+     * opaque, explicitly read-granted content URIs. If both ClipData and the
+     * typed EXTRA_STREAM list are supplied, their ordered entries must agree:
+     * never silently choose one interpretation of an ambiguous grant.
+     */
+    @Suppress("DEPRECATION")
+    fun parseMultiple(intent: Intent?): List<IncomingShare>? {
+        if (intent?.action != Intent.ACTION_SEND_MULTIPLE ||
+            intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION == 0) return null
+        return try {
+            val extras = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            else intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+            val clip = intent.clipData
+            val clipped = if (clip != null) {
+                if (clip.itemCount !in 1..MAX_SHARED_DOCUMENTS) return null
+                (0 until clip.itemCount).map {
+                    clip.getItemAt(it).uri ?: return null
+                }
+            } else null
+            if (extras != null && (extras.size !in 1..MAX_SHARED_DOCUMENTS ||
+                extras.any { it == null })) return null
+            if (extras != null && clipped != null && extras != clipped) return null
+            val uris = clipped ?: extras ?: return null
+            if (uris.isEmpty() || uris.size > MAX_SHARED_DOCUMENTS ||
+                uris.distinct().size != uris.size || uris.any {
+                    it.scheme != ContentResolver.SCHEME_CONTENT || it.authority.isNullOrBlank()
+                }) return null
+            val mime = intent.type?.takeUnless {
+                it.isBlank() || it == "*/*" || it.contains('\n') || it.contains('\r')
+            }
+            uris.map { IncomingShare(it, mime) }
+        } catch (_: RuntimeException) {
+            null
+        }
+    }
+
 }
