@@ -201,7 +201,9 @@ class LocalSharesheetSmokeTest {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
             }
-            compose.activity.startActivity(inbound)
+            // Exercise Activity's same-instance incoming-share callback
+            // without launching a second Activity that outlives ComposeRule.
+            compose.runOnUiThread { compose.activity.onNewIntent(inbound) }
             compose.waitUntil(15_000L) {
                 compose.onAllNodesWithText("Document received from Android Share.",
                     substring = true).fetchSemanticsNodes().isNotEmpty()
@@ -245,16 +247,14 @@ class LocalSharesheetSmokeTest {
         }
         try {
             resolver.openOutputStream(source, "wt")!!.use { it.write(bytes) }
-            compose.activity.startActivity(
-                Intent(compose.activity, TransferActivity::class.java).apply {
-                    action = Intent.ACTION_SEND
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_STREAM, source)
-                    clipData = ClipData.newUri(resolver, "Synthetic inbound copy", source)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                }
-            )
+            val inbound = Intent(compose.activity, TransferActivity::class.java).apply {
+                action = Intent.ACTION_SEND
+                type = "text/plain"
+                putExtra(Intent.EXTRA_STREAM, source)
+                clipData = ClipData.newUri(resolver, "Synthetic inbound copy", source)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            compose.runOnUiThread { compose.activity.onNewIntent(inbound) }
             compose.waitUntil(15_000L) {
                 compose.onAllNodesWithText("Document received from Android Share.",
                     substring = true).fetchSemanticsNodes().isNotEmpty()
