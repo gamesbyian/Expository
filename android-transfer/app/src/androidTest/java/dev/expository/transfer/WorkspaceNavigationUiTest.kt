@@ -13,6 +13,8 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
@@ -126,6 +128,23 @@ class WorkspaceNavigationUiTest {
         max.addItem(ClipData.Item(Uri.parse("content://synthetic.example/overflow")))
         assertNull("Oversized batches must fail before the first upload",
             ScopedUploadPicker.documents(Intent().apply { clipData = max }))
+    }
+
+    /** A system picker result must not be redirected by a changed workspace. */
+    @Test fun remotePickerWitnessRejectsChangedDestinationOrSource() {
+        val upload = RemotePickerWitness("session-a", "/inbox")
+        assertTrue(upload.matches("session-a", "/inbox"))
+        assertFalse(upload.matches("session-b", "/inbox"))
+        assertFalse(upload.matches("session-a", "/other-folder"))
+        assertFalse(upload.matches("", "/inbox"))
+        assertFalse(RemotePickerWitness("", "/inbox").matches("", "/inbox"))
+
+        val save = RemotePickerWitness("session-a", "/inbox", "/inbox/notes.txt")
+        assertTrue(save.matches("session-a", "/inbox", "/inbox/notes.txt"))
+        assertFalse(save.matches("session-a", "/inbox", "/inbox/another.txt"))
+        assertFalse(save.matches("session-a", "/other-folder", "/inbox/notes.txt"))
+        assertFalse(save.matches("session-b", "/inbox", "/inbox/notes.txt"))
+        assertFalse(save.matches("session-a", "/inbox"))
     }
 
 }
