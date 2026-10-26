@@ -44,6 +44,8 @@ data class IncomingShareRequest(
 /** Inbound user share is transient; source URIs are never persisted. */
 class TransferActivity : ComponentActivity() {
     private var nextShareSequence = 0L
+    /** Changes synchronously on onNewIntent, even while DocumentsUI owns the screen. */
+    val incomingShareEpoch: Long get() = nextShareSequence
     private val pendingShare = mutableStateOf<IncomingShareRequest?>(null)
 
     /** Isolated share ingestion: OS lifecycle delegates to this method. */
@@ -65,7 +67,9 @@ class TransferActivity : ComponentActivity() {
         if (intent?.action == Intent.ACTION_SEND ||
             intent?.action == Intent.ACTION_SEND_MULTIPLE) ingestIncomingShare(intent)
         setContent {
-            MaterialTheme { Surface { DeveloperPreview(pendingShare.value) } }
+            MaterialTheme { Surface {
+                DeveloperPreview(pendingShare.value) { incomingShareEpoch }
+            } }
         }
     }
 
@@ -89,7 +93,9 @@ private val demoFiles = listOf(
 )
 
 @Composable
-private fun DeveloperPreview(incomingShare: IncomingShareRequest?) {
+private fun DeveloperPreview(
+    incomingShare: IncomingShareRequest?, currentShareEpoch: () -> Long
+) {
     var selected by androidx.compose.runtime.remember { mutableStateOf<String?>(null) }
     val proof = CapabilityProof(Support.SUPPORTED, "synthetic-only", Long.MAX_VALUE)
     val fake = LocationRef(
@@ -150,7 +156,9 @@ private fun DeveloperPreview(incomingShare: IncomingShareRequest?) {
             }
             item { RecoveryStatusCard() }
             when (workspace) {
-                TransferWorkspace.LOCAL -> item { LocalCopyCard(incomingShare) }
+                TransferWorkspace.LOCAL -> item {
+                    LocalCopyCard(incomingShare, currentShareEpoch)
+                }
                 TransferWorkspace.SFTP -> item { SftpBrowseCard(incomingShare) }
                 TransferWorkspace.FTPS -> item { FtpsBrowseCard() }
                 TransferWorkspace.DEMO -> {

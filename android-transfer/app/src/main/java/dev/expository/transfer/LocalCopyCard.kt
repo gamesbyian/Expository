@@ -47,8 +47,15 @@ import java.util.concurrent.atomic.AtomicBoolean
  * First real, user-initiated file operation: Android picker -> Save As picker.
  * One file only, no move/delete/overwrite. No background or process-death recovery.
  */
+/** A saved picker result cannot use an epoch predating a new Android Share. */
+internal fun shareEpochUnchanged(launched: Long, current: Long): Boolean =
+    launched >= 0L && launched == current
+
 @Composable
-fun LocalCopyCard(incomingShare: IncomingShareRequest? = null) {
+fun LocalCopyCard(
+    incomingShare: IncomingShareRequest? = null,
+    currentShareEpoch: () -> Long
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val service = remember(context) {
@@ -68,6 +75,8 @@ fun LocalCopyCard(incomingShare: IncomingShareRequest? = null) {
     var selectionRevision by remember { mutableLongStateOf(0L) }
     var openPickerRevision by remember { mutableLongStateOf(-1L) }
     var savePickerRevision by remember { mutableLongStateOf(-1L) }
+    var openPickerShareEpoch by remember { mutableLongStateOf(-1L) }
+    var savePickerShareEpoch by remember { mutableLongStateOf(-1L) }
     var frozenSaveSource by remember { mutableStateOf<Uri?>(null) }
 
     LaunchedEffect(incomingShare?.sequence) {
@@ -114,13 +123,16 @@ fun LocalCopyCard(incomingShare: IncomingShareRequest? = null) {
     val save = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val sourceUri = frozenSaveSource
         val originalRevision = savePickerRevision
+        val originalShareEpoch = savePickerShareEpoch
         frozenSaveSource = null
         savePickerRevision = -1L
+        savePickerShareEpoch = -1L
         val targetUri = result.data?.data
         if (result.resultCode != Activity.RESULT_OK || targetUri == null) {
             status = "Save As canceled. No transfer started."
         } else if (sourceUri == null || sourceUri != selected ||
-            originalRevision != selectionRevision) {
+            originalRevision != selectionRevision ||
+            !shareEpochUnchanged(originalShareEpoch, currentShareEpoch())) {
             status = "Source selection changed while Save As was open. No copy started. The picker may have created an empty document."
         } else {
             val permit = AtomicBoolean(true)
@@ -173,8 +185,11 @@ fun LocalCopyCard(incomingShare: IncomingShareRequest? = null) {
     }
     val open = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val launchedRevision = openPickerRevision
+        val launchedShareEpoch = openPickerShareEpoch
         openPickerRevision = -1L
-        if (launchedRevision != selectionRevision) {
+        openPickerShareEpoch = -1L
+        if (launchedRevision != selectionRevision ||
+            !shareEpochUnchanged(launchedShareEpoch, currentShareEpoch())) {
             status = "Old file-picker result ignored because the selection changed."
             return@rememberLauncherForActivityResult
         }
@@ -213,6 +228,7 @@ fun LocalCopyCard(incomingShare: IncomingShareRequest? = null) {
                     // In-memory grants are not carried into the next pick attempt.
                     selectionRevision += 1L
                     openPickerRevision = selectionRevision
+                    openPickerShareEpoch = currentShareEpoch()
                     selected = null
                     displayName = null
                     destinationName = null
@@ -229,6 +245,7 @@ fun LocalCopyCard(incomingShare: IncomingShareRequest? = null) {
                     val source = selected ?: return@Button
                     frozenSaveSource = source
                     savePickerRevision = selectionRevision
+                    savePickerShareEpoch = currentShareEpoch()
                     val sourceName = displayName ?: "copy.bin"
                     save.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)

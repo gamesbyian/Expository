@@ -205,5 +205,25 @@ class WorkspaceNavigationUiTest {
         // Parsed grants are only offered after a pinned authenticated session.
         compose.onNodeWithText("Upload 2 shared files here").assertDoesNotExist()
     }
+    /** OS intent callback invalidates picker witnesses before Compose can resume. */
+    @Test fun synchronousShareEpochRejectsStalePickerResultWitness() {
+        val activity = compose.activity
+        val before = activity.incomingShareEpoch
+        assertTrue(shareEpochUnchanged(before, before))
+        assertFalse(shareEpochUnchanged(-1L, before))
+
+        // No provider access is needed: even a malformed incoming share
+        // supersedes a picker started under the previous Activity intent.
+        compose.runOnUiThread {
+            activity.ingestIncomingShare(Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+            })
+        }
+        val after = activity.incomingShareEpoch
+        assertEquals(before + 1L, after)
+        assertFalse("A delayed Save As/Open result cannot use its old URI",
+            shareEpochUnchanged(before, after))
+        assertTrue(shareEpochUnchanged(after, after))
+    }
 
 }
