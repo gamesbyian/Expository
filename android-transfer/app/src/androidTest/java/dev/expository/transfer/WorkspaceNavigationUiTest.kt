@@ -85,7 +85,7 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("SFTP file transfer").assertExists()
         compose.onNodeWithText("Copy A → B…").assertIsNotEnabled()
         compose.onNodeWithText("Copy B → A…").assertIsNotEnabled()
-        compose.onNodeWithText("Move and remote cross-pane transfers are unavailable.",
+        compose.onNodeWithText("Remote cross-pane Copy/Move and local Move remain unavailable.",
             substring = true).assertExists()
         compose.onNodeWithText("Single view").performClick()
         compose.onNodeWithText("✓ Single view").assertExists()
