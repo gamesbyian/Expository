@@ -113,7 +113,15 @@ data class BrowsePaneState(
  * authority to mutate. Re-observe the directory, reselect and replan first.
  */
 private fun FolderVisit.withoutProof(): FolderVisit =
-    copy(location = location.copy(capabilities = emptyMap()))
+    copy(
+        location = location.copy(capabilities = emptyMap()),
+        // Selected items independently contain LocationRef snapshots. If those
+        // are left untouched, OperationPlanner can still see old READ proofs
+        // despite the pane's location having been invalidated.
+        selected = selected.map { item ->
+            item.copy(location = item.location.copy(capabilities = emptyMap()))
+        }
+    )
 
 private fun LocationRef.freeze(): LocationRef =
     copy(folder = folder.toList(), capabilities = capabilities.toMap())
