@@ -85,6 +85,11 @@ fun LocalCopyCard(incomingShare: IncomingShareRequest? = null) {
         destinationName = null
         receipt = null
         mime = "application/octet-stream"
+        if (request.batch.isNotEmpty()) {
+            status = request.batch.size.toString() +
+                " files received from Android Share. Switch to SFTP, connect securely, and choose a remote folder to upload explicitly. No files have been transferred."
+            return@LaunchedEffect
+        }
         val candidate = request.payload
         if (candidate == null) {
             status = "The shared item has no supported one-file read grant. Choose a file instead."
