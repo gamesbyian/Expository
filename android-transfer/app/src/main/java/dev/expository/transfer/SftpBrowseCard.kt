@@ -170,8 +170,8 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
             status = "SFTP session expired. Reconnect to upload."
             return
         }
-        if (sources.isEmpty() || sources.size > 12 ||
-            sources.any { it.scheme != "content" } ||
+        if (sources.isEmpty() || sources.size > ScopedUploadPicker.MAX_DOCUMENTS ||
+            sources.any { it.scheme != android.content.ContentResolver.SCHEME_CONTENT } ||
             sources.distinct().size != sources.size) {
             busy = false
             status = "Select 1–12 distinct Android documents. No remote upload started."
@@ -283,18 +283,7 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
             busy = false
             status = "Upload picker canceled. No remote file created."
         } else {
-            val sources = runCatching {
-                val clips = result.data?.clipData
-                if (clips != null) {
-                    require(clips.itemCount in 1..12) { "TOO_MANY_SOURCES" }
-                    (0 until clips.itemCount).map { index ->
-                        clips.getItemAt(index).uri
-                            ?: error("NON_DOCUMENT_SOURCE")
-                    }
-                } else {
-                    listOfNotNull(result.data?.data)
-                }
-            }.getOrNull()
+            val sources = ScopedUploadPicker.documents(result.data)
             if (sources == null || sources.isEmpty()) {
                 busy = false
                 status = "Upload selection invalid or exceeds 12 documents. Nothing uploaded."
