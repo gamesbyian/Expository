@@ -146,5 +146,64 @@ class WorkspaceNavigationUiTest {
         assertFalse(save.matches("session-b", "/inbox", "/inbox/notes.txt"))
         assertFalse(save.matches("session-a", "/inbox"))
     }
+    /** Bounded multi-share parsing and user-directed, no-silent-upload UI. */
+    @Test fun inboundMultiShareRequiresMatchingScopedGrantsAndExplicitUpload() {
+        val a = Uri.parse("content://synthetic.example/source-a")
+        val b = Uri.parse("content://synthetic.example/source-b")
+        val clip = ClipData.newRawUri("Synthetic source", a).apply {
+            addItem(ClipData.Item(b))
+        }
+        fun share() = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "text/plain"
+            clipData = clip
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, arrayListOf(a, b))
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        assertEquals(listOf(a, b),
+            IncomingShareParser.parseMultiple(share())?.map { it.uri })
+        assertNull("No grant cannot be promoted into remote writes",
+            IncomingShareParser.parseMultiple(share().apply {
+                flags = flags and Intent.FLAG_GRANT_READ_URI_PERMISSION.inv()
+            }))
+        assertNull("Conflicting ClipData and EXTRA_STREAM must fail closed",
+            IncomingShareParser.parseMultiple(share().apply {
+                putParcelableArrayListExtra(Intent.EXTRA_STREAM, arrayListOf(b, a))
+            }))
+        assertNull("Duplicate source must not upload twice",
+            IncomingShareParser.parseMultiple(share().apply {
+                putParcelableArrayListExtra(Intent.EXTRA_STREAM, arrayListOf(a, a))
+                clipData = ClipData.newRawUri("Synthetic", a).apply {
+                    addItem(ClipData.Item(a))
+                }
+            }))
+        assertNull("file:// source is not a granted Android document",
+            IncomingShareParser.parseMultiple(share().apply {
+                val local = Uri.parse("file:///unsafe")
+                clipData = ClipData.newRawUri("Synthetic", a).apply {
+                    addItem(ClipData.Item(local))
+                }
+                putParcelableArrayListExtra(Intent.EXTRA_STREAM, arrayListOf(a, local))
+            }))
+        val large = (0..IncomingShareParser.MAX_SHARED_DOCUMENTS).map {
+            Uri.parse("content://synthetic.example/" + it)
+        }
+        assertNull("Share beyond 12 documents must reject as a unit",
+            IncomingShareParser.parseMultiple(share().apply {
+                clipData = null
+                putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(large))
+            }))
+
+        compose.runOnUiThread { compose.activity.ingestIncomingShare(share()) }
+        compose.waitUntil(15_000L) {
+            compose.onAllNodesWithText("2 shared documents received", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("SFTP").performClick()
+        compose.onNodeWithText("Shared documents ready.", substring = true).assertExists()
+        compose.onNodeWithText("Connect securely").assertIsNotEnabled()
+        // Parsed grants are only offered after a pinned authenticated session.
+        compose.onNodeWithText("Upload 2 shared files here").assertDoesNotExist()
+    }
 
 }

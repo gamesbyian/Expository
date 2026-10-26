@@ -347,8 +347,10 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                 style = MaterialTheme.typography.bodySmall)
 
             if (session == null) {
-                if (incomingShare?.payload != null) {
-                    Text("Shared document ready. Connect to a trusted SFTP server, then choose a destination folder and explicitly upload.",
+                if (incomingShare?.payload != null || incomingShare?.batch?.isNotEmpty() == true) {
+                    Text((if (incomingShare?.batch?.isNotEmpty() == true)
+                        "Shared documents ready." else "Shared document ready.") +
+                        " Connect to a trusted SFTP server, then choose a destination folder and explicitly upload.",
                         style = MaterialTheme.typography.bodySmall)
                 }
                 OutlinedTextField(host, { host = it }, label = { Text("SFTP host") },
@@ -526,15 +528,20 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                 }) { Text("Upload files here…") }
                 Text("Choose up to 12 files. Each is copied separately; the batch stops on the first unverified result. Earlier verified uploads remain.",
                     style = MaterialTheme.typography.bodySmall)
-                val sharedFile = incomingShare?.payload?.uri
-                if (sharedFile != null) {
-                    Text("Android shared document available. No upload starts until tapped.",
+                val sharedFiles = incomingShare?.batch?.map { it.uri }
+                    ?: incomingShare?.payload?.let { listOf(it.uri) }
+                if (!sharedFiles.isNullOrEmpty()) {
+                    Text(sharedFiles.size.toString() +
+                        " Android-shared document(s) available. No upload starts until tapped.",
                         style = MaterialTheme.typography.bodySmall)
                     Button(
                         enabled = !busy && session != null && sessionId.isNotBlank(),
                         modifier = Modifier.heightIn(min = 48.dp),
-                        onClick = { uploadSources(listOf(sharedFile)) }
-                    ) { Text("Upload shared file here") }
+                        onClick = { uploadSources(sharedFiles) }
+                    ) {
+                        Text(if (sharedFiles.size == 1) "Upload shared file here"
+                             else "Upload " + sharedFiles.size + " shared files here")
+                    }
                 }
                 if (folder != "/") Button(enabled = !busy, onClick = {
                     val parent = folder.substringBeforeLast('/', "").ifBlank { "/" }

@@ -85,6 +85,12 @@ fun LocalCopyCard(incomingShare: IncomingShareRequest? = null) {
         destinationName = null
         receipt = null
         mime = "application/octet-stream"
+        val batch = request.batch
+        if (batch != null) {
+            status = batch.size.toString() +
+                " shared documents received. Switch to SFTP to explicitly upload them; Local Save As supports one document at a time."
+            return@LaunchedEffect
+        }
         val candidate = request.payload
         if (candidate == null) {
             status = "The shared item has no supported one-file read grant. Choose a file instead."
