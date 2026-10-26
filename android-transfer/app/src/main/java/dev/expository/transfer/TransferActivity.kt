@@ -2,6 +2,7 @@
 package dev.expository.transfer
 
 import android.os.Bundle
+import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +22,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,12 +35,36 @@ import dev.expository.transfer.planner.*
 import dev.expository.transfer.journal.RecoveryStatusCard
 
 /** Android-native picker-first transfer shell; synthetic planner stays isolated in Demo. */
+data class IncomingShareRequest(val payload: IncomingShare?, val sequence: Long)
+
+/** Inbound user share is transient; source URIs are never persisted. */
 class TransferActivity : ComponentActivity() {
+    private var nextShareSequence = 0L
+    private val pendingShare = mutableStateOf<IncomingShareRequest?>(null)
+
+    /** Shared ingestion path for launch, real onNewIntent and isolated UI tests.
+     * Tests call this instead of inventing a framework lifecycle transition.
+     */
+    fun ingestIncomingShare(inbound: Intent) {
+        if (inbound.action != Intent.ACTION_SEND) return
+        nextShareSequence++
+        pendingShare.value = IncomingShareRequest(
+            IncomingShareParser.parse(inbound), nextShareSequence
+        )
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (intent?.action == Intent.ACTION_SEND) ingestIncomingShare(intent)
         setContent {
-            MaterialTheme { Surface { DeveloperPreview() } }
+            MaterialTheme { Surface { DeveloperPreview(pendingShare.value) } }
         }
+    }
+
+    public override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        ingestIncomingShare(intent)
     }
 }
 
@@ -55,7 +81,7 @@ private val demoFiles = listOf(
 )
 
 @Composable
-private fun DeveloperPreview() {
+private fun DeveloperPreview(incomingShare: IncomingShareRequest?) {
     var selected by androidx.compose.runtime.remember { mutableStateOf<String?>(null) }
     val proof = CapabilityProof(Support.SUPPORTED, "synthetic-only", Long.MAX_VALUE)
     val fake = LocationRef(
@@ -77,6 +103,9 @@ private fun DeveloperPreview() {
                 destinationListing = DestinationListing("synthetic-listing-1", true, emptyList())), 0L)
     }
     var workspace by remember { mutableStateOf(TransferWorkspace.LOCAL) }
+    LaunchedEffect(incomingShare?.sequence) {
+        if (incomingShare != null) workspace = TransferWorkspace.LOCAL
+    }
     Scaffold { padding ->
         // One outer scroll owner. Only the active connection form is composed;
         // switching away disposes its ephemeral session and credentials.
@@ -109,7 +138,7 @@ private fun DeveloperPreview() {
             }
             item { RecoveryStatusCard() }
             when (workspace) {
-                TransferWorkspace.LOCAL -> item { LocalCopyCard() }
+                TransferWorkspace.LOCAL -> item { LocalCopyCard(incomingShare) }
                 TransferWorkspace.SFTP -> item { SftpBrowseCard() }
                 TransferWorkspace.FTPS -> item { FtpsBrowseCard() }
                 TransferWorkspace.DEMO -> {

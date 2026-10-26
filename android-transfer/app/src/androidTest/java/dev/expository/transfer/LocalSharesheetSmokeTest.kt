@@ -1,5 +1,6 @@
 package dev.expository.transfer
 
+import android.content.ClipData
 import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
@@ -14,6 +15,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.Until
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -135,6 +137,207 @@ class LocalSharesheetSmokeTest {
                 Uri.parse("file:///private/should-never-be-exposed.txt"), "text/plain")
         } catch (_: IllegalArgumentException) { rejected = true }
         assertTrue("Never expose file:// or arbitrary schemes to external apps", rejected)
+    }
+
+    @Test fun inboundSingleDocumentShareRejectsUntrustedOrAmbiguousUriGrants() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME,
+                    "expository-inbound-contract-" + UUID.randomUUID() + ".txt")
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }) ?: error("INBOUND_FIXTURE_INSERT_FAILED")
+        try {
+            val valid = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                clipData = ClipData.newUri(resolver, "Synthetic inbound document", uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val accepted = IncomingShareParser.parse(valid)
+            assertEquals(uri, accepted?.uri)
+            assertEquals("text/plain", accepted?.suggestedMime)
+            assertEquals(null, IncomingShareParser.parse(Intent(valid).apply {
+                flags = 0
+            }))
+            assertEquals(null, IncomingShareParser.parse(Intent(valid).apply {
+                action = Intent.ACTION_SEND_MULTIPLE
+            }))
+            assertEquals(null, IncomingShareParser.parse(Intent(valid).apply {
+                putExtra(Intent.EXTRA_STREAM, Uri.parse("file:///untrusted.txt"))
+                clipData = null
+            }))
+            assertEquals(null, IncomingShareParser.parse(Intent(valid).apply {
+                putExtra(Intent.EXTRA_STREAM, Uri.parse("content://other.example/thing"))
+            }))
+            assertEquals(null, IncomingShareParser.parse(Intent(valid).apply {
+                removeExtra(Intent.EXTRA_STREAM)
+                clipData = null
+            }))
+        } finally {
+            resolver.delete(uri, null, null)
+        }
+    }
+
+    @Test fun androidReceiveShareSelectsSyntheticFileWithoutCopyOrUpload() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        val name = "expository-inbound-" + UUID.randomUUID().toString().take(12) + ".txt"
+        val bytes = "Synthetic inbound Android document".toByteArray(Charsets.UTF_8)
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                put(MediaStore.MediaColumns.IS_PENDING, 0)
+            }) ?: error("INBOUND_PROVIDER_INSERT_FAILED")
+        try {
+            resolver.openOutputStream(uri, "wt")!!.use { it.write(bytes) }
+            val inbound = Intent(compose.activity, TransferActivity::class.java).apply {
+                action = Intent.ACTION_SEND
+                type = "text/plain"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                clipData = ClipData.newUri(resolver, "Synthetic inbound document", uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            // Ingest a real scoped share payload without creating any
+            // artificial Android activity lifecycle transitions.
+            compose.runOnUiThread { compose.activity.ingestIncomingShare(inbound) }
+            compose.waitUntil(15_000L) {
+                compose.onAllNodesWithText("Document received from Android Share.",
+                    substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("Source: " + name).assertExists()
+            compose.onNodeWithText("Save copy…").assertIsEnabled()
+            compose.onNodeWithText("Share…").assertIsEnabled()
+            compose.onNodeWithText("Open with…").assertIsEnabled()
+            // Reception alone must perform zero writes or external handoffs.
+            assertArrayEquals(bytes, resolver.openInputStream(uri)!!.use { it.readBytes() })
+        } finally {
+            resolver.delete(uri, null, null)
+        }
+    }
+
+    @Test fun androidInboundShareToNewSaveDocumentVerifiesCopiedBytes() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val tag = UUID.randomUUID().toString().take(10)
+        val srcName = "expository-inboundcopy-" + tag + ".txt"
+        val targetName = "expository-inbound-saved-" + tag + ".txt"
+        val bytes = ByteArray(131_099) { i -> ((i * 29 + 3) and 255).toByte() }
+        val source = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, srcName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                put(MediaStore.MediaColumns.IS_PENDING, 0)
+            }) ?: error("INBOUND_COPY_SOURCE_INSERT_FAILED")
+        fun findTarget(): Uri? {
+            resolver.query(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.MediaColumns._ID),
+                "${MediaStore.MediaColumns.DISPLAY_NAME}=?",
+                arrayOf(targetName), null)?.use { rows ->
+                if (rows.moveToFirst()) {
+                    return Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        rows.getLong(0).toString())
+                }
+            }
+            return null
+        }
+        try {
+            resolver.openOutputStream(source, "wt")!!.use { it.write(bytes) }
+            val inbound = Intent(compose.activity, TransferActivity::class.java).apply {
+                action = Intent.ACTION_SEND
+                type = "text/plain"
+                putExtra(Intent.EXTRA_STREAM, source)
+                clipData = ClipData.newUri(resolver, "Synthetic inbound copy", source)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            compose.runOnUiThread { compose.activity.ingestIncomingShare(inbound) }
+            compose.waitUntil(15_000L) {
+                compose.onAllNodesWithText("Document received from Android Share.",
+                    substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("Save copy…").performClick()
+            val picker = device.wait(
+                Until.hasObject(By.pkg("com.google.android.documentsui")), 12_000L
+            ) || device.wait(
+                Until.hasObject(By.pkg("com.android.documentsui")), 3_000L
+            ) || device.wait(Until.hasObject(By.text("Save")), 3_000L) ||
+                device.currentPackageName == "android"
+            assertTrue("Android Create Document picker must open", picker)
+            // DocumentsUI frequently rebinds nodes while switching roots.
+            // Acquire a fresh UiObject2 before each mutation.
+            var rootsOpened = false
+            repeat(3) {
+                if (!rootsOpened) {
+                    val roots = device.findObject(By.desc("Show roots"))
+                        ?: device.findObject(By.descContains("navigation"))
+                    if (roots != null) {
+                        try {
+                            roots.click()
+                            rootsOpened = true
+                        } catch (_: StaleObjectException) {
+                            device.waitForIdle(300L)
+                        }
+                    }
+                }
+            }
+            fun clickFresh(text: String, stage: String) {
+                repeat(5) {
+                    val item = device.wait(Until.findObject(By.text(text)), 3_000L)
+                    if (item != null) {
+                        try {
+                            item.click()
+                            return
+                        } catch (_: StaleObjectException) {
+                            device.waitForIdle(300L)
+                        }
+                    }
+                }
+                error(stage + "_STALE_OR_MISSING")
+            }
+            if (device.wait(Until.hasObject(By.text("Downloads")), 5_000L))
+                clickFresh("Downloads", "INBOUND_DOWNLOADS_ROOT")
+            var named = false
+            repeat(5) {
+                if (!named) {
+                    val field = device.wait(
+                        Until.findObject(By.clazz("android.widget.EditText")), 3_000L
+                    )
+                    if (field != null) {
+                        try {
+                            field.text = targetName
+                            named = true
+                        } catch (_: StaleObjectException) {
+                            device.waitForIdle(300L)
+                        }
+                    }
+                }
+            }
+            check(named) { "INBOUND_SAVE_EDIT_FIELD_STALE_OR_MISSING" }
+            val saveText = if (device.wait(Until.hasObject(By.text("Save")), 5_000L))
+                "Save" else "SAVE"
+            clickFresh(saveText, "INBOUND_SAVE_BUTTON")
+            compose.waitUntil(30_000L) {
+                compose.onAllNodesWithText("Receipt: BYTES_VERIFIED", substring = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("Destination: " + targetName).assertExists()
+            assertArrayEquals("incoming share source must be preserved", bytes,
+                resolver.openInputStream(source)!!.use { it.readBytes() })
+            // SAF may not expose this new URI in MediaStore; if it does,
+            // independently verify the mirrored bytes too.
+            findTarget()?.let { target ->
+                assertArrayEquals(bytes,
+                    resolver.openInputStream(target)!!.use { it.readBytes() })
+            }
+        } finally {
+            findTarget()?.let { resolver.delete(it, null, null) }
+            resolver.delete(source, null, null)
+        }
     }
 
 }

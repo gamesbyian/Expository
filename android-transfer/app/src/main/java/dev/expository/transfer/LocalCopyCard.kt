@@ -17,6 +17,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -47,7 +48,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * One file only, no move/delete/overwrite. No background or process-death recovery.
  */
 @Composable
-fun LocalCopyCard() {
+fun LocalCopyCard(incomingShare: IncomingShareRequest? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val service = remember(context) {
@@ -64,6 +65,38 @@ fun LocalCopyCard() {
     var continueCopy by remember { mutableStateOf<AtomicBoolean?>(null) }
     var transferred by remember { mutableLongStateOf(0L) }
     var receipt by remember { mutableStateOf<CopyReceipt?>(null) }
+
+    LaunchedEffect(incomingShare?.sequence) {
+        val request = incomingShare ?: return@LaunchedEffect
+        if (busy) {
+            status = "A file was shared while a copy was active. Finish the current transfer and share again."
+            return@LaunchedEffect
+        }
+        // Incoming share replaces the previous picker selection, including
+        // on unsupported/malformed SEND requests. Never retain stale grants.
+        selected = null
+        displayName = null
+        destinationName = null
+        receipt = null
+        mime = "application/octet-stream"
+        val candidate = request.payload
+        if (candidate == null) {
+            status = "The shared item has no supported one-file read grant. Choose a file instead."
+        } else {
+            val observation = withContext(Dispatchers.IO) {
+                runCatching { service.observe(candidate.uri) }.getOrNull()
+            }
+            if (observation == null) {
+                status = "Cannot read the shared document. Choose it with Android's file picker."
+            } else {
+                selected = candidate.uri
+                displayName = observation.displayName
+                mime = observation.mimeType.takeIf { it.isNotBlank() }
+                    ?: candidate.suggestedMime ?: "application/octet-stream"
+                status = "Document received from Android Share. Save a copy, open, or share onward."
+            }
+        }
+    }
 
     val save = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val sourceUri = selected
