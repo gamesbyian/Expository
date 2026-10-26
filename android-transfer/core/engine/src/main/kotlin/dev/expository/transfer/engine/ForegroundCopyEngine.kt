@@ -3,6 +3,7 @@ package dev.expository.transfer.engine
 import dev.expository.transfer.planner.Operation
 import dev.expository.transfer.planner.TransferPlan
 import dev.expository.transfer.planner.TransferRoute
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.security.MessageDigest
@@ -34,6 +35,10 @@ data class CopyReceipt(
 )
 
 object ForegroundCopyEngine {
+    // InputStream.read(nonempty buffer) is contractually nonzero or EOF, but
+    // faulty ContentProvider/remote adapters can violate that contract.
+    // Bound repeated zero-byte reads in both transfer and verification.
+    private const val MAX_CONSECUTIVE_EMPTY_READS = 16
     fun copy(
         plan: TransferPlan,
         currentPlan: () -> TransferPlan,
@@ -65,11 +70,17 @@ object ForegroundCopyEngine {
                     // A provider can produce a partially created document on error.
                     touchedDestination = true
                     val buffer = ByteArray(64 * 1024)
+                    var emptyReadStreak = 0
                     while (true) {
                         if (!continueRequested()) throw InterruptedException()
                         val count = input.read(buffer)
                         if (count == -1) break
-                        if (count == 0) continue
+                        if (count == 0) {
+                            if (++emptyReadStreak >= MAX_CONSECUTIVE_EMPTY_READS)
+                                throw IOException("SOURCE_READ_STALLED")
+                            continue
+                        }
+                        emptyReadStreak = 0
                         output.write(buffer, 0, count)
                         sourceDigest.update(buffer, 0, count)
                         transferred = Math.addExact(transferred, count.toLong())
@@ -93,11 +104,17 @@ object ForegroundCopyEngine {
         try {
             verifyStream.use { input ->
                 val buffer = ByteArray(64 * 1024)
+                var emptyReadStreak = 0
                 while (true) {
                     if (!continueRequested()) throw InterruptedException()
                     val count = input.read(buffer)
                     if (count == -1) break
-                    if (count == 0) continue
+                    if (count == 0) {
+                        if (++emptyReadStreak >= MAX_CONSECUTIVE_EMPTY_READS)
+                            throw IOException("DESTINATION_READBACK_STALLED")
+                        continue
+                    }
+                    emptyReadStreak = 0
                     verifiedBytes = Math.addExact(verifiedBytes, count.toLong())
                     destinationDigest.update(buffer, 0, count)
                 }

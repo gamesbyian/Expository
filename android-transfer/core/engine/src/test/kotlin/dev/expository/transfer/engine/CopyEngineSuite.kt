@@ -122,6 +122,57 @@ object CopyEngineSuite {
             })
             check(receipt.proof == CopyProof.UNCERTAIN)
         }
+        scenario("permanent zero-byte source reads stop without success") {
+            var reads = 0
+            val out = ByteArrayOutputStream()
+            val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
+                override fun openSource(): InputStream = object : InputStream() {
+                    override fun read(): Int { reads++; return 0 }
+                    override fun read(b: ByteArray, off: Int, len: Int): Int {
+                        reads++; return 0
+                    }
+                }
+                override fun openNewDestination(): OutputStream = out
+                override fun openDestinationReadBack(): InputStream? = null
+            })
+            check(reads in 1..32 && receipt.proof == CopyProof.UNCERTAIN &&
+                receipt.bytesWritten == 0L && out.size() == 0)
+        }
+        scenario("permanent zero-byte readback is never marked verified") {
+            var reads = 0
+            val out = ByteArrayOutputStream()
+            val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
+                override fun openSource() = ByteArrayInputStream(bytes)
+                override fun openNewDestination(): OutputStream = out
+                override fun openDestinationReadBack(): InputStream = object : InputStream() {
+                    override fun read(): Int { reads++; return 0 }
+                    override fun read(b: ByteArray, off: Int, len: Int): Int {
+                        reads++; return 0
+                    }
+                }
+            })
+            check(reads in 1..32 && receipt.proof == CopyProof.UNCERTAIN &&
+                receipt.reason == "VERIFY_READ_FAILED" &&
+                out.toByteArray().contentEquals(bytes))
+        }
+        scenario("transient zero-byte reads do not corrupt data") {
+            val out = ByteArrayOutputStream()
+            fun oneZeroThenBytes() = object : ByteArrayInputStream(bytes) {
+                private var first = true
+                override fun read(b: ByteArray, off: Int, len: Int): Int {
+                    if (first) { first = false; return 0 }
+                    return super.read(b, off, len)
+                }
+            }
+            val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
+                override fun openSource() = oneZeroThenBytes()
+                override fun openNewDestination(): OutputStream = out
+                override fun openDestinationReadBack() = oneZeroThenBytes()
+            })
+            check(receipt.proof == CopyProof.BYTES_VERIFIED &&
+                receipt.bytesWritten == bytes.size.toLong() &&
+                out.toByteArray().contentEquals(bytes))
+        }
         println("PASS engine total=" + passed + " proof=synthetic-JVM-only")
     }
 }
