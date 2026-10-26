@@ -118,7 +118,7 @@ Preflight against both **(1) other proposed names** and **(2) existing destinati
 
 **Native beta P0:** easy Save to device/Upload via system UI, folder transfers, secure connections, queue and conflict engine, **all three pairings**, remote New folder/Move to…, bulk-renaming **literal, numbering, prefix/suffix, case, live preview and collision prevention**, action alternatives to drag. Shipping a UI containing tabs for these modes without completing end-to-end bytes and recovery is not acceptance.
 
-**Beta P1, early:** regex/capture groups, chained transformations, saved recipes, cycle-safe staged renames and truthful best-effort undo after implementation/testing; flexible arbitrary server-to-server relay optimization, enhanced keyboard shortcuts and iconography. **The core compact bulk-renamer itself is not deferred.**
+**Beta P0 safety:** any executable Rename Apply must safely handle collision dependencies, swap/cycle staging (or block unsupported cycles *before writing*), per-step journal and uncertain-state reconciliation. **Beta P1, early:** regex/capture groups, optional chained operations and saved recipes, enhanced best-effort undo UX, advanced transfer optimizations, keyboard shortcuts and iconography. The core renamer and truthful safe execution are not deferred.
 
 **Beyond beta:** sync rules, remote DocumentsProvider, more protocols, image comparisons and media extras. No FTP FXP by default; no proprietary cloud service; no internet-accessible helper server.
 

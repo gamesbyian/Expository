@@ -1,6 +1,6 @@
 # Expository Transfer: implementation proof matrix, v2
 
-**Status:** test design and evidence gates only, October 23, 2026. No Android Transfer APK exists yet. Read [second-pass decisions](SECOND-PASS-DECISIONS.md) and [hardened plan](HARDENED-IMPLEMENTATION-PLAN.md) first.
+**Status:** October 23, 2026 **scenario design** (IDs N01–N26), not the ranked workboard (IDs W01–W09). Android Transfer code and developer debug APK now exist; exact scoped results are in the [release ledger](RELEASE-READINESS.md), and next runnable tasks in the [native workboard](../../android-transfer/WORK-QUEUE.md). Read [second-pass decisions](SECOND-PASS-DECISIONS.md) and [hardened plan](HARDENED-IMPLEMENTATION-PLAN.md) first.
 
 | ID | Scenario | Required observed result | Evidence gate |
 |---|---|---|---|
@@ -53,6 +53,6 @@ Keep a machine-readable test-case identifier for each N01–N26 in the future An
 6. **G8** Drive API/Docs controlled-account acceptance as a first-class destination, never handoff theater.
 7. **G9** device/accessibility/privacy acceptance and signed distributable APK.
 
-Start Drive provider capability investigation during G0/G1 so API constraints shape the architecture, even though full G8 delivery follows queue foundations.
+Begin/continue Drive provider capability investigation in parallel with the current workspace and recovery work; the G0/G1 initial scaffolding already exists. Real Google account/Drive provider/Docs conversion acceptance is still outstanding.
 
 **Stop ship:** silent overwrite/delete, any misreported Save/Drive confirmation, ambiguous operation auto-replayed, incorrect sort-based renumbering, unverified broad permission escalation, drag-only critical action, background transfer claimed durable when grant expired, or a screenshot/artifact containing credentials.
