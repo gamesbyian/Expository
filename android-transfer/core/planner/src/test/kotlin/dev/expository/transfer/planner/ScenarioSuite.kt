@@ -322,6 +322,48 @@ object ScenarioSuite {
             check(!unsafe.executable && "OCCUPIED_DESTINATION" in unsafe.blockers)
             check(unsafe.steps.isEmpty())
         }
+        test("seeded batch rename properties: order, collision and drift") {
+            // A deterministic property corpus complements fixed 40/500/10k
+            // examples without importing a nondeterministic CI fuzz harness.
+            val random = java.util.Random(0x5EED2026L)
+            repeat(320) { trial ->
+                val count = 2 + random.nextInt(39)
+                val names = (0 until count).map { i ->
+                    "S" + trial.toString().padStart(3, '0') +
+                        "_E" + i.toString().padStart(3, '0') + ".mkv"
+                }
+                val selected = names.toMutableList().also {
+                    java.util.Collections.shuffle(it, random)
+                }
+                val snap = snapshot(names, selected)
+                val recipe = RenameRecipe(listOf(RenameEdit.Prefix(
+                    "t" + trial + "_" + random.nextInt(1000) + "_"
+                )))
+                val plan = RenamePlanner.preview(snap, recipe, NOW)
+                check(plan.executable && plan.preview.size == count)
+                assertStepsPreserveAll(snap, plan)
+                check(RenamePlanner.preview(snap, recipe, NOW).digest == plan.digest)
+                check(RenamePlanner.revalidate(plan, snap, recipe, NOW))
+
+                // A formerly empty target can become occupied by an item not
+                // in the selection. A stale "safe" preview must fail closed.
+                val occupiedName = plan.preview.first().proposed
+                val withSibling = snapshot(names + occupiedName, selected)
+                val collision = RenamePlanner.preview(withSibling, recipe, NOW)
+                check(!collision.executable &&
+                    "OCCUPIED_DESTINATION" in collision.blockers &&
+                    collision.steps.isEmpty())
+                check(!RenamePlanner.revalidate(plan, withSibling, recipe, NOW))
+
+                // Changing just one selected item's version invalidates
+                // immutable source proof even if all proposed names are equal.
+                val drift = snap.copy(children = snap.children.mapIndexed { i, row ->
+                    if (i == 0) row.copy(version = "changed-by-other-writer")
+                    else row
+                })
+                check(!RenamePlanner.revalidate(plan, drift, recipe, NOW))
+            }
+        }
         println("PASS scenarios=" + cases + " evidence=E1 synthetic only")
     }
 }
