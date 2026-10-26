@@ -1,9 +1,11 @@
 package dev.expository.transfer
 
 import android.content.ContentValues
+import android.content.Intent
 import android.net.Uri
 import android.provider.MediaStore
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -14,6 +16,8 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -96,4 +100,41 @@ class LocalSharesheetSmokeTest {
             resolver.delete(uri, null, null)
         }
     }
+    @Test fun externalOpenIntentContainsOnlyScopedReadAccessToSelectedDocument() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        val source = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME,
+                    "expository-open-contract-" + UUID.randomUUID() + ".txt")
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }) ?: error("OPEN_INTENT_FIXTURE_INSERT_FAILED")
+        try {
+            val outbound = LocalDocumentHandoff.openWith(resolver, source, "text/plain")
+            assertEquals(Intent.ACTION_VIEW, outbound.action)
+            assertEquals(source, outbound.data)
+            assertEquals("text/plain", outbound.type)
+            assertEquals(source, outbound.clipData!!.getItemAt(0).uri)
+            assertTrue(outbound.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+            assertFalse(outbound.flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0)
+            assertFalse(outbound.hasExtra(Intent.EXTRA_STREAM))
+            // Zero destination writes or external activities: this only
+            // proves Android intent scope, never a Docs edit or cloud save.
+            compose.onNodeWithText("Open with…").assertIsNotEnabled()
+        } finally {
+            resolver.delete(source, null, null)
+        }
+    }
+
+    @Test fun externalOpenRejectsNonContentUris() {
+        val resolver = InstrumentationRegistry.getInstrumentation().targetContext.contentResolver
+        var rejected = false
+        try {
+            LocalDocumentHandoff.openWith(resolver,
+                Uri.parse("file:///private/should-never-be-exposed.txt"), "text/plain")
+        } catch (_: IllegalArgumentException) { rejected = true }
+        assertTrue("Never expose file:// or arbitrary schemes to external apps", rejected)
+    }
+
 }
