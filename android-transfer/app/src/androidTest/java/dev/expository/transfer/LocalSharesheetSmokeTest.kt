@@ -1,5 +1,6 @@
 package dev.expository.transfer
 
+import android.content.ClipData
 import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
@@ -135,6 +136,85 @@ class LocalSharesheetSmokeTest {
                 Uri.parse("file:///private/should-never-be-exposed.txt"), "text/plain")
         } catch (_: IllegalArgumentException) { rejected = true }
         assertTrue("Never expose file:// or arbitrary schemes to external apps", rejected)
+    }
+
+    @Test fun inboundSingleDocumentShareRejectsUntrustedOrAmbiguousUriGrants() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME,
+                    "expository-inbound-contract-" + UUID.randomUUID() + ".txt")
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }) ?: error("INBOUND_FIXTURE_INSERT_FAILED")
+        try {
+            val valid = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                clipData = ClipData.newUri(resolver, "Synthetic inbound document", uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val accepted = IncomingShareParser.parse(valid)
+            assertEquals(uri, accepted?.uri)
+            assertEquals("text/plain", accepted?.suggestedMime)
+            assertEquals(null, IncomingShareParser.parse(Intent(valid).apply {
+                flags = 0
+            }))
+            assertEquals(null, IncomingShareParser.parse(Intent(valid).apply {
+                action = Intent.ACTION_SEND_MULTIPLE
+            }))
+            assertEquals(null, IncomingShareParser.parse(Intent(valid).apply {
+                putExtra(Intent.EXTRA_STREAM, Uri.parse("file:///untrusted.txt"))
+                clipData = null
+            }))
+            assertEquals(null, IncomingShareParser.parse(Intent(valid).apply {
+                putExtra(Intent.EXTRA_STREAM, Uri.parse("content://other.example/thing"))
+            }))
+            assertEquals(null, IncomingShareParser.parse(Intent(valid).apply {
+                removeExtra(Intent.EXTRA_STREAM)
+                clipData = null
+            }))
+        } finally {
+            resolver.delete(uri, null, null)
+        }
+    }
+
+    @Test fun androidReceiveShareSelectsSyntheticFileWithoutCopyOrUpload() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        val name = "expository-inbound-" + UUID.randomUUID().toString().take(12) + ".txt"
+        val bytes = "Synthetic inbound Android document".toByteArray(Charsets.UTF_8)
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                put(MediaStore.MediaColumns.IS_PENDING, 0)
+            }) ?: error("INBOUND_PROVIDER_INSERT_FAILED")
+        try {
+            resolver.openOutputStream(uri, "wt")!!.use { it.write(bytes) }
+            val inbound = Intent(compose.activity, TransferActivity::class.java).apply {
+                action = Intent.ACTION_SEND
+                type = "text/plain"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                clipData = ClipData.newUri(resolver, "Synthetic inbound document", uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            compose.activity.startActivity(inbound)
+            compose.waitUntil(15_000L) {
+                compose.onAllNodesWithText("Document received from Android Share.",
+                    substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("Source: " + name).assertExists()
+            compose.onNodeWithText("Save copy…").assertIsEnabled()
+            compose.onNodeWithText("Share…").assertIsEnabled()
+            compose.onNodeWithText("Open with…").assertIsEnabled()
+            // Reception alone must perform zero writes or external handoffs.
+            assertArrayEquals(bytes, resolver.openInputStream(uri)!!.use { it.readBytes() })
+        } finally {
+            resolver.delete(uri, null, null)
+        }
     }
 
 }
