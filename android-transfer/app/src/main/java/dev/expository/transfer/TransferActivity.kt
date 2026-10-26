@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.expository.transfer.planner.*
 import dev.expository.transfer.journal.RecoveryStatusCard
+import java.util.concurrent.atomic.AtomicLong
 
 /** Android-native picker-first transfer shell; synthetic planner stays isolated in Demo. */
 data class IncomingShareRequest(
@@ -43,9 +44,14 @@ data class IncomingShareRequest(
 
 /** Inbound user share is transient; source URIs are never persisted. */
 class TransferActivity : ComponentActivity() {
+    companion object {
+        // Multiple Activity instances can exist while DocumentsUI is on top.
+        // Share changes invalidate old picker requests across this process.
+        private val processShareEpoch = AtomicLong(0L)
+    }
     private var nextShareSequence = 0L
-    /** Changes synchronously on onNewIntent, even while DocumentsUI owns the screen. */
-    val incomingShareEpoch: Long get() = nextShareSequence
+    /** Synchronous, process-wide and never persisted across launches. */
+    val incomingShareEpoch: Long get() = processShareEpoch.get()
     private val pendingShare = mutableStateOf<IncomingShareRequest?>(null)
 
     /** Isolated share ingestion: OS lifecycle delegates to this method. */
@@ -53,6 +59,7 @@ class TransferActivity : ComponentActivity() {
         if (inbound.action != Intent.ACTION_SEND &&
             inbound.action != Intent.ACTION_SEND_MULTIPLE) return
         nextShareSequence++
+        processShareEpoch.incrementAndGet()
         pendingShare.value = IncomingShareRequest(
             if (inbound.action == Intent.ACTION_SEND) IncomingShareParser.parse(inbound)
                 else null,
