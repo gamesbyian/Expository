@@ -15,6 +15,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.Until
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -267,15 +268,56 @@ class LocalSharesheetSmokeTest {
             ) || device.wait(Until.hasObject(By.text("Save")), 3_000L) ||
                 device.currentPackageName == "android"
             assertTrue("Android Create Document picker must open", picker)
-            (device.findObject(By.desc("Show roots"))
-                ?: device.findObject(By.descContains("navigation")))?.click()
-            device.wait(Until.findObject(By.text("Downloads")), 8_000L)?.click()
-            val field = device.wait(Until.findObject(By.clazz("android.widget.EditText")),
-                10_000L) ?: error("INBOUND_SAVE_FIELD_NOT_FOUND")
-            field.text = targetName
-            (device.wait(Until.findObject(By.text("Save")), 5_000L)
-                ?: device.wait(Until.findObject(By.text("SAVE")), 3_000L)
-                ?: error("INBOUND_SAVE_BUTTON_NOT_FOUND")).click()
+            // DocumentsUI frequently rebinds nodes while switching roots.
+            // Acquire a fresh UiObject2 before each mutation.
+            repeat(3) {
+                val roots = device.findObject(By.desc("Show roots"))
+                    ?: device.findObject(By.descContains("navigation"))
+                if (roots != null) {
+                    try {
+                        roots.click()
+                        return@repeat
+                    } catch (_: StaleObjectException) {
+                        device.waitForIdle(300L)
+                    }
+                }
+            }
+            fun clickFresh(text: String, stage: String) {
+                repeat(5) {
+                    val item = device.wait(Until.findObject(By.text(text)), 3_000L)
+                    if (item != null) {
+                        try {
+                            item.click()
+                            return
+                        } catch (_: StaleObjectException) {
+                            device.waitForIdle(300L)
+                        }
+                    }
+                }
+                error(stage + "_STALE_OR_MISSING")
+            }
+            if (device.wait(Until.hasObject(By.text("Downloads")), 5_000L))
+                clickFresh("Downloads", "INBOUND_DOWNLOADS_ROOT")
+            var named = false
+            repeat(5) {
+                if (!named) {
+                    val field = device.wait(
+                        Until.findObject(By.clazz("android.widget.EditText")), 3_000L
+                    )
+                    if (field != null) {
+                        try {
+                            field.text = targetName
+                            named = true
+                        } catch (_: StaleObjectException) {
+                            device.waitForIdle(300L)
+                        }
+                    }
+                }
+            }
+            check(named) { "INBOUND_SAVE_EDIT_FIELD_STALE_OR_MISSING" }
+            val saveText = if (device.wait(Until.hasObject(By.text("Save")), 5_000L))
+                "Save" else "SAVE"
+            clickFresh(saveText, "INBOUND_SAVE_BUTTON")
             compose.waitUntil(30_000L) {
                 compose.onAllNodesWithText("Receipt: BYTES_VERIFIED", substring = true)
                     .fetchSemanticsNodes().isNotEmpty()
