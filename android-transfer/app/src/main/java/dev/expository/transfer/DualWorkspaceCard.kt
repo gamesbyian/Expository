@@ -46,7 +46,10 @@ import dev.expository.transfer.saf.TreeCopyPreflight
  */
 internal data class RemotePeerContext(
     val uploadSources: List<LocalPaneUploadSource>,
-    val downloadTarget: LocalPaneDownloadTarget?
+    val downloadTarget: LocalPaneDownloadTarget?,
+    val selectedOtherSftp: PeerSftpSource?,
+    val maySelectRemote: Boolean,
+    val onSelectedRemote: (PeerSftpSource?) -> Unit
 )
 
 @Composable
@@ -76,12 +79,19 @@ internal fun DualWorkspaceCard(
     // not the visible positions. Swap transports session state and closes no
     // unrelated connection; switching endpoint tears down its old session.
     var remoteSwapped by remember { mutableStateOf(false) }
+    // These are transient session objects, never persisted or serialized.
+    // Swap their *owners* together with the movable authenticated panes.
+    var selectedRemoteA by remember { mutableStateOf<PeerSftpSource?>(null) }
+    var selectedRemoteB by remember { mutableStateOf<PeerSftpSource?>(null) }
     val connectionA = remember {
         movableContentOf<BrowseEndpoint, RemotePeerContext> { endpoint, peer ->
             when (endpoint) {
                 BrowseEndpoint.SFTP -> SftpBrowseCard(
                     localPaneSources = peer.uploadSources,
-                    localPaneTarget = peer.downloadTarget
+                    localPaneTarget = peer.downloadTarget,
+                    remotePaneSource = peer.selectedOtherSftp,
+                    allowRemoteSelection = peer.maySelectRemote,
+                    onRemoteSource = peer.onSelectedRemote
                 )
                 BrowseEndpoint.FTPS -> FtpsBrowseCard()
                 else -> Unit
@@ -93,7 +103,10 @@ internal fun DualWorkspaceCard(
             when (endpoint) {
                 BrowseEndpoint.SFTP -> SftpBrowseCard(
                     localPaneSources = peer.uploadSources,
-                    localPaneTarget = peer.downloadTarget
+                    localPaneTarget = peer.downloadTarget,
+                    remotePaneSource = peer.selectedOtherSftp,
+                    allowRemoteSelection = peer.maySelectRemote,
+                    onRemoteSource = peer.onSelectedRemote
                 )
                 BrowseEndpoint.FTPS -> FtpsBrowseCard()
                 else -> Unit
@@ -104,7 +117,7 @@ internal fun DualWorkspaceCard(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Dual-location workspace", style = MaterialTheme.typography.titleLarge)
         Text(
-            "A and B have independent device-folder browsers or separately authenticated SFTP/FTPS connections. Device-to-Device Copy requires an explicit verified preflight. Local-to-SFTP Copy supports up to 12 reviewed files, each with a verified, journaled upload. SFTP-to-selected-device-folder Copy is also explicitly reviewed; other remote routes and cross-pane Move remain unavailable.",
+            "A and B browse independent device folders or authenticated SFTP/FTPS sessions. Device-to-Device and Local-to-SFTP copies require reviewed, journaled preflights. SFTP-to-Device and one-file SFTP-to-SFTP Copy are also available after explicit review. Other remote routes and cross-pane Move remain unavailable.",
             style = MaterialTheme.typography.bodySmall
         )
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -115,7 +128,11 @@ internal fun DualWorkspaceCard(
                 DualPairing.REMOTE_REMOTE to "Server ↔ Server"
             )) {
                 Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !busy,
-                    onClick = { onPreset(pairing) }) { Text(title) }
+                    onClick = {
+                        selectedRemoteA = null
+                        selectedRemoteB = null
+                        onPreset(pairing)
+                    }) { Text(title) }
             }
         }
         Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !busy,
@@ -123,6 +140,9 @@ internal fun DualWorkspaceCard(
                 // Move the remembered remote connection together with its
                 // endpoint and the owner's independently navigated state.
                 remoteSwapped = !remoteSwapped
+                val previousA = selectedRemoteA
+                selectedRemoteA = selectedRemoteB
+                selectedRemoteB = previousA
                 onSwap()
             }) { Text("Swap A and B") }
         // Keep a direct scoped folder-picker action visible near the top of
@@ -152,7 +172,13 @@ internal fun DualWorkspaceCard(
                                 stateDescription = if (pane.endpoint == endpoint)
                                     "Selected" else "Not selected"
                             },
-                            onClick = { onEndpoint(which, endpoint) }
+                            onClick = {
+                                if (pane.endpoint != endpoint) {
+                                    if (which == WorkspacePane.A) selectedRemoteA = null
+                                    else selectedRemoteB = null
+                                }
+                                onEndpoint(which, endpoint)
+                            }
                         ) { Text(if (pane.endpoint == endpoint) "✓ " + endpoint.name
                             else endpoint.name) }
                     }
@@ -210,7 +236,19 @@ internal fun DualWorkspaceCard(
                             LocalPaneUploadSource.fromSelection(a) else emptyList()
                     }
                     val peerTarget = peerLocal?.let { LocalPaneDownloadTarget.from(it) }
-                    val peer = RemotePeerContext(peerSources, peerTarget)
+                    val otherIsSftp = if (which == WorkspacePane.A)
+                        workspace.b.endpoint == BrowseEndpoint.SFTP
+                    else workspace.a.endpoint == BrowseEndpoint.SFTP
+                    val peerSelected = if (!otherIsSftp) null
+                        else if (which == WorkspacePane.A) selectedRemoteB
+                        else selectedRemoteA
+                    val peer = RemotePeerContext(
+                        peerSources, peerTarget, peerSelected, otherIsSftp,
+                        onSelectedRemote = { chosen ->
+                            if (which == WorkspacePane.A) selectedRemoteA = chosen
+                            else selectedRemoteB = chosen
+                        }
+                    )
                     if (first) connectionA(pane.endpoint, peer)
                     else connectionB(pane.endpoint, peer)
                 }
@@ -298,7 +336,7 @@ internal fun DualWorkspaceCard(
             Text("Cancel transfer")
         }
         Text(copyStatus, style = MaterialTheme.typography.bodySmall)
-        Text("Device-to-Device Copy supports 1–12 selected files with separate journals and verification. Local-to-SFTP Copy also supports up to 12 after explicit review. Folder recursion, remaining remote routes and cross-pane Move are still unavailable.",
+        Text("Device-to-Device and Local-to-SFTP Copy support 1–12 selected files. SFTP-to-SFTP Copy relays one selected file between independently authenticated servers with exclusive create, durable journaling and independent destination readback. Recursive folders, remaining remote routes and cross-pane Move are still unavailable.",
             style = MaterialTheme.typography.bodySmall)
     }
 }
