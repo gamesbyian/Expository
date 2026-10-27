@@ -210,7 +210,7 @@ class LocalPickerPositiveCopyTest {
             clipData = android.content.ClipData.newUri(resolver, "Synthetic source", uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        fun findTarget(name: String = sourceName): Uri? {
+        fun findTarget(): Uri? {
             resolver.query(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
                 arrayOf(MediaStore.MediaColumns._ID),
                 "${MediaStore.MediaColumns.DISPLAY_NAME}=?",
@@ -348,7 +348,7 @@ class LocalPickerPositiveCopyTest {
             resolver.openOutputStream(item, "wt")!!.use { it.write(bytes) }
             return item
         }
-        fun findTarget(): Uri? {
+        fun findTarget(name: String = sourceName): Uri? {
             resolver.query(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
                 arrayOf(MediaStore.MediaColumns._ID),
                 "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND " +
