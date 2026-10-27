@@ -73,18 +73,22 @@ class SafTreeToTreeCopy(
         if (!request.targetWriteGranted) return false
         val uri = document(request.targetTree, request.targetFolderId)
         val columns = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
             DocumentsContract.Document.COLUMN_MIME_TYPE,
             DocumentsContract.Document.COLUMN_FLAGS
         )
         return resolver.query(uri, columns, null, null, null)?.use { cursor ->
             if (!cursor.moveToFirst()) return@use false
-            val mimeIndex = cursor.getColumnIndexOrThrow(
-                DocumentsContract.Document.COLUMN_MIME_TYPE)
-            val flagsIndex = cursor.getColumnIndexOrThrow(
-                DocumentsContract.Document.COLUMN_FLAGS)
-            cursor.getString(mimeIndex) == DocumentsContract.Document.MIME_TYPE_DIR &&
-                cursor.getInt(flagsIndex) and
-                    DocumentsContract.Document.FLAG_DIR_SUPPORTS_CREATE != 0
+            val id = cursor.getString(cursor.getColumnIndexOrThrow(
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID))
+            val mime = cursor.getString(cursor.getColumnIndexOrThrow(
+                DocumentsContract.Document.COLUMN_MIME_TYPE))
+            val flags = cursor.getInt(cursor.getColumnIndexOrThrow(
+                DocumentsContract.Document.COLUMN_FLAGS))
+            id == request.targetFolderId &&
+                mime == DocumentsContract.Document.MIME_TYPE_DIR &&
+                flags and DocumentsContract.Document.FLAG_DIR_SUPPORTS_CREATE != 0 &&
+                !cursor.moveToNext()
         } == true
     }
 
