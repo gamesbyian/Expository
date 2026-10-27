@@ -159,7 +159,11 @@ class NewFolderPositiveProviderTest {
             }
             val nameEditor = editor ?: error("APP_FOLDER_NAME_EDITOR_MISSING")
             nameEditor.setText(child)
-            clickApp("Review New Folder")
+            // The test tag names the actual Foundation Button-role action.
+            // A UiAutomator text-row ancestor may be clickable without
+            // activating this dynamically inserted, keyboard-adjacent action.
+            compose.onNodeWithTag("saf-new-folder-review")
+                .assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
             // Distinguish a missing button caused by a denied provider
             // preflight from another offscreen accessibility failure.
             compose.waitUntil(25_000L) {
@@ -174,11 +178,13 @@ class NewFolderPositiveProviderTest {
                 compose.onAllNodesWithText(
                     "Review this one New Folder operation before creating it.",
                     substring = true).fetchSemanticsNodes().isNotEmpty())
-            clickApp("Confirm New Folder")
-            assertTrue("Provider-confirmed folder creation receipt must be visible",
-                device.wait(Until.hasObject(By.textContains(
-                    "Folder created and its exact identity verified.")), 30_000L)
-                    || appText("Folder created and its exact identity verified.") != null)
+            compose.onNodeWithTag("saf-new-folder-confirm")
+                .assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
+            compose.waitUntil(30_000L) {
+                compose.onAllNodesWithText(
+                    "Folder created and its exact identity verified.",
+                    substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
             val after = AttemptRecoveryIndex.recover(ctx)
             assertTrue("One new durable verified mkdir record is required",
                 after.verifiedReceipts >= before.verifiedReceipts + 1)
