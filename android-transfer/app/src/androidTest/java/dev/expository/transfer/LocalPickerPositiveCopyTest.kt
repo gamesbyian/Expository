@@ -11,6 +11,8 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
@@ -379,8 +381,12 @@ class LocalPickerPositiveCopyTest {
             }
             val clicksBefore = FolderPickerTrace.button.get()
             val launchesBefore = FolderPickerTrace.launch.get()
+            // Semantics OnClick exercises the accessibility/Compose action
+            // even when nested LazyColumn scrolling puts the node outside
+            // the screen's actual touch bounds. This isolates event wiring
+            // from touch-position issues; physical taps are tested separately.
             compose.onNodeWithTag("local-tree-picker-Location " + pane)
-                .assertIsEnabled().performClick()
+                .assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
             compose.waitForIdle()
             // If synthetic Compose action is not dispatched as a real click,
             // exercise the physically visible button via UiAutomator once.
