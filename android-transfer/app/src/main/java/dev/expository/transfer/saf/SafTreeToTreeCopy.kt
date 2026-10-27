@@ -34,7 +34,9 @@ data class TreeCopyPreflight(
     val issuedMillis: Long,
     val sourceName: String,
     val sourceMime: String,
-    val existingTargetDocumentIds: Set<String>
+    val existingTargetDocumentIds: Set<String>,
+    /** Frozen source version, independent from evolving destination revision. */
+    val sourceRevision: String = ""
 )
 
 /**
@@ -94,7 +96,7 @@ class SafTreeToTreeCopy(
 
     private data class Observation(val plan: TransferPlan,
         val sourceName: String, val sourceMime: String,
-        val existingTargetDocumentIds: Set<String>)
+        val sourceRevision: String, val existingTargetDocumentIds: Set<String>)
 
     private fun observePlan(request: TreeCopyRequest, issued: Long,
         now: Long): Observation {
@@ -166,7 +168,7 @@ class SafTreeToTreeCopy(
             now
         )
         return Observation(plan, metadata.displayName, metadata.mimeType,
-            siblings.children.map { it.documentId }.toSet())
+            metadata.revision, siblings.children.map { it.documentId }.toSet())
     }
 
     /** Called before presenting an explicit Confirm Copy action. */
@@ -176,7 +178,7 @@ class SafTreeToTreeCopy(
             ?.takeIf { it.plan.executable }
             ?.let { TreeCopyPreflight(
                 request, it.plan, issued, it.sourceName, it.sourceMime,
-                it.existingTargetDocumentIds) }
+                it.existingTargetDocumentIds, it.sourceRevision) }
     }
 
     fun copy(
