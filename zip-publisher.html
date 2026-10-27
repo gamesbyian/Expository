@@ -51,12 +51,14 @@ button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid #ffe1
 </main>
 <script>
 (()=>{'use strict';
+// Credential entry is intentionally restricted to a top-level, user-opened page.
+if(window.self!==window.top){document.body.replaceChildren(document.createTextNode('Open Expository ZIP publisher directly in a new tab.'));return}
 const MAX_FILES=100,MAX_BYTES=32*1024*1024,MAX_SINGLE=16*1024*1024;
 const $=id=>document.getElementById(id);
 let incoming=null,review=null,busy=false,writerAbort=null,channel=null;
 function status(message){$('status').textContent=message}
 function cleanPath(name){
- return typeof name==='string'&&name.length>0&&name.length<=4096&&!/[\x00-\x1f\x7f\\]/.test(name)&&!name.startsWith('/')&&!name.split('/').some(part=>!part||part==='.'||part==='..'||part.length>255||/[<>:"|?*]/.test(part)||/[. ]$/.test(part)||/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(part));
+ return typeof name==='string'&&name.length>0&&name.length<=4096&&!/[\x00-\x1f\x7f\\]/.test(name)&&!name.startsWith('/')&&!name.split('/').some(part=>!part||part==='.'||part==='..'||part.length>255||part.toLowerCase()==='.git'||/[<>:"|?*]/.test(part)||/[. ]$/.test(part)||/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(part));
 }
 function repoPath(repo){return /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repo)&&repo.length<260&&!repo.split('/').includes('..')}
 function branchPath(base){return typeof base==='string'&&base.length<256&&base.length>0&&!base.startsWith('/')&&!base.endsWith('/')&&!base.includes('..')&&!base.includes('//')&&!/[\x00-\x20\x7f~^:?*[\]\\]/.test(base)&&!base.split('/').some(x=>!x||x.endsWith('.lock')||x.startsWith('.')||x.endsWith('.'))}
@@ -134,6 +136,8 @@ async function writeNewBranch(plan,token,branch,onProgress,signal){
  const commit=await github(token,'POST',prefix+'/git/commits',{message:'Extract ZIP files with Expository',tree:newTree.sha,parents:[plan.head]},signal);
  if(!/^[a-f0-9]{40}$/i.test(commit?.sha||''))throw Error('Commit creation returned no valid SHA.');
  if(signal?.aborted)throw Error('Publishing stopped before branch creation.');
+ const current=await github(token,'GET',prefix+'/git/ref/heads/'+encodeGitPath(plan.base),undefined,signal);
+ if(current?.object?.sha!==plan.head)throw Error('Base branch changed during upload. No new branch was created. Review again.');
  // The only ref mutation is a brand-new branch; no update to main or existing branches.
  const ref=await github(token,'POST',prefix+'/git/refs',{ref:'refs/heads/'+branch,sha:commit.sha},signal);
  if(ref?.object?.sha!==commit.sha)throw Error('GitHub branch creation did not confirm the commit SHA.');

@@ -38,6 +38,7 @@ test('writer rejects path traversal, unsafe Windows targets and ambiguous duplic
  const {api}=setup();
  for(const p of ['../escape.txt','/absolute','dir//file.txt','CON.txt','folder/bad?.txt'])assert.equal(api.cleanPath(p),false,p);
  assert.equal(api.cleanPath('folder/ok.png'),true);
+ assert.equal(api.cleanPath('.git/config'),false,'Git administration metadata cannot be published');
  assert.throws(()=>api.resolveEntries([file('foo.png'),file('FOO.PNG')],''),/duplicate/);
  assert.throws(()=>api.resolveEntries([file('safe.txt')],'../bad'),/unsafe/);
  assert.throws(()=>api.resolveEntries([file('safe.txt')],'test/'),/unsafe/);
@@ -112,4 +113,18 @@ test('read-only explorer passes checked ZIP payload to a nonce-only companion UR
  assert.equal(bundle.repo,'owner/private');
  assert.equal(bundle.base,'dev/active');
  assert.doesNotMatch(opened,/owner|private|screen|credential|token/i,'private paths are not encoded into the URL')
+});
+
+test('publisher refuses a base branch that moves during blob upload, before new ref creation',async()=>{
+ const {api,calls}=setup((url,options,requests)=>{
+  if(url.includes('/git/ref/heads/main')&&requests.filter(x=>x.url.includes('/git/ref/heads/main')).length>=3)return {object:{sha:'f'.repeat(40)}};
+ });
+ const plan=await api.inspectDestination('secret','owner/repo','main','import',[file('new.txt')]);
+ await assert.rejects(api.writeNewBranch(plan,'secret','expository/zip-late-race',()=>{}),/changed during upload/);
+ assert.equal(calls.some(x=>x.url.endsWith('/git/blobs')&&x.options.method==='POST'),true,'the upload began');
+ assert.equal(calls.some(x=>x.url.endsWith('/git/refs')&&x.options.method==='POST'),false,'branch reference was never created');
+});
+test('publishing token entry is frame-guarded',()=>{
+ assert.match(html,/window\.self!==window\.top/);
+ assert.match(html,/window\.open|window\.top/);
 });
