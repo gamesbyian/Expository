@@ -756,3 +756,6 @@ test('image rotates four quarter turns without changing image bytes or leaving s
  assert.equal(image.style.transform,'');
  assert.equal(blob.size,32,'source bytes remain unchanged');
 });
+
+// Exercise standalone ZIP archive security and extraction fixtures in the regular CI entrypoint.
+require('./zip-browser.test.cjs');
