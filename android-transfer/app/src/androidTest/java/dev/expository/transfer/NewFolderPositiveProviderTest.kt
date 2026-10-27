@@ -103,19 +103,32 @@ class NewFolderPositiveProviderTest {
                     "Folder opened. Scoped Android browser", substring = true)
                     .fetchSemanticsNodes().isNotEmpty()
             }
+            // The picker causes Activity STOP/START and async tree loading.
+            // Target stable, test-only semantics rather than a transient text
+            // node in the recomposing pane, and let idling settle every stage.
+            compose.waitUntil(15_000L) {
+                compose.onAllNodesWithText("Destination creation:", substring = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.waitForIdle()
             val before = AttemptRecoveryIndex.recover(ctx)
-            compose.onNodeWithText("New folder…").assertIsEnabled()
-                .performSemanticsAction(SemanticsActions.OnClick)
+            compose.onNodeWithTag("saf-new-folder-open")
+                .assertIsEnabled().performClick()
+            compose.waitUntil(10_000L) {
+                compose.onAllNodesWithText("Folder name")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
             compose.onNodeWithTag("saf-new-folder-name").performTextInput(child)
             compose.waitForIdle()
-            compose.onNodeWithText("Review New Folder")
-                .performSemanticsAction(SemanticsActions.OnClick)
+            compose.onNodeWithTag("saf-new-folder-review")
+                .assertIsEnabled().performClick()
             compose.waitUntil(20_000L) {
                 compose.onAllNodesWithText("Confirm New Folder")
                     .fetchSemanticsNodes().isNotEmpty()
             }
-            compose.onNodeWithText("Confirm New Folder")
-                .performSemanticsAction(SemanticsActions.OnClick)
+            compose.waitForIdle()
+            compose.onNodeWithTag("saf-new-folder-confirm")
+                .assertIsEnabled().performClick()
             compose.waitUntil(30_000L) {
                 compose.onAllNodesWithText(
                     "Folder created and its exact identity verified.",
