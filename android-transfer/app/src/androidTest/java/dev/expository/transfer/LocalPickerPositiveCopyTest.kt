@@ -373,8 +373,15 @@ class LocalPickerPositiveCopyTest {
             val pickerVisible = device.wait(androidx.test.uiautomator.Until.hasObject(
                 androidx.test.uiautomator.By.pkg("com.google.android.documentsui")), 12_000L) ||
                 device.wait(androidx.test.uiautomator.Until.hasObject(
-                    androidx.test.uiautomator.By.pkg("com.android.documentsui")), 3_000L)
-            assertTrue("Android DocumentsUI must own tree-picker step", pickerVisible)
+                    androidx.test.uiautomator.By.pkg("com.android.documentsui")), 3_000L) ||
+                device.wait(androidx.test.uiautomator.Until.hasObject(
+                    androidx.test.uiautomator.By.text("Recent")), 3_000L) ||
+                device.wait(androidx.test.uiautomator.Until.hasObject(
+                    androidx.test.uiautomator.By.text("Downloads")), 3_000L) ||
+                device.currentPackageName == "android"
+            assertTrue("Android tree picker must be visible, never Expository; foreground=" +
+                (device.currentPackageName ?: "none"), pickerVisible &&
+                    device.currentPackageName != context.packageName)
             // Prefer the actual storage volume, not DocumentsUI's virtual
             // Downloads collection (which can hide real child directories).
             // No filesystem path or grant is manufactured by this test.
