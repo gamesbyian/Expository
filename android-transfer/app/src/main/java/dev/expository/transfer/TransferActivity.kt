@@ -417,10 +417,29 @@ private fun DeveloperPreview(
                     failure = CopyProof.UNCERTAIN
                     break
                 }
+                // A verified earlier file has necessarily changed the
+                // destination listing revision. For subsequent approved items,
+                // obtain a fresh exclusive-create plan rather than attempting
+                // to replay a stale digest. Keep the *reviewed source version*,
+                // filename, MIME and scoped endpoints immutable. The executor
+                // independently revalidates the newly issued plan before I/O.
+                val current = if (index == 0) plan else withContext(Dispatchers.IO) {
+                    SafTreeToTreeCopy(context.contentResolver) { digest ->
+                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                    }.prepare(plan.request)
+                }
+                if (current == null || current.request != plan.request ||
+                    current.sourceName != plan.sourceName ||
+                    current.sourceMime != plan.sourceMime ||
+                    current.sourceRevision.isBlank() ||
+                    current.sourceRevision != plan.sourceRevision) {
+                    failure = CopyProof.BLOCKED
+                    break
+                }
                 val receipt = withContext(Dispatchers.IO) {
                     SafTreeToTreeCopy(context.contentResolver) { digest ->
                         AndroidAtomicAttemptStorage(context.applicationContext, digest)
-                    }.copy(plan,
+                    }.copy(current,
                         continueRequested = { permit.get() },
                         onProgress = { bytes ->
                             val now = System.nanoTime()
