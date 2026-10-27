@@ -112,11 +112,14 @@ object SftpBrowseBounds {
 
     fun requireValid(limit: Int): Int =
         limit.also {
-            require(it in INITIAL..MAX && it % STEP == 0) { "INVALID_SFTP_BROWSE_WINDOW" }
+            require(it in 1..MAX) { "INVALID_SFTP_BROWSE_WINDOW" }
         }
 
     fun next(limit: Int): Int {
         requireValid(limit)
+        require(limit >= INITIAL && limit % STEP == 0) {
+            "INVALID_PROGRESSIVE_BROWSE_STEP"
+        }
         return (limit + STEP).coerceAtMost(MAX)
     }
 }
