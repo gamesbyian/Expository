@@ -51,5 +51,7 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    // Disposable localhost SSH daemon is instrumentation-only, never shipped in the app.
+    androidTestImplementation("org.apache.sshd:sshd-sftp:2.20.0")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
