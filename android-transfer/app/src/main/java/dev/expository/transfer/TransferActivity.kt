@@ -480,8 +480,10 @@ private fun DeveloperPreview(
             }
             item { RecoveryStatusCard() }
             when (workspace) {
-                TransferWorkspace.LOCAL -> {
-                    item {
+                TransferWorkspace.LOCAL -> item {
+                    // Keep browser and Copy actions in one lazy item so the
+                    // second card is composed and accessible before scrolling.
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         // Conventional Single is a real, independently scoped
                         // browser, not the narrow-screen Dual A/B tab.
                         LocalTreePane(
@@ -524,8 +526,6 @@ private fun DeveloperPreview(
                                 toggleTreeSelection(WorkspacePane.SINGLE, entry)
                             }
                         )
-                    }
-                    item {
                         val pickedId = treeSingle.selected.singleOrNull()
                         val source = if (pickedId != null && treeSingle.treeUri != null)
                             runCatching {
