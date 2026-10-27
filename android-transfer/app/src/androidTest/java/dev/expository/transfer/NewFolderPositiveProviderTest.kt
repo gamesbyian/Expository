@@ -113,22 +113,25 @@ class NewFolderPositiveProviderTest {
             compose.waitForIdle()
             val before = AttemptRecoveryIndex.recover(ctx)
             compose.onNodeWithTag("saf-new-folder-open")
-                .assertIsEnabled().performClick()
-            compose.waitUntil(10_000L) {
-                compose.onAllNodesWithText("Folder name")
+                .assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
+            // A floating input label may be merged or not yet laid out in
+            // Android semantics. Wait for the actual editable control.
+            compose.waitUntil(15_000L) {
+                compose.onAllNodes(
+                    androidx.compose.ui.test.hasTestTag("saf-new-folder-name"))
                     .fetchSemanticsNodes().isNotEmpty()
             }
             compose.onNodeWithTag("saf-new-folder-name").performTextInput(child)
             compose.waitForIdle()
             compose.onNodeWithTag("saf-new-folder-review")
-                .assertIsEnabled().performClick()
+                .assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
             compose.waitUntil(20_000L) {
                 compose.onAllNodesWithText("Confirm New Folder")
                     .fetchSemanticsNodes().isNotEmpty()
             }
             compose.waitForIdle()
             compose.onNodeWithTag("saf-new-folder-confirm")
-                .assertIsEnabled().performClick()
+                .assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
             compose.waitUntil(30_000L) {
                 compose.onAllNodesWithText(
                     "Folder created and its exact identity verified.",
