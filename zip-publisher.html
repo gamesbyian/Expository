@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#11141e">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src https://api.github.com; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; worker-src 'none'">
+<title>Expository · ZIP publisher</title>
+<style>
+:root{color-scheme:dark;--bg:#0e1119;--panel:#191f2d;--border:#354157;--text:#f1f4fb;--muted:#b5c0d5;--accent:#8ccffd}*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+.rainbow{height:5px;background:linear-gradient(90deg,#f16b85,#ffae66,#ffe57e,#7cdfb4,#8dc9ff,#b6a0ee)}
+main{max-width:840px;padding:18px;margin:auto}h1{font-size:clamp(23px,6vw,33px);margin:8px 0}h2{font-size:17px}
+p{color:var(--muted)}section{border:1px solid var(--border);background:var(--panel);padding:16px;border-radius:16px;margin:16px 0}
+label{display:block;margin:12px 0 4px;font-size:13px;font-weight:700;color:var(--muted)}
+input{width:100%;min-height:46px;background:#0c1019;border:1px solid #52617a;border-radius:10px;padding:12px;color:var(--text);font:inherit}
+button,.button-link{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:10px 14px;color:var(--text);background:#273348;border:1px solid #536580;border-radius:11px;font:inherit;cursor:pointer}
+button:disabled{opacity:.4;cursor:not-allowed}button.primary{background:#184f78;border-color:var(--accent)}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid #ffe17a;outline-offset:2px}
+.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}.hint{font-size:12px;color:var(--muted)}.status{white-space:pre-wrap;overflow-wrap:anywhere}
+#files{max-height:38dvh;overflow:auto;margin:12px 0}.path{border-bottom:1px solid var(--border);padding:7px 2px;overflow-wrap:anywhere;font-size:13px}
+#destinations{max-height:34dvh;overflow:auto}.path strong{color:var(--accent)}a{color:#a9dcff}
+@media(max-width:450px){main{padding:10px}section{padding:12px}.actions button{flex:1 1 170px}}
+</style>
+</head>
+<body>
+<div class="rainbow"></div>
+<main>
+<h1>Extract ZIP to GitHub</h1>
+<p>This is a separate, opt-in publishing tool. It cannot change a repository until you explicitly review and confirm. Your write-capable token stays in this tab's memory.</p>
+<section aria-label="Incoming ZIP contents">
+<h2>Incoming files</h2>
+<div id="incoming" role="status" aria-live="polite">Waiting for a one-time handoff from the Expository ZIP viewer. Open an archive there and choose “Publish to GitHub”.</div>
+<div id="files"></div>
+</section>
+<section aria-label="GitHub destination">
+<h2>Destination</h2>
+<label for="repo">GitHub repository (owner/name)</label><input id="repo" autocomplete="off" spellcheck="false" placeholder="owner/repository">
+<label for="base">Base branch</label><input id="base" autocomplete="off" spellcheck="false" value="main">
+<label for="prefix">Destination folder (leave empty for root)</label><input id="prefix" autocomplete="off" spellcheck="false" placeholder="imported/assets">
+<label for="token">Fine-grained GitHub token with Contents: Read and Write</label><input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste token in this tab only">
+<p class="hint">Never paste a token into the normal Expository viewer to enable publishing. This writer does not remember credentials. The output always goes to a newly created branch, never directly to your base branch.</p>
+<div class="actions"><button id="review" disabled>Review destination and collisions</button><button id="publish" class="primary" disabled>Confirm: create new branch</button><button id="cancel" disabled>Stop before branch creation</button></div>
+<div id="status" class="status" role="status" aria-live="polite"></div>
+<div id="destinations"></div>
+</section>
+<section>
+<h2>Permissions and safeguards</h2>
+<p class="hint">Maximum 100 files, 32 MB uncompressed, 16 MB per file. ZIP decoding and checksums are completed in Expository before this handoff. The writer checks repository-tree completeness, existing destination paths and base-branch identity, then creates Git objects and a <strong>new branch</strong>. Existing GitHub files are never overwritten. A failed or cancelled upload may leave unreachable Git objects, but cannot update the base branch.</p>
+</section>
+</main>
+<script>
+(()=>{'use strict';
+const MAX_FILES=100,MAX_BYTES=32*1024*1024,MAX_SINGLE=16*1024*1024;
+const $=id=>document.getElementById(id);
+let incoming=null,review=null,busy=false,writerAbort=null,channel=null;
+function status(message){$('status').textContent=message}
+function cleanPath(name){
+ return typeof name==='string'&&name.length>0&&name.length<=4096&&!/[\x00-\x1f\x7f\\]/.test(name)&&!name.startsWith('/')&&!name.split('/').some(part=>!part||part==='.'||part==='..'||part.length>255||/[<>:"|?*]/.test(part)||/[. ]$/.test(part)||/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(part));
+}
+function repoPath(repo){return /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repo)&&repo.length<260&&!repo.split('/').includes('..')}
+function branchPath(base){return typeof base==='string'&&base.length<256&&base.length>0&&!base.startsWith('/')&&!base.endsWith('/')&&!base.includes('..')&&!base.includes('//')&&!/[\x00-\x20\x7f~^:?*[\]\\]/.test(base)&&!base.split('/').some(x=>!x||x.endsWith('.lock')||x.startsWith('.')||x.endsWith('.'))}
+function sizeText(bytes){return (bytes/1024/1024).toFixed(2)+' MB'}
+function resolveEntries(source,prefix){
+ if(!Array.isArray(source)||!source.length||source.length>MAX_FILES)throw Error('Selection must contain 1–100 files.');
+ if(prefix&&!cleanPath(prefix))throw Error('Destination folder contains unsafe path segments.');
+ const names=new Set(),out=[];let sum=0;
+ for(const entry of source){
+  if(!entry||!cleanPath(entry.path)||!(entry.blob instanceof Blob)||entry.blob.size>MAX_SINGLE)throw Error('Unsafe member path or oversized file.');
+  sum+=entry.blob.size;if(sum>MAX_BYTES)throw Error('Selected files exceed the 32 MB limit.');
+  const path=(prefix?prefix+'/':'')+entry.path,fold=path.toLowerCase();
+  if(names.has(fold))throw Error('Selected files contain ambiguous duplicate destinations.');
+  names.add(fold);out.push({path,blob:entry.blob});
+ }
+ return out;
+}
+function findCollisions(entries,tree){
+ if(!tree||!Array.isArray(tree.tree)||tree.truncated)throw Error('GitHub tree coverage is incomplete; refusing to publish.');
+ const occupied=new Map();
+ for(const e of tree.tree)if(e&&typeof e.path==='string')occupied.set(e.path.toLowerCase(),e.type);
+ const blockers=[];
+ for(const entry of entries){
+  const full=entry.path.toLowerCase(),parts=full.split('/');
+  if(occupied.has(full)||[...occupied.keys()].some(p=>p.startsWith(full+'/')))blockers.push(entry.path);
+  for(let n=1;n<parts.length;n++){const ancestor=parts.slice(0,n).join('/');if(occupied.get(ancestor)==='blob'||occupied.get(ancestor)==='commit'){blockers.push(entry.path);break}}
+ }
+ return [...new Set(blockers)];
+}
+function encodeGitPath(path){return path.split('/').map(encodeURIComponent).join('/')}
+async function github(token,method,path,body,signal){
+ const headers={'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','Authorization':'Bearer '+token};
+ if(body!==undefined)headers['Content-Type']='application/json';
+ const response=await fetch('https://api.github.com'+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),cache:'no-store',signal,redirect:'error'});
+ if(!response.ok)throw Error('GitHub '+method+' returned HTTP '+response.status+'. Check token scope, branch, path and API rate limit.');
+ return response.json();
+}
+async function inspectDestination(token,repo,base,prefix,source,signal){
+ if(!repoPath(repo)||!branchPath(base))throw Error('Invalid owner/repository or branch name.');
+ const entries=resolveEntries(source,prefix),root='/repos/'+repo;
+ const branch=await github(token,'GET',root+'/git/ref/heads/'+encodeGitPath(base),undefined,signal);
+ const head=branch?.object?.sha;
+ if(!/^[a-f0-9]{40}$/i.test(head||''))throw Error('Base branch did not resolve to a commit.');
+ const commit=await github(token,'GET',root+'/git/commits/'+head,undefined,signal),treeSha=commit?.tree?.sha;
+ if(!/^[a-f0-9]{40}$/i.test(treeSha||''))throw Error('Commit tree is unavailable.');
+ const tree=await github(token,'GET',root+'/git/trees/'+treeSha+'?recursive=1',undefined,signal);
+ const collisions=findCollisions(entries,tree);
+ if(collisions.length)throw Error('Existing files or directory conflicts: '+collisions.slice(0,8).join(', ')+(collisions.length>8?' …':''));
+ return {repo,base,head,treeSha,entries};
+}
+function encodeBlob(blob){
+ return new Promise((resolve,reject)=>{
+  const reader=new FileReader();
+  reader.onload=()=>{const value=reader.result;if(typeof value!=='string'||!value.includes(','))reject(Error('File encoding failed'));else resolve(value.slice(value.indexOf(',')+1))};
+  reader.onerror=()=>reject(Error('File cannot be read'));reader.readAsDataURL(blob)
+ });
+}
+async function writeNewBranch(plan,token,branch,onProgress,signal){
+ if(!branchPath(branch)||branch===plan.base)throw Error('Unsafe proposed output branch.');
+ const prefix='/repos/'+plan.repo,latest=await github(token,'GET',prefix+'/git/ref/heads/'+encodeGitPath(plan.base),undefined,signal);
+ if(latest?.object?.sha!==plan.head)throw Error('Base branch changed after review. Review destinations again.');
+ const tree=await github(token,'GET',prefix+'/git/trees/'+plan.treeSha+'?recursive=1',undefined,signal);
+ if(findCollisions(plan.entries,tree).length)throw Error('Destinations are no longer collision-free.');
+ const entries=[];
+ for(let i=0;i<plan.entries.length;i++){
+  if(signal?.aborted)throw Error('Publishing cancelled before branch creation.');
+  const file=plan.entries[i];onProgress('Uploading '+(i+1)+'/'+plan.entries.length+' · '+file.path);
+  const content=await encodeBlob(file.blob);
+  const result=await github(token,'POST',prefix+'/git/blobs',{content,encoding:'base64'},signal);
+  if(!/^[a-f0-9]{40}$/i.test(result?.sha||''))throw Error('Blob creation failed integrity response.');
+  entries.push({path:file.path,mode:'100644',type:'blob',sha:result.sha})
+ }
+ onProgress('Preparing an atomic tree and commit…');
+ const newTree=await github(token,'POST',prefix+'/git/trees',{base_tree:plan.treeSha,tree:entries},signal);
+ const commit=await github(token,'POST',prefix+'/git/commits',{message:'Extract ZIP files with Expository',tree:newTree.sha,parents:[plan.head]},signal);
+ if(!/^[a-f0-9]{40}$/i.test(commit?.sha||''))throw Error('Commit creation returned no valid SHA.');
+ if(signal?.aborted)throw Error('Publishing stopped before branch creation.');
+ // The only ref mutation is a brand-new branch; no update to main or existing branches.
+ const ref=await github(token,'POST',prefix+'/git/refs',{ref:'refs/heads/'+branch,sha:commit.sha},signal);
+ if(ref?.object?.sha!==commit.sha)throw Error('GitHub branch creation did not confirm the commit SHA.');
+ return {commitSha:commit.sha,branch};
+}
+function renderIncoming(){
+ const files=$('files');files.replaceChildren();$('incoming').textContent=incoming?incoming.entries.length+' verified files handed off in browser memory from '+incoming.sourceName:'Waiting for Expository…';
+ if(!incoming)return;
+ const total=incoming.entries.reduce((n,e)=>n+e.blob.size,0);
+ $('incoming').textContent=incoming.entries.length+' files · '+sizeText(total)+' · received from Expository, in browser memory only.';
+ for(const entry of incoming.entries){const line=document.createElement('div');line.className='path';line.textContent=entry.path+' · '+sizeText(entry.blob.size);files.append(line)}
+ $('repo').value=incoming.repo;$('base').value=incoming.base;$('review').disabled=false
+}
+function invalidate(){review=null;$('publish').disabled=true;$('destinations').replaceChildren()}
+async function startReview(){
+ if(busy||!incoming)return;
+ const repo=$('repo').value.trim(),base=$('base').value.trim(),prefix=$('prefix').value.trim().replace(/\/$/,''),token=$('token').value.trim();
+ if(!token){status('A write-capable fine-grained token is required for review.');return}
+ if(!repoPath(repo)||!branchPath(base)){status('Invalid repository or base branch.');return}
+ busy=true;invalidate();$('review').disabled=true;status('Reading base commit, repository tree and destination collisions…');
+ try{
+  const plan=await inspectDestination(token,repo,base,prefix,incoming.entries);
+  review={plan,token,repo,base,prefix,source:incoming.entries};
+  const destination=$('destinations');destination.replaceChildren();
+  const title=document.createElement('p');title.textContent='No collisions. '+plan.entries.length+' files will be committed into a NEW branch from '+base+' @ '+plan.head.slice(0,12)+'.';destination.append(title);
+  for(const entry of plan.entries){const line=document.createElement('div');line.className='path';line.textContent=entry.path;destination.append(line)}
+  $('publish').disabled=false;status('Review complete. Confirm to create a new branch. No existing branch will be modified.');
+ }catch(e){status('Review blocked: '+e.message)}
+ finally{busy=false;$('review').disabled=false}
+}
+async function startPublish(){
+ if(busy||!review)return;
+ if($('repo').value.trim()!==review.repo||$('base').value.trim()!==review.base||$('prefix').value.trim().replace(/\/$/,'')!==review.prefix||$('token').value.trim()!==review.token){invalidate();status('Destination or token changed. Review again.');return}
+ busy=true;$('publish').disabled=true;$('review').disabled=true;$('cancel').disabled=false;
+ writerAbort=new AbortController();const choice=review;
+ const suffix=Array.from(crypto.getRandomValues(new Uint8Array(5))).map(x=>x.toString(16).padStart(2,'0')).join('');
+ const newBranch='expository/zip-'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'-'+suffix;
+ status('Starting upload for new branch '+newBranch+'…');
+ try{
+  const result=await writeNewBranch(choice.plan,choice.token,newBranch,status,writerAbort.signal);
+  const a=document.createElement('a');a.href='https://github.com/'+choice.repo+'/tree/'+encodeGitPath(result.branch);a.target='_blank';a.rel='noopener noreferrer';a.textContent='Open the new GitHub branch';
+  $('destinations').replaceChildren(a);
+  status('Created '+newBranch+' at commit '+result.commitSha.slice(0,12)+'. Base branch unchanged. You can open a pull request on GitHub.');
+ }catch(e){status('Publishing did not complete: '+e.message+'. Check GitHub for the new branch before retrying. The base branch was not updated.')}
+ finally{busy=false;writerAbort=null;$('cancel').disabled=true;$('review').disabled=false;$('token').value='';review=null}
+}
+function receiveBundle(packet){
+ if(incoming||packet?.type!=='bundle'||!Array.isArray(packet.entries))return;
+ if(!repoPath(packet.repo)||!branchPath(packet.base)||typeof packet.sourceName!=='string')return;
+ try{
+  const files=resolveEntries(packet.entries,'');
+  incoming={repo:packet.repo,base:packet.base,sourceName:packet.sourceName.slice(0,140),entries:files};renderIncoming();status('Select a destination folder and enter a write-capable token to review.');
+  channel?.close();channel=null
+ }catch(e){status('Handoff rejected: '+e.message)}
+}
+$('review').onclick=startReview;$('publish').onclick=startPublish;
+$('cancel').onclick=()=>{if(writerAbort){writerAbort.abort();status('Stopping before branch creation…')}};
+for(const id of ['repo','base','prefix','token'])$(id).oninput=invalidate;
+const nonce=location.hash.slice(1);
+if(/^[a-f0-9]{32}$/.test(nonce)&&typeof BroadcastChannel==='function'){
+ history.replaceState(null,'',location.pathname+location.search);
+ channel=new BroadcastChannel('expository-zip-'+nonce);
+ channel.onmessage=event=>{const packet=event.data;if(packet?.nonce===nonce)receiveBundle(packet)};
+ channel.postMessage({type:'ready',nonce});
+}else status('Open a ZIP in Expository and choose Publish to GitHub to send files securely to this tab.');
+})();
+</script>
+</body>
+</html>
