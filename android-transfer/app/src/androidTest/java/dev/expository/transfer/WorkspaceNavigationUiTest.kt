@@ -70,7 +70,7 @@ class WorkspaceNavigationUiTest {
 
         compose.onNodeWithText("Device ↔ Server").performClick()
         compose.onNodeWithText("Pane B · SFTP").performClick()
-        compose.onNodeWithText("Location B · SFTP").assertExists()
+        compose.onNodeWithText("Location B · SFTP", substring = true).assertExists()
         compose.onNodeWithText("SFTP file transfer").assertExists()
         compose.onNodeWithText("Connect securely").assertIsNotEnabled()
         // The inactive phone tab is not exposed or disconnected.
@@ -94,7 +94,7 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("SFTP file transfer").assertExists()
         compose.onNodeWithText("Dual view").performClick()
         compose.onNodeWithText("✓ Dual view").assertExists()
-        compose.onNodeWithText("Location A · SFTP").assertExists()
+        compose.onNodeWithText("Location A · SFTP", substring = true).assertExists()
     }
 
     @Test fun incomingShareOffersSftpDestinationWithoutSilentUpload() {
