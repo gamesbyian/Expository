@@ -113,6 +113,60 @@ object ScenarioSuite {
             val p = OperationPlanner.transfer(makeRequest(listOf(directory("Series", l)), dst), NOW)
             check(!p.executable && "SOURCE_TO_DESCENDANT" in p.blockers)
         }
+        test("source direct-parent membership is required for Copy and Move") {
+            val src = remote(folder = listOf("Inbox"))
+            val dst = remote(folder = listOf("Destination"))
+            val legitimate = file("safe.txt", src)
+            val req = makeRequest(listOf(legitimate), dst)
+            val accepted = OperationPlanner.transfer(req, NOW)
+            check(accepted.executable)
+            for (operation in listOf(Operation.COPY, Operation.MOVE)) {
+                val mismatched = legitimate.copy(parent = listOf("Other"))
+                val changed = req.copy(sources = listOf(mismatched), operation = operation)
+                val blocked = OperationPlanner.transfer(changed, NOW)
+                check(!blocked.executable && "SOURCE_PARENT_MISMATCH" in blocked.blockers)
+                check(!OperationPlanner.revalidate(accepted, changed, NOW))
+            }
+            val absentContainer = src.copy(key = src.key.copy(containerId = ""))
+            val blocked = OperationPlanner.transfer(
+                req.copy(sources = listOf(file("safe.txt", absentContainer))), NOW)
+            check(!blocked.executable && "SOURCE_IDENTITY" in blocked.blockers)
+        }
+        test("SAF native Move requires identical scoped grant, not just provider") {
+            val caps = caps(Capability.READ, Capability.WRITE,
+                Capability.PROVIDER_MOVE, Capability.DELETE_SOURCE)
+            val from = LocationRef(
+                LocationKey(LocationKind.LOCAL_SAF, "provider", "root", "A", "grant-one"),
+                listOf("Inbox"), "rev1", caps, "provider-ns", "provider-domain")
+            val sameGrant = from.copy(
+                key = from.key.copy(containerId = "B"), folder = listOf("Archive"))
+            val otherGrant = sameGrant.copy(key = sameGrant.key.copy(grantId = "grant-two"))
+            val source = ItemRef(
+                ItemKey("provider", "file-id", "file-v1"), from,
+                from.folder, "file.txt", ItemKind.FILE)
+            val approved = makeRequest(listOf(source), sameGrant, Operation.MOVE)
+            val safeFastPath = OperationPlanner.transfer(approved, NOW)
+            check(safeFastPath.executable &&
+                safeFastPath.route == TransferRoute.VERIFIED_PROVIDER_MOVE)
+            val separate = OperationPlanner.transfer(
+                approved.copy(destination = otherGrant), NOW)
+            check(!separate.executable &&
+                separate.route == TransferRoute.BLOCKED &&
+                "DELETE_CONSENT_REQUIRED" in separate.blockers)
+            val explicitlyAuthorized = OperationPlanner.transfer(
+                approved.copy(destination = otherGrant, deletionAuthorized = true), NOW)
+            check(explicitlyAuthorized.executable &&
+                explicitlyAuthorized.route == TransferRoute.COPY_VERIFY_THEN_DELETE)
+            val directCopy = OperationPlanner.transfer(
+                approved.copy(destination = otherGrant, operation = Operation.COPY), NOW)
+            check(directCopy.executable && directCopy.route == TransferRoute.DEVICE_RELAY)
+            check(!OperationPlanner.revalidate(safeFastPath,
+                approved.copy(destination = otherGrant), NOW))
+            val noGrant = sameGrant.copy(key = sameGrant.key.copy(grantId = null))
+            check(OperationPlanner.transfer(
+                approved.copy(destination = noGrant), NOW).route !=
+                TransferRoute.VERIFIED_PROVIDER_MOVE)
+        }
         test("capability expiry fails closed") {
             val l = remote(capabilities = caps(Capability.READ))
             val dst = remote(folder = listOf("Other"),
