@@ -78,3 +78,38 @@ test('new branch writer refuses a moved base branch before mutating Git objects'
  await assert.rejects(api.writeNewBranch(plan,'secret','expository/zip-demo',()=>{}),/changed/);
  assert.equal(calls.filter(x=>x.options.method==='POST').length,0);
 });
+
+test('read-only explorer passes checked ZIP payload to a nonce-only companion URL',async()=>{
+ const index=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+ const first=index.indexOf('const ZIP_PUBLISH_MAX='),last=index.indexOf('const ZIP_SHARE_MAX=',first);
+ assert.ok(first>=0&&last>first,'ZIP handoff is present in normal viewer');
+ let opened='',channel;
+ class FakeChannel {
+  constructor(name){this.name=name;this.packets=[];channel=this}
+  postMessage(packet){this.packets.push(packet)}
+  close(){}
+ }
+ const state={repo:'owner/private',branch:'dev/active',repoRequest:7};
+ const ctx=vm.createContext({
+  Blob,URL,BroadcastChannel:FakeChannel,crypto:require('node:crypto').webcrypto,state,
+  zipChoice:()=>new Set(),unzipMember:async()=>new Blob(['verified']),
+  location:{href:'https://gamesbyian.github.io/Expository/'},
+  window:{open:(url)=>{opened=url}},status:()=>{},setTimeout:()=>{}
+ });
+ vm.runInContext(index.slice(first,last)+'\nglobalThis.publishZipForTest=publishZip;',ctx);
+ const manifest={entries:[{name:'assets/screen.png',size:8}]};
+ ctx.publishZipForTest(manifest,{name:'pictures.zip'});
+ const url=new URL(opened);
+ assert.equal(url.search,'');
+ assert.equal(url.pathname,'/Expository/zip-publisher.html');
+ assert.match(url.hash,/^#[0-9a-f]{32}$/);
+ channel.onmessage({data:{type:'ready',nonce:url.hash.slice(1)}});
+ await new Promise(resolve=>setImmediate(resolve));
+ const bundle=channel.packets.find(p=>p.type==='bundle');
+ assert.ok(bundle);
+ assert.equal(bundle.entries[0].path,'assets/screen.png');
+ assert.equal(await bundle.entries[0].blob.text(),'verified');
+ assert.equal(bundle.repo,'owner/private');
+ assert.equal(bundle.base,'dev/active');
+ assert.doesNotMatch(opened,/owner|private|screen|credential|token/i,'private paths are not encoded into the URL')
+});
