@@ -324,7 +324,11 @@ private fun DeveloperPreview(
         val updated = runCatching { model.pane(which).select(item) }.getOrNull()
             ?: return
         model = model.update(which, updated)
-        replaceTree(which, current.toggle(entry))
+        // Selection changes also invalidate previously reviewed peer-upload
+        // batches. A removed-then-reselected identical file must not
+        // resurrect a stale approval.
+        replaceTree(which, current.toggle(entry).copy(
+            generation = treeReadGeneration.incrementAndGet()))
     }
 
 
