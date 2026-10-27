@@ -281,9 +281,9 @@ internal fun DualWorkspaceCard(
                     Text("Files (" + proposedCopy.size + "): " +
                         proposedCopy.joinToString(", ") { it.sourceName })
                     Text("Route: Device → Device · Copy originals; never delete sources")
-                    Text("Plans: " +
+                    Text("Initial reviewed source plans: " +
                         proposedCopy.joinToString(", ") { it.plan.digest.take(8) } + "…")
-                    Text("Each file has separate fresh preflight, durable attempt journal and independent byte verification. The batch stops at the first uncertain result; earlier verified files remain and must not be blindly retried. No overwrite.",
+                    Text("Each file has a fresh provider preflight, a pinned original source version, a separate durable journal and independent byte verification. Later destination snapshots are refreshed after verified earlier files. The batch stops at the first uncertain result; prior verified files remain. No overwrite or automatic retry.",
                         style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
