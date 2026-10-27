@@ -60,6 +60,25 @@ data class FtpsBrowsePreview(
     val truncated: Boolean
 )
 
+/** Bounded read-only expansion; LIST fallback remains non-authoritative. */
+object FtpsBrowseBounds {
+    const val INITIAL = 200
+    const val STEP = 200
+    const val MAX = 2000
+
+    fun requireValid(limit: Int): Int = limit.also {
+        require(it in 1..MAX) { "INVALID_FTPS_BROWSE_WINDOW" }
+    }
+
+    fun next(limit: Int): Int {
+        requireValid(limit)
+        require(limit >= INITIAL && limit % STEP == 0) {
+            "INVALID_PROGRESSIVE_FTPS_STEP"
+        }
+        return (limit + STEP).coerceAtMost(MAX)
+    }
+}
+
 /** Remote names are never normalized by guessing OS path semantics. */
 object FtpsPath {
     fun checkedChild(name: String): String {
@@ -170,12 +189,20 @@ object SecureFtps {
  * a partial directory is authoritative.
  */
 internal object FtpsMlsdEntries {
-    fun decode(files: Array<FTPFile>): List<FtpsEntry> =
-        files.asSequence()
+    fun decode(files: Array<FTPFile>): List<FtpsEntry> {
+        val entries = files.asSequence()
             .filter { it.name != "." && it.name != ".." }
             .map {
                 FtpsEntry(FtpsPath.checkedChild(it.name ?: ""), it.isDirectory, it.size)
             }.toList()
+        // A hostile or faulty server can return two identically named rows.
+        // They are not unique file identities, and keyed Compose previews
+        // would otherwise crash or offer ambiguous source selection.
+        require(entries.map { it.name }.toSet().size == entries.size) {
+            "AMBIGUOUS_FTPS_DIRECTORY"
+        }
+        return entries
+    }
 }
 
 /** Single-threaded control connection. Do not start a second command mid-RETR. */
@@ -213,7 +240,7 @@ class FtpsSession internal constructor(private val client: FTPSClient) : AutoClo
      * timeout, permissions or unknown data-channel failure is never retried.
      */
     fun browseReadOnly(absoluteFolder: String, maxEntries: Int = 200): FtpsBrowsePreview {
-        require(maxEntries in 1..200)
+        FtpsBrowseBounds.requireValid(maxEntries)
         val result = runCatching { list(absoluteFolder) }
         val entries = result.getOrNull()
         if (entries != null && entries.isNotEmpty()) {

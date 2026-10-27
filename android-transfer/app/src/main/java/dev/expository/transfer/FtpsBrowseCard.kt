@@ -35,6 +35,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.ftps.FtpsBrowsePreview
+import dev.expository.transfer.ftps.FtpsBrowseBounds
 import dev.expository.transfer.ftps.FtpsMode
 import dev.expository.transfer.ftps.FtpsPath
 import dev.expository.transfer.ftps.FtpsSession
@@ -71,6 +72,7 @@ fun FtpsBrowseCard() {
     var sessionId by remember { mutableStateOf("") }
     var folder by remember { mutableStateOf("/") }
     var page by remember { mutableStateOf<FtpsBrowsePreview?>(null) }
+    var browseLimit by remember { mutableStateOf(FtpsBrowseBounds.INITIAL) }
     var pendingFile by remember { mutableStateOf<String?>(null) }
     var pendingSaveWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -151,26 +153,33 @@ fun FtpsBrowseCard() {
         }
     }
 
-    fun browseTo(next: String) {
+    fun browseTo(next: String,
+        requestedLimit: Int = if (next == folder) browseLimit else FtpsBrowseBounds.INITIAL) {
         val live = session ?: return
+        val limit = runCatching { FtpsBrowseBounds.requireValid(requestedLimit) }
+            .getOrNull() ?: return
         busy = true
         status = "Loading encrypted remote listing…"
         scope.launch {
             val result = withContext(Dispatchers.IO) {
-                runCatching { live.browseReadOnly(next) }
+                runCatching { live.browseReadOnly(next, maxEntries = limit) }
             }
             if (session === live) {
                 result.onSuccess {
                     folder = next
                     page = it
+                    browseLimit = limit
                     pendingFile = null
                     pendingSaveWitness = null
                     status = if (it.method == "LIST")
-                        "Compatibility LIST preview. Incomplete metadata cannot authorize changes."
+                        "Compatibility LIST preview is non-authoritative. " +
+                            (if (it.truncated) "More entries may remain unseen."
+                            else "It cannot authorize writes.")
                     else if (it.truncated)
-                        "Directory truncated at 200 items. More results are not shown."
-                    else
-                        "Secure MLSD listing. Files require separate MLST proof before Save As."
+                        "Showing " + it.entries.size + " MLSD entries; " +
+                            (if (limit < FtpsBrowseBounds.MAX) "load next 200 to inspect more."
+                             else "2,000-item safety cap reached.")
+                    else "Secure MLSD listing. Files still require separate MLST proof before Save As."
                 }.onFailure {
                     status = "Unable to browse securely. No plaintext fallback was attempted."
                 }
@@ -241,6 +250,7 @@ fun FtpsBrowseCard() {
                                 session = live
                                 sessionId = UUID.randomUUID().toString()
                                 folder = chosenRoot
+                                browseLimit = FtpsBrowseBounds.INITIAL
                                 page = listing
                                 status = if (listing.method == "LIST")
                                     "Encrypted connection; LIST preview is non-authoritative."
@@ -258,6 +268,7 @@ fun FtpsBrowseCard() {
                         session = null
                         sessionId = ""
                         page = null
+                        browseLimit = FtpsBrowseBounds.INITIAL
                         pendingFile = null
                         pendingSaveWitness = null
                         status = "Disconnected. Session and credentials cleared."
@@ -339,8 +350,18 @@ fun FtpsBrowseCard() {
                         }
                     }
                 }
-                if (page?.truncated == true) Text("Showing at most 200 entries. No hidden entry is selectable.",
-                    style = MaterialTheme.typography.bodySmall)
+                if (page?.truncated == true) {
+                    if (browseLimit < FtpsBrowseBounds.MAX) {
+                        Button(enabled = !busy,
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = { browseTo(folder, FtpsBrowseBounds.next(browseLimit)) }) {
+                            Text("Show next 200")
+                        }
+                    }
+                    Text("Incomplete FTPS directory preview. Hidden entries cannot be selected; " +
+                        "legacy LIST is never authoritative for mutations.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
             }
             if (continueCopy != null) {
                 Text("Written: " + transferred + " bytes (not yet verified)",

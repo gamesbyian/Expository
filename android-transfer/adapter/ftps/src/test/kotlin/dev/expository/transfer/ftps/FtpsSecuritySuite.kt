@@ -113,6 +113,42 @@ object FtpsSecuritySuite {
                 check(whole.entries.size == 3)
             }
         }
+        checkCase("progressive MLSD inspection of 205 rows stays bounded") {
+            fun item(index: Int): org.apache.commons.net.ftp.FTPFile =
+                org.apache.commons.net.ftp.FTPFile().apply {
+                    name = "entry-" + index.toString().padStart(4, '0') + ".txt"
+                    type = org.apache.commons.net.ftp.FTPFile.FILE_TYPE
+                    size = index.toLong()
+                }
+            val data = Array(205, ::item)
+            val client = object : org.apache.commons.net.ftp.FTPSClient(false) {
+                override fun changeWorkingDirectory(pathname: String): Boolean = true
+                override fun mlistDir(): Array<org.apache.commons.net.ftp.FTPFile> = data
+            }
+            FtpsSession(client).use { session ->
+                val first = session.browseReadOnly("/large")
+                check(first.entries.size == 200 && first.truncated && !first.authoritative)
+                val full = session.browseReadOnly("/large", FtpsBrowseBounds.next(200))
+                check(full.method == "MLSD" && full.authoritative && !full.truncated)
+                check(full.entries.size == 205 && full.entries.last().name == "entry-0204.txt")
+                check(runCatching { session.browseReadOnly("/large", 2001) }.isFailure)
+                check(FtpsBrowseBounds.next(2000) == 2000)
+                check(runCatching { FtpsBrowseBounds.next(201) }.isFailure)
+            }
+        }
+        checkCase("duplicate untrusted MLSD names refuse ambiguous preview") {
+            val first = org.apache.commons.net.ftp.FTPFile().apply {
+                name = "duplicate.txt"
+                type = org.apache.commons.net.ftp.FTPFile.FILE_TYPE
+            }
+            val second = org.apache.commons.net.ftp.FTPFile().apply {
+                name = "duplicate.txt"
+                type = org.apache.commons.net.ftp.FTPFile.FILE_TYPE
+            }
+            check(runCatching {
+                FtpsMlsdEntries.decode(arrayOf(first, second))
+            }.isFailure)
+        }
         checkCase("empty MLSD permits LIST preview but never mutation witness") {
             fun file(name: String): org.apache.commons.net.ftp.FTPFile =
                 org.apache.commons.net.ftp.FTPFile().apply {
