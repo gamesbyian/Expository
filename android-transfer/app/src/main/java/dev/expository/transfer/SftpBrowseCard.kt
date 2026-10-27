@@ -979,7 +979,7 @@ internal fun SftpBrowseCard(
                     val valid = !busy && session === req.destination &&
                         sessionId == req.destinationSessionId &&
                         folder == req.destinationFolder &&
-                        selected?.session === req.source &&
+                        selected != null && selected.session === req.source &&
                         selected.sessionId == req.sourceSessionId &&
                         selected.absoluteFile == req.sourceFile &&
                         selected.revision == req.sourceRevision &&
