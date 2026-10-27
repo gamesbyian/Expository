@@ -156,6 +156,7 @@ private fun DeveloperPreview(
     var scrollB by remember { mutableStateOf(LazyListState()) }
     var proposedCopy by remember { mutableStateOf<List<TreeCopyPreflight>?>(null) }
     var copyBusy by remember { mutableStateOf(false) }
+    var remoteRelayBusy by remember { mutableStateOf(false) }
     var copyStatus by remember { mutableStateOf(
         "Choose two device folders and select 1–12 source files for reviewed Copy.") }
     var copyPermit by remember { mutableStateOf<AtomicBoolean?>(null) }
@@ -510,7 +511,7 @@ private fun DeveloperPreview(
             item {
                 FlowRow(modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(enabled = !copyBusy,
+                    Button(enabled = !copyBusy && !remoteRelayBusy,
                         onClick = {
                             proposedCopy = null
                             model = model.view(WorkspaceView.SINGLE)
@@ -520,7 +521,7 @@ private fun DeveloperPreview(
                                 "Selected" else "Not selected"
                         }) { Text(if (model.view == WorkspaceView.SINGLE)
                             "✓ Single view" else "Single view") }
-                    Button(enabled = !copyBusy,
+                    Button(enabled = !copyBusy && !remoteRelayBusy,
                         onClick = { model = model.view(WorkspaceView.DUAL) },
                         modifier = Modifier.heightIn(min = 48.dp).semantics {
                             stateDescription = if (model.view == WorkspaceView.DUAL)
@@ -697,6 +698,7 @@ private fun DeveloperPreview(
                         },
                         onSelect = ::toggleTreeSelection,
                         busy = copyBusy,
+                        onRelayBusy = { remoteRelayBusy = it },
                         copyStatus = copyStatus,
                         proposedCopy = proposedCopy,
                         onCopy = ::requestDeviceCopy,
