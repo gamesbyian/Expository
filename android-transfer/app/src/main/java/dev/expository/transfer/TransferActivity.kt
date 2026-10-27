@@ -345,8 +345,9 @@ private fun DeveloperPreview(
             model.pane(destinationPane).endpoint != BrowseEndpoint.LOCAL ||
             !from.complete || !to.complete || !to.canWrite ||
             from.selected.size !in 1..12 || chosen.size != from.selected.size ||
-            chosen.map { it.title.lowercase(java.util.Locale.ROOT) }.toSet().size !=
-                chosen.size) {
+            chosen.map { java.text.Normalizer.normalize(it.title,
+                java.text.Normalizer.Form.NFC).lowercase(java.util.Locale.ROOT) }
+                .toSet().size != chosen.size) {
             copyStatus = "Copy blocked: select 1–12 distinct files and two fully listed, granted device folders."
             return
         }
