@@ -95,6 +95,7 @@ internal object LocalTreeReader {
         val seen = HashSet<String>()
         var complete = true
         var hasMore = false
+        var scanned = 0
         resolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
             val idColumn = cursor.getColumnIndexOrThrow(
                 DocumentsContract.Document.COLUMN_DOCUMENT_ID)
@@ -105,11 +106,14 @@ internal object LocalTreeReader {
             val sizeColumn = cursor.getColumnIndex(
                 DocumentsContract.Document.COLUMN_SIZE)
             while (cursor.moveToNext()) {
-                if (entries.size >= maxVisible) {
+                // Count *every* cursor row, including malformed/duplicate
+                // rows, so a hostile provider cannot defeat this scan cap.
+                if (scanned >= maxVisible) {
                     complete = false
                     hasMore = true
                     break
                 }
+                scanned++
                 val id = cursor.getString(idColumn) ?: continue
                 val name = cursor.getString(nameColumn) ?: continue
                 val mime = cursor.getString(typeColumn) ?: continue
