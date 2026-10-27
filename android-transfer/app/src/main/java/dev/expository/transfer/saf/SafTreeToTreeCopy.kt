@@ -103,8 +103,11 @@ class SafTreeToTreeCopy(
         // the folder the user selected. Recheck direct child membership on
         // every preflight and immediately before the write-ahead copy.
         // An incomplete/ambiguous source listing cannot authorize a write.
+        // Read an authoritative, bounded up-to-2000-child witness before
+        // mutation. Truncation still rejects the entire operation.
         val sourceMembers = LocalTreeReader.list(
-            resolver, request.sourceTree, request.sourceFolderId)
+            resolver, request.sourceTree, request.sourceFolderId,
+            LocalTreeReader.MAX_BROWSE)
         require(sourceMembers.complete &&
             sourceMembers.children.count {
                 it.documentId == request.sourceDocumentId &&
@@ -115,7 +118,7 @@ class SafTreeToTreeCopy(
         require(metadata.displayName == request.expectedSourceName &&
             metadata.mimeType != DocumentsContract.Document.MIME_TYPE_DIR)
         val siblings = LocalTreeReader.list(resolver, request.targetTree,
-            request.targetFolderId)
+            request.targetFolderId, LocalTreeReader.MAX_BROWSE)
         val revision = hash(siblings.children.flatMap {
             listOf(it.documentId, it.title, it.directory.toString(),
                 it.bytes?.toString().orEmpty())
