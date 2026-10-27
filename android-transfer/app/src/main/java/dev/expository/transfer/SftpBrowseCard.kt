@@ -121,7 +121,9 @@ internal fun SftpBrowseCard(
     localPaneTarget: LocalPaneDownloadTarget? = null,
     remotePaneSource: PeerSftpSource? = null,
     allowRemoteSelection: Boolean = false,
-    onRemoteSource: (PeerSftpSource?) -> Unit = {}
+    onRemoteSource: (PeerSftpSource?) -> Unit = {},
+    peerRelaySourceId: String? = null,
+    onRelaySourceActive: (String?) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -147,6 +149,8 @@ internal fun SftpBrowseCard(
     var showRenamePreview by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Enter a known SHA-256 SSH host-key fingerprint. Unknown keys are never trusted automatically.") }
     var busy by remember { mutableStateOf(false) }
+    val peerRelayLocked = session != null && sessionId.isNotBlank() &&
+        peerRelaySourceId == sessionId
     var transferred by remember { mutableLongStateOf(0L) }
     var continueCopy by remember { mutableStateOf<AtomicBoolean?>(null) }
     var transferKind by remember { mutableStateOf("") }
@@ -446,6 +450,7 @@ internal fun SftpBrowseCard(
             return
         }
         pendingRelay = null
+        onRelaySourceActive(request.sourceSessionId)
         val permit = AtomicBoolean(true)
         continueCopy = permit
         transferKind = "Server-to-server Copy"
@@ -495,6 +500,7 @@ internal fun SftpBrowseCard(
             } catch (_: Exception) {
                 status = "Server-to-server Copy outcome uncertain; inspect destination."
             } finally {
+                onRelaySourceActive(null)
                 continueCopy = null
                 transferKind = ""
                 busy = false
@@ -647,22 +653,22 @@ internal fun SftpBrowseCard(
                         style = MaterialTheme.typography.bodySmall)
                 }
                 OutlinedTextField(host, { host = it }, label = { Text("SFTP host") },
-                    enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(port, { port = it }, label = { Text("Port") },
-                    enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(startFolder, { startFolder = it },
                     label = { Text("Starting folder (absolute path)") },
-                    enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(username, { username = it }, label = { Text("Username") },
-                    enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(password, { password = it },
                     label = { Text("Password (session only)") },
                     visualTransformation = PasswordVisualTransformation(),
-                    enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(fingerprint, { fingerprint = it },
                     label = { Text("Trusted SSH key: SHA256:…") },
-                    enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !busy &&
+                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !busy && !peerRelayLocked &&
                     host.isNotBlank() && username.isNotBlank() &&
                     password.isNotBlank() && fingerprint.isNotBlank(),
                     onClick = {
@@ -707,7 +713,7 @@ internal fun SftpBrowseCard(
                     }) { Text(if (busy) "Connecting…" else "Connect securely") }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(enabled = !busy, onClick = {
+                    Button(enabled = !busy && !peerRelayLocked, onClick = {
                         session = null
                         sessionId = ""
                         page = null
@@ -721,14 +727,14 @@ internal fun SftpBrowseCard(
                         showRenamePreview = false
                         status = "Disconnected. Remote session cleared."
                     }) { Text("Disconnect") }
-                    Button(enabled = !busy, onClick = { browseTo(folder) }) { Text("Refresh") }
+                    Button(enabled = !busy && !peerRelayLocked, onClick = { browseTo(folder) }) { Text("Refresh") }
                 }
                 Text("Remote folder: " + folder)
                 pendingMove?.let { sourceToMove ->
                     Text("Selected to move: " + sourceToMove,
                         style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(enabled = !busy && page?.truncated == false &&
+                        Button(enabled = !busy && !peerRelayLocked && page?.truncated == false &&
                             // Root is a valid verified destination. Only the
                             // source's same folder and partial listings block.
                             folder != sourceToMove.substringBeforeLast('/', "").ifBlank { "/" },
@@ -778,14 +784,14 @@ internal fun SftpBrowseCard(
                                     }
                                 }
                             }) { Text("Move here") }
-                        Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
+                        Button(enabled = !busy && !peerRelayLocked, modifier = Modifier.heightIn(min = 48.dp),
                             onClick = { pendingMove = null }) { Text("Cancel Move") }
                     }
                 }
                 OutlinedTextField(newFolderName, { newFolderName = it },
                     label = { Text("New folder name") }, singleLine = true,
-                    enabled = !busy, modifier = Modifier.fillMaxWidth())
-                Button(enabled = !busy && newFolderName.isNotBlank() &&
+                    enabled = !busy && !peerRelayLocked, modifier = Modifier.fillMaxWidth())
+                Button(enabled = !busy && !peerRelayLocked && newFolderName.isNotBlank() &&
                     page?.truncated != true,
                     modifier = Modifier.heightIn(min = 48.dp), onClick = {
                         val live = session
@@ -826,7 +832,7 @@ internal fun SftpBrowseCard(
                             }
                         }
                     }) { Text("Create folder") }
-                Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp), onClick = {
+                Button(enabled = !busy && !peerRelayLocked, modifier = Modifier.heightIn(min = 48.dp), onClick = {
                     busy = true // freeze session while Android picks a local source
                     pendingUploadWitness = RemotePickerWitness(sessionId, folder)
                     chooseUpload.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
@@ -844,7 +850,7 @@ internal fun SftpBrowseCard(
                     Text("Other pane selected: " + localPaneSources.size +
                         " file(s)", style = MaterialTheme.typography.bodySmall)
                     Button(
-                        enabled = !busy && session != null && sessionId.isNotBlank() &&
+                        enabled = !busy && !peerRelayLocked && session != null && sessionId.isNotBlank() &&
                             pendingPeerUpload == null,
                         modifier = Modifier.heightIn(min = 48.dp),
                         onClick = {
@@ -876,7 +882,7 @@ internal fun SftpBrowseCard(
                                 "Discard this proposal and review again.",
                                 style = MaterialTheme.typography.bodySmall)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(enabled = !busy && valid,
+                                Button(enabled = !busy && !peerRelayLocked && valid,
                                     modifier = Modifier.heightIn(min = 48.dp),
                                     onClick = {
                                         pendingPeerUpload = null
@@ -884,7 +890,7 @@ internal fun SftpBrowseCard(
                                             review.sources.map { it.documentUri },
                                             scopedSources = review.sources)
                                     }) { Text("Confirm SFTP Copy") }
-                                Button(enabled = !busy,
+                                Button(enabled = !busy && !peerRelayLocked,
                                     modifier = Modifier.heightIn(min = 48.dp),
                                     onClick = { pendingPeerUpload = null }) {
                                     Text("Cancel proposal")
@@ -900,7 +906,7 @@ internal fun SftpBrowseCard(
                         " Android-shared document(s) available. No upload starts until tapped.",
                         style = MaterialTheme.typography.bodySmall)
                     Button(
-                        enabled = !busy && session != null && sessionId.isNotBlank(),
+                        enabled = !busy && !peerRelayLocked && session != null && sessionId.isNotBlank(),
                         modifier = Modifier.heightIn(min = 48.dp),
                         onClick = { uploadSources(sharedFiles) }
                     ) {
@@ -908,13 +914,13 @@ internal fun SftpBrowseCard(
                              else "Upload " + sharedFiles.size + " shared files here")
                     }
                 }
-                if (folder != "/") Button(enabled = !busy, onClick = {
+                if (folder != "/") Button(enabled = !busy && !peerRelayLocked, onClick = {
                     val parent = folder.substringBeforeLast('/', "").ifBlank { "/" }
                     browseTo(parent)
                 }) { Text("Parent folder") }
                 Button(
                     modifier = Modifier.heightIn(min = 48.dp),
-                    enabled = !busy && page?.truncated == false && page?.entries?.isNotEmpty() == true,
+                    enabled = !busy && !peerRelayLocked && page?.truncated == false && page?.entries?.isNotEmpty() == true,
                     onClick = { showRenamePreview = !showRenamePreview }
                 ) { Text(if (showRenamePreview) "Hide rename preview" else "Bulk rename preview…") }
                 if (showRenamePreview) page?.let { current ->
@@ -952,7 +958,7 @@ internal fun SftpBrowseCard(
                                     onClick = { executePeerDownload(pending) }) {
                                     Text("Confirm Device Copy")
                                 }
-                                Button(enabled = !busy,
+                                Button(enabled = !busy && !peerRelayLocked,
                                     modifier = Modifier.heightIn(min = 48.dp),
                                     onClick = { pendingPeerDownload = null }) {
                                     Text("Cancel proposal")
@@ -966,7 +972,7 @@ internal fun SftpBrowseCard(
                     Text("Other server selection: " +
                         source.absoluteFile.substringAfterLast('/'),
                         style = MaterialTheme.typography.bodySmall)
-                    Button(enabled = !busy && pendingRelay == null &&
+                    Button(enabled = !busy && !peerRelayLocked && pendingRelay == null &&
                         source.session !== session,
                         modifier = Modifier.heightIn(min = 48.dp),
                         onClick = { prepareRelay() }) {
@@ -1008,7 +1014,7 @@ internal fun SftpBrowseCard(
                                     onClick = { executeRelay(approved) }) {
                                     Text("Confirm Server Copy")
                                 }
-                                Button(enabled = !busy,
+                                Button(enabled = !busy && !peerRelayLocked,
                                     modifier = Modifier.heightIn(min = 48.dp),
                                     onClick = { pendingRelay = null }) {
                                     Text("Cancel proposal")
@@ -1016,6 +1022,11 @@ internal fun SftpBrowseCard(
                             }
                         }
                     }
+                }
+                if (peerRelayLocked) {
+                    Text("This authenticated SFTP source session is locked while " +
+                        "the other pane relays a file. Cancel the transfer there to stop.",
+                        style = MaterialTheme.typography.bodySmall)
                 }
                 val entries = page?.entries.orEmpty()
                 LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
@@ -1029,11 +1040,11 @@ internal fun SftpBrowseCard(
                                     style = MaterialTheme.typography.bodySmall)
                             }
                             if (entry.directory) {
-                                Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
+                                Button(enabled = !busy && !peerRelayLocked, modifier = Modifier.heightIn(min = 48.dp),
                                     onClick = { browseTo(path) }) { Text("Open") }
                             } else {
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
+                                    Button(enabled = !busy && !peerRelayLocked, modifier = Modifier.heightIn(min = 48.dp),
                                         onClick = {
                                             pendingFile = path
                                             pendingSaveWitness = RemotePickerWitness(sessionId, folder, path)
@@ -1049,7 +1060,7 @@ internal fun SftpBrowseCard(
                                             })
                                         }) { Text("Save As…") }
                                     if (allowRemoteSelection) {
-                                        Button(enabled = !busy && session != null &&
+                                        Button(enabled = !busy && !peerRelayLocked && session != null &&
                                             sessionId.isNotBlank(),
                                             modifier = Modifier.heightIn(min = 48.dp),
                                             onClick = {
@@ -1065,14 +1076,14 @@ internal fun SftpBrowseCard(
                                     }
                                     if (localPaneTarget != null) {
                                         Button(
-                                            enabled = !busy && pendingPeerDownload == null,
+                                            enabled = !busy && !peerRelayLocked && pendingPeerDownload == null,
                                             modifier = Modifier.heightIn(min = 48.dp),
                                             onClick = {
                                                 preparePeerDownload(path, entry.revision)
                                             }
                                         ) { Text("Copy into other device pane…") }
                                     }
-                                    Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
+                                    Button(enabled = !busy && !peerRelayLocked, modifier = Modifier.heightIn(min = 48.dp),
                                         onClick = {
                                             pendingMove = path
                                             status = "Choose a destination folder, then tap Move here. " +
@@ -1085,7 +1096,7 @@ internal fun SftpBrowseCard(
                 }
                 if (page?.truncated == true) {
                     if (browseLimit < SftpBrowseBounds.MAX) {
-                        Button(enabled = !busy,
+                        Button(enabled = !busy && !peerRelayLocked,
                             modifier = Modifier.heightIn(min = 48.dp),
                             onClick = {
                                 browseTo(folder, SftpBrowseBounds.next(browseLimit))
