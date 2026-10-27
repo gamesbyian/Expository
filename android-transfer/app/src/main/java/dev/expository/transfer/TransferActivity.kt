@@ -144,6 +144,9 @@ private fun DeveloperPreview(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var model by remember { mutableStateOf(TransferWorkspaceState()) }
+    // One lifetime-wide monotonic generation prevents a stale provider query
+    // from matching a newly reselected tree after endpoint reset or A/B swap.
+    val treeReadGeneration = remember { AtomicLong(0L) }
     var treeA by remember { mutableStateOf(LocalTreeBrowseState()) }
     var treeB by remember { mutableStateOf(LocalTreeBrowseState()) }
     var scrollA by remember { mutableStateOf(LazyListState()) }
@@ -167,7 +170,7 @@ private fun DeveloperPreview(
             model.pane(which).endpoint != BrowseEndpoint.LOCAL) return
         // Refresh and navigation invalidate a reviewed destination snapshot.
         proposedCopy = null
-        val nextGeneration = tree(which).generation + 1L
+        val nextGeneration = treeReadGeneration.incrementAndGet()
         replaceTree(which, LocalTreeBrowseState(
             treeUri = uri, crumbs = crumbs, loading = true,
             canWrite = writeGranted,
