@@ -133,6 +133,16 @@ class WorkspaceNavigationUiTest {
         }
     }
 
+    @Test fun dualPickerShortcutFollowsActiveLocalPane() {
+        compose.onNodeWithText("Dual view").performClick()
+        compose.onNodeWithText("Device ↔ Device").performClick()
+        compose.onNodeWithText("Choose Pane A folder…").assertExists()
+        compose.onNodeWithText("Pane B · LOCAL").performClick()
+        compose.onNodeWithText("Choose Pane B folder…").assertExists()
+        compose.onNodeWithText("Pane A · LOCAL").performClick()
+        compose.onNodeWithText("Choose Pane A folder…").assertExists()
+    }
+
     @Test fun newFolderUiUnavailableWithoutOsTreeGrant() {
         compose.onNodeWithText("Dual view").performClick()
         compose.onNodeWithText("Device ↔ Device").performClick()
