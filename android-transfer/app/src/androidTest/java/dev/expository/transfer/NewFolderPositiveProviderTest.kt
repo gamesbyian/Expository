@@ -129,11 +129,24 @@ class NewFolderPositiveProviderTest {
                 device.waitForIdle(400L)
             }
             clickApp("New folder…")
-            val editor = device.wait(Until.findObject(By.desc("Folder name")),
-                12_000L) ?: device.wait(Until.findObject(
-                    By.clazz("android.widget.EditText")), 3_000L)
-                ?: error("APP_FOLDER_NAME_EDITOR_MISSING")
-            editor.setText(child)
+            // The dynamically inserted editor can be below the fold after
+            // tapping New Folder, even though its opener was visible.
+            var editor: androidx.test.uiautomator.UiObject2? = null
+            repeat(8) {
+                if (editor == null) editor =
+                    device.wait(Until.findObject(By.desc("Folder name")), 1_000L)
+                if (editor == null) editor =
+                    device.wait(Until.findObject(
+                        By.clazz("android.widget.EditText")), 250L)
+                if (editor == null) {
+                    val width = device.displayWidth
+                    val height = device.displayHeight
+                    device.swipe(width / 2, height * 3 / 4,
+                        width / 2, height / 4, 18)
+                }
+            }
+            val nameEditor = editor ?: error("APP_FOLDER_NAME_EDITOR_MISSING")
+            nameEditor.setText(child)
             clickApp("Review New Folder")
             clickApp("Confirm New Folder")
             assertTrue("Provider-confirmed folder creation receipt must be visible",
