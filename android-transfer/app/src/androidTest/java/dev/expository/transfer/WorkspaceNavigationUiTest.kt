@@ -78,6 +78,45 @@ class WorkspaceNavigationUiTest {
         assertFalse(corrupt.hasMore)
     }
 
+    @Test fun unsafeProviderRowsInvalidateCopySnapshotWithoutTruncation() {
+        val columns = arrayOf(
+            android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE,
+            android.provider.DocumentsContract.Document.COLUMN_SIZE)
+        fun listing(rows: List<Array<Any?>>) =
+            MatrixCursor(columns).use { cursor ->
+                rows.forEach { cursor.addRow(it) }
+                LocalTreeReader.decodeRows(cursor)
+            }
+        fun row(id: String, name: String): Array<Any?> =
+            arrayOf(id, name, "text/plain", 12L)
+
+        val validUtf8 = "é".repeat(127)  // 254 bytes; never truncated
+        val accepted = listing(listOf(row("valid-id", validUtf8)))
+        assertTrue(accepted.complete)
+        assertEquals(validUtf8, accepted.children.single().title)
+
+        val oversizedName = listing(listOf(
+            row("safe-id", "ok.txt"), row("too-long-name", "é".repeat(128))))
+        assertFalse("255 UTF-8 bytes is the file name ceiling", oversizedName.complete)
+        assertEquals(listOf("ok.txt"), oversizedName.children.map { it.title })
+
+        val oversizedOpaqueId = listing(listOf(
+            row("x".repeat(8193), "fake.txt")))
+        assertFalse("Provider must not drive unbounded opaque IDs",
+            oversizedOpaqueId.complete)
+        assertTrue(oversizedOpaqueId.children.isEmpty())
+
+        for (invalid in listOf("folder/child", "bad\\name", "bad\u0000name",
+            "bad\nname", "..")) {
+            val observed = listing(listOf(row("id-1", invalid)))
+            assertFalse("Invalid provider name cannot authorize a mutation",
+                observed.complete)
+            assertTrue(observed.children.isEmpty())
+        }
+    }
+
     // Peer-pane upload has no user data, credentials, or server writes here.
     @Test fun aSelectedLocalChildNeedsCompleteReadScopedFolderProof() {
         val tree = Uri.parse("content://synthetic.documents/tree/root")
