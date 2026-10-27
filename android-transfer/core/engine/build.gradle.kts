@@ -25,3 +25,11 @@ tasks.register<JavaExec>("journaledCopyScenarios") {
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("dev.expository.transfer.engine.JournaledCopySuite")
 }
+
+tasks.register<JavaExec>("renameScenarios") {
+    group = "verification"
+    description = "Fail-closed per-step bulk rename journals, cycles and interrupted operation scenarios"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.engine.JournaledRenameSuite")
+}
