@@ -136,6 +136,19 @@ object FtpsSecuritySuite {
                 check(runCatching { FtpsBrowseBounds.next(201) }.isFailure)
             }
         }
+        checkCase("duplicate untrusted MLSD names refuse ambiguous preview") {
+            val first = org.apache.commons.net.ftp.FTPFile().apply {
+                name = "duplicate.txt"
+                type = org.apache.commons.net.ftp.FTPFile.FILE_TYPE
+            }
+            val second = org.apache.commons.net.ftp.FTPFile().apply {
+                name = "duplicate.txt"
+                type = org.apache.commons.net.ftp.FTPFile.FILE_TYPE
+            }
+            check(runCatching {
+                FtpsMlsdEntries.decode(arrayOf(first, second))
+            }.isFailure)
+        }
         checkCase("empty MLSD permits LIST preview but never mutation witness") {
             fun file(name: String): org.apache.commons.net.ftp.FTPFile =
                 org.apache.commons.net.ftp.FTPFile().apply {
