@@ -81,7 +81,10 @@ internal data class RemotePickerWitness(
  * implicit upload, background service or promise of process-death recovery.
  */
 @Composable
-fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
+fun SftpBrowseCard(
+    incomingShare: IncomingShareRequest? = null,
+    localPaneSource: LocalPaneUploadSource? = null
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var host by remember { mutableStateOf("") }
@@ -185,13 +188,21 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
      * journaled, exclusive-create and read-back-verified operation.
      * This is deliberately not an atomic multi-file transaction.
      */
-    fun uploadSources(sources: List<Uri>) {
+    fun uploadSources(
+        sources: List<Uri>, scopedSource: LocalPaneUploadSource? = null
+    ) {
         val live = session
         val directory = folder
         val opaque = sessionId
         if (live == null || opaque.isBlank()) {
             busy = false
             status = "SFTP session expired. Reconnect to upload."
+            return
+        }
+        if (scopedSource != null &&
+            (sources.size != 1 || sources[0] != scopedSource.documentUri ||
+                localPaneSource != scopedSource)) {
+            status = "Opposite pane selection changed. No upload started."
             return
         }
         if (sources.isEmpty() || sources.size > ScopedUploadPicker.MAX_DOCUMENTS ||
@@ -216,6 +227,9 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                 // destination with exclusive-create semantics.
                 val ready = withContext(Dispatchers.IO) {
                     runCatching {
+                        if (scopedSource != null) require(
+                            scopedSource.membershipStillVerified(context.contentResolver)
+                        ) { "SCOPED_SOURCE_MEMBERSHIP_UNVERIFIED" }
                         val observer = dev.expository.transfer.saf.SafSingleDocumentCopy(
                             context.contentResolver)
                         val names = sources.map {
@@ -251,6 +265,7 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                         val active = coroutineContext[Job]
                         var lastDisplayed = 0L
                         uploader.copy(live, opaque, source, directory,
+                            scopedSource = scopedSource,
                             continueRequested = {
                                 permit.get() && active?.isActive == true
                             },
@@ -551,6 +566,24 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                 }) { Text("Upload files here…") }
                 Text("Choose up to 12 files. Each is copied separately; the batch stops on the first unverified result. Earlier verified uploads remain.",
                     style = MaterialTheme.typography.bodySmall)
+                // The opposite Local pane selects the source. This pinned
+                // remote session supplies the destination. No automatic writes.
+                if (localPaneSource != null) {
+                    Text("Other pane selected: " + localPaneSource.expectedName,
+                        style = MaterialTheme.typography.bodySmall)
+                    Button(
+                        enabled = !busy && session != null && sessionId.isNotBlank(),
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        onClick = {
+                            uploadSources(listOf(localPaneSource.documentUri),
+                                scopedSource = localPaneSource)
+                        }
+                    ) { Text("Copy selected device file here…") }
+                    Text("Explicit one-file upload. Scoped child membership and remote " +
+                        "collision checks are refreshed before exclusive, journaled " +
+                        "creation. The original stays on the device.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
                 val sharedFiles = incomingShare?.batch?.map { it.uri }
                     ?: incomingShare?.payload?.let { listOf(it.uri) }
                 if (!sharedFiles.isNullOrEmpty()) {
