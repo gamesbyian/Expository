@@ -44,6 +44,9 @@ import dev.expository.transfer.sftp.SftpPath
 import dev.expository.transfer.sftp.SftpSession
 import dev.expository.transfer.sftp.SftpTarget
 import dev.expository.transfer.sftp.SftpToSafSave
+import dev.expository.transfer.sftp.SftpRelayCopy
+import dev.expository.transfer.sftp.SftpRelayRequest
+import dev.expository.transfer.sftp.SftpRelayPreflight
 import dev.expository.transfer.sftp.SafToSftpUpload
 import dev.expository.transfer.sftp.SftpToSafTreeCopy
 import dev.expository.transfer.sftp.SftpTreeCopyRequest
@@ -80,6 +83,16 @@ internal data class PeerUploadReview(
             sessionId == liveSessionId && folder == liveFolder
 }
 
+/** In-memory selected remote file from the other independent pane. Never serialized. */
+internal data class PeerSftpSource(
+    val session: SftpSession,
+    val sessionId: String,
+    val folder: String,
+    val absoluteFile: String,
+    val revision: String,
+    val size: Long
+)
+
 internal data class PendingPeerSftpDownload(
     val witness: PeerSftpDownloadWitness,
     val preflight: SftpTreeCopyPreflight
@@ -105,7 +118,9 @@ internal data class RemotePickerWitness(
 internal fun SftpBrowseCard(
     incomingShare: IncomingShareRequest? = null,
     localPaneSources: List<LocalPaneUploadSource> = emptyList(),
-    localPaneTarget: LocalPaneDownloadTarget? = null
+    localPaneTarget: LocalPaneDownloadTarget? = null,
+    remotePaneSource: PeerSftpSource? = null,
+    onRemoteSource: (PeerSftpSource?) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -124,6 +139,7 @@ internal fun SftpBrowseCard(
     var pendingFile by remember { mutableStateOf<String?>(null) }
     var pendingPeerUpload by remember { mutableStateOf<PeerUploadReview?>(null) }
     var pendingPeerDownload by remember { mutableStateOf<PendingPeerSftpDownload?>(null) }
+    var pendingRelay by remember { mutableStateOf<SftpRelayPreflight?>(null) }
     var pendingSaveWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
     var pendingUploadWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
     var pendingMove by remember { mutableStateOf<String?>(null) }
@@ -388,6 +404,8 @@ internal fun SftpBrowseCard(
                     pendingFile = null
                     pendingPeerUpload = null
                     pendingPeerDownload = null
+                    pendingRelay = null
+                    onRemoteSource(null)
                     showRenamePreview = false
                     status = if (it.truncated) {
                         "Showing " + it.entries.size + " entries. " +
@@ -560,6 +578,8 @@ internal fun SftpBrowseCard(
                                 browseLimit = SftpBrowseBounds.INITIAL
                                 pendingPeerUpload = null
                                 pendingPeerDownload = null
+                                pendingRelay = null
+                                onRemoteSource(null)
                                 page = directory
                                 status = "Pinned SFTP session authenticated. Select a remote file."
                             }.onFailure {
@@ -578,6 +598,8 @@ internal fun SftpBrowseCard(
                         pendingFile = null
                         pendingPeerUpload = null
                         pendingPeerDownload = null
+                        pendingRelay = null
+                        onRemoteSource(null)
                         pendingMove = null
                         showRenamePreview = false
                         status = "Disconnected. Remote session cleared."
