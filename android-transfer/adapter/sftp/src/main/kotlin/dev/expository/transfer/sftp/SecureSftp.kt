@@ -40,7 +40,7 @@ data class SftpTarget(val host: String, val port: Int = 22, val trustedHostKey: 
     init {
         require(host.isNotBlank() && host.length <= 253 &&
             host.none { it.isWhitespace() || it == '/' || it == '\\' ||
-                it == '@' || it == ':' || it == '\r' || it == '\n' }) { "INVALID_HOST" }
+                it == '@' || it == ':' || it.code < 32 || it.code == 127 }) { "INVALID_HOST" }
         require(port in 1..65535) { "INVALID_PORT" }
     }
 }
