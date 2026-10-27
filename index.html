@@ -130,7 +130,7 @@ function zipManifest(blob){
    if(pos+46+nameLen+extraLen+commentLen>bytes.length)fail('truncated entry');
    const name=decoder.decode(bytes.subarray(pos+46,pos+46+nameLen)).replace(/\\/g,'/');
    pos+=46+nameLen+extraLen+commentLen;
-   if(!name||name.startsWith('/')||name.includes('\0')||name.split('/').some(x=>x==='..'||x==='.')||/^[a-zA-Z]:/.test(name))continue;
+   if(!name||name.startsWith('/')||/[\x00-\x1f\x7f]/.test(name)||name.split('/').some(x=>x==='..'||x==='.'||!x)||/^[a-zA-Z]:/.test(name))continue;
    if(name.endsWith('/'))continue;
    if(uncompressed>ZIP_ENTRY_MAX||compressed>ZIP_MAX_BYTES)continue;
    total+=uncompressed;if(total>ZIP_TOTAL_MAX)fail('uncompressed total exceeds 128 MB');
@@ -149,7 +149,7 @@ function zipCRC(bytes){
 async function scanZipGallery(){
  const seq=++zipScanSeq;zipGalleryEntries=[];zipManifests.clear();
  if(!$('includeZip').checked||!state.repo||!state.branch){paint();return}
- if(!state.indexReady){status('ZIP gallery needs repository indexing. Toggle again after index is ready.');return}
+ if(!state.indexReady){status('ZIP gallery will load after repository indexing.');return}
  const archives=state.indexEntries.filter(x=>x.type==='file'&&/\.zip$/i.test(x.name)&&x.size<=ZIP_MAX_BYTES).slice(0,12);
  const repo=state.repo,branch=state.branch;let failures=0,processed=0;
  status('Inspecting up to '+archives.length+' ZIPs locally…');
@@ -172,7 +172,11 @@ async function unzipMember(manifest,entry){
  let result=piece;
  if(entry.method===8){
   if(typeof DecompressionStream!=='function')throw Error('This browser cannot decode ZIP deflate streams.');
-  result=await new Response(piece.stream().pipeThrough(new DecompressionStream('deflate-raw'))).blob();
+  const reader=piece.stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader();
+  const chunks=[];let total=0;
+  try{for(;;){const {done,value}=await reader.read();if(done)break;total+=value.byteLength;if(total>entry.size||total>ZIP_ENTRY_MAX)throw Error('ZIP decompression exceeded declared size');chunks.push(value)}}
+  finally{reader.releaseLock()}
+  result=new Blob(chunks);
  }
  if(result.size!==entry.size||result.size>ZIP_ENTRY_MAX)throw Error('ZIP member length mismatch.');
  const data=new Uint8Array(await result.arrayBuffer());
@@ -181,7 +185,7 @@ async function unzipMember(manifest,entry){
 }
 function zipViewer(manifest,parent,folder=''){
  const root=elem('div','zip-browser');const heading=elem('div','zip-controls');
- const up=elem('button','pill','← '+(folder?'Up a folder':'Repository file'));up.onclick=()=>folder?showContent(zipViewer(manifest,parent,folder.split('/').slice(0,-1).join('/'))):openPreview(parent);
+ const up=elem('button','pill','← '+(folder?'Up a folder':'Repository file'));up.onclick=()=>folder?showContent(zipViewer(manifest,parent,folder.split('/').slice(0,-1).join('/'))):(clearPreview(),navigate(fileFolder(parent.path)));
  const downloadAll=elem('button','pill','Extract all to device');
  downloadAll.onclick=async()=>{
   if(typeof window.showDirectoryPicker!=='function'){status('Folder extraction is unavailable in this browser. Open individual files to download them, or download the original ZIP.');return}
@@ -191,6 +195,7 @@ function zipViewer(manifest,parent,folder=''){
     try{
      let dest=directory;const parts=entry.name.split('/');
      for(const p of parts.slice(0,-1))dest=await dest.getDirectoryHandle(p,{create:true});
+     try{await dest.getFileHandle(parts.at(-1));errors.push(entry.name+': destination already exists');continue}catch(e){if(e.name!=='NotFoundError')throw e}
      const file=await dest.getFileHandle(parts.at(-1),{create:true});
      const writer=await file.createWritable();try{await writer.write(await unzipMember(manifest,entry));await writer.close()}catch(e){await writer.abort().catch(()=>{});throw e}
     }catch(e){errors.push(entry.name+': '+e.message)}
@@ -388,7 +393,7 @@ async function indexTree(repo,branch,request){
   state.indexTruncated=Boolean(result.truncated);state.indexReady=true;state.indexError=false;
   for(const entry of result.tree||[])if(entry.type==='tree')treeAdd(entry.path);
   const recovered=recoverLargeFolderFromIndex();
-  paintTree();if(recovered||$('scope').value!=='folder')paint();if(state.sizeOpen)renderSizeMap();
+  paintTree();if(recovered||$('scope').value!=='folder')paint();if(state.sizeOpen)renderSizeMap();if($('includeZip').checked)scanZipGallery();
   if(result.truncated){status('Repository tree index truncated by GitHub; search and very large directory listings may be incomplete.');if(state.items.length>=1000)recoverTargetedFolder()}
   else if(recovered)status(state.items.length+' items · '+(state.path||'/')+' · '+recovered+' additional files/folders recovered from complete Git tree index.');
  }catch(e){if(request===state.repoRequest){state.indexReady=false;state.indexError=true;if($('scope').value!=='folder')paint();if(state.sizeOpen)renderSizeMap();status('Folder indexing unavailable: '+e.message+' · Direct browsing still works.');if(state.items.length>=1000)recoverTargetedFolder()}}
