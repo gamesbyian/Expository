@@ -201,8 +201,10 @@ private fun DeveloperPreview(
                         "Folder opened. Scoped Android browser; " +
                             listing.children.size + " visible items."
                     else if (listing.hasMore)
-                        "Showing " + listing.children.size +
-                            " items. Choose Show next 200 to inspect more; no write is authorized."
+                        "Showing " + listing.children.size + " items. " +
+                            (if (maxVisible < LocalTreeReader.MAX_BROWSE)
+                                "Choose Show next 200 to inspect more; no write is authorized."
+                            else "2000-row safety cap reached; no write is authorized.")
                     else "Ambiguous provider listing; no write is authorized."
                 ))
                 val location = LocationRef(
