@@ -26,8 +26,13 @@ internal object SafNewDocumentIdentity {
     fun isDirectChild(expectedName: String, newDocumentId: String,
         parent: TreeListing): Boolean =
         parent.complete && expectedName.isNotBlank() && newDocumentId.isNotBlank() &&
-            parent.children.count { child ->
+            parent.children.count { it.documentId == newDocumentId } == 1 &&
+            parent.children.count {
+                SafFolderPolicy.normalized(it.title) ==
+                    SafFolderPolicy.normalized(expectedName)
+            } == 1 &&
+            parent.children.any { child ->
                 child.documentId == newDocumentId &&
                     child.title == expectedName && !child.directory
-            } == 1
+            }
 }
