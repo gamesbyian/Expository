@@ -104,6 +104,23 @@ data class SftpRemoteEntry(val name: String, val directory: Boolean, val size: L
 }
 data class SftpBrowsePage(val entries: List<SftpRemoteEntry>, val truncated: Boolean)
 
+/** Explicit, bounded rescans. No server paging cursor or complete-write proof is inferred. */
+object SftpBrowseBounds {
+    const val INITIAL = 200
+    const val STEP = 200
+    const val MAX = 2000
+
+    fun requireValid(limit: Int): Int =
+        limit.also {
+            require(it in INITIAL..MAX && it % STEP == 0) { "INVALID_SFTP_BROWSE_WINDOW" }
+        }
+
+    fun next(limit: Int): Int {
+        requireValid(limit)
+        return (limit + STEP).coerceAtMost(MAX)
+    }
+}
+
 class SftpSession internal constructor(
     private val ssh: SshClient,
     private val session: ClientSession,
@@ -127,7 +144,7 @@ class SftpSession internal constructor(
      * the entire directory in Compose. Full pagination is a later G4 gate.
      */
     fun browse(absoluteFolder: String, maxEntries: Int = 200): SftpBrowsePage {
-        require(maxEntries in 1..200)
+        SftpBrowseBounds.requireValid(maxEntries)
         val entries = sftp.readDir(SftpPath.requireAbsolute(absoluteFolder))
             .asSequence().filter { it.filename != "." && it.filename != ".." }
             .take(maxEntries + 1).map { item ->
@@ -135,6 +152,11 @@ class SftpSession internal constructor(
                 SftpRemoteEntry(SftpPath.validateChild(item.filename),
                     a.isDirectory, a.size, a.modifyTime?.toMillis())
             }.toList()
+        // Duplicate names are not stable UI identities. Treat an ambiguous
+        // server listing as an error rather than rendering duplicate item keys.
+        require(entries.map { it.name }.distinct().size == entries.size) {
+            "AMBIGUOUS_SFTP_DIRECTORY"
+        }
         return SftpBrowsePage(entries.take(maxEntries), entries.size > maxEntries)
     }
 
