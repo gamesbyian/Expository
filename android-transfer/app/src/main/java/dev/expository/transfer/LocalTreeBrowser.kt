@@ -17,7 +17,24 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import dev.expository.transfer.saf.SafNewFolder
+import dev.expository.transfer.saf.SafFolderCreateRequest
+import dev.expository.transfer.saf.SafFolderCreatePreflight
+import dev.expository.transfer.saf.SafFolderCreateProof
+import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
@@ -236,6 +253,7 @@ internal fun LocalTreePane(
                 else "read-only grant"), style = MaterialTheme.typography.bodySmall)
             Text("Selected: " + state.selected.size,
                 style = MaterialTheme.typography.bodySmall)
+            SafFolderCreateCard(state, enabled, onRefresh)
             LazyColumn(
                 state = scroll,
                 modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
@@ -271,5 +289,140 @@ internal fun LocalTreePane(
             Text("Browsing never changes files. Copy requires complete preflight, explicit review and a journal. Dual-pane Local → SFTP Copy supports up to 12 selected files, and SFTP → Local Copy can save one remote file to a folder chosen in the other pane. Other cross-pane routes and Move are not yet available.",
                 style = MaterialTheme.typography.bodySmall)
         }
+    }
+}
+
+/**
+ * Inline Android SAF New Folder; deliberately no server or broad-storage path.
+ * The immutable proposal is revoked on every tree/navigation/refresh/selection
+ * epoch. The actual create is journaled before DocumentsContract mutation.
+ */
+@Composable
+internal fun SafFolderCreateCard(
+    state: LocalTreeBrowseState,
+    enabled: Boolean,
+    onRefresh: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val currentState by rememberUpdatedState(state)
+    val service = remember(context) {
+        SafNewFolder(context.contentResolver) { digest ->
+            AndroidAtomicAttemptStorage(context.applicationContext, digest)
+        }
+    }
+    var editing by remember(state.treeUri, state.folderId) { mutableStateOf(false) }
+    var name by remember(state.treeUri, state.folderId) { mutableStateOf("") }
+    var pending by remember(state.treeUri, state.folderId) {
+        mutableStateOf<SafFolderCreatePreflight?>(null)
+    }
+    var pendingEpoch by remember(state.treeUri, state.folderId) { mutableStateOf(-1L) }
+    var processing by remember(state.treeUri, state.folderId) { mutableStateOf(false) }
+    var status by remember(state.treeUri, state.folderId) { mutableStateOf("") }
+    LaunchedEffect(state.generation) {
+        pending = null
+        pendingEpoch = -1L
+    }
+    val available = enabled && !processing && !state.loading && state.complete &&
+        state.canWrite && state.treeUri != null && state.folderId != null
+
+    Button(enabled = available, modifier = Modifier.heightIn(min = 48.dp),
+        onClick = { editing = !editing; pending = null }) {
+        Text(if (editing) "Close New Folder" else "New folder…")
+    }
+    if (editing) {
+        TextField(
+            value = name,
+            onValueChange = { name = it; pending = null },
+            enabled = available && pending == null,
+            label = { Text("Folder name") },
+            singleLine = true
+        )
+        if (pending == null) {
+            Button(enabled = available && name.isNotBlank(),
+                modifier = Modifier.heightIn(min = 48.dp),
+                onClick = {
+                    val snapshot = currentState
+                    val uri = snapshot.treeUri ?: return@Button
+                    val parent = snapshot.folderId ?: return@Button
+                    val epoch = snapshot.generation
+                    val proposedName = name
+                    processing = true
+                    status = "Checking exact provider permissions and complete folder listing…"
+                    scope.launch {
+                        val proposal = withContext(Dispatchers.IO) {
+                            service.prepare(SafFolderCreateRequest(
+                                uri, parent, proposedName, snapshot.canWrite))
+                        }
+                        val live = currentState
+                        if (live.generation != epoch || live.treeUri != uri ||
+                            live.folderId != parent || !live.complete ||
+                            !live.canWrite || live.loading) {
+                            status = "Folder changed during review. No directory created."
+                        } else if (proposal == null) {
+                            status = "New Folder blocked: name, provider create permission, " +
+                                "complete listing or collision could not be verified."
+                        } else {
+                            pending = proposal
+                            pendingEpoch = epoch
+                            status = "Review this one New Folder operation before creating it."
+                        }
+                        processing = false
+                    }
+                }) { Text("Review New Folder") }
+        } else {
+            val proposal = pending
+            if (proposal != null) {
+                Text("Create a new folder named “" + proposal.request.name +
+                    "” in the selected Android folder.")
+                Text("Review plan: " + proposal.digest.take(12) + "…",
+                    style = MaterialTheme.typography.bodySmall)
+                Text("No existing folder is opened or overwritten. " +
+                    "Provider ambiguity leaves a review-required journal.")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(enabled = available &&
+                        pendingEpoch == state.generation,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        onClick = {
+                            val frozen = proposal
+                            val epoch = pendingEpoch
+                            val live = currentState
+                            if (epoch != live.generation ||
+                                live.treeUri != frozen.request.treeUri ||
+                                live.folderId != frozen.request.parentId) {
+                                pending = null
+                                status = "Folder changed. Create approval expired."
+                                return@Button
+                            }
+                            pending = null
+                            processing = true
+                            status = "Creating one new folder after final revalidation…"
+                            scope.launch {
+                                val receipt = withContext(Dispatchers.IO) {
+                                    service.create(frozen)
+                                }
+                                status = when (receipt.proof) {
+                                    SafFolderCreateProof.DIRECTORY_CONFIRMED ->
+                                        "Folder created and its exact identity verified."
+                                    SafFolderCreateProof.BLOCKED ->
+                                        "New Folder blocked: " + receipt.reason
+                                    SafFolderCreateProof.ACKNOWLEDGED ->
+                                        "Folder creation acknowledged, but metadata is not verified. Inspect before retry."
+                                    SafFolderCreateProof.UNCERTAIN ->
+                                        "Folder creation uncertain. Inspect before retrying."
+                                }
+                                processing = false
+                                if (receipt.proof == SafFolderCreateProof.DIRECTORY_CONFIRMED)
+                                    onRefresh()
+                            }
+                        }) { Text("Confirm New Folder") }
+                    Button(enabled = !processing,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        onClick = { pending = null }) { Text("Cancel") }
+                }
+            }
+        }
+        if (status.isNotBlank()) Text(status,
+            style = MaterialTheme.typography.bodySmall)
     }
 }
