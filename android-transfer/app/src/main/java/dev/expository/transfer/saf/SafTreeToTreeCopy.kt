@@ -10,6 +10,7 @@ import dev.expository.transfer.engine.CopyReceipt
 import dev.expository.transfer.engine.CopyStreams
 import dev.expository.transfer.engine.DurableAttemptJournal
 import dev.expository.transfer.engine.JournaledCopyEngine
+import dev.expository.transfer.engine.SourceConsistencyStream
 import dev.expository.transfer.planner.*
 import java.io.FileNotFoundException
 import java.io.InputStream
@@ -200,9 +201,23 @@ class SafTreeToTreeCopy(
         }
         var created: Uri? = null
         val streams = object : CopyStreams {
-            override fun openSource(): InputStream =
-                resolver.openInputStream(document(request.sourceTree,
-                    request.sourceDocumentId)) ?: throw FileNotFoundException()
+            override fun openSource(): InputStream {
+                val uri = document(request.sourceTree, request.sourceDocumentId)
+                val input = resolver.openInputStream(uri) ?: throw FileNotFoundException()
+                return SourceConsistencyStream(input) {
+                    val members = LocalTreeReader.list(resolver,
+                        request.sourceTree, request.sourceFolderId,
+                        LocalTreeReader.MAX_BROWSE)
+                    members.complete && members.children.count {
+                        it.documentId == request.sourceDocumentId &&
+                            it.title == confirmed.sourceName && !it.directory
+                    } == 1 && observer.observe(uri).let { current ->
+                        current.revision == confirmed.sourceRevision &&
+                            current.displayName == confirmed.sourceName &&
+                            current.mimeType == confirmed.sourceMime
+                    }
+                }
+            }
             override fun openNewDestination(): OutputStream {
                 val parent = document(request.targetTree, request.targetFolderId)
                 // ONLY after a durable attempt exists. createDocument never
