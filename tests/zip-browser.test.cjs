@@ -8,8 +8,8 @@ const source=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 const start=source.indexOf('const ZIP_MAX_BYTES='),end=source.indexOf('const $=id=>',start);
 assert.ok(start>=0&&end>start,'ZIP reader is embedded in the browser application');
 const context=vm.createContext({Blob,Uint8Array,DataView,TextDecoder,Response,DecompressionStream,withMediaType:b=>b});
-vm.runInContext(source.slice(start,end)+'\nglobalThis.exposed={zipManifest,unzipMember,zipCRC,zipSafeForDevice};',context);
-const {zipManifest,unzipMember,zipCRC,zipSafeForDevice}=context.exposed;
+vm.runInContext(source.slice(start,end)+'\nglobalThis.exposed={zipManifest,unzipMember,zipCRC,zipSafeForDevice,zipShareSelected};',context);
+const {zipManifest,unzipMember,zipCRC,zipSafeForDevice,zipShareSelected}=context.exposed;
 function archive(name='pictures/hello.txt',body='Hello from ZIP',crcOverride){
  const data=Buffer.from(body),filename=Buffer.from(name),crc=crcOverride??zipCRC(data);
  const local=Buffer.alloc(30);local.writeUInt32LE(0x04034b50,0);local.writeUInt32LE(crc,14);local.writeUInt32LE(data.length,18);local.writeUInt32LE(data.length,22);local.writeUInt16LE(filename.length,26);
@@ -72,4 +72,23 @@ test('ZIP parser rejects a mismatched central directory size',async()=>{
   const pos=data.length-22;data.writeUInt32LE(data.readUInt32LE(pos+12)+1,pos+12);
  });
  await assert.rejects(zipManifest(blob),/central directory/);
+});
+
+test('ZIP share action calls navigator.share within the original click, with prepared files',()=>{
+ let shared=false;
+ context.navigator={canShare({files}){return files[0]==='already-verified'},share({files}){shared=files[0]==='already-verified';return Promise.resolve()}};
+ context.status=()=>{};
+ zipShareSelected(['already-verified']);
+ assert.equal(shared,true,'no asynchronous work precedes invoking the native share sheet');
+});
+test('ZIP share action refuses browser-declined file batches',()=>{
+ let shared=false,message='';
+ context.navigator={canShare(){return false},share(){shared=true;return Promise.resolve()}};
+ context.status=s=>{message=s};
+ zipShareSelected(['unsupported']);
+ assert.equal(shared,false);
+ assert.match(message,/cannot share/);
+});
+test('ZIP safety guard rejects case-insensitive special device paths',()=>{
+ for(const name of ['a/PRN.jpg','LPT9','weird<name>.txt'])assert.equal(zipSafeForDevice(name),false);
 });
