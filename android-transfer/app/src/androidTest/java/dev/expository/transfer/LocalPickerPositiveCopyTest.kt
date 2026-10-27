@@ -5,8 +5,10 @@ import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
 import android.provider.MediaStore
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -368,8 +370,18 @@ class LocalPickerPositiveCopyTest {
             }
             return false
         }
-        fun pickFolder(folder: String) {
-            compose.onNodeWithText("Choose folder").performClick()
+        fun pickFolder(folder: String, pane: String) {
+            // The inactive dual pane is intentionally still composed. Do
+            // not match an arbitrary Text descendant with an inherited click
+            // action: exercise the exact enabled Button in the active pane.
+            compose.runOnUiThread {
+                compose.activity.folderPickerStage = "NOT_REQUESTED"
+            }
+            compose.onNodeWithTag("local-tree-picker-Location " + pane)
+                .assertIsEnabled().performClick()
+            compose.waitUntil(5_000L) {
+                compose.activity.folderPickerStage != "NOT_REQUESTED"
+            }
             val pickerVisible = device.wait(androidx.test.uiautomator.Until.hasObject(
                 androidx.test.uiautomator.By.pkg("com.google.android.documentsui")), 12_000L) ||
                 device.wait(androidx.test.uiautomator.Until.hasObject(
@@ -456,7 +468,7 @@ class LocalPickerPositiveCopyTest {
         try {
             compose.onNodeWithText("Dual view").performClick()
             compose.onNodeWithText("Device ↔ Device").performClick()
-            pickFolder(sourceDir)
+            pickFolder(sourceDir, "A")
             compose.onNodeWithText(sourceName).assertExists()
             compose.onNodeWithText("Select").performClick()
             // Inspect the selected row's actual Compose state, not a stale
@@ -466,7 +478,7 @@ class LocalPickerPositiveCopyTest {
                     .isNotEmpty()
             }
             compose.onNodeWithText("Pane B · LOCAL").performClick()
-            pickFolder(destDir)
+            pickFolder(destDir, "B")
             compose.onNodeWithText(markerName).assertExists()
             val before = dev.expository.transfer.journal.AttemptRecoveryIndex.recover(context)
             compose.onNodeWithText("Copy A → B…").performClick()
