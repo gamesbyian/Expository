@@ -11,7 +11,7 @@ import android.provider.DocumentsContract
  * command. UI selection alone is never authority to upload. The SFTP copy
  * adapter rechecks direct child membership before planning and opening bytes.
  */
-internal data class LocalPaneUploadSource(
+data class LocalPaneUploadSource(
     val treeUri: Uri,
     val folderId: String,
     val documentId: String,
@@ -34,7 +34,7 @@ internal data class LocalPaneUploadSource(
         }.getOrDefault(false)
 
     companion object {
-        fun from(state: LocalTreeBrowseState): LocalPaneUploadSource? {
+        internal fun from(state: LocalTreeBrowseState): LocalPaneUploadSource? {
             if (state.loading || !state.complete || state.treeUri == null) return null
             val id = state.selected.singleOrNull() ?: return null
             val entry = state.entries.singleOrNull {
