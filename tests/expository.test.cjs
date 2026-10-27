@@ -95,6 +95,9 @@ test('recursive gallery scopes traverse descendants and entire repository withou
  assert.deepEqual(app.currentMatches().map(x=>x.name),['a.svg','b.png','other.webp']);
  get('sortFiles').value='name';get('sortDirection').value='asc';get('groupFolders').value='folder';
  assert.deepEqual(app.currentMatches().map(x=>x.path),['media/a.svg','media-old/other.webp','media/sub/b.png']);
+ get('groupFolders').value='none';get('extFilter').value='svg, html';get('scope').value='allFiles';
+ assert.deepEqual(app.currentMatches().map(x=>x.name),['a.svg','z.html'],'extension facets accept comma-delimited types without a new scan');
+ get('extFilter').value='';
  assert.equal(app.fileFolder('media/sub/b.png'),'media/sub');
  assert.equal(app.fileFolder('root.png'),'');
 });
@@ -116,6 +119,17 @@ test('folder group dividers, paging and jump actions use real containing paths',
  assert.equal(app.state.path,'art');
  assert.equal(get('scope').value,'folder','jump must switch out of recursive mode');
  assert.equal(get('filter').value,'','jump clears stale filter');
+});
+
+test('folder grouping stays stable across show-more pagination boundaries',()=>{
+ const {app,get}=boot();app.state.indexReady=true;app.state.mode='list';get('scope').value='allImages';get('groupFolders').value='folder';
+ app.state.indexEntries=[...Array.from({length:81},(_,i)=>({type:'file',name:'image'+String(i).padStart(3,'0')+'.png',path:'images/image'+String(i).padStart(3,'0')+'.png',size:10})),{type:'file',name:'last.png',path:'screens/last.png',size:10}];
+ app.paint();let host=get('items');
+ assert.equal(host.children.filter(x=>x.className==='gallery-divider').length,1);
+ const more=host.children.find(x=>x.className==='pill more');assert.ok(more);
+ more.onclick();
+ assert.equal(host.children.filter(x=>x.className==='gallery-divider').length,2,'continued folder is not given a duplicate divider');
+ assert.equal(app.state.visibleItems.length,82);
 });
 
 test('HTML thumbnail summaries are inert DOM text without loading or running scripts',()=>{
