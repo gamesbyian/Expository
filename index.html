@@ -77,7 +77,7 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 .doc-thumbnail{box-sizing:border-box;width:100%;height:100%;padding:10px;display:flex;flex-direction:column;align-items:stretch;gap:7px;overflow:hidden;background:linear-gradient(145deg,#f9fafc,#dbe2ee);color:#263148;text-align:left}.doc-thumbnail .doc-type{font-size:9px;font-weight:800;letter-spacing:.14em;color:#5274a4}.doc-thumbnail .doc-title{font-size:12px;line-height:1.3;overflow-wrap:anywhere;max-height:36px;overflow:hidden}.doc-thumbnail .doc-excerpt{font-size:9px;line-height:1.45;color:#69768b;overflow:hidden;overflow-wrap:anywhere}.items.list .doc-thumbnail{padding:5px;gap:2px}.items.list .doc-thumbnail .doc-title{font-size:9px;max-height:22px}.items.list .doc-thumbnail .doc-excerpt{display:none}
 @media(max-width:420px){.items.list .gallery-card{flex-direction:column}.items.list .gallery-card .folder-jump{max-width:none}}
 
-.zip-browser{width:100%;min-width:0}.zip-controls{display:flex;gap:8px;flex-wrap:wrap}.zip-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:9px}.zip-list button{text-align:left;min-height:48px;overflow-wrap:anywhere}.zip-member{background:var(--panel2);border:1px solid var(--stroke);border-radius:10px;padding:10px;color:var(--text);display:flex;flex-direction:column;gap:5px}.zip-mini{height:88px;display:grid;place-items:center}.zip-mini img{max-width:100%;max-height:88px;object-fit:contain}
+.zip-browser{width:100%;min-width:0}.zip-controls{display:flex;gap:8px;flex-wrap:wrap}.zip-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:9px}.zip-list button{text-align:left;min-height:48px;overflow-wrap:anywhere}.zip-member{background:var(--panel2);border:1px solid var(--stroke);border-radius:10px;padding:10px;color:var(--text);display:flex;flex-direction:column;gap:5px}.zip-entry{display:flex;gap:8px;align-items:center;min-width:0;border:1px solid var(--stroke);border-radius:11px;padding:5px}.zip-entry input{width:23px;height:23px;flex:none;accent-color:var(--accent)}.zip-entry .zip-member{flex:1;border:0;min-width:0}.zip-mini{height:88px;display:grid;place-items:center}.zip-mini img{max-width:100%;max-height:88px;object-fit:contain}
 </style>
 </head>
 <body>
@@ -103,12 +103,12 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 <div class="path" id="breadcrumbs">No repository selected</div>
 <section id="storyView" class="story-view" hidden aria-label="Repository Story Mode"></section><section id="sizeView" class="size-view" hidden aria-label="Repository file-size map"></section><div id="items" class="items grid"><div class="empty"><strong>Browse in full colour.</strong>Open any public repository, or connect a read-only token for your private ones.</div></div><div class="status" id="status" aria-live="polite"></div><div id="searchResults" aria-live="polite"></div>
 </section></main>
-<section id="preview" class="preview" role="dialog" aria-modal="true" aria-label="File preview"><div class="preview-head"><button id="prevPreview" class="icon-btn" aria-label="Previous file" title="Previous file">‹</button><button id="nextPreview" class="icon-btn" aria-label="Next file" title="Next file">›</button><strong id="previewTitle"></strong><button id="compareAction" class="pill" hidden aria-label="Pin image for visual comparison">Pin A</button><button id="copyRaw" class="pill" hidden aria-label="Copy file text">Copy text</button><button id="downloadRaw" class="pill" hidden aria-label="Download original file">Download</button><button id="previewFolder" class="pill" title="Open containing folder" aria-label="Open containing folder">Folder ↳</button><button id="copyFile" class="pill" title="Copy file deep link" aria-label="Copy file deep link">Copy ↗</button><a id="fileLink" class="pill" target="_blank" rel="noopener noreferrer" aria-label="View file on GitHub">Git ↗</a><button id="closePreview" class="icon-btn" aria-label="Close preview">✕</button></div><div id="inspectTools" class="inspect-tools" hidden><button id="fileHistory" class="pill">History</button><button id="structuredToggle" class="pill" hidden>JSON tree</button></div><div class="preview-body" id="previewBody"></div></section>
+<section id="preview" class="preview" role="dialog" aria-modal="true" aria-label="File preview"><div class="preview-head"><button id="prevPreview" class="icon-btn" aria-label="Previous file" title="Previous file">‹</button><button id="nextPreview" class="icon-btn" aria-label="Next file" title="Next file">›</button><strong id="previewTitle"></strong><button id="compareAction" class="pill" hidden aria-label="Pin image for visual comparison">Pin A</button><button id="copyRaw" class="pill" hidden aria-label="Copy file text">Copy text</button><button id="downloadRaw" class="pill" hidden aria-label="Download original file">Download</button><button id="shareRaw" class="pill" hidden aria-label="Share this file with device apps">Share</button><button id="previewFolder" class="pill" title="Open containing folder" aria-label="Open containing folder">Folder ↳</button><button id="copyFile" class="pill" title="Copy file deep link" aria-label="Copy file deep link">Copy ↗</button><a id="fileLink" class="pill" target="_blank" rel="noopener noreferrer" aria-label="View file on GitHub">Git ↗</a><button id="closePreview" class="icon-btn" aria-label="Close preview">✕</button></div><div id="inspectTools" class="inspect-tools" hidden><button id="fileHistory" class="pill">History</button><button id="structuredToggle" class="pill" hidden>JSON tree</button></div><div class="preview-body" id="previewBody"></div></section>
 <script>
 (()=>{'use strict';
 
 const ZIP_MAX_BYTES=24*1024*1024,ZIP_ENTRY_MAX=16*1024*1024,ZIP_TOTAL_MAX=128*1024*1024,ZIP_MAX_FILES=2000;
-let zipContext=null,zipStartFolder='';const zipManifests=new Map();let zipGalleryEntries=[],zipScanSeq=0;
+let zipContext=null,zipStartFolder='';const zipManifests=new Map(),zipSelections=new Map();let zipGalleryEntries=[],zipScanSeq=0,zipPrepSeq=0;
 function zipManifest(blob){
  const fail=msg=>{throw Error('ZIP: '+msg)};
  if(blob.size>ZIP_MAX_BYTES)fail('archive exceeds the 24 MB browser-inspection limit');
@@ -116,29 +116,35 @@ function zipManifest(blob){
   const bytes=new Uint8Array(buffer),v=new DataView(buffer);let eocd=-1;
   for(let i=bytes.length-22;i>=Math.max(0,bytes.length-65557);i--)if(v.getUint32(i,true)===0x06054b50){eocd=i;break}
   if(eocd<0)fail('end directory not found');
+  if(eocd+22+v.getUint16(eocd+20,true)>bytes.length)fail('truncated end directory');
   const count=v.getUint16(eocd+10,true),size=v.getUint32(eocd+12,true),offset=v.getUint32(eocd+16,true);
   if(count===65535||size===0xffffffff||offset===0xffffffff)fail('ZIP64 requires another reader');
   if(count>ZIP_MAX_FILES)fail('too many files');
   if(offset+size>eocd)fail('invalid central directory');
-  const decoder=new TextDecoder('utf-8',{fatal:false}),entries=[];let pos=offset,total=0;
+  const decoder=new TextDecoder('utf-8',{fatal:false}),entries=[],seen=new Set();let pos=offset,total=0;
   for(let i=0;i<count;i++){
    if(pos+46>bytes.length||v.getUint32(pos,true)!==0x02014b50)fail('bad central directory entry');
    const flags=v.getUint16(pos+8,true),method=v.getUint16(pos+10,true),crc=v.getUint32(pos+16,true),
     compressed=v.getUint32(pos+20,true),uncompressed=v.getUint32(pos+24,true),
     nameLen=v.getUint16(pos+28,true),extraLen=v.getUint16(pos+30,true),commentLen=v.getUint16(pos+32,true),
-    local=v.getUint32(pos+42,true);
+    local=v.getUint32(pos+42,true),madeBy=v.getUint16(pos+4,true),unixMode=v.getUint32(pos+38,true)>>>16;
    if(pos+46+nameLen+extraLen+commentLen>bytes.length)fail('truncated entry');
    const name=decoder.decode(bytes.subarray(pos+46,pos+46+nameLen)).replace(/\\/g,'/');
    pos+=46+nameLen+extraLen+commentLen;
-   if(!name||name.startsWith('/')||/[\x00-\x1f\x7f]/.test(name)||name.split('/').some(x=>x==='..'||x==='.'||!x)||/^[a-zA-Z]:/.test(name))continue;
+   if(!name||name.length>4096||name.startsWith('/')||/[\x00-\x1f\x7f]/.test(name)||name.split('/').some(x=>x==='..'||x==='.'||!x||x.length>255)||/^[a-zA-Z]:/.test(name))continue;
    if(name.endsWith('/'))continue;
-   if(uncompressed>ZIP_ENTRY_MAX||compressed>ZIP_MAX_BYTES)continue;
+   if(uncompressed>ZIP_ENTRY_MAX||compressed>ZIP_MAX_BYTES||flags&1||flags&64||![0,8].includes(method))continue;
+   if((madeBy>>>8)===3&&((unixMode&0xf000)!==0&&(unixMode&0xf000)!==0x8000))continue;
+   if(method===0&&compressed!==uncompressed)continue;
+   if(seen.has(name.toLowerCase()))continue;
    total+=uncompressed;if(total>ZIP_TOTAL_MAX)fail('uncompressed total exceeds 128 MB');
    if(local+30>bytes.length||v.getUint32(local,true)!==0x04034b50)continue;
-   const start=local+30+v.getUint16(local+26,true)+v.getUint16(local+28,true);
-   if(start+compressed>bytes.length)continue;
-   entries.push({name,path:name,size:uncompressed,compressed,method,flags,crc,start,type:'file'});
+   const localLen=v.getUint16(local+26,true),localExtra=v.getUint16(local+28,true),start=local+30+localLen+localExtra;
+   if(start+compressed>bytes.length||start>offset||v.getUint16(local+8,true)!==method||v.getUint16(local+6,true)!==flags)continue;
+   if(decoder.decode(bytes.subarray(local+30,local+30+localLen)).replace(/\\/g,'/')!==name)continue;
+   seen.add(name.toLowerCase());entries.push({name,path:name,size:uncompressed,compressed,method,flags,crc,start,type:'file'});
   }
+  if(pos!==offset+size)fail('central directory size mismatch');
   return {blob,entries,skipped:count-entries.length};
  });
 }
@@ -184,45 +190,119 @@ async function unzipMember(manifest,entry){
  if(zipCRC(data)!==entry.crc)throw Error('ZIP member checksum mismatch.');
  return withMediaType(new Blob([data]),entry.name.split('/').at(-1));
 }
+
+const ZIP_SHARE_MAX=12,ZIP_SHARE_BYTES=12*1024*1024;
+function zipChoice(parent){if(!zipSelections.has(parent.path))zipSelections.set(parent.path,new Set());return zipSelections.get(parent.path)}
+function zipShareSelected(files){
+ if(typeof navigator.share!=='function'){status('Sharing files is unavailable in this browser. Use Extract selected to folder or download files individually.');return}
+ if(typeof navigator.canShare==='function'&&!navigator.canShare({files})){status('The device cannot share this selection. Choose fewer or smaller files.');return}
+ // A preprepared File array is needed: navigator.share must run synchronously within the click gesture.
+ Promise.resolve(navigator.share({files})).then(()=>status('Files handed to the device share target.')).catch(e=>{if(e.name!=='AbortError')status('Device sharing failed: '+e.message)});
+}
+function zipSafeForDevice(name){
+ return name.split('/').every(x=>x&&!/[<>:"|?*\x00-\x1f\x7f]/.test(x)&&!/[. ]$/.test(x)&&! /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(x));
+}
+async function zipExtractFolder(manifest,entries,button,progress){
+ if(typeof window.showDirectoryPicker!=='function'){status('Directory export is unavailable. Try Share selected, or open an individual file to download.');return}
+ // Must happen immediately on user click, before any decompression or another await.
+ let directory;
+ try{directory=await window.showDirectoryPicker({mode:'readwrite'})}
+ catch(e){if(e.name!=='AbortError')status('Device folder picker failed: '+e.message);return}
+ let saved=0,collisions=0,failed=0,cancelled=false;button.disabled=true;
+ const cancel=elem('button','pill','Stop extraction');button.after(cancel);cancel.onclick=()=>{cancelled=true;cancel.disabled=true;progress.textContent='Stopping after the current file…'};
+ try{
+  for(let i=0;i<entries.length&&!cancelled;i++){
+   const entry=entries[i];progress.textContent='Extracting '+(i+1)+'/'+entries.length+' · '+entry.name;
+   if(!zipSafeForDevice(entry.name)){failed++;continue}
+   try{
+    let dest=directory;const parts=entry.name.split('/');
+    for(const name of parts.slice(0,-1))dest=await dest.getDirectoryHandle(name,{create:true});
+    let exists=false;
+    try{await dest.getFileHandle(parts.at(-1));exists=true}catch(e){if(e.name!=='NotFoundError')throw e}
+    if(exists){collisions++;continue}
+    const payload=await unzipMember(manifest,entry);
+    if(cancelled)break;
+    const file=await dest.getFileHandle(parts.at(-1),{create:true});
+    const writer=await file.createWritable();
+    try{await writer.write(payload);await writer.close();saved++}catch(e){try{await writer.abort()}catch{}throw e}
+   }catch{failed++}
+  }
+  progress.textContent=(cancelled?'Stopped. ':'')+saved+'/'+entries.length+' files saved'+(collisions?' · '+collisions+' already existed (skipped)':'')+(failed?' · '+failed+' failed/unsupported':'')+'. Existing files were not deliberately overwritten.';
+  status(progress.textContent);
+ }finally{button.disabled=false;cancel.remove()}
+}
+async function zipPrepareShare(manifest,parent,share,progress){
+ const seq=++zipPrepSeq,choice=zipChoice(parent),selection=manifest.entries.filter(e=>choice.has(e.name));
+ share.disabled=true;
+ if(!selection.length){progress.textContent='Select files to prepare an Android share-sheet batch (up to 12, 12 MB total).';return}
+ if(selection.length>ZIP_SHARE_MAX||selection.reduce((n,e)=>n+e.size,0)>ZIP_SHARE_BYTES){
+  progress.textContent='Share selection exceeds 12 files or 12 MB. Folder extraction has a larger allowance.';return
+ }
+ if(typeof File!=='function'||typeof navigator.share!=='function'){
+  progress.textContent='File sharing is unavailable here. Use Extract selected to folder.';return
+ }
+ const basenames=selection.map(e=>e.name.split('/').at(-1).toLowerCase());
+ if(new Set(basenames).size!==basenames.length){progress.textContent='Selected files share a filename. Share them in separate batches, or use folder extraction to preserve paths.';return}
+ progress.textContent='Verifying '+selection.length+' selected files for device sharing…';
+ try{
+  const files=[];
+  for(const member of selection){
+   const blob=await unzipMember(manifest,member);
+   if(seq!==zipPrepSeq||!share.isConnected)return;
+   files.push(new File([blob],member.name.split('/').at(-1),{type:blob.type||'application/octet-stream'}));
+  }
+  if(seq!==zipPrepSeq||!share.isConnected)return;
+  if(typeof navigator.canShare==='function'&&!navigator.canShare({files})){
+   progress.textContent='Browser declined this batch. Select fewer files or use folder extraction.';return
+  }
+  share.disabled=false;share.onclick=()=>zipShareSelected(files);
+  progress.textContent=files.length+' files verified and ready to share with the device.';
+ }catch(e){if(seq===zipPrepSeq)progress.textContent='Share preparation failed: '+e.message}
+}
 function zipViewer(manifest,parent,folder=''){
- const root=elem('div','zip-browser');const heading=elem('div','zip-controls');
- const up=elem('button','pill','← '+(folder?'Up a folder':'Repository file'));up.onclick=()=>folder?showContent(zipViewer(manifest,parent,folder.split('/').slice(0,-1).join('/'))):(clearPreview(),navigate(fileFolder(parent.path)));
- const downloadAll=elem('button','pill','Extract all to device');
- downloadAll.onclick=async()=>{
-  if(typeof window.showDirectoryPicker!=='function'){status('Folder extraction is unavailable in this browser. Open individual files to download them, or download the original ZIP.');return}
-  try{
-   const directory=await window.showDirectoryPicker({mode:'readwrite'});const errors=[];
-   for(const entry of manifest.entries){
-    try{
-     let dest=directory;const parts=entry.name.split('/');
-     for(const p of parts.slice(0,-1))dest=await dest.getDirectoryHandle(p,{create:true});
-     try{await dest.getFileHandle(parts.at(-1));errors.push(entry.name+': destination already exists');continue}catch(e){if(e.name!=='NotFoundError')throw e}
-     const file=await dest.getFileHandle(parts.at(-1),{create:true});
-     const writer=await file.createWritable();try{await writer.write(await unzipMember(manifest,entry));await writer.close()}catch(e){await writer.abort().catch(()=>{});throw e}
-    }catch(e){errors.push(entry.name+': '+e.message)}
-   }
-   status(errors.length?'ZIP extraction incomplete: '+errors.length+' entries failed.':'Extracted '+manifest.entries.length+' files to the selected device folder.');
-  }catch(e){status('ZIP extraction cancelled or failed: '+e.message)}
+ const root=elem('div','zip-browser'),heading=elem('div','zip-controls'),progress=elem('p','hint');
+ const choice=zipChoice(parent),selected=manifest.entries.filter(e=>choice.has(e.name));
+ const up=elem('button','pill','← '+(folder?'Up a folder':'Repository folder'));
+ up.onclick=()=>folder?showContent(zipViewer(manifest,parent,folder.split('/').slice(0,-1).join('/'))):(clearPreview(),navigate(fileFolder(parent.path)));
+ const selectAll=elem('button','pill','Select visible folder');
+ selectAll.onclick=()=>{
+  const subset=manifest.entries.filter(e=>e.name.startsWith(folder?folder+'/':''));
+  if(choice.size+subset.filter(e=>!choice.has(e.name)).length>ZIP_SHARE_MAX){status('Selection is limited to 12 files. Select entries individually for larger folders.');return}
+  for(const e of subset)choice.add(e.name);showContent(zipViewer(manifest,parent,folder))
  };
- heading.append(up,downloadAll);root.append(heading);
- const summary=elem('p','hint',manifest.entries.length+' safe files · '+manifest.skipped+' unsupported or excluded · local browser decoding, no repository changes');
- root.append(summary);
+ const clear=elem('button','pill','Clear selection');clear.disabled=!choice.size;
+ clear.onclick=()=>{choice.clear();showContent(zipViewer(manifest,parent,folder))};
+ const all=elem('button','pill','Extract all to folder');
+ all.onclick=()=>zipExtractFolder(manifest,manifest.entries,all,progress);
+ const extract=elem('button','pill','Extract selected to folder');extract.disabled=!choice.size;
+ extract.onclick=()=>zipExtractFolder(manifest,selected,extract,progress);
+ const share=elem('button','pill','Share selected…');share.disabled=true;
+ heading.append(up,selectAll,clear,all,extract,share);root.append(heading);
+ root.append(elem('p','hint',manifest.entries.length+' safe files · '+manifest.skipped+' excluded · '+selected.length+' selected · browser-local extraction'));
+ root.append(progress);
  const listing=elem('div','zip-list'),prefix=folder?folder+'/':'',folders=new Set(),files=[];
  for(const entry of manifest.entries){if(!entry.name.startsWith(prefix))continue;const remain=entry.name.slice(prefix.length);if(remain.includes('/'))folders.add(remain.split('/')[0]);else files.push(entry)}
  for(const dirname of [...folders].sort()){
   const b=elem('button','pill','📁 '+dirname);b.onclick=()=>showContent(zipViewer(manifest,parent,prefix+dirname));listing.append(b)
  }
  for(const entry of files.sort((a,b)=>a.name.localeCompare(b.name))){
-  const b=elem('button','zip-member');b.append(elem('span','filename',entry.name.split('/').at(-1)),elem('span','meta',formatSize(entry.size)));
-  b.onclick=()=>openPreview({path:parent.path,name:entry.name.split('/').at(-1),size:entry.size,type:'file',zipMember:entry,zipParent:parent});
+  const row=elem('div','zip-entry'),check=elem('input'),b=elem('button','zip-member');
+  check.type='checkbox';check.checked=choice.has(entry.name);check.setAttribute('aria-label','Select '+entry.name);
+  check.onchange=()=>{
+   if(check.checked){if(choice.size>=ZIP_SHARE_MAX){status('Choose at most 12 files per selection.');check.checked=false;return}choice.add(entry.name)}
+   else choice.delete(entry.name);
+   showContent(zipViewer(manifest,parent,folder))
+  };
+  b.append(elem('span','filename',entry.name.split('/').at(-1)),elem('span','meta',formatSize(entry.size)));
+  b.onclick=()=>{zipStartFolder=folder;openPreview({path:parent.path,name:entry.name.split('/').at(-1),size:entry.size,type:'file',zipMember:entry,zipParent:parent})};
   if(imageRx.test(entry.name)&&entry.size<=2e6){
    const thumb=elem('span','zip-mini');b.prepend(thumb);
    unzipMember(manifest,entry).then(blob=>{if(b.isConnected){const img=elem('img');img.alt='';img.src=blobUrl(blob,'preview');thumb.append(img)}}).catch(()=>{});
   }
-  listing.append(b)
+  row.append(check,b);listing.append(row)
  }
  if(!files.length&&!folders.size)listing.append(elem('p','hint','Folder is empty.'));
- root.append(listing);return root
+ root.append(listing);zipPrepareShare(manifest,parent,share,progress);return root
 }
 
 const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0,selectionMode:false,selected:new Map(),sheetSeq:0,sheetOpen:false,activeRequests:new Set(),rateLimitedUntil:0,folderRecoveryKey:'',sizeOpen:false,imageFullscreenCleanup:null};
@@ -717,7 +797,7 @@ function closeImageFullscreen(){
   Promise.resolve(document.exitFullscreen()).catch(()=>{});
  }
 }
-function clearPreview(){closeImageFullscreen();++state.sheetSeq;state.sheetOpen=false;++state.compareSeq;const wasOpen=state.preview!==null;state.preview=null;state.historyOpen=false;state.structuredOpen=false;$('inspectTools').hidden=true;state.currentBlob=null;state.previewText=null;$('copyRaw').hidden=true;$('downloadRaw').hidden=true;state.compareMode=false;updateCompareAction();$('preview').classList.remove('open');$('scrim').classList.remove('on');$('previewBody').replaceChildren();clearUrls('preview');if(wasOpen&&state.repo&&state.branch)updateHash();if(wasOpen&&state.returnFocus?.isConnected)state.returnFocus.focus();state.returnFocus=null;$('pageHeader').inert=false;$('pageMain').inert=false}
+function clearPreview(){++zipPrepSeq;zipSelections.clear();closeImageFullscreen();++state.sheetSeq;state.sheetOpen=false;++state.compareSeq;const wasOpen=state.preview!==null;state.preview=null;state.historyOpen=false;state.structuredOpen=false;$('inspectTools').hidden=true;state.currentBlob=null;state.previewText=null;$('copyRaw').hidden=true;$('downloadRaw').hidden=true;$('shareRaw').hidden=true;state.compareMode=false;updateCompareAction();$('preview').classList.remove('open');$('scrim').classList.remove('on');$('previewBody').replaceChildren();clearUrls('preview');if(wasOpen&&state.repo&&state.branch)updateHash();if(wasOpen&&state.returnFocus?.isConnected)state.returnFocus.focus();state.returnFocus=null;$('pageHeader').inert=false;$('pageMain').inert=false}
 function compareReady(){return Boolean(state.pinned&&state.preview&&state.currentBlob&&imageRx.test(state.preview.name)&&state.pinned.item.path!==state.preview.path&&state.pinned.repo===state.repo&&state.pinned.branch===state.branch)}
 function updateCompareAction(){
  const b=$('compareAction'),isImage=Boolean(state.preview&&state.currentBlob&&imageRx.test(state.preview.name));
@@ -800,7 +880,8 @@ function trapPreviewFocus(e){
 }
 function adjacentPreview(direction){const files=state.visibleItems.filter(x=>x.type!=='dir');const i=files.findIndex(x=>x.path===state.preview?.path);if(i<0||!files.length)return;openPreview(files[(i+direction+files.length)%files.length])}
 function previewButtons(){const files=state.visibleItems.filter(x=>x.type!=='dir');const enabled=files.length>1;$('prevPreview').disabled=!enabled;$('nextPreview').disabled=!enabled}
-async function downloadOriginal(){if(!state.preview||!state.currentBlob)return;const file=state.preview;const url=URL.createObjectURL(state.currentBlob);try{const a=elem('a');a.href=url;a.download=file.name;a.style.display='none';document.body.append(a);a.click();a.remove();status('Saving '+file.name)}finally{setTimeout(()=>URL.revokeObjectURL(url),15000)}}
+async function shareOriginal(){if(!state.preview||!state.currentBlob||typeof File!=='function'||typeof navigator.share!=='function'){status('File sharing is not available in this browser.');return}const blob=state.currentBlob,item=state.preview,file=new File([blob],item.name,{type:blob.type||'application/octet-stream'});zipShareSelected([file])}
+function downloadOriginal(){if(!state.preview||!state.currentBlob)return;const file=state.preview;const url=URL.createObjectURL(state.currentBlob);try{const a=elem('a');a.href=url;a.download=file.name;a.style.display='none';document.body.append(a);a.click();a.remove();status('Saving '+file.name)}finally{setTimeout(()=>URL.revokeObjectURL(url),15000)}}
 async function copyText(){if(!state.previewText)return;try{await navigator.clipboard.writeText(state.previewText);status('Copied file text')}catch{status('Clipboard unavailable; select text in preview.')}}
 function cancelContentScan(clear=true){++state.searchSeq;state.scanning=false;$('contentSearch').textContent='Search contents';if(clear)$('searchResults').replaceChildren()}
 async function scanContents(){
@@ -1010,7 +1091,7 @@ async function renderCurrentFile(){
    node=state.structuredOpen?tableViewer(text.slice(0,500000),/\.tsv$/i.test(lower)?'\t':','):sourceViewer(text.slice(0,500000),item.name,text.length>500000);
   }else node=/\.(md|markdown)$/i.test(lower)?simpleMarkdown(text.slice(0,500000),item):sourceViewer(text.slice(0,500000),item.name,text.length>500000);
  }else node=elem('div','message','No inline preview for this format. Use the GitHub link.');
- showContent(node);if(item.zipMember&&zipContext){const back=elem('button','pill','← Back to ZIP');back.onclick=()=>openPreview(item.zipParent);$('previewBody').prepend(back)}updateCompareAction()
+ showContent(node);if(item.zipMember&&zipContext){const back=elem('button','pill','← Back to ZIP');back.onclick=()=>{zipStartFolder=fileFolder(item.zipMember.name);openPreview(item.zipParent)};$('previewBody').prepend(back)}updateCompareAction()
 }
 async function toggleStructured(){if(!state.preview||!state.previewText)return;state.structuredOpen=!state.structuredOpen;await renderCurrentFile()}
 async function toggleHistory(){
@@ -1215,7 +1296,7 @@ async function openPreview(item){
  try{
   if(item.size>20e6){showContent(elem('div','message','Large file. Open it on GitHub to download.'));return}
   const blob=await fetchBlob(item);if(state.preview!==item)return;
-  state.currentBlob=blob;$('downloadRaw').hidden=false;await renderCurrentFile();
+  state.currentBlob=blob;$('downloadRaw').hidden=false;$('shareRaw').hidden=!(typeof navigator.share==='function'&&typeof File==='function');await renderCurrentFile();
  }catch(e){if(state.preview===item)showContent(elem('div','message','Preview unavailable: '+e.message))}
 }
 
@@ -1244,7 +1325,7 @@ async function openRepo(targetPath=''){
  $('branchPicker').hidden=true;$('branchPicker').replaceChildren(new Option('Choose a branch…',''));$('loadBranches').disabled=true;
  abortRequests();
  cancelContentScan();stopStory();hideSizeMap();state.storyData=null;const request=++state.repoRequest;state.repo=repo;state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;
- state.folderRecoveryKey='';++zipScanSeq;zipGalleryEntries=[];zipManifests.clear();zipContext=null;zipStartFolder='';clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
+ state.folderRecoveryKey='';++zipScanSeq;++zipPrepSeq;zipGalleryEntries=[];zipManifests.clear();zipSelections.clear();zipContext=null;zipStartFolder='';clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
  clearObjects();clearPreview();++state.seq;status('Connecting to '+repo+'…');
  try{
   const info=await json('/repos/'+repo);if(request!==state.repoRequest)return;
@@ -1254,7 +1335,7 @@ async function openRepo(targetPath=''){
  }catch(e){if(request===state.repoRequest)status('Cannot open repository: '+e.message);return false}
 }
 function resetSession(){
- abortRequests();state.rateLimitedUntil=0;state.folderRecoveryKey='';++zipScanSeq;zipGalleryEntries=[];zipManifests.clear();zipContext=null;zipStartFolder='';cancelContentScan();stopStory();hideSizeMap();state.storyData=null;++state.repoRequest;++state.seq;state.token='';state.repo='';state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;state.cache.clear();state.items=[];state.visibleItems=[];
+ abortRequests();state.rateLimitedUntil=0;state.folderRecoveryKey='';++zipScanSeq;++zipPrepSeq;zipGalleryEntries=[];zipManifests.clear();zipSelections.clear();zipContext=null;zipStartFolder='';cancelContentScan();stopStory();hideSizeMap();state.storyData=null;++state.repoRequest;++state.seq;state.token='';state.repo='';state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;state.cache.clear();state.items=[];state.visibleItems=[];
  state.tree.clear();state.expanded.clear();state.indexEntries=[];state.indexReady=false;state.indexError=false;state.indexTruncated=false;state.repoIsPrivate=true;
  clearSelection();state.renderEpoch++;if(state.thumbObserver){state.thumbObserver.disconnect();state.thumbObserver=null}thumbQueue.length=0;
  clearPreview();clearObjects();paintBookmarks();$('token').value='';$('branch').value='';$('loadBranches').disabled=true;$('loadBranches').textContent='Browse branches';$('branchPicker').hidden=true;$('branchPicker').replaceChildren(new Option('Choose a branch…',''));
@@ -1282,7 +1363,7 @@ function currentShareUrl(){
  return base
 }
 async function copyCurrentLink(){try{await navigator.clipboard.writeText(currentShareUrl());status(state.repoIsPrivate?'GitHub link copied. Private paths stay out of Expository URLs.':'Shareable Expository link copied; credentials are never included.')}catch{status('Clipboard unavailable; use the GitHub file link or your browser address bar.')}}
-$('openRepo').onclick=()=>openRepo();$('disconnect').onclick=()=>{resetSession();status('Credentials and private browsing state cleared from this tab.')};$('copyFolder').onclick=copyCurrentLink;$('copyFile').onclick=copyCurrentLink;$('previewFolder').onclick=()=>{if(state.preview)openContainingFolder(state.preview.path)};$('compareAction').onclick=compareAction;$('downloadRaw').onclick=downloadOriginal;$('copyRaw').onclick=copyText;$('fileHistory').onclick=toggleHistory;$('structuredToggle').onclick=toggleStructured;$('bookmark').onclick=toggleBookmark;$('contentSearch').onclick=scanContents;$('storyToggle').onclick=toggleStory;$('sizeToggle').onclick=toggleSizeMap;$('selectMode').onclick=()=>{state.selectionMode=!state.selectionMode;updateSelectionControls()};$('contactSheet').onclick=openContactSheet;$('clearSelection').onclick=clearSelection;$('connect').onclick=connect;$('loadBranches').onclick=loadBranches;$('branchPicker').onchange=()=>{const selected=$('branchPicker').value;if(!selected)return;$('branch').value=selected;openRepo()};$('repoSelect').onchange=()=>{if($('repoSelect').value){$('repo').value=$('repoSelect').value;$('branch').value='';openRepo()}};
+$('openRepo').onclick=()=>openRepo();$('disconnect').onclick=()=>{resetSession();status('Credentials and private browsing state cleared from this tab.')};$('copyFolder').onclick=copyCurrentLink;$('copyFile').onclick=copyCurrentLink;$('previewFolder').onclick=()=>{if(state.preview)openContainingFolder(state.preview.path)};$('compareAction').onclick=compareAction;$('downloadRaw').onclick=downloadOriginal;$('shareRaw').onclick=shareOriginal;$('copyRaw').onclick=copyText;$('fileHistory').onclick=toggleHistory;$('structuredToggle').onclick=toggleStructured;$('bookmark').onclick=toggleBookmark;$('contentSearch').onclick=scanContents;$('storyToggle').onclick=toggleStory;$('sizeToggle').onclick=toggleSizeMap;$('selectMode').onclick=()=>{state.selectionMode=!state.selectionMode;updateSelectionControls()};$('contactSheet').onclick=openContactSheet;$('clearSelection').onclick=clearSelection;$('connect').onclick=connect;$('loadBranches').onclick=loadBranches;$('branchPicker').onchange=()=>{const selected=$('branchPicker').value;if(!selected)return;$('branch').value=selected;openRepo()};$('repoSelect').onchange=()=>{if($('repoSelect').value){$('repo').value=$('repoSelect').value;$('branch').value='';openRepo()}};
 function syncRefineToViewport(){
  const mobile=typeof window!=='undefined'&&window.matchMedia('(max-width:760px)').matches;
  $('refineControls').hidden=mobile;$('refineToggle').setAttribute('aria-expanded',String(!mobile))
