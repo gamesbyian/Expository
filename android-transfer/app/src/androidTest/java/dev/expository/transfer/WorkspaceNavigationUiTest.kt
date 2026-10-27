@@ -38,6 +38,7 @@ class WorkspaceNavigationUiTest {
      */
     @Test fun boundedSafListingShowsMoreWithoutTreatingTruncationAsComplete() {
         var rows = 205
+        var corruptFirst = false
         val provider = object : ContentProvider() {
             override fun onCreate() = true
             override fun query(uri: Uri, projection: Array<out String>?,
@@ -51,7 +52,9 @@ class WorkspaceNavigationUiTest {
                 )
                 return MatrixCursor(columns).apply {
                     repeat(rows) { i ->
-                        addRow(arrayOf("id-$i", "Synthetic $i.txt", "text/plain", i.toLong()))
+                        addRow(arrayOf(
+                            if (corruptFirst && i == 0) null else "id-$i",
+                            "Synthetic $i.txt", "text/plain", i.toLong()))
                     }
                 }
             }
@@ -85,6 +88,13 @@ class WorkspaceNavigationUiTest {
         assertTrue(hardCap.hasMore)
         assertTrue("Invalid intermediate page size is refused",
             runCatching { LocalTreeReader.list(resolver, tree, "root", 201) }.isFailure)
+        rows = 10
+        corruptFirst = true
+        val corrupt = LocalTreeReader.list(resolver, tree, "root")
+        assertEquals(9, corrupt.children.size)
+        assertFalse("Null provider metadata must invalidate a complete listing",
+            corrupt.complete)
+        assertFalse(corrupt.hasMore)
     }
 
     @Test fun secureWorkspacesStayDistinctAndSyntheticFilesRequireDemoTab() {
