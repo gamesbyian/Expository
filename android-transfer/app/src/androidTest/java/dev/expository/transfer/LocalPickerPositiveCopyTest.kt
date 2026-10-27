@@ -433,7 +433,13 @@ class LocalPickerPositiveCopyTest {
             compose.onNodeWithText("Device ↔ Device").performClick()
             pickFolder(sourceDir, "A")
             compose.onNodeWithText(sourceName).assertExists()
-            compose.onNodeWithText("Select").performSemanticsAction(SemanticsActions.OnClick)
+            // Two fixture rows both initially say 'Select'. Their stable
+            // filename order puts expository-from before expository-second,
+            // so choose the first exact label while both are unselected.
+            if (fileCount == 2) compose.onAllNodesWithText("Select")[0]
+                .performSemanticsAction(SemanticsActions.OnClick)
+            else compose.onNodeWithText("Select")
+                .performSemanticsAction(SemanticsActions.OnClick)
             // Nested scrolling can put the file's visual button outside the
             // touch viewport. Exercise its accessible OnClick action, then
             // require the actual source selection UI state to change.
