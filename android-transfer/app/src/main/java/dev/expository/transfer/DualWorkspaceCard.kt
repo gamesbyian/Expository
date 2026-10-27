@@ -41,7 +41,7 @@ import dev.expository.transfer.saf.TreeCopyPreflight
  * disconnected by changing tabs. A/B Swap moves the same remembered session
  * with its endpoint using Compose movable content, not a new connection.
  * The separate Single view remains available. Only reviewed, journaled
- * local-to-local Copy and explicitly requested one-file Local-to-SFTP
+ * local-to-local Copy and explicitly requested bounded Local-to-SFTP
  * uploads can run between panes. Other remote cross-pane writes remain gated.
  */
 @Composable
@@ -72,18 +72,18 @@ internal fun DualWorkspaceCard(
     // unrelated connection; switching endpoint tears down its old session.
     var remoteSwapped by remember { mutableStateOf(false) }
     val connectionA = remember {
-        movableContentOf<BrowseEndpoint, LocalPaneUploadSource?> { endpoint, peerSource ->
+        movableContentOf<BrowseEndpoint, List<LocalPaneUploadSource>> { endpoint, peerSources ->
             when (endpoint) {
-                BrowseEndpoint.SFTP -> SftpBrowseCard(localPaneSource = peerSource)
+                BrowseEndpoint.SFTP -> SftpBrowseCard(localPaneSources = peerSources)
                 BrowseEndpoint.FTPS -> FtpsBrowseCard()
                 else -> Unit
             }
         }
     }
     val connectionB = remember {
-        movableContentOf<BrowseEndpoint, LocalPaneUploadSource?> { endpoint, peerSource ->
+        movableContentOf<BrowseEndpoint, List<LocalPaneUploadSource>> { endpoint, peerSources ->
             when (endpoint) {
-                BrowseEndpoint.SFTP -> SftpBrowseCard(localPaneSource = peerSource)
+                BrowseEndpoint.SFTP -> SftpBrowseCard(localPaneSources = peerSources)
                 BrowseEndpoint.FTPS -> FtpsBrowseCard()
                 else -> Unit
             }
@@ -93,7 +93,7 @@ internal fun DualWorkspaceCard(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Dual-location workspace", style = MaterialTheme.typography.titleLarge)
         Text(
-            "A and B have independent device-folder browsers or separately authenticated SFTP/FTPS connections. Device-to-Device Copy requires an explicit verified preflight. One-file Local-to-SFTP Copy uses explicit approval and a verified, journaled upload. Other cross-pane remote Copy and Move remain unavailable.",
+            "A and B have independent device-folder browsers or separately authenticated SFTP/FTPS connections. Device-to-Device Copy requires an explicit verified preflight. Local-to-SFTP Copy supports up to 12 reviewed files, each with a verified, journaled upload. Other cross-pane remote Copy and Move remain unavailable.",
             style = MaterialTheme.typography.bodySmall
         )
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -171,15 +171,15 @@ internal fun DualWorkspaceCard(
                     // Movable content keeps the authenticated session attached
                     // to its owner even when the user swaps A and B.
                     val first = (which == WorkspacePane.A) != remoteSwapped
-                    val peerSource = if (which == WorkspacePane.A) {
+                    val peerSources = if (which == WorkspacePane.A) {
                         if (workspace.b.endpoint == BrowseEndpoint.LOCAL)
-                            LocalPaneUploadSource.from(b) else null
+                            LocalPaneUploadSource.fromSelection(b) else emptyList()
                     } else {
                         if (workspace.a.endpoint == BrowseEndpoint.LOCAL)
-                            LocalPaneUploadSource.from(a) else null
+                            LocalPaneUploadSource.fromSelection(a) else emptyList()
                     }
-                    if (first) connectionA(pane.endpoint, peerSource)
-                    else connectionB(pane.endpoint, peerSource)
+                    if (first) connectionA(pane.endpoint, peerSources)
+                    else connectionB(pane.endpoint, peerSources)
                 }
             }
         }
@@ -263,7 +263,7 @@ internal fun DualWorkspaceCard(
             Text("Cancel transfer")
         }
         Text(copyStatus, style = MaterialTheme.typography.bodySmall)
-        Text("One-file Local-to-SFTP Copy is available only by explicit action in the authenticated SFTP destination pane. Other cross-pane Copy/Move and local Move remain unavailable.",
+        Text("Local-to-SFTP Copy is available for up to 12 selected device files after explicit review in the authenticated SFTP pane. Other cross-pane Copy/Move and local Move remain unavailable.",
             style = MaterialTheme.typography.bodySmall)
     }
 }
