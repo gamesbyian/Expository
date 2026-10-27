@@ -75,14 +75,17 @@ jobs:
       - name: Build developer-only signed debug APK
         working-directory: android-transfer
         run: gradle -PwithAndroid=true :app:assembleDebug --no-daemon
-      - name: Record artifact SHA256 (not a release signature)
+      - name: Give the distributable APK an unambiguous filename
         working-directory: android-transfer
-        run: sha256sum app/build/outputs/apk/debug/app-debug.apk > app/build/outputs/apk/debug/SHA256SUMS.txt
+        run: mv app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/expository-ftp-developer-debug.apk
+      - name: Record artifact SHA256 (not a release signature)
+        working-directory: android-transfer/app/build/outputs/apk/debug
+        run: sha256sum expository-ftp-developer-debug.apk > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: expository-transfer-developer-debug-apk
+          name: expository-ftp-developer-debug-apk
           path: |
-            android-transfer/app/build/outputs/apk/debug/app-debug.apk
+            android-transfer/app/build/outputs/apk/debug/expository-ftp-developer-debug.apk
             android-transfer/app/build/outputs/apk/debug/SHA256SUMS.txt
           retention-days: 5
 
