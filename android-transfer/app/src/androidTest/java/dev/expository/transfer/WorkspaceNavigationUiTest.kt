@@ -113,15 +113,73 @@ class WorkspaceNavigationUiTest {
         val selected = LocalPaneUploadSource(
             Uri.parse("content://synthetic.documents/tree/root"),
             "root", "child-1", "example.txt")
-        val review = PeerUploadReview(selected, "pinned-session-1", "/inbox")
-        assertTrue(review.stillMatches(selected, "pinned-session-1", "/inbox"))
-        assertFalse(review.stillMatches(null, "pinned-session-1", "/inbox"))
-        assertFalse(review.stillMatches(selected.copy(documentId = "child-2"),
+        val review = PeerUploadReview(listOf(selected), "pinned-session-1", "/inbox")
+        assertTrue(review.stillMatches(listOf(selected), "pinned-session-1", "/inbox"))
+        assertFalse(review.stillMatches(emptyList(), "pinned-session-1", "/inbox"))
+        assertFalse(review.stillMatches(
+            listOf(selected.copy(documentId = "child-2")),
             "pinned-session-1", "/inbox"))
-        assertFalse(review.stillMatches(selected, "pinned-session-2", "/inbox"))
-        assertFalse(review.stillMatches(selected, "pinned-session-1", "/archive"))
-        assertFalse(PeerUploadReview(selected, "", "/inbox")
-            .stillMatches(selected, "", "/inbox"))
+        assertFalse(review.stillMatches(
+            listOf(selected.copy(browseGeneration = 1L)),
+            "pinned-session-1", "/inbox"))
+        assertFalse(review.stillMatches(listOf(selected), "pinned-session-2", "/inbox"))
+        assertFalse(review.stillMatches(listOf(selected), "pinned-session-1", "/archive"))
+        assertFalse(PeerUploadReview(listOf(selected), "", "/inbox")
+            .stillMatches(listOf(selected), "", "/inbox"))
+    }
+
+    /** A batch freezes every selected direct child in visible order. It never
+     * confers a grant: each membership and file's bytes are checked at upload. */
+    @Test fun dualLocalPeerBatchRejectsIncompleteOrStaleSelections() {
+        val tree = Uri.parse("content://synthetic.documents/tree/root")
+        val children = (1..13).map {
+            TreeEntry("id-$it", "file-$it.txt", false, it.toLong())
+        }
+        val base = LocalTreeBrowseState(
+            treeUri = tree, crumbs = listOf(TreeCrumb("root", "Synthetic")),
+            entries = children, complete = true, generation = 10,
+            selected = setOf("id-3", "id-1", "id-2"))
+        val frozen = LocalPaneUploadSource.fromSelection(base)
+        assertEquals(listOf("file-1.txt", "file-2.txt", "file-3.txt"),
+            frozen.map { it.expectedName })
+        assertEquals(listOf("id-1", "id-2", "id-3"),
+            frozen.map { it.documentId })
+        assertTrue(frozen.all { it.browseGeneration == 10L })
+
+        val review = PeerUploadReview(frozen, "pinned", "/incoming")
+        assertTrue(review.stillMatches(
+            LocalPaneUploadSource.fromSelection(base), "pinned", "/incoming"))
+        assertFalse("A refresh or re-selection must invalidate a prior review",
+            review.stillMatches(
+                LocalPaneUploadSource.fromSelection(base.copy(generation = 11)),
+                "pinned", "/incoming"))
+        assertFalse(review.stillMatches(
+            LocalPaneUploadSource.fromSelection(base.copy(
+                selected = setOf("id-1", "id-2"))), "pinned", "/incoming"))
+        assertFalse(review.stillMatches(frozen, "changed-session", "/incoming"))
+        assertFalse(review.stillMatches(frozen, "pinned", "/other"))
+
+        assertTrue(LocalPaneUploadSource.fromSelection(base.copy(
+            complete = false)).isEmpty())
+        assertTrue(LocalPaneUploadSource.fromSelection(base.copy(
+            loading = true)).isEmpty())
+        assertTrue(LocalPaneUploadSource.fromSelection(base.copy(
+            selected = emptySet())).isEmpty())
+        assertTrue(LocalPaneUploadSource.fromSelection(base.copy(
+            selected = setOf("id-1", "missing"))).isEmpty())
+        assertTrue(LocalPaneUploadSource.fromSelection(base.copy(
+            entries = children.map { if (it.documentId == "id-2")
+                it.copy(directory = true) else it })).isEmpty())
+        assertTrue(LocalPaneUploadSource.fromSelection(base.copy(
+            selected = children.map { it.documentId }.toSet())).isEmpty())
+        assertEquals(12, LocalPaneUploadSource.fromSelection(base.copy(
+            selected = children.take(12).map { it.documentId }.toSet())).size)
+        assertTrue("Duplicate selected names block batch-wide preflight",
+            LocalPaneUploadSource.fromSelection(base.copy(
+                entries = children.map {
+                    if (it.documentId == "id-2") it.copy(title = "file-1.txt")
+                    else it
+                })).isEmpty())
     }
 
     @Test fun anUnconnectedDualRemotePaneNeverOffersPeerUploadConfirmation() {
@@ -213,7 +271,7 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("SFTP file transfer").assertExists()
         compose.onNodeWithText("Copy A → B…").assertIsNotEnabled()
         compose.onNodeWithText("Copy B → A…").assertIsNotEnabled()
-        compose.onNodeWithText("One-file Local-to-SFTP Copy is available only by explicit action",
+        compose.onNodeWithText("Local-to-SFTP Copy is available for up to 12 selected device files",
             substring = true).assertExists()
         compose.onNodeWithText("Single view").performClick()
         compose.onNodeWithText("✓ Single view").assertExists()
