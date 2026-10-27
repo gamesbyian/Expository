@@ -136,13 +136,26 @@ internal object LocalTreeReader {
                 complete = false
                 continue
             }
-            if (id.isBlank() || name.isBlank() || !seen.add(id)) {
+            // Never advertise a complete, mutation-authorizing listing if
+            // opaque document IDs are unbounded or filenames would need
+            // truncation. Truncation creates a different *visible* identity
+            // from the document actually returned by the provider.
+            //
+            // Document IDs are opaque (slashes are allowed), but bound their
+            // UTF-8 size to avoid hostile Cursor rows exhausting app memory.
+            // Filename validity matches immutable planner's byte ceiling.
+            if (id.isBlank() || name.isBlank() ||
+                id.toByteArray(Charsets.UTF_8).size > 8192 ||
+                name.toByteArray(Charsets.UTF_8).size > 255 ||
+                name == "." || name == ".." ||
+                name.any { it == '/' || it == '\\' || it.code < 32 ||
+                    it.code == 127 } || !seen.add(id)) {
                 complete = false
                 continue
             }
             entries += TreeEntry(
                 documentId = id,
-                title = name.take(255),
+                title = name,
                 directory = mime == DocumentsContract.Document.MIME_TYPE_DIR,
                 bytes = if (sizeColumn >= 0 && !cursor.isNull(sizeColumn))
                     cursor.getLong(sizeColumn).takeIf { it >= 0L } else null
