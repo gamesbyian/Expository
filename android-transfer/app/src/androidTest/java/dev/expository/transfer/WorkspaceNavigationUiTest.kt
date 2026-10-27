@@ -81,7 +81,7 @@ class WorkspaceNavigationUiTest {
         // Swap moves the remote session's composition identity with the
         // endpoint, rather than replacing it with the other pane's session.
         compose.onNodeWithText("Swap A and B").performClick()
-        compose.onNodeWithText("Pane A · SFTP").performClick()
+        compose.onNodeWithText("✓ Pane A · SFTP").assertExists()
         compose.onNodeWithText("SFTP file transfer").assertExists()
         compose.onNodeWithText("Copy A → B…").assertIsNotEnabled()
         compose.onNodeWithText("Copy B → A…").assertIsNotEnabled()
