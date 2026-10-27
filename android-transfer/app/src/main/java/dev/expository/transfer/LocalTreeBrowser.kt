@@ -255,7 +255,7 @@ internal fun LocalTreePane(
                     }
                 }
             }
-            Text("Browsing never changes files. A Copy needs complete preflight, explicit confirmation and a journal; remote cross-pane transfers and Move are not yet enabled.",
+            Text("Browsing never changes files. Copy requires complete preflight, explicit review and a journal. Dual-pane Local → SFTP Copy supports 1–12 selected files; other remote cross-pane transfers and Move are not yet enabled.",
                 style = MaterialTheme.typography.bodySmall)
         }
     }
