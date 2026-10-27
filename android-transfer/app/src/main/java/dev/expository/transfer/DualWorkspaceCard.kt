@@ -70,6 +70,7 @@ internal fun DualWorkspaceCard(
     onLoadMore: (WorkspacePane) -> Unit,
     onSelect: (WorkspacePane, TreeEntry) -> Unit,
     busy: Boolean,
+    onRelayBusy: (Boolean) -> Unit,
     copyStatus: String,
     proposedCopy: List<TreeCopyPreflight>?,
     onCopy: (WorkspacePane) -> Unit,
@@ -257,7 +258,10 @@ internal fun DualWorkspaceCard(
                             else selectedRemoteB = chosen
                         },
                         peerRelaySourceId = relayingFromSession,
-                        onRelaySourceActive = { id -> relayingFromSession = id }
+                        onRelaySourceActive = { id ->
+                            relayingFromSession = id
+                            onRelayBusy(id != null)
+                        }
                     )
                     if (first) connectionA(pane.endpoint, peer)
                     else connectionB(pane.endpoint, peer)
