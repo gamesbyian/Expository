@@ -35,7 +35,7 @@ class SftpNewFolder(
         val issued = System.currentTimeMillis()
 
         fun prepare(now: Long): DirectoryCreatePlan {
-            val listing = session.browse(parent)
+            val listing = session.completeMutationListing(parent)
             val items = listing.entries.sortedBy { it.name }
             val bytes = items.joinToString("\n") {
                 it.name + ":" + it.revision
