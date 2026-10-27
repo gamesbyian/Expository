@@ -11,9 +11,11 @@ import dev.expository.transfer.engine.DurableAttemptJournal
 import dev.expository.transfer.planner.JournalState
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 import dev.expository.transfer.journal.AttemptRecoveryIndex
+import dev.expository.transfer.saf.SafNewDocumentIdentity
 import dev.expository.transfer.saf.SafSingleDocumentCopy
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,6 +32,38 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 @RunWith(AndroidJUnit4::class)
 class AndroidContentProviderCopyTest {
+    @Test fun newlyCreatedSafCopyMustRemainAnExactDirectChild() {
+        val observed = TreeEntry("id-new", "Destination.txt", false, 12L)
+        val matching = TreeListing(listOf(
+            TreeEntry("id-original", "Existing.txt", false, 9L), observed), true)
+        assertTrue(SafNewDocumentIdentity.isDirectChild(
+            "Destination.txt", "id-new", matching))
+        assertFalse("Incomplete provider membership is not proof",
+            SafNewDocumentIdentity.isDirectChild("Destination.txt", "id-new",
+                matching.copy(complete = false)))
+        assertFalse("A different parent or renamed file is not proof",
+            SafNewDocumentIdentity.isDirectChild("Destination.txt", "id-new",
+                TreeListing(listOf(TreeEntry("id-new", "Wrong.txt", false, 12L)), true)))
+        assertFalse("A directory with the expected name is not the copied file",
+            SafNewDocumentIdentity.isDirectChild("Destination.txt", "id-new",
+                TreeListing(listOf(observed.copy(directory = true)), true)))
+        assertFalse("Duplicated provider identities are ambiguous",
+            SafNewDocumentIdentity.isDirectChild("Destination.txt", "id-new",
+                TreeListing(listOf(observed, observed), true)))
+        assertFalse("A second file with the same name is a collision",
+            SafNewDocumentIdentity.isDirectChild("Destination.txt", "id-new",
+                TreeListing(listOf(observed,
+                    TreeEntry("id-other", "Destination.txt", false, 4L)), true)))
+        assertFalse("Case-folded sibling collisions must fail closed",
+            SafNewDocumentIdentity.isDirectChild("Destination.txt", "id-new",
+                TreeListing(listOf(observed,
+                    TreeEntry("id-other", "DESTINATION.TXT", false, 4L)), true)))
+        assertFalse("Returned ID absent from chosen parent must stop",
+            SafNewDocumentIdentity.isDirectChild("Destination.txt", "id-new",
+                TreeListing(listOf(TreeEntry("elsewhere", "Destination.txt",
+                    false, 12L)), true)))
+    }
+
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private val resolver: ContentResolver get() = context.contentResolver
 
