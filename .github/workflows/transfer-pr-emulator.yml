@@ -89,7 +89,33 @@ jobs:
           script: cd android-transfer && gradle -PwithAndroid=true ${TARGET_TEST_CLASS:+-Pandroid.testInstrumentationRunnerArguments.class=$TARGET_TEST_CLASS} :app:connectedDebugAndroidTest --no-daemon
       - name: Summarize failed tests without disclosing provider content
         if: failure()
-        run: python3 android-transfer/scripts/summarize_emulator_failures.py
+        shell: bash
+        run: |
+          # This trusted main-branch workflow can test an older immutable PR
+          # source where newer app-side diagnostics do not yet exist. Keep the
+          # diagnostic inline here; never execute a PR-provided log parser.
+          python3 - <<'PY'
+          import pathlib, re, xml.etree.ElementTree as ET
+          root = pathlib.Path("android-transfer/app/build/outputs/androidTest-results/connected")
+          safe = re.compile(r"[^A-Za-z0-9_.$#-]")
+          frame = re.compile(r"\\b([A-Za-z][A-Za-z0-9_]*\\.(?:kt|java)):(\\d{1,6})\\b")
+          failed = 0
+          for path in sorted(root.rglob("*.xml"))[:300]:
+              try:
+                  xml = ET.parse(path).getroot()
+              except (ET.ParseError, OSError):
+                  continue
+              for case in xml.iter("testcase"):
+                  issue = next((e for e in case if e.tag in ("failure", "error")), None)
+                  if issue is None:
+                      continue
+                  name = safe.sub("_", ".".join((case.attrib.get("classname", "unknown"),
+                                                case.attrib.get("name", "unknown"))))[:190]
+                  frames = [f"{file}:{line}" for file, line in frame.findall(issue.text or "")][:6]
+                  print(f"FAIL {name} at {', '.join(frames) or 'no source frame'}")
+                  failed += 1
+          print(f"Sanitized failed testcases: {failed}")
+          PY
       - name: Publish synthetic report and tested SHA
         if: always()
         shell: bash
