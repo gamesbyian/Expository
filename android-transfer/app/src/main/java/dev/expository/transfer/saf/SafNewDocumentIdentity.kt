@@ -1,5 +1,7 @@
 package dev.expository.transfer.saf
 
+import dev.expository.transfer.TreeListing
+
 /**
  * A DocumentsProvider may choose a different name or unexpectedly return an
  * existing document. Neither result satisfies an explicitly reviewed,
@@ -19,4 +21,13 @@ internal object SafNewDocumentIdentity {
             newDocumentId.isNotBlank() &&
             newDocumentId !in existingDocumentIds &&
             newDocumentId !in forbiddenDocumentIds
+
+    /** A returned content URI must actually be the new file in the chosen parent. */
+    fun isDirectChild(expectedName: String, newDocumentId: String,
+        parent: TreeListing): Boolean =
+        parent.complete && expectedName.isNotBlank() && newDocumentId.isNotBlank() &&
+            parent.children.count { child ->
+                child.documentId == newDocumentId &&
+                    child.title == expectedName && !child.directory
+            } == 1
 }
