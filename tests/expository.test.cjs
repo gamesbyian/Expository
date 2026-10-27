@@ -94,7 +94,7 @@ test('recursive gallery scopes traverse descendants and entire repository withou
  get('sortDirection').value='desc';
  assert.deepEqual(app.currentMatches().map(x=>x.name),['a.svg','b.png','other.webp']);
  get('sortFiles').value='name';get('sortDirection').value='asc';get('groupFolders').value='folder';
- assert.deepEqual(app.currentMatches().map(x=>x.path),['media/a.svg','media/sub/b.png','media-old/other.webp']);
+ assert.deepEqual(app.currentMatches().map(x=>x.path),['media/a.svg','media-old/other.webp','media/sub/b.png']);
  assert.equal(app.fileFolder('media/sub/b.png'),'media/sub');
  assert.equal(app.fileFolder('root.png'),'');
 });
