@@ -493,23 +493,24 @@ class LocalPickerPositiveCopyTest {
             compose.onNodeWithText("Device ↔ Device").performClick()
             pickFolder(sourceDir, "A")
             compose.onNodeWithText(sourceName).assertExists()
-            compose.onNodeWithText("Select").performClick()
-            // Inspect the selected row's actual Compose state, not a stale
-            // count label potentially outside the active viewport.
+            compose.onNodeWithText("Select").performSemanticsAction(SemanticsActions.OnClick)
+            // Nested scrolling can put the file's visual button outside the
+            // touch viewport. Exercise its accessible OnClick action, then
+            // require the actual source selection UI state to change.
             compose.waitUntil(15_000L) {
                 compose.onAllNodesWithText("✓ Select").fetchSemanticsNodes()
                     .isNotEmpty()
             }
-            compose.onNodeWithText("Pane B · LOCAL").performClick()
+            compose.onNodeWithText("Pane B · LOCAL").performSemanticsAction(SemanticsActions.OnClick)
             pickFolder(destDir, "B")
             compose.onNodeWithText(markerName).assertExists()
             val before = dev.expository.transfer.journal.AttemptRecoveryIndex.recover(context)
-            compose.onNodeWithText("Copy A → B…").performClick()
+            compose.onNodeWithText("Copy A → B…").performSemanticsAction(SemanticsActions.OnClick)
             compose.waitUntil(30_000L) {
                 compose.onAllNodesWithText("Review Device Copy").fetchSemanticsNodes()
                     .isNotEmpty()
             }
-            compose.onNodeWithText("Confirm Copy").performClick()
+            compose.onNodeWithText("Confirm Copy").performSemanticsAction(SemanticsActions.OnClick)
             compose.waitUntil(45_000L) {
                 compose.onAllNodesWithText("Copy verified:", substring = true)
                     .fetchSemanticsNodes().isNotEmpty()
