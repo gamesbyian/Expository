@@ -114,6 +114,9 @@ internal class SftpToSafTreeCopy(
         val siblings = LocalTreeReader.list(resolver, target.treeUri,
             target.folderId, LocalTreeReader.MAX_BROWSE)
         require(siblings.complete) { "DESTINATION_LISTING_NOT_AUTHORITATIVE" }
+        require(siblings.children.size < LocalTreeReader.MAX_BROWSE) {
+            "POSTCREATE_MEMBERSHIP_WOULD_EXCEED_LIMIT"
+        }
         val revision = fingerprint(siblings.children.flatMap {
             listOf(it.documentId, it.title, it.directory.toString(),
                 it.bytes?.toString().orEmpty())
@@ -231,11 +234,24 @@ internal class SftpToSafTreeCopy(
                         observer.observe(uri).displayName, newId,
                         confirmed.existingTargetDocumentIds)
                 ) throw IOException("SAF_NEW_DOCUMENT_IDENTITY_UNVERIFIED")
+                val parentEntries = LocalTreeReader.list(resolver,
+                    target.treeUri, target.folderId, LocalTreeReader.MAX_BROWSE)
+                if (!SafNewDocumentIdentity.isDirectChild(
+                    confirmed.sourceName, newId, parentEntries))
+                    throw IOException("SAF_NEW_DOCUMENT_PARENT_UNVERIFIED")
                 return resolver.openOutputStream(uri, "w")
                     ?: throw FileNotFoundException()
             }
-            override fun openDestinationReadBack(): InputStream? =
-                created?.let { resolver.openInputStream(it) }
+            override fun openDestinationReadBack(): InputStream? {
+                val uri = created ?: return null
+                val target = request.target
+                val newId = DocumentsContract.getDocumentId(uri)
+                val parentEntries = LocalTreeReader.list(resolver,
+                    target.treeUri, target.folderId, LocalTreeReader.MAX_BROWSE)
+                if (!SafNewDocumentIdentity.isDirectChild(
+                    confirmed.sourceName, newId, parentEntries)) return null
+                return resolver.openInputStream(uri)
+            }
         }
         return JournaledCopyEngine.copy(
             plan,
