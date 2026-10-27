@@ -45,10 +45,13 @@ jobs:
             name="${REQUEST#'/transfer-native emulator-pr '}"
             case "$name" in
               AndroidContentProviderCopyTest|FtpsUiSmokeTest|LocalPickerCancelSmokeTest|LocalPickerPositiveCopyTest|LocalPickerSourceSelectionTest|LocalSharesheetSmokeTest|RenamePreviewUiSmokeTest|WorkspaceNavigationUiTest|RecoveryRefreshUiTest|RecoveryIndexFailurePolicyTest) ;;
+              # One fixed Android DocumentsUI acceptance method. No arbitrary
+              # method, package, sh fragment or wildcard is allowed.
+              LocalPickerPositiveCopyTest#twoRealSystemPickedTreesCopyExactBytesAndPreserveSource) ;;
               *) echo "Unsupported test selection"; exit 2 ;;
             esac
             printf 'TARGET_TEST_CLASS=dev.expository.transfer.%s\n' "$name" >> "$GITHUB_ENV"
-            echo "A single approved instrumentation class selected."
+            echo "One exactly allowlisted instrumentation class or method selected."
           fi
       - uses: actions/checkout@v4
         with:
