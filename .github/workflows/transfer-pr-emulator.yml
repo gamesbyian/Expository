@@ -48,6 +48,7 @@ jobs:
               # One fixed Android DocumentsUI acceptance method. No arbitrary
               # method, package, sh fragment or wildcard is allowed.
               LocalPickerPositiveCopyTest#twoRealSystemPickedTreesCopyExactBytesAndPreserveSource) ;;
+              NewFolderPositiveProviderTest#oneRealSystemPickedFolderCreatesExactChildAndVerifiedJournal) ;;
               *) echo "Unsupported test selection"; exit 2 ;;
             esac
             printf 'TARGET_TEST_CLASS=dev.expository.transfer.%s\n' "$name" >> "$GITHUB_ENV"
