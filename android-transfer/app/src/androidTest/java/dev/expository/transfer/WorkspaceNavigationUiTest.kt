@@ -117,6 +117,28 @@ class WorkspaceNavigationUiTest {
         }
     }
 
+    @Test fun scopedSafNewFolderRejectsUnicodeCollisionsAndUnsafeNames() {
+        val policy = dev.expository.transfer.saf.SafFolderPolicy
+        assertTrue(policy.canName("New Notes", listOf("Old Notes")))
+        assertFalse(policy.canName("notes", listOf("NOTES")))
+        assertFalse(policy.canName("é", listOf("e\u0301")))
+        assertFalse(policy.canName("safe", listOf("SAME", "same")))
+        assertFalse(policy.canName("name", listOf("folder/unsafe")))
+        assertTrue(policy.canName("é".repeat(127), emptyList()))
+        assertFalse(policy.canName("é".repeat(128), emptyList()))
+        for (invalid in listOf("", ".", "..", "a/b", "a\\b",
+            "break\nline", "\u0000", "name\u007f")) {
+            assertFalse("Invalid SAF new directory name must block",
+                policy.validName(invalid))
+        }
+    }
+
+    @Test fun newFolderUiUnavailableWithoutOsTreeGrant() {
+        compose.onNodeWithText("Dual view").performClick()
+        compose.onNodeWithText("Device ↔ Device").performClick()
+        compose.onNodeWithText("New folder…").assertIsNotEnabled()
+    }
+
     // Peer-pane upload has no user data, credentials, or server writes here.
     @Test fun aSelectedLocalChildNeedsCompleteReadScopedFolderProof() {
         val tree = Uri.parse("content://synthetic.documents/tree/root")
