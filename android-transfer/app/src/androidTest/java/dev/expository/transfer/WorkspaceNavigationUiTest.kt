@@ -27,7 +27,6 @@ import java.util.UUID
 class WorkspaceNavigationUiTest {
     @get:Rule val compose = createAndroidComposeRule<TransferActivity>()
 
-
     /**
      * Synthetic Android MatrixCursor tests the same bounded decoder used by
      * the actual DocumentsProvider query. This is not an OS-picked grant,
@@ -122,12 +121,22 @@ class WorkspaceNavigationUiTest {
 
         compose.onNodeWithText("Device ↔ Server").performClick()
         compose.onNodeWithText("Pane B · SFTP").performClick()
-        compose.onNodeWithText("Location B · SFTP").assertExists()
-        compose.onNodeWithText("Secure remote dual-pane connection pending.",
-            substring = true).assertExists()
+        compose.onNodeWithText("Location B · SFTP", substring = true).assertExists()
+        compose.onNodeWithText("SFTP file transfer").assertExists()
+        compose.onNodeWithText("Connect securely").assertIsNotEnabled()
+        // The inactive phone tab is not exposed or disconnected.
+        compose.onNodeWithText("Pane A · LOCAL").performClick()
+        compose.onNodeWithText("SFTP file transfer").assertDoesNotExist()
+        compose.onNodeWithText("Pane B · SFTP").performClick()
+        compose.onNodeWithText("SFTP file transfer").assertExists()
+        // Swap moves the remote session's composition identity with the
+        // endpoint, rather than replacing it with the other pane's session.
+        compose.onNodeWithText("Swap A and B").performClick()
+        compose.onNodeWithText("✓ Pane A · SFTP").assertExists()
+        compose.onNodeWithText("SFTP file transfer").assertExists()
         compose.onNodeWithText("Copy A → B…").assertIsNotEnabled()
         compose.onNodeWithText("Copy B → A…").assertIsNotEnabled()
-        compose.onNodeWithText("Move and remote cross-pane transfers are unavailable.",
+        compose.onNodeWithText("Remote cross-pane Copy/Move and local Move remain unavailable.",
             substring = true).assertExists()
         compose.onNodeWithText("Single view").performClick()
         compose.onNodeWithText("✓ Single view").assertExists()
@@ -136,7 +145,7 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("SFTP file transfer").assertExists()
         compose.onNodeWithText("Dual view").performClick()
         compose.onNodeWithText("✓ Dual view").assertExists()
-        compose.onNodeWithText("Location B · SFTP").assertExists()
+        compose.onNodeWithText("Location A · SFTP", substring = true).assertExists()
     }
 
     @Test fun incomingShareOffersSftpDestinationWithoutSilentUpload() {
