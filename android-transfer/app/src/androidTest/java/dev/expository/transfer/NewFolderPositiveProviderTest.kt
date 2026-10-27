@@ -102,9 +102,15 @@ class NewFolderPositiveProviderTest {
             // picker. Compose's test harness has repeatedly crashed inside
             // Material3 ChildSemanticsNode while idling its synthetic tree; a
             // native UiAutomator journey is also closer to actual user input.
-            assertTrue("Returned scoped browser must finish opening",
-                device.wait(Until.hasObject(By.textContains(
-                    "Folder opened. Scoped Android browser")), 25_000L))
+            // Scoped folder status may be outside the visible viewport on a
+            // small portrait screen. Compose can observe a composed offscreen
+            // accessibility node here; the subsequent *actions* still use
+            // UiAutomator to avoid triggering stale ChildSemanticsNode clicks.
+            compose.waitUntil(25_000L) {
+                compose.onAllNodesWithText(
+                    "Folder opened. Scoped Android browser", substring = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
             val before = AttemptRecoveryIndex.recover(ctx)
             fun appText(label: String): androidx.test.uiautomator.UiObject2? {
                 repeat(8) {
