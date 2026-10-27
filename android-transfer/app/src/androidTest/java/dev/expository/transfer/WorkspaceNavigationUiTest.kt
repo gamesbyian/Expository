@@ -265,6 +265,14 @@ class WorkspaceNavigationUiTest {
             okay("episode.txt", "episode (1).txt", "created-3"))
         assertFalse("A returned existing URI could overwrite user bytes",
             okay("episode.txt", "episode.txt", "old-1"))
+        assertFalse("Source may live in another folder, outside sibling list",
+            dev.expository.transfer.saf.SafNewDocumentIdentity.matches(
+                "episode.txt", "episode.txt", "source-elsewhere",
+                existing, setOf("source-elsewhere")))
+        assertTrue("A real new child remains allowed",
+            dev.expository.transfer.saf.SafNewDocumentIdentity.matches(
+                "episode.txt", "episode.txt", "new-4",
+                existing, setOf("source-elsewhere")))
         assertFalse(okay("episode.txt", "episode.txt", ""))
         assertFalse(okay("", "", "created-3"))
         assertFalse(okay("episode.txt", "Selected document", "created-3"))
