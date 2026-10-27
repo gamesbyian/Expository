@@ -1,0 +1,31 @@
+name: Expository Transfer scoped SFTP relay acceptance
+# E3 uses only generated loopback SSH keys, anonymous disposable temp files,
+# and two synthetic authenticated sessions. It never contacts an external host.
+on:
+  pull_request:
+    paths:
+      - "android-transfer/adapter/sftp/src/main/kotlin/dev/expository/transfer/sftp/SftpRelayCopy.kt"
+      - "android-transfer/adapter/sftp/src/test/kotlin/dev/expository/transfer/sftp/SftpServerLabSuite.kt"
+      - ".github/workflows/transfer-sftp-relay-acceptance.yml"
+permissions:
+  contents: read
+jobs:
+  synthetic-relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+          cache-read-only: true
+      - name: Prove pinned localhost SFTP source to second authenticated destination
+        working-directory: android-transfer
+        run: gradle :adapter:sftp:lab --no-daemon --quiet
