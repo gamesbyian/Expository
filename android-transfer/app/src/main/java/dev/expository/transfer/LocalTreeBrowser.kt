@@ -110,44 +110,44 @@ internal object LocalTreeReader {
         var complete = true
         var hasMore = false
         var scanned = 0
-            val idColumn = cursor.getColumnIndexOrThrow(
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-            val nameColumn = cursor.getColumnIndexOrThrow(
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-            val typeColumn = cursor.getColumnIndexOrThrow(
-                DocumentsContract.Document.COLUMN_MIME_TYPE)
-            val sizeColumn = cursor.getColumnIndex(
-                DocumentsContract.Document.COLUMN_SIZE)
-            while (cursor.moveToNext()) {
-                // Count *every* cursor row, including malformed/duplicate
-                // rows, so a hostile provider cannot defeat this scan cap.
-                if (scanned >= maxVisible) {
-                    complete = false
-                    hasMore = true
-                    break
-                }
-                scanned++
-                val id = cursor.getString(idColumn)
-                val name = cursor.getString(nameColumn)
-                val mime = cursor.getString(typeColumn)
-                if (id == null || name == null || mime == null) {
-                    // A malformed provider row cannot silently disappear and
-                    // leave a mutation-authorizing "complete" snapshot.
-                    complete = false
-                    continue
-                }
-                if (id.isBlank() || name.isBlank() || !seen.add(id)) {
-                    complete = false
-                    continue
-                }
-                entries += TreeEntry(
-                    documentId = id,
-                    title = name.take(255),
-                    directory = mime == DocumentsContract.Document.MIME_TYPE_DIR,
-                    bytes = if (sizeColumn >= 0 && !cursor.isNull(sizeColumn))
-                        cursor.getLong(sizeColumn).takeIf { it >= 0L } else null
-                )
+        val idColumn = cursor.getColumnIndexOrThrow(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+        val nameColumn = cursor.getColumnIndexOrThrow(
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+        val typeColumn = cursor.getColumnIndexOrThrow(
+            DocumentsContract.Document.COLUMN_MIME_TYPE)
+        val sizeColumn = cursor.getColumnIndex(
+            DocumentsContract.Document.COLUMN_SIZE)
+        while (cursor.moveToNext()) {
+            // Count *every* cursor row, including malformed/duplicate
+            // rows, so a hostile provider cannot defeat this scan cap.
+            if (scanned >= maxVisible) {
+                complete = false
+                hasMore = true
+                break
             }
+            scanned++
+            val id = cursor.getString(idColumn)
+            val name = cursor.getString(nameColumn)
+            val mime = cursor.getString(typeColumn)
+            if (id == null || name == null || mime == null) {
+                // A malformed provider row cannot silently disappear and
+                // leave a mutation-authorizing "complete" snapshot.
+                complete = false
+                continue
+            }
+            if (id.isBlank() || name.isBlank() || !seen.add(id)) {
+                complete = false
+                continue
+            }
+            entries += TreeEntry(
+                documentId = id,
+                title = name.take(255),
+                directory = mime == DocumentsContract.Document.MIME_TYPE_DIR,
+                bytes = if (sizeColumn >= 0 && !cursor.isNull(sizeColumn))
+                    cursor.getLong(sizeColumn).takeIf { it >= 0L } else null
+            )
+        }
         return TreeListing(
             entries.sortedWith(compareByDescending<TreeEntry> { it.directory }
                 .thenBy(String.CASE_INSENSITIVE_ORDER) { it.title }),
