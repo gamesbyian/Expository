@@ -19,6 +19,12 @@ object SftpServerLabSuite {
         val tmp = Files.createTempDirectory("expository-sftp-fixture-")
         val payload = "Synthetic SFTP fixture\n"
         Files.writeString(tmp.resolve("synthetic.txt"), payload, StandardCharsets.UTF_8)
+        // 205 owned children exercise the real adapter beyond its former cap.
+        val many = Files.createDirectory(tmp.resolve("many"))
+        repeat(205) { index ->
+            Files.writeString(many.resolve("entry-" + index.toString().padStart(4, '0') + ".txt"),
+                "synthetic child $index", StandardCharsets.UTF_8)
+        }
 
         // Fully generated in-memory host key. Avoid any on-disk persisted host
         // identity or silently trusting first-use keys in client code.
@@ -49,6 +55,25 @@ object SftpServerLabSuite {
                 val browse = session.browse("/")
                 check(!browse.truncated)
                 check(browse.entries.any { it.name == "synthetic.txt" && !it.directory })
+                val firstWindow = session.browse("/many")
+                check(firstWindow.truncated && firstWindow.entries.size == 200) {
+                    "First bounded window must not pretend 205 rows are complete"
+                }
+                val nextWindow = session.browse("/many", maxEntries = 400)
+                check(!nextWindow.truncated && nextWindow.entries.size == 205)
+                check(nextWindow.entries.map { it.name }.toSet().size == 205)
+                check(nextWindow.entries.any { it.name == "entry-0204.txt" })
+                check(session.openRead("/many/entry-0204.txt").use { it.readBytes() }
+                    .contentEquals("synthetic child 204".toByteArray(StandardCharsets.UTF_8)))
+                check(runCatching { session.browse("/many", maxEntries = 2001) }.isFailure)
+                check(runCatching {
+                    session.openExclusiveWrite("/many/entry-0204.txt").use {
+                        it.write(byteArrayOf(77))
+                    }
+                }.isFailure) { "Expanded browsing cannot weaken no-overwrite rule" }
+                check(session.openRead("/many/entry-0204.txt").use { it.readBytes() }
+                    .contentEquals("synthetic child 204".toByteArray(StandardCharsets.UTF_8)))
+                println("PASS SFTP LAB 205 remote items, bounded 200/400 windows, no overwrite")
                 val observed = session.statFile("/synthetic.txt")
                 check(observed.size == payload.toByteArray(StandardCharsets.UTF_8).size.toLong())
                 check(runCatching { session.statFile("/") }.isFailure)
@@ -128,6 +153,11 @@ object SftpServerLabSuite {
             println("PASS SFTP LAB wrong host fingerprint rejected during handshake")
         } finally {
             runCatching { sshd.stop(true) }
+            repeat(205) { index ->
+                runCatching { Files.deleteIfExists(many.resolve(
+                    "entry-" + index.toString().padStart(4, '0') + ".txt")) }
+            }
+            runCatching { Files.deleteIfExists(many) }
             runCatching { Files.deleteIfExists(tmp.resolve("synthetic.txt")) }
             runCatching { Files.deleteIfExists(tmp.resolve("synthetic-upload.txt")) }
             runCatching { Files.deleteIfExists(tmp.resolve("new-dir/move-source.txt")) }
