@@ -49,7 +49,9 @@ internal data class RemotePeerContext(
     val downloadTarget: LocalPaneDownloadTarget?,
     val selectedOtherSftp: PeerSftpSource?,
     val maySelectRemote: Boolean,
-    val onSelectedRemote: (PeerSftpSource?) -> Unit
+    val onSelectedRemote: (PeerSftpSource?) -> Unit,
+    val peerRelaySourceId: String?,
+    val onRelaySourceActive: (String?) -> Unit
 )
 
 @Composable
@@ -83,6 +85,8 @@ internal fun DualWorkspaceCard(
     // Swap their *owners* together with the movable authenticated panes.
     var selectedRemoteA by remember { mutableStateOf<PeerSftpSource?>(null) }
     var selectedRemoteB by remember { mutableStateOf<PeerSftpSource?>(null) }
+    var relayingFromSession by remember { mutableStateOf<String?>(null) }
+    val workspaceBusy = busy || relayingFromSession != null
     val connectionA = remember {
         movableContentOf<BrowseEndpoint, RemotePeerContext> { endpoint, peer ->
             when (endpoint) {
@@ -91,7 +95,9 @@ internal fun DualWorkspaceCard(
                     localPaneTarget = peer.downloadTarget,
                     remotePaneSource = peer.selectedOtherSftp,
                     allowRemoteSelection = peer.maySelectRemote,
-                    onRemoteSource = peer.onSelectedRemote
+                    onRemoteSource = peer.onSelectedRemote,
+                    peerRelaySourceId = peer.peerRelaySourceId,
+                    onRelaySourceActive = peer.onRelaySourceActive
                 )
                 BrowseEndpoint.FTPS -> FtpsBrowseCard()
                 else -> Unit
@@ -106,7 +112,9 @@ internal fun DualWorkspaceCard(
                     localPaneTarget = peer.downloadTarget,
                     remotePaneSource = peer.selectedOtherSftp,
                     allowRemoteSelection = peer.maySelectRemote,
-                    onRemoteSource = peer.onSelectedRemote
+                    onRemoteSource = peer.onSelectedRemote,
+                    peerRelaySourceId = peer.peerRelaySourceId,
+                    onRelaySourceActive = peer.onRelaySourceActive
                 )
                 BrowseEndpoint.FTPS -> FtpsBrowseCard()
                 else -> Unit
@@ -127,7 +135,7 @@ internal fun DualWorkspaceCard(
                 DualPairing.LOCAL_REMOTE to "Device ↔ Server",
                 DualPairing.REMOTE_REMOTE to "Server ↔ Server"
             )) {
-                Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !busy,
+                Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !workspaceBusy,
                     onClick = {
                         selectedRemoteA = null
                         selectedRemoteB = null
@@ -135,7 +143,7 @@ internal fun DualWorkspaceCard(
                     }) { Text(title) }
             }
         }
-        Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !busy,
+        Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !workspaceBusy,
             onClick = {
                 // Move the remembered remote connection together with its
                 // endpoint and the owner's independently navigated state.
@@ -151,7 +159,7 @@ internal fun DualWorkspaceCard(
         if (workspace.pane(workspace.activeDual).endpoint == BrowseEndpoint.LOCAL) {
             Button(
                 modifier = Modifier.heightIn(min = 48.dp),
-                enabled = !busy,
+                enabled = !workspaceBusy,
                 onClick = { onPick(workspace.activeDual) }
             ) { Text("Choose Pane " + workspace.activeDual.name + " folder…") }
         }
@@ -167,7 +175,7 @@ internal fun DualWorkspaceCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     for (endpoint in BrowseEndpoint.entries) {
                         Button(
-                            enabled = !busy,
+                            enabled = !workspaceBusy,
                             modifier = Modifier.heightIn(min = 48.dp).semantics {
                                 stateDescription = if (pane.endpoint == endpoint)
                                     "Selected" else "Not selected"
@@ -188,7 +196,7 @@ internal fun DualWorkspaceCard(
                         label = "Location " + which.name,
                         state = tree,
                         scroll = scroll,
-                        enabled = !busy,
+                        enabled = !workspaceBusy,
                         onPick = { onPick(which) },
                         onOpen = { entry ->
                             onNavigate(which, tree.crumbs +
@@ -247,7 +255,9 @@ internal fun DualWorkspaceCard(
                         onSelectedRemote = { chosen ->
                             if (which == WorkspacePane.A) selectedRemoteA = chosen
                             else selectedRemoteB = chosen
-                        }
+                        },
+                        peerRelaySourceId = relayingFromSession,
+                        onRelaySourceActive = { id -> relayingFromSession = id }
                     )
                     if (first) connectionA(pane.endpoint, peer)
                     else connectionB(pane.endpoint, peer)
@@ -266,7 +276,7 @@ internal fun DualWorkspaceCard(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for (pane in listOf(WorkspacePane.A, WorkspacePane.B)) {
                             Button(
-                                enabled = !busy,
+                                enabled = !workspaceBusy,
                                 modifier = Modifier.heightIn(min = 48.dp).semantics {
                                     stateDescription =
                                         if (workspace.activeDual == pane) "Selected"
@@ -304,10 +314,10 @@ internal fun DualWorkspaceCard(
             a.treeUri != null && a.canWrite && a.complete && b.complete
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Button(enabled = !busy && proposedCopy == null && readyA,
+            Button(enabled = !workspaceBusy && proposedCopy == null && readyA,
                 modifier = Modifier.heightIn(min = 48.dp),
                 onClick = { onCopy(WorkspacePane.A) }) { Text("Copy A → B…") }
-            Button(enabled = !busy && proposedCopy == null && readyB,
+            Button(enabled = !workspaceBusy && proposedCopy == null && readyB,
                 modifier = Modifier.heightIn(min = 48.dp),
                 onClick = { onCopy(WorkspacePane.B) }) { Text("Copy B → A…") }
         }
@@ -324,9 +334,9 @@ internal fun DualWorkspaceCard(
                     Text("Each file has a fresh provider preflight, a pinned original source version, a separate durable journal and independent byte verification. Later destination snapshots are refreshed after verified earlier files. The batch stops at the first uncertain result; prior verified files remain. No overwrite or automatic retry.",
                         style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
+                        Button(enabled = !workspaceBusy, modifier = Modifier.heightIn(min = 48.dp),
                             onClick = onConfirmCopy) { Text("Confirm Copy") }
-                        Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
+                        Button(enabled = !workspaceBusy, modifier = Modifier.heightIn(min = 48.dp),
                             onClick = onCancelCopy) { Text("Cancel proposal") }
                     }
                 }
