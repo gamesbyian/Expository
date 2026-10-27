@@ -41,6 +41,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -333,7 +334,8 @@ internal fun SafFolderCreateCard(
     val available = enabled && !processing && !state.loading && state.complete &&
         state.canWrite && state.treeUri != null && state.folderId != null
 
-    Button(enabled = available, modifier = Modifier.heightIn(min = 48.dp),
+    Button(enabled = available,
+        modifier = Modifier.heightIn(min = 48.dp).testTag("saf-new-folder-open"),
         onClick = { editing = !editing; pending = null }) {
         Text(if (editing) "Close New Folder" else "New folder…")
     }
@@ -343,6 +345,7 @@ internal fun SafFolderCreateCard(
         // preflight changes state. Keep the input semantics stable instead.
         Text("Folder name", style = MaterialTheme.typography.bodySmall)
         BasicTextField(
+            modifier = Modifier.testTag("saf-new-folder-name"),
             value = name,
             onValueChange = { name = it; pending = null },
             enabled = available,
@@ -358,7 +361,7 @@ internal fun SafFolderCreateCard(
         )
         if (pending == null) {
             Button(enabled = available && name.isNotBlank(),
-                modifier = Modifier.heightIn(min = 48.dp),
+                modifier = Modifier.heightIn(min = 48.dp).testTag("saf-new-folder-review"),
                 onClick = {
                     keyboard?.hide()
                     focusManager.clearFocus()
@@ -402,7 +405,7 @@ internal fun SafFolderCreateCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(enabled = available &&
                         pendingEpoch == state.generation,
-                        modifier = Modifier.heightIn(min = 48.dp),
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("saf-new-folder-confirm"),
                         onClick = {
                             val frozen = proposal
                             val epoch = pendingEpoch
