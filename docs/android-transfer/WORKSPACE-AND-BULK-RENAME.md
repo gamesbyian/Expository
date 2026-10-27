@@ -123,3 +123,7 @@ Preflight against both **(1) other proposed names** and **(2) existing destinati
 **Beyond beta:** sync rules, remote DocumentsProvider, more protocols, image comparisons and media extras. No FTP FXP by default; no proprietary cloud service; no internet-accessible helper server.
 
 **Research and device caveat:** This is a source-linked design synthesis, not evidence that competitors were installed, Android FTP libraries passed target-SDK tests, or any UI was tested on the user's phone. Such acceptance is required before release.
+
+## Approved multi-provider workspace expansion (2026-10-27)
+
+The dual pane presets Local/Local, Local/Remote and Remote/Remote evolve into two arbitrary independently chosen **locations**: SAF-backed cloud folder or Device, FTP/FTPS/SFTP server, Drive API account/folder and GitHub repository/branch/path (capability-dependent). Default single-location browser remains full-featured, not a collapsed dual-view. Drag proposes reviewed Copy using the same planner as Copy-to; Move is explicit, and GitHub write operations show proposed branch/commit changes. Preserve per-pane identity, sort, scroll, breadcrumbs and selection on A/B collapse. Read [universal locations](UNIVERSAL-LOCATIONS.md) for OAuth, API, provider flags, export formats, mutation/proof and acceptance constraints. These providers are planned, not delivered.
