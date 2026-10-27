@@ -18,6 +18,10 @@ Expository Transfer is the **Android-native file-transfer** app under `android-t
 - On ambiguous write/rename/commit/Drive create **stop and reconcile**, never auto-retry or delete unknown staged data. Receipts may claim `CONTENT_HASH_VERIFIED` only on real comparable content proof; Share/External Open are handoffs, not Drive/Docs saves.
 - The required UX offers a **permanent full-featured single-location browser by default** and an **optional dual-location view** (Local/Local, Local/Remote, Remote/Remote); responsive A/B tabs in dual view are not the single-location mode. **Already implemented, still incomplete:** default Single has a separately scoped Local SAF browser and route-specific SFTP/FTPS browser cards; optional Dual has independently selectable Local/Local, Local/Remote and Remote/Remote panes with live trusted SFTP/FTPS cards, A/B tab collapse, swap and two limited reviewed SFTP Copy directions. This is not full feature parity with a unified single-location browser, all six cross-endpoint Copy/Move routes, native drag support or physical-device acceptance. SFTP bulk rename currently previews only. Do not relabel those remaining gaps as delivered.
 
+## APK artifact naming
+
+All future downloadable Android Transfer APKs must include the exact token `expository-ftp` in the **`.apk` filename**, not merely the Actions artifact/ZIP name. The trusted-main developer workflow packages `expository-ftp-developer-debug.apk` in `expository-ftp-developer-debug-apk` and writes `SHA256SUMS.txt` against that published filename. Any PR-head, emulator, signed beta or release workflow that uploads a distributable APK must maintain this policy, preserving build variant/version labels where helpful. Historical artifacts need no retrofit.
+
 ## Implement, verify, integrate
 
 - Pick one independently testable vertical slice. Reuse pure Kotlin planner under `core/planner`, write-ahead attempt journal in `core/engine`, scoped Android SAF and trusted `adapter/sftp`/`adapter/ftps`. Source `android-transfer/` must remain relocatable to a native repo; do not mutate web explorer to ship transfer features.
