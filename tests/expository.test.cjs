@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,documentThumbnail,openContainingFolder};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl
  );
@@ -72,6 +72,65 @@ test('repo-wide names and recursive image views match expected paths',()=>{
  app.state.indexError=true;app.state.items=[{type:'file',name:'local.png',path:'src/local.png'}];
  assert.equal(app.currentMatches().length,1,'fallback to current-folder images');
 });
+test('recursive gallery scopes traverse descendants and entire repository without path-prefix leakage',()=>{
+ const {app,get}=boot();app.state.indexReady=true;app.state.path='media';
+ app.state.indexEntries=[
+  {type:'file',name:'b.png',path:'media/sub/b.png',size:50},
+  {type:'file',name:'z.html',path:'media/z.html',size:10},
+  {type:'file',name:'a.svg',path:'media/a.svg',size:30},
+  {type:'file',name:'other.webp',path:'media-old/other.webp',size:80},
+  {type:'file',name:'start.md',path:'docs/start.md',size:20}
+ ];
+ get('scope').value='descendants';
+ assert.deepEqual(app.currentMatches().map(x=>x.name),['a.svg','b.png','z.html']);
+ get('fileKind').value='html';
+ assert.deepEqual(app.currentMatches().map(x=>x.name),['z.html']);
+ get('fileKind').value='previewable';get('scope').value='allFiles';
+ assert.equal(app.currentMatches().length,5);
+ get('fileKind').value='all';get('scope').value='allImages';
+ assert.deepEqual(app.currentMatches().map(x=>x.name),['a.svg','b.png','other.webp']);
+ get('sortFiles').value='size';get('sortDirection').value='asc';
+ assert.deepEqual(app.currentMatches().map(x=>x.name),['other.webp','b.png','a.svg']);
+ get('sortDirection').value='desc';
+ assert.deepEqual(app.currentMatches().map(x=>x.name),['a.svg','b.png','other.webp']);
+ get('sortFiles').value='name';get('sortDirection').value='asc';get('groupFolders').value='folder';
+ assert.deepEqual(app.currentMatches().map(x=>x.path),['media/a.svg','media/sub/b.png','media-old/other.webp']);
+ assert.equal(app.fileFolder('media/sub/b.png'),'media/sub');
+ assert.equal(app.fileFolder('root.png'),'');
+});
+
+test('folder group dividers, paging and jump actions use real containing paths',()=>{
+ const {app,get}=boot();app.state.repo='gamesbyian/Expository';app.state.branch='main';app.state.indexReady=true;app.state.mode='list';
+ app.state.indexEntries=[
+  {type:'file',name:'a.svg',path:'art/a.svg',size:10},
+  {type:'file',name:'b.svg',path:'art/b.svg',size:10},
+  {type:'file',name:'c.svg',path:'other/c.svg',size:10}
+ ];
+ get('scope').value='allImages';get('groupFolders').value='folder';get('fileKind').value='image';
+ app.paint();
+ const host=get('items'),groups=host.children.filter(x=>x.className==='gallery-divider'),cards=host.children.filter(x=>x.className==='gallery-card');
+ assert.deepEqual(groups.map(x=>x.children[0].textContent),['art','other']);
+ assert.equal(cards.length,3);
+ get('filter').value='old query';
+ cards[0].children[1].onclick();
+ assert.equal(app.state.path,'art');
+ assert.equal(get('scope').value,'folder','jump must switch out of recursive mode');
+ assert.equal(get('filter').value,'','jump clears stale filter');
+});
+
+test('HTML thumbnail summaries are inert DOM text without loading or running scripts',()=>{
+ const {app}=boot(),thumb=fakeNode();
+ const file={name:'dashboard.html',path:'preview/dashboard.html'};
+ const malicious='<title>Report</title><style>h1{color:red}</style><script>stealPrivateToken()</script><h1>Revenue</h1><p>Q3 summary</p>';
+ app.documentThumbnail(file,thumb,malicious);
+ const page=thumb.children[0];
+ assert.equal(page.className,'doc-thumbnail');
+ assert.equal(page.children[1].textContent,'Report');
+ assert.match(page.children[2].textContent,/Revenue/);
+ assert.ok(!page.children[2].textContent.includes('stealPrivateToken'),'scripts excluded from visible excerpt');
+ assert.equal(page.children.some(x=>x.tagName==='IFRAME'),false);
+});
+
 test('share hashes retain repository slash and never contain credentials',()=>{
  const {app,urls}=boot();
  app.state.repo='gamesbyian/Glimpse';app.state.branch='main';app.state.path='design/proposals';app.state.repoIsPrivate=false;app.state.token='SECRET_TEST_TOKEN';
