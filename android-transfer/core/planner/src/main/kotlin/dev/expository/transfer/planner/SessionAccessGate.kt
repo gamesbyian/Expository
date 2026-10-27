@@ -12,6 +12,16 @@ package dev.expository.transfer.planner
  * grants are RAM-only and scoped to a single process/app-session identity.
  */
 enum class ProtectedScope { LOCAL, REMOTE }
+
+/**
+ * Opaque, RAM-only session binding. LOCAL may use one explicit device-access
+ * identity; REMOTE must use each authenticated connection's own identity.
+ * Never use a URL, URI, username, hostname or filename as the identifier.
+ */
+data class ProtectedSubject(val scope: ProtectedScope, val sessionId: String) {
+    init { require(sessionId.isNotBlank()) { "Missing scoped session binding" } }
+}
+
 enum class UnlockCadence {
     ONCE_PER_APP_SESSION,
     ON_RETURN_FROM_BACKGROUND,
@@ -59,7 +69,7 @@ class SessionAccessGate(
     var policy: SessionUnlockPolicy = initialPolicy
         private set
 
-    private val grants = mutableMapOf<ProtectedScope, Grant>()
+    private val grants = mutableMapOf<ProtectedSubject, Grant>()
     private var backgroundGeneration = 0L
 
     /** Changing security/convenience settings revokes all previously issued grants. */
@@ -76,12 +86,12 @@ class SessionAccessGate(
      * must bind one unique, immutable approved action identifier.
      */
     fun onPlatformAuthenticationSucceeded(
-        scope: ProtectedScope,
+        subject: ProtectedSubject,
         nowMillis: Long,
         operationId: String? = null
     ) {
         require(nowMillis >= 0)
-        val current = policy.forScope(scope)
+        val current = policy.forScope(subject.scope)
         if (!current.enabled) return
         if (current.cadence == UnlockCadence.PER_PROTECTED_ACTION)
             require(!operationId.isNullOrBlank()) {
@@ -90,32 +100,34 @@ class SessionAccessGate(
         else require(operationId == null) {
             "Session unlock must not borrow a protected operation identifier"
         }
-        grants[scope] = Grant(
+        grants[subject] = Grant(
             nowMillis, nowMillis, backgroundGeneration, operationId)
     }
 
     /** Background return is a separate event, never inferred from recomposition. */
     fun onAppBackgrounded() {
         if (backgroundGeneration < Long.MAX_VALUE) backgroundGeneration++
-        grants.keys.toList().forEach { scope ->
-            if (policy.forScope(scope).cadence ==
-                UnlockCadence.ON_RETURN_FROM_BACKGROUND) grants.remove(scope)
+        grants.keys.toList().forEach { subject ->
+            if (policy.forScope(subject.scope).cadence in setOf(
+                UnlockCadence.ON_RETURN_FROM_BACKGROUND,
+                UnlockCadence.PER_PROTECTED_ACTION
+            )) grants.remove(subject)
         }
     }
 
     /** True for disabled gates or a current device-verified unlock only. */
-    fun canView(scope: ProtectedScope, nowMillis: Long): Boolean {
-        if (!policy.forScope(scope).enabled) return true
-        val grant = grants[scope] ?: return false
+    fun canView(subject: ProtectedSubject, nowMillis: Long): Boolean {
+        if (!policy.forScope(subject.scope).enabled) return true
+        val grant = grants[subject] ?: return false
         if (nowMillis < grant.authenticatedAt || nowMillis < grant.lastInteractionAt)
             return false
-        return when (policy.forScope(scope).cadence) {
+        return when (policy.forScope(subject.scope).cadence) {
             UnlockCadence.ONCE_PER_APP_SESSION -> true
             UnlockCadence.ON_RETURN_FROM_BACKGROUND ->
                 grant.backgroundGeneration == backgroundGeneration
             UnlockCadence.AFTER_IDLE ->
                 nowMillis - grant.lastInteractionAt <=
-                    policy.forScope(scope).idleTimeoutMillis
+                    policy.forScope(subject.scope).idleTimeoutMillis
             UnlockCadence.PER_PROTECTED_ACTION -> true
         }
     }
@@ -124,9 +136,9 @@ class SessionAccessGate(
      * UI should call this only for genuine user interactions, never render
      * frames or background polls. It can't resurrect an expired grant.
      */
-    fun noteUserInteraction(scope: ProtectedScope, nowMillis: Long) {
-        if (canView(scope, nowMillis) && nowMillis >= 0) {
-            grants[scope]?.lastInteractionAt = nowMillis
+    fun noteUserInteraction(subject: ProtectedSubject, nowMillis: Long) {
+        if (canView(subject, nowMillis) && nowMillis >= 0) {
+            grants[subject]?.lastInteractionAt = nowMillis
         }
     }
 
@@ -137,29 +149,32 @@ class SessionAccessGate(
      * half-authorized Local->Remote mutations or token replay.
      */
     fun authorizeAction(
-        scopes: Set<ProtectedScope>,
+        subjects: Set<ProtectedSubject>,
         operationId: String,
         nowMillis: Long
     ): Boolean {
-        if (scopes.isEmpty() || operationId.isBlank() || nowMillis < 0) return false
-        val allowed = scopes.all { scope ->
-            val cfg = policy.forScope(scope)
-            if (!canView(scope, nowMillis)) false
+        if (subjects.isEmpty() || operationId.isBlank() || nowMillis < 0) return false
+        val allowed = subjects.all { subject ->
+            val cfg = policy.forScope(subject.scope)
+            if (!canView(subject, nowMillis)) false
             else if (!cfg.enabled ||
                 cfg.cadence != UnlockCadence.PER_PROTECTED_ACTION) true
-            else grants[scope]?.let {
+            else grants[subject]?.let {
                 !it.used && it.operationId == operationId
             } == true
         }
         if (!allowed) return false
-        scopes.forEach { scope ->
-            val cfg = policy.forScope(scope)
+        subjects.forEach { subject ->
+            val cfg = policy.forScope(subject.scope)
             if (cfg.enabled && cfg.cadence ==
-                UnlockCadence.PER_PROTECTED_ACTION) grants[scope]?.used = true
-            noteUserInteraction(scope, nowMillis)
+                UnlockCadence.PER_PROTECTED_ACTION) grants[subject]?.used = true
+            noteUserInteraction(subject, nowMillis)
         }
         return true
     }
+
+    /** Endpoint disconnect/swap/reauth never conveys its old access grant. */
+    fun lock(subject: ProtectedSubject) { grants.remove(subject) }
 
     /** Explicit user Lock or process-end clears all grants, not just UI flags. */
     fun lock() { grants.clear() }
