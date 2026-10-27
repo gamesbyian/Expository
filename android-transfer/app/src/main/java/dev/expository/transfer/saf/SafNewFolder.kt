@@ -30,20 +30,28 @@ internal data class SafFolderCreateReceipt(
  * complete and bounded; confirmation re-observes the identical parent/siblings.
  * No inferred file paths, persisted permissions, overwrite or implicit retry.
  */
+internal object SafFolderPolicy {
+    fun validName(value: String): Boolean =
+        value.isNotBlank() && value != "." && value != ".." &&
+            value.toByteArray(Charsets.UTF_8).size <= 255 &&
+            value.none { it == '/' || it == '\\' || it.code < 32 || it.code == 127 }
+
+    fun normalized(value: String): String =
+        Normalizer.normalize(value, Normalizer.Form.NFC).lowercase(Locale.ROOT)
+
+    fun canName(name: String, siblings: List<String>): Boolean {
+        if (!validName(name) || siblings.any { !validName(it) }) return false
+        val names = siblings.map(::normalized)
+        return names.size == names.toSet().size && normalized(name) !in names
+    }
+}
+
 internal class SafNewFolder(
     private val resolver: ContentResolver,
     private val storageForPlan: (String) -> AtomicAttemptStorage
 ) {
     private fun document(uri: Uri, id: String) =
         DocumentsContract.buildDocumentUriUsingTree(uri, id)
-
-    private fun validName(value: String): Boolean =
-        value.isNotBlank() && value != "." && value != ".." &&
-            value.toByteArray(Charsets.UTF_8).size <= 255 &&
-            value.none { it == '/' || it == '\\' || it.code < 32 || it.code == 127 }
-
-    private fun normalized(value: String) =
-        Normalizer.normalize(value, Normalizer.Form.NFC).lowercase(Locale.ROOT)
 
     private fun digest(parts: List<String>): String {
         val md = MessageDigest.getInstance("SHA-256")
@@ -58,7 +66,7 @@ internal class SafNewFolder(
 
     private fun observe(req: SafFolderCreateRequest): Pair<String, Set<String>> {
         require(req.writeGranted && LocalTreeReader.validTree(req.treeUri) &&
-            req.parentId.isNotBlank() && validName(req.name)) {
+            req.parentId.isNotBlank() && SafFolderPolicy.validName(req.name)) {
             "INVALID_SCOPED_CREATE_REQUEST"
         }
         val parent = document(req.treeUri, req.parentId)
@@ -87,9 +95,9 @@ internal class SafNewFolder(
         val siblings = LocalTreeReader.list(
             resolver, req.treeUri, req.parentId, LocalTreeReader.MAX_BROWSE)
         require(siblings.complete) { "INCOMPLETE_PARENT_LISTING" }
-        val names = siblings.children.map { normalized(it.title) }
-        require(names.size == names.toSet().size) { "AMBIGUOUS_SIBLING_NAMES" }
-        require(normalized(req.name) !in names) { "DESTINATION_ALREADY_EXISTS" }
+        require(SafFolderPolicy.canName(
+            req.name, siblings.children.map { it.title }
+        )) { "COLLISION_OR_AMBIGUOUS_SIBLING_NAMES" }
         val listing = siblings.children.sortedBy { it.documentId }.flatMap {
             listOf(it.documentId, it.title, it.directory.toString(),
                 it.bytes?.toString().orEmpty())
