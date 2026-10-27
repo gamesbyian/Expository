@@ -41,6 +41,8 @@ object JournaledRenameSuite {
         var driftAfterFirstAtPreflight = false
         var corruptAfterMutation = false
         var rejectAllMutations = false
+        var revokeRenameBeforeSecond = false
+        var revokeTempBeforeFirst = false
 
         override fun observe(): RenameSnapshot {
             observes++
@@ -50,7 +52,17 @@ object JournaledRenameSuite {
             if (corruptAfterMutation && operations > 0)
                 rows = rows.map { if (it.id == base.children[0].id)
                     it.copy(version = "server-content-drift") else it }
+            val capabilities = when {
+                revokeRenameBeforeSecond && operations == 1 && observes >= 4 ->
+                    base.location.capabilities + (Capability.RENAME to
+                        CapabilityProof(Support.UNKNOWN, "revoked-before-second", 0L))
+                revokeTempBeforeFirst && observes >= 2 ->
+                    base.location.capabilities + (Capability.TEMP_RENAME to
+                        CapabilityProof(Support.UNKNOWN, "revoked-before-stage", 0L))
+                else -> base.location.capabilities
+            }
             return base.copy(children = rows,
+                location = base.location.copy(capabilities = capabilities),
                 listingRevision = if (operations == 0) base.listingRevision
                     else "after-step-$operations")
         }
@@ -73,12 +85,13 @@ object JournaledRenameSuite {
         val plan = RenamePlanner.preview(original, recipe, NOW)
         val storage = mutableMapOf<Int, MemoryStorage>()
         val recipe = recipe
+        var clockMillis: () -> Long = { NOW }
         fun run(continueRequested: () -> Boolean = { true }): RenameExecutionReceipt =
             JournaledRenameEngine.execute(plan, recipe, endpoint,
                 { digest, step ->
                     check(digest == plan.digest)
                     storage.getOrPut(step) { MemoryStorage() }
-                }, NOW, continueRequested)
+                }, NOW, continueRequested, clockMillis)
         fun state(step: Int): JournalState? =
             storage[step]?.let { DurableAttemptJournal(it).current()?.state }
     }
@@ -155,6 +168,47 @@ object JournaledRenameSuite {
             check(receipt.verifiedSteps == 1)
             check(f.endpoint.operations == 1)
             check(f.state(0) == JournalState.VERIFIED && f.state(1) == null)
+        }
+        scenario("revoke rename proof between items stops without second journal") {
+            val f = Fixture(arrayOf("a.txt", "b.txt"),
+                RenameRecipe(listOf(RenameEdit.Prefix("new-"))))
+            f.endpoint.revokeRenameBeforeSecond = true
+            val receipt = f.run()
+            check(receipt.proof == RenameExecutionProof.STOPPED_AFTER_VERIFIED_STEPS)
+            check(receipt.verifiedSteps == 1 && f.endpoint.operations == 1)
+            check(f.state(0) == JournalState.VERIFIED && f.state(1) == null)
+        }
+        scenario("expired grant stops after first verified item") {
+            val f = Fixture(arrayOf("a.txt", "b.txt"),
+                RenameRecipe(listOf(RenameEdit.Prefix("new-"))))
+            f.clockMillis = {
+                if (f.endpoint.observes >= 4) 100_001L else NOW
+            }
+            val receipt = f.run()
+            check(receipt.proof == RenameExecutionProof.STOPPED_AFTER_VERIFIED_STEPS)
+            check(receipt.verifiedSteps == 1 && f.endpoint.operations == 1)
+            check(f.state(0) == JournalState.VERIFIED && f.state(1) == null)
+        }
+        scenario("temporary staging authorization revoked before first mutation") {
+            val f = Fixture(arrayOf("A", "B"), RenameRecipe(listOf(
+                RenameEdit.Replace("A", "tmp-token"),
+                RenameEdit.Replace("B", "A"),
+                RenameEdit.Replace("tmp-token", "B")
+            )))
+            check(f.plan.executable && f.plan.steps.first().phase == RenamePhase.STAGE)
+            f.endpoint.revokeTempBeforeFirst = true
+            check(f.run().proof == RenameExecutionProof.BLOCKED)
+            check(f.endpoint.operations == 0 && f.storage.isEmpty())
+        }
+        scenario("grant expires after write acknowledgement remains uncertain") {
+            val f = Fixture(arrayOf("a.txt"),
+                RenameRecipe(listOf(RenameEdit.Prefix("new-"))))
+            f.clockMillis = {
+                if (f.endpoint.observes >= 3) 100_001L else NOW
+            }
+            val result = f.run()
+            check(result.proof == RenameExecutionProof.UNCERTAIN)
+            check(f.endpoint.operations == 1 && f.state(0) == JournalState.UNCERTAIN)
         }
         scenario("operator stops only between verified steps") {
             val f = Fixture(arrayOf("a.txt", "b.txt"), RenameRecipe(listOf(RenameEdit.Prefix("new-"))))
