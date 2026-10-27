@@ -44,6 +44,11 @@ import dev.expository.transfer.saf.TreeCopyPreflight
  * local-to-local Copy and explicitly requested bounded Local-to-SFTP
  * uploads can run between panes. Other remote cross-pane writes remain gated.
  */
+internal data class RemotePeerContext(
+    val uploadSources: List<LocalPaneUploadSource>,
+    val downloadTarget: LocalPaneDownloadTarget?
+)
+
 @Composable
 internal fun DualWorkspaceCard(
     workspace: TransferWorkspaceState,
@@ -72,18 +77,24 @@ internal fun DualWorkspaceCard(
     // unrelated connection; switching endpoint tears down its old session.
     var remoteSwapped by remember { mutableStateOf(false) }
     val connectionA = remember {
-        movableContentOf<BrowseEndpoint, List<LocalPaneUploadSource>> { endpoint, peerSources ->
+        movableContentOf<BrowseEndpoint, RemotePeerContext> { endpoint, peer ->
             when (endpoint) {
-                BrowseEndpoint.SFTP -> SftpBrowseCard(localPaneSources = peerSources)
+                BrowseEndpoint.SFTP -> SftpBrowseCard(
+                    localPaneSources = peer.uploadSources,
+                    localPaneTarget = peer.downloadTarget
+                )
                 BrowseEndpoint.FTPS -> FtpsBrowseCard()
                 else -> Unit
             }
         }
     }
     val connectionB = remember {
-        movableContentOf<BrowseEndpoint, List<LocalPaneUploadSource>> { endpoint, peerSources ->
+        movableContentOf<BrowseEndpoint, RemotePeerContext> { endpoint, peer ->
             when (endpoint) {
-                BrowseEndpoint.SFTP -> SftpBrowseCard(localPaneSources = peerSources)
+                BrowseEndpoint.SFTP -> SftpBrowseCard(
+                    localPaneSources = peer.uploadSources,
+                    localPaneTarget = peer.downloadTarget
+                )
                 BrowseEndpoint.FTPS -> FtpsBrowseCard()
                 else -> Unit
             }
@@ -93,7 +104,7 @@ internal fun DualWorkspaceCard(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Dual-location workspace", style = MaterialTheme.typography.titleLarge)
         Text(
-            "A and B have independent device-folder browsers or separately authenticated SFTP/FTPS connections. Device-to-Device Copy requires an explicit verified preflight. Local-to-SFTP Copy supports up to 12 reviewed files, each with a verified, journaled upload. Other cross-pane remote Copy and Move remain unavailable.",
+            "A and B have independent device-folder browsers or separately authenticated SFTP/FTPS connections. Device-to-Device Copy requires an explicit verified preflight. Local-to-SFTP Copy supports up to 12 reviewed files, each with a verified, journaled upload. SFTP-to-selected-device-folder Copy is also explicitly reviewed; other remote routes and cross-pane Move remain unavailable.",
             style = MaterialTheme.typography.bodySmall
         )
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -188,8 +199,10 @@ internal fun DualWorkspaceCard(
                         if (workspace.a.endpoint == BrowseEndpoint.LOCAL)
                             LocalPaneUploadSource.fromSelection(a) else emptyList()
                     }
-                    if (first) connectionA(pane.endpoint, peerSources)
-                    else connectionB(pane.endpoint, peerSources)
+                    val peerTarget = peerLocal?.let { LocalPaneDownloadTarget.from(it) }
+                    val peer = RemotePeerContext(peerSources, peerTarget)
+                    if (first) connectionA(pane.endpoint, peer)
+                    else connectionB(pane.endpoint, peer)
                 }
             }
         }
@@ -273,7 +286,7 @@ internal fun DualWorkspaceCard(
             Text("Cancel transfer")
         }
         Text(copyStatus, style = MaterialTheme.typography.bodySmall)
-        Text("Local-to-SFTP Copy is available for up to 12 selected device files after explicit review in the authenticated SFTP pane. Other cross-pane Copy/Move and local Move remain unavailable.",
+        Text("Local-to-SFTP Copy is available for up to 12 selected device files after explicit review in the authenticated SFTP pane. Other cross-pane routes and Move remain unavailable.",
             style = MaterialTheme.typography.bodySmall)
     }
 }

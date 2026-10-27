@@ -45,6 +45,9 @@ import dev.expository.transfer.sftp.SftpSession
 import dev.expository.transfer.sftp.SftpTarget
 import dev.expository.transfer.sftp.SftpToSafSave
 import dev.expository.transfer.sftp.SafToSftpUpload
+import dev.expository.transfer.sftp.SftpToSafTreeCopy
+import dev.expository.transfer.sftp.SftpTreeCopyRequest
+import dev.expository.transfer.sftp.SftpTreeCopyPreflight
 import dev.expository.transfer.sftp.SftpNewFolder
 import dev.expository.transfer.sftp.FolderCreateProof
 import dev.expository.transfer.sftp.SftpSameServerMove
@@ -77,6 +80,11 @@ internal data class PeerUploadReview(
             sessionId == liveSessionId && folder == liveFolder
 }
 
+internal data class PendingPeerSftpDownload(
+    val witness: PeerSftpDownloadWitness,
+    val preflight: SftpTreeCopyPreflight
+)
+
 internal data class RemotePickerWitness(
     val sessionId: String,
     val folder: String,
@@ -94,9 +102,10 @@ internal data class RemotePickerWitness(
  * implicit upload, background service or promise of process-death recovery.
  */
 @Composable
-fun SftpBrowseCard(
+internal fun SftpBrowseCard(
     incomingShare: IncomingShareRequest? = null,
-    localPaneSources: List<LocalPaneUploadSource> = emptyList()
+    localPaneSources: List<LocalPaneUploadSource> = emptyList(),
+    localPaneTarget: LocalPaneDownloadTarget? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -114,6 +123,7 @@ fun SftpBrowseCard(
     var browseLimit by remember { mutableStateOf(SftpBrowseBounds.INITIAL) }
     var pendingFile by remember { mutableStateOf<String?>(null) }
     var pendingPeerUpload by remember { mutableStateOf<PeerUploadReview?>(null) }
+    var pendingPeerDownload by remember { mutableStateOf<PendingPeerSftpDownload?>(null) }
     var pendingSaveWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
     var pendingUploadWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
     var pendingMove by remember { mutableStateOf<String?>(null) }
@@ -377,6 +387,7 @@ fun SftpBrowseCard(
                     browseLimit = limit
                     pendingFile = null
                     pendingPeerUpload = null
+                    pendingPeerDownload = null
                     showRenamePreview = false
                     status = if (it.truncated) {
                         "Showing " + it.entries.size + " entries. " +
@@ -389,6 +400,101 @@ fun SftpBrowseCard(
                 }
             }
             busy = false
+        }
+    }
+
+    /** Read-only preflight: neither the remote nor the local provider changes. */
+    fun preparePeerDownload(sourcePath: String, expectedRevision: String) {
+        val live = session ?: return
+        val target = localPaneTarget ?: return
+        val opaque = sessionId
+        val chosenFolder = folder
+        if (busy || opaque.isBlank() || pendingPeerDownload != null) return
+        val witness = PeerSftpDownloadWitness(
+            target, opaque, chosenFolder, sourcePath, expectedRevision)
+        busy = true
+        status = "Checking remote source and Android destination before review…"
+        scope.launch {
+            try {
+                val proposal = withContext(Dispatchers.IO) {
+                    SftpToSafTreeCopy(context.contentResolver) { digest ->
+                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                    }.prepare(live, SftpTreeCopyRequest(
+                        opaque, sourcePath, expectedRevision, target))
+                }
+                if (session !== live || sessionId != opaque || folder != chosenFolder ||
+                    localPaneTarget != target) {
+                    pendingPeerDownload = null
+                    status = "Connection, folder or opposite pane changed. No Copy approved."
+                } else if (proposal == null) {
+                    pendingPeerDownload = null
+                    status = "Copy blocked: source revision, provider creation, complete listing or collision could not be verified."
+                } else {
+                    pendingPeerDownload = PendingPeerSftpDownload(witness, proposal)
+                    status = "Review the immutable destination Copy plan. No document has been created."
+                }
+            } catch (_: CancellationException) {
+                status = "Copy review canceled. No destination created."
+            } catch (_: Exception) {
+                status = "Copy preflight failed. No destination created."
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    fun executePeerDownload(pending: PendingPeerSftpDownload) {
+        val live = session ?: return
+        val witness = pending.witness
+        val revision = page?.entries?.singleOrNull { row ->
+            val path = if (folder == "/") "/" + row.name else folder + "/" + row.name
+            !row.directory && path == witness.remotePath
+        }?.revision.orEmpty()
+        if (busy || !witness.stillMatches(localPaneTarget,
+            sessionId, folder, witness.remotePath, revision)) {
+            pendingPeerDownload = null
+            status = "Copy approval expired. No destination document created."
+            return
+        }
+        pendingPeerDownload = null
+        val permit = AtomicBoolean(true)
+        continueCopy = permit
+        transferKind = "Peer download"
+        transferred = 0L
+        busy = true
+        status = "Copying to a new Android document after final preflight…"
+        scope.launch {
+            try {
+                val receipt = withContext(Dispatchers.IO) {
+                    val active = coroutineContext[Job]
+                    SftpToSafTreeCopy(context.contentResolver) { digest ->
+                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                    }.copy(live, pending.preflight,
+                        continueRequested = { permit.get() && active?.isActive == true },
+                        onProgress = { bytes -> transferred = bytes })
+                }
+                transferred = receipt.bytesWritten
+                status = when (receipt.proof) {
+                    CopyProof.BYTES_VERIFIED ->
+                        "Copy verified: the Android document read-back matched " +
+                            receipt.bytesWritten + " SFTP bytes. Refresh the other pane. " +
+                            "Cloud synchronization is not confirmed."
+                    CopyProof.WRITE_ACKNOWLEDGED ->
+                        "Provider acknowledged the Copy, but matching bytes could not be verified. Inspect destination."
+                    CopyProof.UNCERTAIN ->
+                        "Copy uncertain or partial. Inspect the destination before retrying."
+                    CopyProof.BLOCKED ->
+                        "Copy blocked by changed source, scoped permission, listing or collision. No source was deleted."
+                }
+            } catch (_: CancellationException) {
+                status = "Copy interrupted. Destination may contain partial bytes."
+            } catch (_: Exception) {
+                status = "Copy outcome uncertain. Inspect destination before retry."
+            } finally {
+                continueCopy = null
+                transferKind = ""
+                busy = false
+            }
         }
     }
 
@@ -453,6 +559,7 @@ fun SftpBrowseCard(
                                 folder = chosenFolder
                                 browseLimit = SftpBrowseBounds.INITIAL
                                 pendingPeerUpload = null
+                                pendingPeerDownload = null
                                 page = directory
                                 status = "Pinned SFTP session authenticated. Select a remote file."
                             }.onFailure {
@@ -470,6 +577,7 @@ fun SftpBrowseCard(
                         browseLimit = SftpBrowseBounds.INITIAL
                         pendingFile = null
                         pendingPeerUpload = null
+                        pendingPeerDownload = null
                         pendingMove = null
                         showRenamePreview = false
                         status = "Disconnected. Remote session cleared."
@@ -672,6 +780,47 @@ fun SftpBrowseCard(
                 if (showRenamePreview) page?.let { current ->
                     RemoteRenamePreviewCard(sessionId, folder, current, !busy)
                 }
+                pendingPeerDownload?.let { pending ->
+                    val witness = pending.witness
+                    val visibleRevision = page?.entries?.singleOrNull { row ->
+                        val path = if (folder == "/") "/" + row.name else
+                            folder + "/" + row.name
+                        !row.directory && path == witness.remotePath
+                    }?.revision.orEmpty()
+                    val valid = !busy && session != null &&
+                        witness.stillMatches(localPaneTarget, sessionId, folder,
+                            witness.remotePath, visibleRevision)
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Review SFTP → Device Copy",
+                                style = MaterialTheme.typography.titleMedium)
+                            Text("Source: " + pending.preflight.sourceName +
+                                " (" + pending.preflight.sourceSize + " bytes)")
+                            Text("Destination: the opposite pane's chosen Android folder")
+                            Text("Plan: " + pending.preflight.plan.digest.take(12) + "…")
+                            Text("Creates a new document after fresh collision and source " +
+                                "checks. No overwrite, no source deletion or automatic retry. " +
+                                "A partial document may remain after interruption.",
+                                style = MaterialTheme.typography.bodySmall)
+                            if (!valid) Text("Folder, session, source or scoped destination " +
+                                "changed. Cancel and review again.",
+                                style = MaterialTheme.typography.bodySmall)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(enabled = valid,
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    onClick = { executePeerDownload(pending) }) {
+                                    Text("Confirm Device Copy")
+                                }
+                                Button(enabled = !busy,
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    onClick = { pendingPeerDownload = null }) {
+                                    Text("Cancel proposal")
+                                }
+                            }
+                        }
+                    }
+                }
                 val entries = page?.entries.orEmpty()
                 LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -703,6 +852,15 @@ fun SftpBrowseCard(
                                                 putExtra(Intent.EXTRA_TITLE, entry.name)
                                             })
                                         }) { Text("Save As…") }
+                                    if (localPaneTarget != null) {
+                                        Button(
+                                            enabled = !busy && pendingPeerDownload == null,
+                                            modifier = Modifier.heightIn(min = 48.dp),
+                                            onClick = {
+                                                preparePeerDownload(path, entry.revision)
+                                            }
+                                        ) { Text("Copy into other device pane…") }
+                                    }
                                     Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
                                         onClick = {
                                             pendingMove = path
