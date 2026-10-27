@@ -93,9 +93,40 @@ class WorkspaceNavigationUiTest {
             val roots = device.findObject(androidx.test.uiautomator.By.desc("Show roots"))
                 ?: device.findObject(androidx.test.uiautomator.By.descContains("navigation"))
             roots?.click()
+            // Downloads in the picker side rail may be a synthetic recent-
+            // downloads collection, not the physical Download directory.
+            // Try its content first, then explicitly navigate the external
+            // storage volume and the concrete Download child.
             if (device.wait(androidx.test.uiautomator.Until.hasObject(
                     androidx.test.uiautomator.By.text("Downloads")), 8_000L)) {
                 tapText("Downloads", "TREE_DOWNLOADS_ROOT")
+            }
+            val foundInDownloads = device.wait(
+                androidx.test.uiautomator.Until.hasObject(
+                    androidx.test.uiautomator.By.text(folder)), 2_000L)
+            if (!foundInDownloads) {
+                val reopen = device.findObject(
+                    androidx.test.uiautomator.By.desc("Show roots"))
+                    ?: device.findObject(
+                        androidx.test.uiautomator.By.descContains("navigation"))
+                reopen?.click()
+                // The disposable Google APIs emulator's physical storage
+                // label varies by image and configuration.
+                val physicalRoot = listOf(
+                    "Internal storage", "Internal shared storage",
+                    "sdk_gphone64_x86_64", "sdk_gphone_x86_64",
+                    "Pixel_6", "Pixel 6", "emulator"
+                ).firstOrNull { label ->
+                    device.wait(androidx.test.uiautomator.Until.hasObject(
+                        androidx.test.uiautomator.By.text(label)), 600L)
+                }
+                if (physicalRoot != null) {
+                    tapText(physicalRoot, "TREE_PHYSICAL_VOLUME")
+                    if (device.wait(androidx.test.uiautomator.Until.hasObject(
+                            androidx.test.uiautomator.By.text("Download")), 5_000L)) {
+                        tapText("Download", "TREE_PHYSICAL_DOWNLOAD_DIRECTORY")
+                    }
+                }
             }
             tapText(folder, "TREE_SUBFOLDER")
             assertTrue("The test's synthetic subfolder must be selectable",
