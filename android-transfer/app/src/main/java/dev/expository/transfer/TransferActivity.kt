@@ -50,6 +50,7 @@ import dev.expository.transfer.saf.TreeCopyRequest
 import dev.expository.transfer.saf.TreeCopyPreflight
 import dev.expository.transfer.saf.SafTreeToTreeCopy
 import dev.expository.transfer.engine.CopyProof
+import dev.expository.transfer.sftp.SftpAndroidCompat
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 
 /** Android-native picker-first transfer shell; synthetic planner stays isolated in Demo. */
@@ -88,6 +89,9 @@ class TransferActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // MINA's supported Android hooks avoid depending on absent Java
+        // user.home/user.dir properties. Resolve only app-private storage.
+        SftpAndroidCompat.configurePrivateHome(applicationContext.filesDir.toPath())
         if (intent?.action == Intent.ACTION_SEND ||
             intent?.action == Intent.ACTION_SEND_MULTIPLE) ingestIncomingShare(intent)
         setContent {
