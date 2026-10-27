@@ -443,7 +443,11 @@ class LocalPickerPositiveCopyTest {
             }
             if (fileCount == 2) {
                 compose.onNodeWithText(extraName).assertExists()
-                compose.onNodeWithText("Select")
+                // Both rows can contribute 'Select' semantics when one
+                // already shows '✓ Select'. The extra fixture sorts second;
+                // target that exact row and require the selected count to
+                // become two before opening the destination pane.
+                compose.onAllNodesWithText("Select").onLast()
                     .performSemanticsAction(SemanticsActions.OnClick)
                 compose.waitUntil(15_000L) {
                     compose.onAllNodesWithText("Selected: 2").fetchSemanticsNodes()
