@@ -76,6 +76,8 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 .items.list .gallery-card{flex-direction:row;align-items:stretch}.items.list .gallery-card .tile{min-width:0}.items.list .gallery-card .folder-jump{max-width:32%;flex:0 0 auto;align-self:stretch}
 .doc-thumbnail{box-sizing:border-box;width:100%;height:100%;padding:10px;display:flex;flex-direction:column;align-items:stretch;gap:7px;overflow:hidden;background:linear-gradient(145deg,#f9fafc,#dbe2ee);color:#263148;text-align:left}.doc-thumbnail .doc-type{font-size:9px;font-weight:800;letter-spacing:.14em;color:#5274a4}.doc-thumbnail .doc-title{font-size:12px;line-height:1.3;overflow-wrap:anywhere;max-height:36px;overflow:hidden}.doc-thumbnail .doc-excerpt{font-size:9px;line-height:1.45;color:#69768b;overflow:hidden;overflow-wrap:anywhere}.items.list .doc-thumbnail{padding:5px;gap:2px}.items.list .doc-thumbnail .doc-title{font-size:9px;max-height:22px}.items.list .doc-thumbnail .doc-excerpt{display:none}
 @media(max-width:420px){.items.list .gallery-card{flex-direction:column}.items.list .gallery-card .folder-jump{max-width:none}}
+
+.zip-browser{width:100%;min-width:0}.zip-controls{display:flex;gap:8px;flex-wrap:wrap}.zip-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:9px}.zip-list button{text-align:left;min-height:48px;overflow-wrap:anywhere}.zip-member{background:var(--panel2);border:1px solid var(--stroke);border-radius:10px;padding:10px;color:var(--text);display:flex;flex-direction:column;gap:5px}.zip-mini{height:88px;display:grid;place-items:center}.zip-mini img{max-width:100%;max-height:88px;object-fit:contain}
 </style>
 </head>
 <body>
@@ -104,6 +106,100 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 <section id="preview" class="preview" role="dialog" aria-modal="true" aria-label="File preview"><div class="preview-head"><button id="prevPreview" class="icon-btn" aria-label="Previous file" title="Previous file">‹</button><button id="nextPreview" class="icon-btn" aria-label="Next file" title="Next file">›</button><strong id="previewTitle"></strong><button id="compareAction" class="pill" hidden aria-label="Pin image for visual comparison">Pin A</button><button id="copyRaw" class="pill" hidden aria-label="Copy file text">Copy text</button><button id="downloadRaw" class="pill" hidden aria-label="Download original file">Download</button><button id="previewFolder" class="pill" title="Open containing folder" aria-label="Open containing folder">Folder ↳</button><button id="copyFile" class="pill" title="Copy file deep link" aria-label="Copy file deep link">Copy ↗</button><a id="fileLink" class="pill" target="_blank" rel="noopener noreferrer" aria-label="View file on GitHub">Git ↗</a><button id="closePreview" class="icon-btn" aria-label="Close preview">✕</button></div><div id="inspectTools" class="inspect-tools" hidden><button id="fileHistory" class="pill">History</button><button id="structuredToggle" class="pill" hidden>JSON tree</button></div><div class="preview-body" id="previewBody"></div></section>
 <script>
 (()=>{'use strict';
+
+const ZIP_MAX_BYTES=24*1024*1024,ZIP_ENTRY_MAX=16*1024*1024,ZIP_TOTAL_MAX=128*1024*1024,ZIP_MAX_FILES=2000;
+let zipContext=null;
+function zipManifest(blob){
+ const fail=msg=>{throw Error('ZIP: '+msg)};
+ if(blob.size>ZIP_MAX_BYTES)fail('archive exceeds the 24 MB browser-inspection limit');
+ return blob.arrayBuffer().then(buffer=>{
+  const bytes=new Uint8Array(buffer),v=new DataView(buffer);let eocd=-1;
+  for(let i=bytes.length-22;i>=Math.max(0,bytes.length-65557);i--)if(v.getUint32(i,true)===0x06054b50){eocd=i;break}
+  if(eocd<0)fail('end directory not found');
+  const count=v.getUint16(eocd+10,true),size=v.getUint32(eocd+12,true),offset=v.getUint32(eocd+16,true);
+  if(count===65535||size===0xffffffff||offset===0xffffffff)fail('ZIP64 requires another reader');
+  if(count>ZIP_MAX_FILES)fail('too many files');
+  if(offset+size>eocd)fail('invalid central directory');
+  const decoder=new TextDecoder('utf-8',{fatal:false}),entries=[];let pos=offset,total=0;
+  for(let i=0;i<count;i++){
+   if(pos+46>bytes.length||v.getUint32(pos,true)!==0x02014b50)fail('bad central directory entry');
+   const flags=v.getUint16(pos+8,true),method=v.getUint16(pos+10,true),crc=v.getUint32(pos+16,true),
+    compressed=v.getUint32(pos+20,true),uncompressed=v.getUint32(pos+24,true),
+    nameLen=v.getUint16(pos+28,true),extraLen=v.getUint16(pos+30,true),commentLen=v.getUint16(pos+32,true),
+    local=v.getUint32(pos+42,true);
+   if(pos+46+nameLen+extraLen+commentLen>bytes.length)fail('truncated entry');
+   const name=decoder.decode(bytes.subarray(pos+46,pos+46+nameLen)).replace(/\\/g,'/');
+   pos+=46+nameLen+extraLen+commentLen;
+   if(!name||name.startsWith('/')||name.includes('\0')||name.split('/').some(x=>x==='..'||x==='.')||/^[a-zA-Z]:/.test(name))continue;
+   if(name.endsWith('/'))continue;
+   if(uncompressed>ZIP_ENTRY_MAX||compressed>ZIP_MAX_BYTES)continue;
+   total+=uncompressed;if(total>ZIP_TOTAL_MAX)fail('uncompressed total exceeds 128 MB');
+   if(local+30>bytes.length||v.getUint32(local,true)!==0x04034b50)continue;
+   const start=local+30+v.getUint16(local+26,true)+v.getUint16(local+28,true);
+   if(start+compressed>bytes.length)continue;
+   entries.push({name,path:name,size:uncompressed,compressed,method,flags,crc,start,type:'file'});
+  }
+  return {blob,entries,skipped:count-entries.length};
+ });
+}
+function zipCRC(bytes){
+ let crc=0xffffffff;for(const b of bytes){crc^=b;for(let k=0;k<8;k++)crc=(crc>>>1)^((crc&1)?0xedb88320:0)}
+ return (crc^0xffffffff)>>>0
+}
+async function unzipMember(manifest,entry){
+ if(entry.flags&1)throw Error('Encrypted ZIP entries are unsupported.');
+ if(entry.method!==0&&entry.method!==8)throw Error('Unsupported ZIP compression method '+entry.method);
+ const piece=manifest.blob.slice(entry.start,entry.start+entry.compressed);
+ let result=piece;
+ if(entry.method===8){
+  if(typeof DecompressionStream!=='function')throw Error('This browser cannot decode ZIP deflate streams.');
+  result=await new Response(piece.stream().pipeThrough(new DecompressionStream('deflate-raw'))).blob();
+ }
+ if(result.size!==entry.size||result.size>ZIP_ENTRY_MAX)throw Error('ZIP member length mismatch.');
+ const data=new Uint8Array(await result.arrayBuffer());
+ if(zipCRC(data)!==entry.crc)throw Error('ZIP member checksum mismatch.');
+ return withMediaType(new Blob([data]),entry.name.split('/').at(-1));
+}
+function zipViewer(manifest,parent,folder=''){
+ const root=elem('div','zip-browser');const heading=elem('div','zip-controls');
+ const up=elem('button','pill','← '+(folder?'Up a folder':'Repository file'));up.onclick=()=>folder?showContent(zipViewer(manifest,parent,folder.split('/').slice(0,-1).join('/'))):openPreview(parent);
+ const downloadAll=elem('button','pill','Extract all to device');
+ downloadAll.onclick=async()=>{
+  if(typeof window.showDirectoryPicker!=='function'){status('Folder extraction is unavailable in this browser. Open individual files to download them, or download the original ZIP.');return}
+  try{
+   const directory=await window.showDirectoryPicker({mode:'readwrite'});const errors=[];
+   for(const entry of manifest.entries){
+    try{
+     let dest=directory;const parts=entry.name.split('/');
+     for(const p of parts.slice(0,-1))dest=await dest.getDirectoryHandle(p,{create:true});
+     const file=await dest.getFileHandle(parts.at(-1),{create:true});
+     const writer=await file.createWritable();try{await writer.write(await unzipMember(manifest,entry));await writer.close()}catch(e){await writer.abort().catch(()=>{});throw e}
+    }catch(e){errors.push(entry.name+': '+e.message)}
+   }
+   status(errors.length?'ZIP extraction incomplete: '+errors.length+' entries failed.':'Extracted '+manifest.entries.length+' files to the selected device folder.');
+  }catch(e){status('ZIP extraction cancelled or failed: '+e.message)}
+ };
+ heading.append(up,downloadAll);root.append(heading);
+ const summary=elem('p','hint',manifest.entries.length+' safe files · '+manifest.skipped+' unsupported or excluded · local browser decoding, no repository changes');
+ root.append(summary);
+ const listing=elem('div','zip-list'),prefix=folder?folder+'/':'',folders=new Set(),files=[];
+ for(const entry of manifest.entries){if(!entry.name.startsWith(prefix))continue;const remain=entry.name.slice(prefix.length);if(remain.includes('/'))folders.add(remain.split('/')[0]);else files.push(entry)}
+ for(const dirname of [...folders].sort()){
+  const b=elem('button','pill','📁 '+dirname);b.onclick=()=>showContent(zipViewer(manifest,parent,prefix+dirname));listing.append(b)
+ }
+ for(const entry of files.sort((a,b)=>a.name.localeCompare(b.name))){
+  const b=elem('button','zip-member');b.append(elem('span','filename',entry.name.split('/').at(-1)),elem('span','meta',formatSize(entry.size)));
+  b.onclick=()=>openPreview({path:parent.path,name:entry.name.split('/').at(-1),size:entry.size,type:'file',zipMember:entry,zipParent:parent});
+  if(imageRx.test(entry.name)&&entry.size<=2e6){
+   const thumb=elem('span','zip-mini');b.prepend(thumb);
+   unzipMember(manifest,entry).then(blob=>{if(b.isConnected){const img=elem('img');img.alt='';img.src=blobUrl(blob,'preview');thumb.append(img)}}).catch(()=>{});
+  }
+  listing.append(b)
+ }
+ if(!files.length&&!folders.size)listing.append(elem('p','hint','Folder is empty.'));
+ root.append(listing);return root
+}
+
 const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0,selectionMode:false,selected:new Map(),sheetSeq:0,sheetOpen:false,activeRequests:new Set(),rateLimitedUntil:0,folderRecoveryKey:'',sizeOpen:false,imageFullscreenCleanup:null};
 const codeRx=/\.(?:js|jsx|mjs|ts|tsx|py|rs|go|java|kt|c|cpp|h|hpp|sh|css|scss|html|sql|gradle)$/i,docsRx=/\.(?:md|markdown|txt|pdf|rst)$/i,dataRx=/\.(?:json|csv|tsv|yaml|yml|xml|toml|ini|properties)$/i;
 const docThumbRx=/\.(?:html?|md|markdown|txt|json|csv|tsv|ya?ml|xml|pdf|css)$/i,previewableRx=/\.(?:png|jpe?g|webp|gif|svg|avif|bmp|html?|md|markdown|txt|json|csv|tsv|ya?ml|xml|pdf|css)$/i;
@@ -872,7 +968,8 @@ function jsonViewer(value){
 async function renderCurrentFile(){
  const item=state.preview,blob=state.currentBlob;if(!item||!blob)return;
  closeImageFullscreen();clearUrls('preview');const lower=item.name.toLowerCase();let node;
- if(imageRx.test(lower))node=imageViewer(blob,item);
+ if(/\.zip$/i.test(lower)&&!item.zipMember){zipContext=await zipManifest(blob);node=zipViewer(zipContext,item)}
+ else if(imageRx.test(lower))node=imageViewer(blob,item);
  else if(/\.pdf$/i.test(lower)){node=elem('iframe');node.title=item.name;node.src=blobUrl(new Blob([blob],{type:'application/pdf'}))}
  else if(/\.(mp4|webm|ogg)$/i.test(lower)){node=elem('video');node.controls=true;node.src=blobUrl(blob)}
  else if(/\.(mp3|wav|m4a|flac)$/i.test(lower)){node=elem('audio');node.controls=true;node.src=blobUrl(blob)}
@@ -887,7 +984,7 @@ async function renderCurrentFile(){
    node=state.structuredOpen?tableViewer(text.slice(0,500000),/\.tsv$/i.test(lower)?'\t':','):sourceViewer(text.slice(0,500000),item.name,text.length>500000);
   }else node=/\.(md|markdown)$/i.test(lower)?simpleMarkdown(text.slice(0,500000),item):sourceViewer(text.slice(0,500000),item.name,text.length>500000);
  }else node=elem('div','message','No inline preview for this format. Use the GitHub link.');
- showContent(node);updateCompareAction()
+ showContent(node);if(item.zipMember&&zipContext){const back=elem('button','pill','← Back to ZIP');back.onclick=()=>openPreview(item.zipParent);$('previewBody').prepend(back)}updateCompareAction()
 }
 async function toggleStructured(){if(!state.preview||!state.previewText)return;state.structuredOpen=!state.structuredOpen;await renderCurrentFile()}
 async function toggleHistory(){
@@ -1078,6 +1175,7 @@ function tableViewer(text,delimiter){
 
 async function openPreview(item){
  if(!safeRepoPath(item?.path)||!item.path){status('Invalid preview path.');return}
+ if(!item.zipMember)zipContext=null;
  state.sheetOpen=false;++state.sheetSeq;
  for(const id of ['prevPreview','nextPreview','fileLink','copyFile'])$(id).hidden=false;
  if(!state.preview)state.returnFocus=document.activeElement;
@@ -1085,12 +1183,12 @@ async function openPreview(item){
  $('fileHistory').textContent='History';$('inspectTools').hidden=false;$('structuredToggle').hidden=true;
  $('copyRaw').hidden=true;$('downloadRaw').hidden=true;state.compareMode=false;
  previewButtons();updateCompareAction();updateHash(item.path);
- $('previewTitle').textContent=item.name;$('fileLink').href='https://github.com/'+state.repo+'/blob/'+enc(state.branch)+'/'+pathPart(item.path);
+ $('previewTitle').textContent=item.name;$('fileLink').hidden=Boolean(item.zipMember);$('fileHistory').hidden=Boolean(item.zipMember);$('prevPreview').disabled=Boolean(item.zipMember);$('nextPreview').disabled=Boolean(item.zipMember);$('fileLink').href='https://github.com/'+state.repo+'/blob/'+enc(state.branch)+'/'+pathPart(item.path);
  $('preview').classList.add('open');$('scrim').classList.add('on');$('pageHeader').inert=true;$('pageMain').inert=true;$('closePreview').focus();
  showContent(elem('div','message','Loading preview…'));
  try{
   if(item.size>20e6){showContent(elem('div','message','Large file. Open it on GitHub to download.'));return}
-  const blob=await fetchBlob(item);if(state.preview!==item)return;
+  const blob=item.zipMember&&zipContext?await unzipMember(zipContext,item.zipMember):await fetchBlob(item);if(state.preview!==item)return;
   state.currentBlob=blob;$('downloadRaw').hidden=false;await renderCurrentFile();
  }catch(e){if(state.preview===item)showContent(elem('div','message','Preview unavailable: '+e.message))}
 }
