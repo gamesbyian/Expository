@@ -24,6 +24,11 @@ on:
         default: false
 permissions:
   contents: read
+# Replace stale cheap PR validation when a newer commit arrives, but never
+# cancel an explicitly requested trusted-main lab, emulator or APK dispatch.
+concurrency:
+  group: transfer-native-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   planner:
     if: github.event_name != 'issue_comment'
