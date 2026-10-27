@@ -29,3 +29,7 @@ PR #47 introduces explicit one-file Move between distinct folders of the *same* 
 
 ## Evidence
 Synthetic fixture data are **E1**, an APK compilation artifact is **build provenance**, not a device acceptance. Keep debug APK artifacts at short retention; no user data in screenshot jobs. Real device, server and OAuth tests must be opt-in with separately documented consent and scope.
+
+## Future cloud and GitHub endpoint security (2026-10-27)
+
+Follow [universal locations](../docs/android-transfer/UNIVERSAL-LOCATIONS.md) before building cloud/repository adapters. Android DocumentsUI URI grants, Drive OAuth account scopes and GitHub auth tokens are **three distinct authorities**; never infer one from another, reuse the web explorer token, or silently escalate permissions. Only persist eligible Android URI grants; validate live capability before each mutation, support revocation/account switch, keep auth material in protected device-local storage, and exclude secrets/private paths/file content from logs and drag payloads. Branch HEAD/revision pinning, changed-tree rejection and post-commit reconciliation are required for GitHub writes; no blind retries. Scope addition is not security acceptance.
