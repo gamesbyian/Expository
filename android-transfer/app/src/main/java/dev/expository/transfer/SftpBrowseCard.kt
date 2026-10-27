@@ -102,7 +102,7 @@ internal data class RemotePickerWitness(
  * implicit upload, background service or promise of process-death recovery.
  */
 @Composable
-fun SftpBrowseCard(
+internal fun SftpBrowseCard(
     incomingShare: IncomingShareRequest? = null,
     localPaneSources: List<LocalPaneUploadSource> = emptyList(),
     localPaneTarget: LocalPaneDownloadTarget? = null
