@@ -271,7 +271,7 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("SFTP file transfer").assertExists()
         compose.onNodeWithText("Copy A → B…").assertIsNotEnabled()
         compose.onNodeWithText("Copy B → A…").assertIsNotEnabled()
-        compose.onNodeWithText("One-file Local-to-SFTP Copy is available only by explicit action",
+        compose.onNodeWithText("Local-to-SFTP Copy is available for up to 12 selected device files",
             substring = true).assertExists()
         compose.onNodeWithText("Single view").performClick()
         compose.onNodeWithText("✓ Single view").assertExists()
