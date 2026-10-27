@@ -87,6 +87,9 @@ jobs:
           # The runner invokes one script string via sh -c; do not use a
           # multi-line if block. The optional class was already allowlisted.
           script: cd android-transfer && gradle -PwithAndroid=true ${TARGET_TEST_CLASS:+-Pandroid.testInstrumentationRunnerArguments.class=$TARGET_TEST_CLASS} :app:connectedDebugAndroidTest --no-daemon
+      - name: Summarize failed tests without disclosing provider content
+        if: failure()
+        run: python3 android-transfer/scripts/summarize_emulator_failures.py
       - name: Publish synthetic report and tested SHA
         if: always()
         shell: bash
