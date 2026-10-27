@@ -101,6 +101,26 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("Copy a file on this device").assertExists()
         compose.onNodeWithText("Sample episode.mkv").assertDoesNotExist()
     }
+    @Test fun singleLocalFolderBrowserRemainsIndependentOfDualPaneTabs() {
+        compose.onNodeWithText("✓ Single view").assertExists()
+        compose.onNodeWithText("Location Single · Device").assertExists()
+        compose.onNodeWithText("Choose folder").assertExists()
+        compose.onNodeWithText("Save copy…").assertIsNotEnabled()
+        compose.onNodeWithText("Dual-location workspace").assertDoesNotExist()
+
+        compose.onNodeWithText("Dual view").performClick()
+        compose.onNodeWithText("Location Single · Device").assertDoesNotExist()
+        compose.onNodeWithText("Location A · Device").assertExists()
+        compose.onNodeWithText("Pane B · LOCAL").performClick()
+        compose.onNodeWithText("Location B · Device").assertExists()
+
+        compose.onNodeWithText("Single view").performClick()
+        compose.onNodeWithText("Location Single · Device").assertExists()
+        compose.onNodeWithText("Location A · Device").assertDoesNotExist()
+        compose.onNodeWithText("Copy a file on this device").assertExists()
+        compose.onNodeWithText("Save copy…").assertIsNotEnabled()
+    }
+
     @Test fun dualModeHasRealIndependentDevicePanesButNoImplicitTransfer() {
         compose.onNodeWithText("✓ Single view").assertExists()
         compose.onNodeWithText("Dual view").performClick()
