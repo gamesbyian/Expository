@@ -160,6 +160,20 @@ class NewFolderPositiveProviderTest {
             val nameEditor = editor ?: error("APP_FOLDER_NAME_EDITOR_MISSING")
             nameEditor.setText(child)
             clickApp("Review New Folder")
+            // Distinguish a missing button caused by a denied provider
+            // preflight from another offscreen accessibility failure.
+            compose.waitUntil(25_000L) {
+                listOf("Review this one New Folder operation before creating it.",
+                    "New Folder blocked:", "Folder changed during review.")
+                    .any { status ->
+                        compose.onAllNodesWithText(status, substring = true)
+                            .fetchSemanticsNodes().isNotEmpty()
+                    }
+            }
+            assertTrue("SAF_MKDIR_NO_REVIEWABLE_PREFLIGHT",
+                compose.onAllNodesWithText(
+                    "Review this one New Folder operation before creating it.",
+                    substring = true).fetchSemanticsNodes().isNotEmpty())
             clickApp("Confirm New Folder")
             assertTrue("Provider-confirmed folder creation receipt must be visible",
                 device.wait(Until.hasObject(By.textContains(
