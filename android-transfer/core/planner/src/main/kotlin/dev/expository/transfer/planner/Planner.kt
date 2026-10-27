@@ -178,9 +178,15 @@ object OperationPlanner {
         for (item in sources) {
             if (item.key.authorityId != item.location.key.authorityId ||
                 item.location.key.rootId.isBlank() ||
+                item.location.key.containerId.isBlank() ||
+                item.location.key.authorityId.isBlank() ||
                 item.key.opaqueItemId.isBlank() || item.key.version.isBlank() ||
                 item.location.revision.isBlank() || item.parent.any { !validComponent(it) } ||
                 !validComponent(item.name)) blockers += "SOURCE_IDENTITY"
+            // An item carries its observed direct-parent identity. Caller
+            // supplied names/IDs cannot silently select a child from a
+            // different directory than the reviewed source location.
+            if (item.parent != item.location.folder) blockers += "SOURCE_PARENT_MISMATCH"
             if (!item.location.supports(Capability.READ, nowMillis)) blockers += "SOURCE_READ_NOT_PROVEN"
             val namespaceMayMatch = item.location.key.kind == dest.key.kind &&
                 item.location.key.rootId == dest.key.rootId &&
@@ -201,8 +207,12 @@ object OperationPlanner {
         if (distinctSourceLocations.size != 1) blockers += "MIXED_SOURCE_LOCATIONS"
         val from = sources.firstOrNull()?.location
         val sameNamespace = from != null && sameVerifiedNamespace(from, dest)
+        // A common provider account/root does not extend an Android URI grant.
+        // Provider-native Move requires the SAME proven scoped grant in both
+        // panes; separately picked folders must use reviewed Copy/Verify/Delete.
         val sameSaf = from != null && from.key.kind == LocationKind.LOCAL_SAF &&
-            dest.key.kind == LocationKind.LOCAL_SAF && sameNamespace
+            dest.key.kind == LocationKind.LOCAL_SAF && sameNamespace &&
+            !from.key.grantId.isNullOrBlank() && from.key.grantId == dest.key.grantId
         val sameRemote = from != null && from.key.kind.isRemote() && sameNamespace
         val anyDrive = (from?.key?.kind in listOf(LocationKind.DRIVE_API, LocationKind.DRIVE_SAF)) ||
             dest.key.kind in listOf(LocationKind.DRIVE_API, LocationKind.DRIVE_SAF)
