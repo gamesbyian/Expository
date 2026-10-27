@@ -73,7 +73,7 @@ class RenamePreviewUiSmokeTest {
                 RemoteRenamePreviewCard("synthetic-session", "/test", truncated, true)
             }
         }
-        rule.onNodeWithText("Complete SFTP listing", substring = true).assertExists()
+        rule.onNodeWithText("A complete authenticated SFTP listing", substring = true).assertExists()
         rule.onNodeWithText("Select all").assertDoesNotExist()
     }
 
