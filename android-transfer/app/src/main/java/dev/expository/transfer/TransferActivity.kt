@@ -52,6 +52,18 @@ import dev.expository.transfer.saf.SafTreeToTreeCopy
 import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 
+/** Monotonic, process-local, privacy-safe click/launcher tracing for E2. */
+internal object FolderPickerTrace {
+    val button = AtomicLong()
+    val pane = AtomicLong()
+    val activity = AtomicLong()
+    val launch = AtomicLong()
+    val result = AtomicLong()
+    val failure = AtomicLong()
+    fun snapshot(): String = listOf(button.get(), pane.get(), activity.get(),
+        launch.get(), result.get(), failure.get()).joinToString("/")
+}
+
 /** Android-native picker-first transfer shell; synthetic planner stays isolated in Demo. */
 data class IncomingShareRequest(
     val payload: IncomingShare?,
@@ -248,6 +260,7 @@ private fun DeveloperPreview(
 
     fun pickerResult(which: WorkspacePane,
         result: androidx.activity.result.ActivityResult) {
+        FolderPickerTrace.result.incrementAndGet()
         val uri = result.data?.data
         val grant = result.data?.flags ?: 0
         if (result.resultCode != Activity.RESULT_OK || uri == null) {
@@ -291,6 +304,7 @@ private fun DeveloperPreview(
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         }
+        FolderPickerTrace.launch.incrementAndGet()
         recordFolderPicker("LAUNCH_REQUESTED")
         runCatching {
             when (which) {
@@ -301,6 +315,7 @@ private fun DeveloperPreview(
             // If no result arrives, LAUNCH_REQUESTED remains. The OS
             // picker may still own the foreground window.
         }.onFailure {
+            FolderPickerTrace.failure.incrementAndGet()
             recordFolderPicker("LAUNCH_FAILED")
             replaceTree(which, tree(which).copy(
                 status = "Android folder picker unavailable. No data accessed."
@@ -615,6 +630,7 @@ private fun DeveloperPreview(
                         },
                         onFocus = { model = model.showDual(it) },
                         onPick = {
+                            FolderPickerTrace.activity.incrementAndGet()
                             proposedCopy = null
                             launchTreePicker(it)
                         },
