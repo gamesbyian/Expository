@@ -33,5 +33,5 @@ test('ZIP reader detects bad CRC instead of exporting corrupted data',async()=>{
  await assert.rejects(unzipMember(manifest,manifest.entries[0]),/checksum/);
 });
 test('ZIP reader rejects files above configured archive cap',async()=>{
- await assert.rejects(zipManifest(new Blob([new Uint8Array(24*1024*1024+1)])),/24 MB/);
+ assert.throws(()=>zipManifest(new Blob([new Uint8Array(24*1024*1024+1)])),/24 MB/);
 });
