@@ -519,6 +519,9 @@ function selectImage(item){
  updateSelectionControls();return true
 }
 function clearSelection(){state.selected.clear();state.selectionMode=false;updateSelectionControls()}
+function openContainingFolder(path){
+ const folder=fileFolder(path);$('scope').value='folder';$('filter').value='';state.limit=80;return navigate(folder)
+}
 function paint(more=false){
  const host=$('items');host.style.setProperty('--tile-min',($('density').value||145)+'px');if(!more)state.renderEpoch++;const epoch=state.renderEpoch;
  if(!more){if(state.thumbObserver){state.thumbObserver.disconnect();state.thumbObserver=null}
@@ -531,30 +534,55 @@ function paint(more=false){
  if(!more&&typeof IntersectionObserver!=='undefined'&&state.mode==='grid'){
   state.thumbObserver=new IntersectionObserver(entries=>{for(const e of entries){if(e.isIntersecting){const target=e.target;state.thumbObserver.unobserve(target);const job=target._thumbJob;if(job)loadThumb(job.item,job.thumb,job.glyph,epoch)}}},{rootMargin:'260px'});
  }
+ const grouped=$('groupFolders').value==='folder'&&scope!=='folder';
+ let lastFolder=previous?fileFolder(matching[previous-1].path):null;
  for(const item of state.visibleItems.slice(previous)){
+  const folder=fileFolder(item.path);
+  if(grouped&&folder!==lastFolder){
+   const divider=elem('div','gallery-divider'),name=elem('strong','',folder||'Repository root'),open=elem('button','','Open folder');
+   open.type='button';open.title='Navigate to '+(folder||'repository root');open.onclick=()=>openContainingFolder(item.path);divider.append(name,open);host.append(divider);
+  }
+  lastFolder=folder;
   const tile=elem('button','tile'),thumb=elem('div','thumb'),glyph=elem('span','glyph',icon(item));thumb.append(glyph);
   tile.append(thumb,elem('span','filename',item.name),elem('span','meta',scope==='folder'?(item.type==='dir'?'Folder':formatSize(item.size)):(item.path+(item.size?' · '+formatSize(item.size):''))));
   tile.title=item.path;tile.dataset.path=item.path;tile.setAttribute('aria-pressed',String(state.selected.has(item.path)));if(state.selected.has(item.path))tile.classList.add('selected');
-  tile.onclick=()=>item.type==='dir'?navigate(item.path):state.selectionMode&&imageRx.test(item.name)?selectImage(item):openPreview(item);host.append(tile);
-  if(state.mode==='grid'&&imageRx.test(item.name)&&item.type==='file'){
+  tile.onclick=()=>item.type==='dir'?navigate(item.path):state.selectionMode&&imageRx.test(item.name)?selectImage(item):openPreview(item);
+  if(scope!=='folder'&&item.type==='file'){
+   const card=elem('div','gallery-card'),jump=elem('button','folder-jump','↳ '+(folder||'Repository root'));
+   jump.type='button';jump.title='Open containing folder: '+(folder||'Repository root');jump.setAttribute('aria-label',jump.title);jump.onclick=()=>openContainingFolder(item.path);card.append(tile,jump);host.append(card);
+  }else host.append(tile);
+  if(state.mode==='grid'&&item.type==='file'&&(imageRx.test(item.name)||docThumbRx.test(item.name))){
    if(state.thumbObserver){thumb._thumbJob={item,thumb,glyph};state.thumbObserver.observe(thumb)}
    else loadThumb(item,thumb,glyph,epoch);
   }
  }
  if(matching.length>state.limit){
-  const more=elem('button','pill more','Show more ('+(matching.length-state.limit)+' remaining)');
-  more.onclick=()=>{state.limit+=80;paint(true)};host.append(more)
+  const button=elem('button','pill more','Show more ('+(matching.length-state.limit)+' remaining)');
+  button.onclick=()=>{state.limit+=80;paint(true)};host.append(button)
  }
  if(!matching.length)host.append(elem('div','empty',scope==='repo'?'No matching files.':'Nothing matches this view.'));updateSelectionControls();
  status(matching.length+' items matched'+(scope==='folder'?' in folder':' across indexed paths')+(state.indexTruncated?' · index incomplete':'')+(state.indexError?' · index unavailable, limited to folder':'')+(matching.length>state.limit?' · showing first '+state.limit:''));
 }
 const thumbQueue=[];let running=0;
-function loadThumb(item,thumb,glyph,epoch){if(item.size>8e6)return;thumbQueue.push({item,thumb,glyph,repo:state.repo,branch:state.branch,epoch});pump()}
+function documentThumbnail(item,thumb,source=''){
+ const page=elem('div','doc-thumbnail'),format=(item.name.split('.').at(-1)||'file').toUpperCase();
+ const titleMatch=/\.html?$/i.test(item.name)?source.match(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/i):null;
+ const heading=(titleMatch?titleMatch[1].replace(/<[^>]*>/g,' ').trim():'')||item.name;
+ const safeExcerpt=/\.html?$/i.test(item.name)?source.slice(0,60000).replace(/<(script|style|template|noscript)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,' ').replace(/<!--[\s\S]*?-->/g,' ').replace(/<[^>]*>/g,' '):source.slice(0,3000);
+ const preview=safeExcerpt.replace(/\s+/g,' ').trim().slice(0,230);
+ page.append(elem('span','doc-type',format),elem('strong','doc-title',heading),elem('span','doc-excerpt',preview||'Open to inspect this file'));thumb.replaceChildren(page)
+}
+function loadThumb(item,thumb,glyph,epoch){
+ if(imageRx.test(item.name)&&item.size>8e6)return;
+ if(docThumbRx.test(item.name)&&(item.size>160000||/\.pdf$/i.test(item.name))){documentThumbnail(item,thumb);return}
+ thumbQueue.push({item,thumb,glyph,repo:state.repo,branch:state.branch,epoch});pump()
+}
 async function pump(){
  while(running<3&&thumbQueue.length){
   const job=thumbQueue.shift();if(job.epoch!==state.renderEpoch||job.repo!==state.repo||job.branch!==state.branch||!job.thumb.isConnected)continue;
   running++;(async()=>{try{const blob=await fetchBlob(job.item);
-   if(job.epoch!==state.renderEpoch||!job.thumb.isConnected)return;
+   if(job.epoch!==state.renderEpoch||!job.thumb.isConnected||job.repo!==state.repo||job.branch!==state.branch)return;
+   if(docThumbRx.test(job.item.name)){documentThumbnail(job.item,job.thumb,await blob.text());return}
    const img=elem('img');img.loading='lazy';img.alt='';img.src=blobUrl(blob,'thumb');job.thumb.replaceChildren(img);
   }catch{}finally{running--;pump()}})()
  }
