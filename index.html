@@ -108,7 +108,7 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 (()=>{'use strict';
 
 const ZIP_MAX_BYTES=24*1024*1024,ZIP_ENTRY_MAX=16*1024*1024,ZIP_TOTAL_MAX=128*1024*1024,ZIP_MAX_FILES=2000;
-let zipContext=null;const zipManifests=new Map();let zipGalleryEntries=[],zipScanSeq=0;
+let zipContext=null,zipStartFolder='';const zipManifests=new Map();let zipGalleryEntries=[],zipScanSeq=0;
 function zipManifest(blob){
  const fail=msg=>{throw Error('ZIP: '+msg)};
  if(blob.size>ZIP_MAX_BYTES)fail('archive exceeds the 24 MB browser-inspection limit');
@@ -150,7 +150,8 @@ async function scanZipGallery(){
  const seq=++zipScanSeq;zipGalleryEntries=[];zipManifests.clear();
  if(!$('includeZip').checked||!state.repo||!state.branch){paint();return}
  if(!state.indexReady){status('ZIP gallery will load after repository indexing.');return}
- const archives=state.indexEntries.filter(x=>x.type==='file'&&/\.zip$/i.test(x.name)&&x.size<=ZIP_MAX_BYTES).slice(0,12);
+ const eligible=state.indexEntries.filter(x=>x.type==='file'&&/\.zip$/i.test(x.name)&&x.size<=ZIP_MAX_BYTES);let budget=64*1024*1024;const archives=[];
+ for(const item of eligible){if(archives.length===12)break;if(item.size>budget)continue;archives.push(item);budget-=item.size}
  const repo=state.repo,branch=state.branch;let failures=0,processed=0;
  status('Inspecting up to '+archives.length+' ZIPs locally…');
  for(const archive of archives){
@@ -640,7 +641,7 @@ function selectImage(item){
 }
 function clearSelection(){state.selected.clear();state.selectionMode=false;updateSelectionControls()}
 function openContainingFolder(path){
- const virtual=zipGalleryEntries.find(x=>x.path===path);if(virtual)return openPreview(virtual.zipParent);
+ const virtual=zipGalleryEntries.find(x=>x.path===path);if(virtual){zipStartFolder=fileFolder(virtual.zipMember.name);return openPreview(virtual.zipParent)}
  const folder=fileFolder(path);$('scope').value='folder';$('filter').value='';$('fileKind').value='all';$('extFilter').value='';state.limit=80;return navigate(folder)
 }
 function paint(more=false){
@@ -993,7 +994,7 @@ function jsonViewer(value){
 async function renderCurrentFile(){
  const item=state.preview,blob=state.currentBlob;if(!item||!blob)return;
  closeImageFullscreen();clearUrls('preview');const lower=item.name.toLowerCase();let node;
- if(/\.zip$/i.test(lower)&&!item.zipMember){zipContext=await zipManifest(blob);node=zipViewer(zipContext,item)}
+ if(/\.zip$/i.test(lower)&&!item.zipMember){zipContext=zipManifests.get(item.path)||await zipManifest(blob);const start=zipStartFolder;zipStartFolder='';node=zipViewer(zipContext,item,start)}
  else if(imageRx.test(lower))node=imageViewer(blob,item);
  else if(/\.pdf$/i.test(lower)){node=elem('iframe');node.title=item.name;node.src=blobUrl(new Blob([blob],{type:'application/pdf'}))}
  else if(/\.(mp4|webm|ogg)$/i.test(lower)){node=elem('video');node.controls=true;node.src=blobUrl(blob)}
@@ -1208,7 +1209,7 @@ async function openPreview(item){
  $('fileHistory').textContent='History';$('inspectTools').hidden=false;$('structuredToggle').hidden=true;
  $('copyRaw').hidden=true;$('downloadRaw').hidden=true;state.compareMode=false;
  previewButtons();updateCompareAction();updateHash(item.path);
- $('previewTitle').textContent=item.name;$('fileLink').hidden=Boolean(item.zipMember);$('fileHistory').hidden=Boolean(item.zipMember);$('prevPreview').disabled=Boolean(item.zipMember);$('nextPreview').disabled=Boolean(item.zipMember);$('fileLink').href='https://github.com/'+state.repo+'/blob/'+enc(state.branch)+'/'+pathPart(item.path);
+ $('previewTitle').textContent=item.name;$('copyFile').hidden=Boolean(item.zipMember);$('fileLink').hidden=Boolean(item.zipMember);$('fileHistory').hidden=Boolean(item.zipMember);$('prevPreview').disabled=Boolean(item.zipMember);$('nextPreview').disabled=Boolean(item.zipMember);$('fileLink').href='https://github.com/'+state.repo+'/blob/'+enc(state.branch)+'/'+pathPart(item.path);
  $('preview').classList.add('open');$('scrim').classList.add('on');$('pageHeader').inert=true;$('pageMain').inert=true;$('closePreview').focus();
  showContent(elem('div','message','Loading preview…'));
  try{
@@ -1243,7 +1244,7 @@ async function openRepo(targetPath=''){
  $('branchPicker').hidden=true;$('branchPicker').replaceChildren(new Option('Choose a branch…',''));$('loadBranches').disabled=true;
  abortRequests();
  cancelContentScan();stopStory();hideSizeMap();state.storyData=null;const request=++state.repoRequest;state.repo=repo;state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;
- state.folderRecoveryKey='';++zipScanSeq;zipGalleryEntries=[];zipManifests.clear();clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
+ state.folderRecoveryKey='';++zipScanSeq;zipGalleryEntries=[];zipManifests.clear();zipContext=null;zipStartFolder='';clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
  clearObjects();clearPreview();++state.seq;status('Connecting to '+repo+'…');
  try{
   const info=await json('/repos/'+repo);if(request!==state.repoRequest)return;
@@ -1253,7 +1254,7 @@ async function openRepo(targetPath=''){
  }catch(e){if(request===state.repoRequest)status('Cannot open repository: '+e.message);return false}
 }
 function resetSession(){
- abortRequests();state.rateLimitedUntil=0;state.folderRecoveryKey='';++zipScanSeq;zipGalleryEntries=[];zipManifests.clear();cancelContentScan();stopStory();hideSizeMap();state.storyData=null;++state.repoRequest;++state.seq;state.token='';state.repo='';state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;state.cache.clear();state.items=[];state.visibleItems=[];
+ abortRequests();state.rateLimitedUntil=0;state.folderRecoveryKey='';++zipScanSeq;zipGalleryEntries=[];zipManifests.clear();zipContext=null;zipStartFolder='';cancelContentScan();stopStory();hideSizeMap();state.storyData=null;++state.repoRequest;++state.seq;state.token='';state.repo='';state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;state.cache.clear();state.items=[];state.visibleItems=[];
  state.tree.clear();state.expanded.clear();state.indexEntries=[];state.indexReady=false;state.indexError=false;state.indexTruncated=false;state.repoIsPrivate=true;
  clearSelection();state.renderEpoch++;if(state.thumbObserver){state.thumbObserver.disconnect();state.thumbObserver=null}thumbQueue.length=0;
  clearPreview();clearObjects();paintBookmarks();$('token').value='';$('branch').value='';$('loadBranches').disabled=true;$('loadBranches').textContent='Browse branches';$('branchPicker').hidden=true;$('branchPicker').replaceChildren(new Option('Choose a branch…',''));
