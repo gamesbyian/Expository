@@ -165,8 +165,11 @@ private fun DeveloperPreview(
     }
 
     fun readTree(which: WorkspacePane, uri: Uri, crumbs: List<TreeCrumb>,
-        writeGranted: Boolean = tree(which).canWrite) {
+        writeGranted: Boolean = tree(which).canWrite,
+        maxVisible: Int = LocalTreeReader.MAX_VISIBLE) {
         if (!LocalTreeReader.validTree(uri) || crumbs.isEmpty() ||
+            maxVisible !in LocalTreeReader.MAX_VISIBLE..LocalTreeReader.MAX_BROWSE ||
+            maxVisible % LocalTreeReader.MAX_VISIBLE != 0 ||
             model.pane(which).endpoint != BrowseEndpoint.LOCAL) return
         // Refresh and navigation invalidate a reviewed destination snapshot.
         proposedCopy = null
@@ -174,12 +177,14 @@ private fun DeveloperPreview(
         replaceTree(which, LocalTreeBrowseState(
             treeUri = uri, crumbs = crumbs, loading = true,
             canWrite = writeGranted,
+            visibleLimit = maxVisible,
             generation = nextGeneration, status = "Reading this Android folder…"
         ))
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching { LocalTreeReader.list(
-                    context.contentResolver, uri, crumbs.last().documentId) }
+                    context.contentResolver, uri, crumbs.last().documentId,
+                    maxVisible) }
             }
             val current = tree(which)
             // A slow provider response must never populate a different account,
@@ -190,11 +195,15 @@ private fun DeveloperPreview(
             result.onSuccess { listing ->
                 replaceTree(which, current.copy(
                     entries = listing.children, complete = listing.complete,
+                    hasMore = listing.hasMore,
                     selected = emptySet(), loading = false,
                     status = if (listing.complete)
                         "Folder opened. Scoped Android browser; " +
                             listing.children.size + " visible items."
-                    else "More than 200 items or ambiguous provider rows; listing incomplete."
+                    else if (listing.hasMore)
+                        "Showing " + listing.children.size +
+                            " items. Choose Show next 200 to inspect more; no write is authorized."
+                    else "Ambiguous provider listing; no write is authorized."
                 ))
                 val location = LocationRef(
                     LocationKey(LocationKind.LOCAL_SAF,
@@ -521,7 +530,28 @@ private fun DeveloperPreview(
                         },
                         onNavigate = { which, crumbs ->
                             proposedCopy = null
-                            tree(which).treeUri?.let { readTree(which, it, crumbs) }
+                            val current = tree(which)
+                            current.treeUri?.let {
+                                // Refresh keeps the requested browse depth;
+                                // a different folder starts at the small page.
+                                readTree(which, it, crumbs,
+                                    maxVisible = if (current.crumbs == crumbs)
+                                        current.visibleLimit
+                                    else LocalTreeReader.MAX_VISIBLE)
+                            }
+                        },
+                        onLoadMore = { which ->
+                            val current = tree(which)
+                            val uri = current.treeUri
+                            if (!copyBusy && !current.loading && current.hasMore &&
+                                uri != null &&
+                                current.visibleLimit < LocalTreeReader.MAX_BROWSE) {
+                                proposedCopy = null
+                                readTree(which, uri, current.crumbs,
+                                    maxVisible = (current.visibleLimit +
+                                        LocalTreeReader.MAX_VISIBLE)
+                                        .coerceAtMost(LocalTreeReader.MAX_BROWSE))
+                            }
                         },
                         onSelect = ::toggleTreeSelection,
                         busy = copyBusy,
