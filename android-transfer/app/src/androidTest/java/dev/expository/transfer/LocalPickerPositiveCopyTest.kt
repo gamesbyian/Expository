@@ -401,18 +401,35 @@ class LocalPickerPositiveCopyTest {
                 device.wait(Until.hasObject(By.text(label)), timeout)
             val volumes = listOf("Internal storage", "Internal shared storage",
                 "sdk_gphone64_x86_64", "sdk_gphone_x86_64", "Pixel 6", "emulator")
-            openRoots()
-            val root = volumes.firstOrNull { visible(it) }
-            if (root != null) {
-                tapText(root, "REAL_STORAGE_ROOT")
-                if (visible("Download", 3_000L)) tapText("Download", "DOWNLOAD_DIR")
-                else if (visible("Downloads", 2_000L))
-                    tapText("Downloads", "DOWNLOAD_DIR")
-            } else if (visible("Downloads", 2_000L)) {
-                tapText("Downloads", "DOWNLOADS_ROOT")
+            // On disposable API35 emulators, MediaStore-backed Downloads
+            // folders can appear only after DocumentsUI refreshes its root.
+            // Reopening an OS root is a genuine UI action; it creates no
+            // synthetic grant and never bypasses the selected-folder step.
+            fun observeTestFolderThroughOsPicker(): Boolean {
+                openRoots()
+                val root = volumes.firstOrNull { visible(it) }
+                if (root != null) {
+                    tapText(root, "REAL_STORAGE_ROOT")
+                    if (visible("Download", 3_000L))
+                        tapText("Download", "DOWNLOAD_DIR")
+                    else if (visible("Downloads", 2_000L))
+                        tapText("Downloads", "DOWNLOAD_DIR")
+                } else if (visible("Downloads", 2_000L)) {
+                    tapText("Downloads", "DOWNLOADS_ROOT")
+                }
+                return visible(folder, 6_000L)
             }
-            assertTrue("TEST_OWNED_SUBFOLDER_NOT_VISIBLE",
-                visible(folder, 6_000L))
+            var folderVisible = false
+            repeat(3) {
+                if (!folderVisible) {
+                    folderVisible = runCatching {
+                        observeTestFolderThroughOsPicker()
+                    }.getOrDefault(false)
+                    if (!folderVisible) device.waitForIdle(500L)
+                }
+            }
+            assertTrue("TEST_OWNED_SUBFOLDER_NOT_VISIBLE_AFTER_REFRESH",
+                folderVisible)
             tapText(folder, "TEST_OWNED_SUBFOLDER")
             assertTrue("The chosen synthetic subfolder must be selectable",
                 tapOneOf(listOf("Use this folder", "USE THIS FOLDER"),
