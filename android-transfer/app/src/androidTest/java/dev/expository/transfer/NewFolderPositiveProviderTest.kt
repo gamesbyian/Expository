@@ -65,9 +65,11 @@ class NewFolderPositiveProviderTest {
 
         try {
             resolver.openOutputStream(marker, "wt")!!.use { it.write(markerBytes) }
-            compose.onNodeWithText("Dual view").performClick()
-            compose.onNodeWithText("Device ↔ Device").performClick()
-            compose.onNodeWithText("Choose Pane A folder…")
+            // A single-location browser has one active SAF folder editor.
+            // Avoid hidden dual-pane composition while investigating Android
+            // picker/IME accessibility. This still exercises the same real
+            // New Folder card and actual scoped OS tree grant.
+            compose.onNodeWithText("Choose folder")
                 .performSemanticsAction(SemanticsActions.OnClick)
 
             val picker = device.wait(Until.hasObject(
