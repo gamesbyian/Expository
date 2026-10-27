@@ -8,6 +8,7 @@ import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.engine.CopyStreams
 import dev.expository.transfer.engine.ForegroundCopyEngine
 import dev.expository.transfer.engine.JournaledCopyEngine
+import dev.expository.transfer.engine.SourceConsistencyStream
 import dev.expository.transfer.engine.AtomicAttemptStorage
 import dev.expository.transfer.engine.DurableAttemptJournal
 import dev.expository.transfer.planner.*
@@ -92,14 +93,24 @@ class SafSingleDocumentCopy(private val resolver: ContentResolver,
             catch (_: Exception) {
                 return CopyReceipt("", CopyProof.BLOCKED, 0, "DOCUMENT_INSPECTION_UNAVAILABLE")
             }
+        // The planner revalidates before opening streams. Also hold the
+        // original observed version through EOF, not merely through preflight.
+        val sourceRevision = try { observe(source).revision } catch (_: Exception) {
+            return CopyReceipt(initialPlan.digest, CopyProof.BLOCKED, 0,
+                "SOURCE_OBSERVATION_UNAVAILABLE")
+        }
         val fresh = {
             // Keep the SAME expiry proof observation clock; metadata changes
             // invalidate the plan, but wall-clock time must not change its digest.
             transferPlan(source, destination, initialTime, System.currentTimeMillis())
         }
         val streams = object : CopyStreams {
-            override fun openSource(): InputStream =
-                resolver.openInputStream(source) ?: throw FileNotFoundException()
+            override fun openSource(): InputStream {
+                val input = resolver.openInputStream(source) ?: throw FileNotFoundException()
+                return SourceConsistencyStream(input) {
+                    observe(source).revision == sourceRevision
+                }
+            }
             override fun openNewDestination(): OutputStream =
                 // The OS created a *new* document. "w" need not truncate on an
                 // arbitrary provider; no existing user document is ever selected.

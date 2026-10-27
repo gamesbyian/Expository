@@ -173,6 +173,69 @@ object CopyEngineSuite {
                 receipt.bytesWritten == bytes.size.toLong() &&
                 out.toByteArray().contentEquals(bytes))
         }
+        scenario("source changed mid-stream must never produce verified receipt") {
+            val out = ByteArrayOutputStream()
+            var current = true
+            var checks = 0
+            val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
+                override fun openSource(): InputStream =
+                    SourceConsistencyStream(ByteArrayInputStream(bytes)) {
+                        checks++
+                        current
+                    }
+                override fun openNewDestination(): OutputStream = object : ByteArrayOutputStream() {
+                    override fun close() {
+                        current = false // concurrent mutation detected only at stream close
+                        super.close()
+                        out.write(toByteArray())
+                    }
+                }
+                override fun openDestinationReadBack(): InputStream =
+                    ByteArrayInputStream(out.toByteArray())
+            })
+            check(checks == 1 && receipt.proof == CopyProof.UNCERTAIN)
+            check(out.toByteArray().contentEquals(bytes))
+        }
+        scenario("post-read inspection failure fails closed") {
+            var checks = 0
+            val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
+                override fun openSource(): InputStream =
+                    SourceConsistencyStream(ByteArrayInputStream(bytes)) {
+                        checks++
+                        throw IOException("synthetic source provider offline")
+                    }
+                override fun openNewDestination(): OutputStream = ByteArrayOutputStream()
+                override fun openDestinationReadBack(): InputStream? = null
+            })
+            check(checks == 1 && receipt.proof == CopyProof.UNCERTAIN)
+        }
+        scenario("unchanged source retains independent digest proof") {
+            var checks = 0
+            val out = ByteArrayOutputStream()
+            val stream = SourceConsistencyStream(ByteArrayInputStream(bytes)) {
+                checks++
+                true
+            }
+            val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
+                override fun openSource(): InputStream = stream
+                override fun openNewDestination(): OutputStream = out
+                override fun openDestinationReadBack(): InputStream =
+                    ByteArrayInputStream(out.toByteArray())
+            })
+            stream.close() // repeated close cannot re-authorize another revision
+            check(checks == 1 && receipt.proof == CopyProof.BYTES_VERIFIED)
+        }
+        scenario("source close IO error remains uncertain") {
+            val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
+                override fun openSource(): InputStream =
+                    SourceConsistencyStream(object : ByteArrayInputStream(bytes) {
+                        override fun close(): Unit = throw IOException("synthetic close failure")
+                    }) { true }
+                override fun openNewDestination(): OutputStream = ByteArrayOutputStream()
+                override fun openDestinationReadBack(): InputStream? = null
+            })
+            check(receipt.proof == CopyProof.UNCERTAIN)
+        }
         println("PASS engine total=" + passed + " proof=synthetic-JVM-only")
     }
 }
