@@ -1,5 +1,7 @@
 package dev.expository.transfer.engine
 
+import dev.expository.transfer.planner.Capability
+import dev.expository.transfer.planner.RenamePhase
 import dev.expository.transfer.planner.RenameItem
 import dev.expository.transfer.planner.RenamePlan
 import dev.expository.transfer.planner.RenamePlanner
@@ -56,7 +58,9 @@ object JournaledRenameEngine {
     private fun agrees(
         observation: RenameSnapshot,
         initial: RenameSnapshot,
-        expected: Map<String, RenameItem>
+        expected: Map<String, RenameItem>,
+        checkedAtMillis: Long,
+        needsTempRename: Boolean
     ): Boolean {
         if (!observation.complete || observation.listingRevision.isBlank() ||
             observation.location.key != initial.location.key ||
@@ -64,7 +68,12 @@ object JournaledRenameEngine {
             observation.location.verifiedNamespace != initial.location.verifiedNamespace ||
             observation.location.verifiedStorageDomain != initial.location.verifiedStorageDomain ||
             observation.location.casePolicy != initial.location.casePolicy ||
-            observation.children.size != expected.size) return false
+            observation.location.capabilities != initial.location.capabilities ||
+            observation.children.size != expected.size ||
+            observation.location.capabilities[Capability.RENAME]?.valid(checkedAtMillis) != true ||
+            (needsTempRename &&
+                observation.location.capabilities[Capability.TEMP_RENAME]?.valid(checkedAtMillis) != true)
+        ) return false
         val rows = observation.children
         if (rows.map { it.id }.toSet().size != rows.size ||
             rows.map { key(it.name) }.toSet().size != rows.size) return false
@@ -81,7 +90,8 @@ object JournaledRenameEngine {
         endpoint: VerifiedRenameEndpoint,
         storageForStep: (digest: String, stepIndex: Int) -> AtomicAttemptStorage,
         nowMillis: Long,
-        continueRequested: () -> Boolean = { true }
+        continueRequested: () -> Boolean = { true },
+        clockMillis: () -> Long = { System.currentTimeMillis() }
     ): RenameExecutionReceipt {
         val total = approved.steps.size
         fun result(proof: RenameExecutionProof, count: Int, reason: String) =
@@ -108,7 +118,13 @@ object JournaledRenameEngine {
             val before = try { endpoint.observe() } catch (_: Exception) {
                 return stopped("PRE_STEP_OBSERVATION_UNAVAILABLE")
             }
-            if (!agrees(before, original, expected) ||
+            // Every mutation must retain the exact approved capability witness,
+            // including its expiration. An approval at batch start cannot
+            // authorize arbitrary later stages after permissions expire.
+            val beforeTime = runCatching { clockMillis() }.getOrNull()
+                ?: return stopped("MUTATION_CLOCK_UNAVAILABLE")
+            if (!agrees(before, original, expected, beforeTime,
+                    step.phase == RenamePhase.STAGE) ||
                 expected[step.itemId]?.name != step.from ||
                 before.children.any { it.name != step.from && key(it.name) == key(step.to) }) {
                 return stopped("PRE_STEP_PARENT_OR_IDENTITY_CHANGED")
@@ -137,7 +153,10 @@ object JournaledRenameEngine {
             }
             expected[step.itemId] = expected.getValue(step.itemId).copy(name = step.to)
             val after = try { endpoint.observe() } catch (_: Exception) { null }
-            if (after == null || !agrees(after, original, expected)) {
+            val afterTime = runCatching { clockMillis() }.getOrNull()
+            if (after == null || afterTime == null ||
+                !agrees(after, original, expected, afterTime,
+                    step.phase == RenamePhase.STAGE)) {
                 runCatching { journal.markUncertain(approved.digest) }
                 return result(RenameExecutionProof.UNCERTAIN, verified,
                     "POST_STEP_IDENTITY_UNVERIFIED_RECONCILE_MANUALLY")
