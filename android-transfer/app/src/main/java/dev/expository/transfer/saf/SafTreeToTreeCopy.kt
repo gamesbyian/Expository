@@ -99,6 +99,17 @@ class SafTreeToTreeCopy(
             request.targetFolderId.isNotBlank() &&
             request.expectedSourceName.isNotBlank() &&
             targetCanCreate(request))
+        // A tree grant proves access, not that this item still belongs to
+        // the folder the user selected. Recheck direct child membership on
+        // every preflight and immediately before the write-ahead copy.
+        // An incomplete/ambiguous source listing cannot authorize a write.
+        val sourceMembers = LocalTreeReader.list(
+            resolver, request.sourceTree, request.sourceFolderId)
+        require(sourceMembers.complete &&
+            sourceMembers.children.count {
+                it.documentId == request.sourceDocumentId &&
+                    it.title == request.expectedSourceName && !it.directory
+            } == 1) { "SOURCE_MEMBERSHIP_UNVERIFIED" }
         val source = document(request.sourceTree, request.sourceDocumentId)
         val metadata = observer.observe(source)
         require(metadata.displayName == request.expectedSourceName &&
