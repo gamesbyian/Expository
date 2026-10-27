@@ -2,6 +2,7 @@ package dev.expository.transfer.sftp
 
 import android.content.ContentResolver
 import android.net.Uri
+import dev.expository.transfer.LocalPaneUploadSource
 import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.engine.CopyReceipt
 import dev.expository.transfer.engine.CopyStreams
@@ -31,9 +32,11 @@ class SafToSftpUpload(private val resolver: ContentResolver,
         source: Uri,
         absoluteFolder: String,
         continueRequested: () -> Boolean,
-        onProgress: (Long) -> Unit = {}
+        onProgress: (Long) -> Unit = {},
+        scopedSource: LocalPaneUploadSource? = null
     ): CopyReceipt {
-        if (sessionOpaqueId.isBlank() || source.scheme != ContentResolver.SCHEME_CONTENT)
+        if (sessionOpaqueId.isBlank() || source.scheme != ContentResolver.SCHEME_CONTENT ||
+            (scopedSource != null && scopedSource.documentUri != source))
             return CopyReceipt("", CopyProof.BLOCKED, 0, "INVALID_SFTP_SESSION_OR_SOURCE")
 
         val proofTime = System.currentTimeMillis()
@@ -53,7 +56,14 @@ class SafToSftpUpload(private val resolver: ContentResolver,
         val folderComponents = if (folder == "/") emptyList() else folder.split('/').drop(1)
 
         fun snapshotPlan(now: Long): TransferPlan {
+            // Re-observe peer-pane membership before planning or streaming.
+            if (scopedSource != null) require(scopedSource.membershipStillVerified(resolver)) {
+                "SCOPED_SOURCE_MEMBERSHIP_CHANGED"
+            }
             val observed = observer.observe(source)
+            if (scopedSource != null) require(observed.displayName == scopedSource.expectedName) {
+                "SCOPED_SOURCE_NAME_CHANGED"
+            }
             val page = session.browse(folder)
             // Never claim a complete namespace from a truncated preview.
             val siblings = page.entries.map { it.name }.sorted()
@@ -103,7 +113,8 @@ class SafToSftpUpload(private val resolver: ContentResolver,
             override fun openSource(): InputStream {
                 // A provider may revoke permission or change metadata after its
                 // picker grant: don't create the destination until open succeeds.
-                if (observer.observe(source).revision != original.revision)
+                if ((scopedSource != null && !scopedSource.membershipStillVerified(resolver)) ||
+                    observer.observe(source).revision != original.revision)
                     throw FileNotFoundException("LOCAL_SOURCE_CHANGED")
                 return resolver.openInputStream(source) ?: throw FileNotFoundException()
             }
