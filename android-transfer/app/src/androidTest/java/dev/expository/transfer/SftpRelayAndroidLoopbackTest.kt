@@ -13,6 +13,8 @@ import dev.expository.transfer.sftp.SftpRelayRequest
 import dev.expository.transfer.sftp.SftpTarget
 import org.apache.sshd.common.keyprovider.KeyPairProvider
 import org.apache.sshd.common.file.virtualfs.VirtualFileSystemFactory
+import org.apache.sshd.common.util.io.PathUtils
+import org.apache.sshd.common.util.OsUtils
 import org.apache.sshd.server.SshServer
 import org.apache.sshd.server.auth.password.PasswordAuthenticator
 import org.apache.sshd.sftp.server.SftpSubsystemFactory
@@ -41,6 +43,11 @@ class SftpRelayAndroidLoopbackTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val root = Files.createTempDirectory(context.cacheDir.toPath(), "relay-e2-")
         val bytes = ByteArray(131_113) { ((it * 17 + 31) and 255).toByte() }
+        // Android does not define Java's user.home/user.dir properties.
+        // Apache MINA explicitly exposes these process-local test hooks.
+        // Never fall back to broad storage or a machine-global directory.
+        PathUtils.setUserHomeFolderResolver { root }
+        OsUtils.setCurrentWorkingDirectoryResolver { root }
         Files.write(root.resolve("synthetic-source.bin"), bytes)
         Files.createDirectory(root.resolve("target"))
 
