@@ -210,7 +210,7 @@ class LocalPickerPositiveCopyTest {
             clipData = android.content.ClipData.newUri(resolver, "Synthetic source", uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        fun findTarget(): Uri? {
+        fun findTarget(name: String = sourceName): Uri? {
             resolver.query(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
                 arrayOf(MediaStore.MediaColumns._ID),
                 "${MediaStore.MediaColumns.DISPLAY_NAME}=?",
@@ -316,7 +316,14 @@ class LocalPickerPositiveCopyTest {
     }
 
 
-    @Test fun twoRealSystemPickedTreesCopyExactBytesAndPreserveSource() {
+    @Test fun twoRealSystemPickedTreesCopyExactBytesAndPreserveSource() =
+        verifyRealPickedTreeCopy(1)
+
+    @Test fun twoRealSystemPickedTreesCopyTwoSelectedFiles() =
+        verifyRealPickedTreeCopy(2)
+
+    private fun verifyRealPickedTreeCopy(fileCount: Int) {
+        require(fileCount in 1..2)
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val resolver = context.contentResolver
         val device = androidx.test.uiautomator.UiDevice.getInstance(
@@ -325,6 +332,8 @@ class LocalPickerPositiveCopyTest {
         val sourceDir = "Expository-source-" + suffix
         val destDir = "Expository-target-" + suffix
         val sourceName = "expository-from-" + suffix + ".txt"
+        val extraName = "expository-second-" + suffix + ".txt"
+        val extraContent = ByteArray(44_011) { i -> ((i * 19 + 23) and 255).toByte() }
         val markerName = "expository-marker-" + suffix + ".txt"
         val content = ByteArray(131_099) { i -> ((i * 41 + 11) and 255).toByte() }
         fun fixture(name: String, dir: String, bytes: ByteArray): Uri {
@@ -344,7 +353,7 @@ class LocalPickerPositiveCopyTest {
                 arrayOf(MediaStore.MediaColumns._ID),
                 "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND " +
                     "${MediaStore.MediaColumns.RELATIVE_PATH}=?",
-                arrayOf(sourceName, "Download/" + destDir + "/"), null)?.use { cursor ->
+                arrayOf(name, "Download/" + destDir + "/"), null)?.use { cursor ->
                 if (cursor.moveToFirst())
                     return Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
                         cursor.getLong(0).toString())
@@ -416,6 +425,8 @@ class LocalPickerPositiveCopyTest {
         }
 
         val source = fixture(sourceName, sourceDir, content)
+        val extraSource = if (fileCount == 2) fixture(extraName, sourceDir, extraContent)
+            else null
         val marker = fixture(markerName, destDir, byteArrayOf(7, 11, 17))
         try {
             compose.onNodeWithText("Dual view").performClick()
@@ -430,6 +441,15 @@ class LocalPickerPositiveCopyTest {
                 compose.onAllNodesWithText("✓ Select").fetchSemanticsNodes()
                     .isNotEmpty()
             }
+            if (fileCount == 2) {
+                compose.onNodeWithText(extraName).assertExists()
+                compose.onNodeWithText("Select")
+                    .performSemanticsAction(SemanticsActions.OnClick)
+                compose.waitUntil(15_000L) {
+                    compose.onAllNodesWithText("Selected: 2").fetchSemanticsNodes()
+                        .isNotEmpty()
+                }
+            }
             compose.onNodeWithText("Pane B · LOCAL").performSemanticsAction(SemanticsActions.OnClick)
             pickFolder(destDir, "B")
             compose.onNodeWithText(markerName).assertExists()
@@ -439,14 +459,16 @@ class LocalPickerPositiveCopyTest {
                 compose.onAllNodesWithText("Review Device Copy").fetchSemanticsNodes()
                     .isNotEmpty()
             }
+            if (fileCount == 2)
+                compose.onNodeWithText("Files (2):", substring = true).assertExists()
             compose.onNodeWithText("Confirm Copy").performSemanticsAction(SemanticsActions.OnClick)
             compose.waitUntil(45_000L) {
                 compose.onAllNodesWithText("Copy verified:", substring = true)
                     .fetchSemanticsNodes().isNotEmpty()
             }
             val after = dev.expository.transfer.journal.AttemptRecoveryIndex.recover(context)
-            assertTrue("One new byte-verified copy receipt required",
-                after.verifiedReceipts >= before.verifiedReceipts + 1)
+            assertTrue("A verified journal per file is required",
+                after.verifiedReceipts >= before.verifiedReceipts + fileCount)
             org.junit.Assert.assertArrayEquals(
                 "Source must remain byte-identical", content,
                 resolver.openInputStream(source)!!.use { it.readBytes() })
@@ -455,11 +477,21 @@ class LocalPickerPositiveCopyTest {
                     "MediaStore mirror must also be exact if indexed", content,
                     resolver.openInputStream(result)!!.use { it.readBytes() })
             }
+            if (extraSource != null) {
+                org.junit.Assert.assertArrayEquals("Second source remains intact",
+                    extraContent, resolver.openInputStream(extraSource)!!.use { it.readBytes() })
+                findTarget(extraName)?.let { second ->
+                    org.junit.Assert.assertArrayEquals("Second destination mirror matches",
+                        extraContent, resolver.openInputStream(second)!!.use { it.readBytes() })
+                }
+            }
         } finally {
             if (device.currentPackageName != context.packageName) device.pressBack()
             findTarget()?.let { runCatching { resolver.delete(it, null, null) } }
+            findTarget(extraName)?.let { runCatching { resolver.delete(it, null, null) } }
             resolver.delete(marker, null, null)
             resolver.delete(source, null, null)
+            extraSource?.let { resolver.delete(it, null, null) }
         }
     }
 
