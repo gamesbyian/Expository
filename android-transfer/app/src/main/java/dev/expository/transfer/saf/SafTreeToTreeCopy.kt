@@ -33,7 +33,8 @@ data class TreeCopyPreflight(
     val plan: TransferPlan,
     val issuedMillis: Long,
     val sourceName: String,
-    val sourceMime: String
+    val sourceMime: String,
+    val existingTargetDocumentIds: Set<String>
 )
 
 /**
@@ -88,7 +89,8 @@ class SafTreeToTreeCopy(
     }
 
     private data class Observation(val plan: TransferPlan,
-        val sourceName: String, val sourceMime: String)
+        val sourceName: String, val sourceMime: String,
+        val existingTargetDocumentIds: Set<String>)
 
     private fun observePlan(request: TreeCopyRequest, issued: Long,
         now: Long): Observation {
@@ -153,7 +155,8 @@ class SafTreeToTreeCopy(
                     revision, siblings.complete, siblings.children.map { it.title })),
             now
         )
-        return Observation(plan, metadata.displayName, metadata.mimeType)
+        return Observation(plan, metadata.displayName, metadata.mimeType,
+            siblings.children.map { it.documentId }.toSet())
     }
 
     /** Called before presenting an explicit Confirm Copy action. */
@@ -162,7 +165,8 @@ class SafTreeToTreeCopy(
         return runCatching { observePlan(request, issued, issued) }.getOrNull()
             ?.takeIf { it.plan.executable }
             ?.let { TreeCopyPreflight(
-                request, it.plan, issued, it.sourceName, it.sourceMime) }
+                request, it.plan, issued, it.sourceName, it.sourceMime,
+                it.existingTargetDocumentIds) }
     }
 
     fun copy(
@@ -195,6 +199,19 @@ class SafTreeToTreeCopy(
                     confirmed.sourceMime, confirmed.sourceName)
                     ?: throw FileNotFoundException()
                 created = uri
+                // A provider can silently return a renamed or previously
+                // existing document. Opening "w" in that case could truncate
+                // unrelated content; inspect identity BEFORE opening it.
+                val newId = runCatching {
+                    DocumentsContract.getDocumentId(uri)
+                }.getOrNull().orEmpty()
+                val observedName = observer.observe(uri).displayName
+                if (uri.scheme != ContentResolver.SCHEME_CONTENT ||
+                    uri.authority != request.targetTree.authority ||
+                    !SafNewDocumentIdentity.matches(
+                        confirmed.sourceName, observedName, newId,
+                        confirmed.existingTargetDocumentIds)
+                ) throw java.io.IOException("SAF_NEW_DOCUMENT_IDENTITY_UNVERIFIED")
                 return resolver.openOutputStream(uri, "w") ?: throw FileNotFoundException()
             }
             override fun openDestinationReadBack(): InputStream? =

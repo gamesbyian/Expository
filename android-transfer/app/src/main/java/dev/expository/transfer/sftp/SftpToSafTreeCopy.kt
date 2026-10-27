@@ -14,6 +14,7 @@ import dev.expository.transfer.engine.DurableAttemptJournal
 import dev.expository.transfer.engine.JournaledCopyEngine
 import dev.expository.transfer.planner.*
 import dev.expository.transfer.saf.SafSingleDocumentCopy
+import dev.expository.transfer.saf.SafNewDocumentIdentity
 import java.io.FileNotFoundException
 import java.io.FilterInputStream
 import java.io.IOException
@@ -38,7 +39,8 @@ internal data class SftpTreeCopyPreflight(
     val plan: TransferPlan,
     val issuedMillis: Long,
     val sourceName: String,
-    val sourceSize: Long
+    val sourceSize: Long,
+    val existingTargetDocumentIds: Set<String>
 )
 
 /**
@@ -87,7 +89,7 @@ internal class SftpToSafTreeCopy(
     }
 
     private data class Observed(val plan: TransferPlan, val name: String,
-        val size: Long)
+        val size: Long, val existingTargetDocumentIds: Set<String>)
 
     private fun observe(
         session: SftpSession,
@@ -145,7 +147,8 @@ internal class SftpToSafTreeCopy(
                     revision, true, siblings.children.map { it.title })),
             nowMillis
         )
-        return Observed(plan, current.name, current.size)
+        return Observed(plan, current.name, current.size,
+            siblings.children.map { it.documentId }.toSet())
     }
 
     fun prepare(
@@ -155,7 +158,7 @@ internal class SftpToSafTreeCopy(
         return runCatching { observe(session, request, issued, issued) }
             .getOrNull()?.takeIf { it.plan.executable }?.let {
                 SftpTreeCopyPreflight(request, it.plan, issued,
-                    it.name, it.size)
+                    it.name, it.size, it.existingTargetDocumentIds)
             }
     }
 
@@ -219,8 +222,15 @@ internal class SftpToSafTreeCopy(
                 created = uri
                 // Providers may silently rename on a concurrent collision.
                 // Never stream to a path the user did not approve.
-                if (observer.observe(uri).displayName != confirmed.sourceName)
-                    throw IOException("SAF_DOCUMENT_NAME_CHANGED")
+                val newId = runCatching {
+                    DocumentsContract.getDocumentId(uri)
+                }.getOrNull().orEmpty()
+                if (uri.scheme != ContentResolver.SCHEME_CONTENT ||
+                    uri.authority != target.treeUri.authority ||
+                    !SafNewDocumentIdentity.matches(confirmed.sourceName,
+                        observer.observe(uri).displayName, newId,
+                        confirmed.existingTargetDocumentIds)
+                ) throw IOException("SAF_NEW_DOCUMENT_IDENTITY_UNVERIFIED")
                 return resolver.openOutputStream(uri, "w")
                     ?: throw FileNotFoundException()
             }

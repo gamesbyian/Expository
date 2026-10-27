@@ -215,6 +215,22 @@ class WorkspaceNavigationUiTest {
             target, "", "/media", "/media/file.bin", "100:123:false"))
     }
 
+    /** Identity is checked before opening a potentially truncating "w" stream. */
+    @Test fun newProviderDocumentMustHaveExactNameAndUnseenDocumentId() {
+        val existing = setOf("old-1", "old-2")
+        fun okay(name: String, observed: String, id: String) =
+            dev.expository.transfer.saf.SafNewDocumentIdentity.matches(
+                name, observed, id, existing)
+        assertTrue(okay("episode.txt", "episode.txt", "created-3"))
+        assertFalse("A rename suffix is an unapproved destination",
+            okay("episode.txt", "episode (1).txt", "created-3"))
+        assertFalse("A returned existing URI could overwrite user bytes",
+            okay("episode.txt", "episode.txt", "old-1"))
+        assertFalse(okay("episode.txt", "episode.txt", ""))
+        assertFalse(okay("", "", "created-3"))
+        assertFalse(okay("episode.txt", "Selected document", "created-3"))
+    }
+
     @Test fun anUnconnectedDualRemotePaneNeverOffersPeerUploadConfirmation() {
         compose.onNodeWithText("Dual view").performClick()
         compose.onNodeWithText("Device ↔ Server").performClick()
