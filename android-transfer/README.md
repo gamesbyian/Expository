@@ -17,9 +17,11 @@ The optional **Local/Remote app-session access gate** has only a pure policy fou
 
 ## Download an experimental APK
 
-For a reproducible CI-built developer APK, open the [latest successful owner-triggered Android debug build](https://github.com/gamesbyian/Expository/actions/runs/40463621576) and download the `expository-transfer-developer-debug-apk` artifact. The archive contains `app-debug.apk` and `SHA256SUMS.txt`. GitHub retains this artifact for **five days**, so a newer owner-triggered `/transfer-native apk` run is necessary after expiry. This is debug-signed, not release-signed; it is not backed up and is not available as a permanent store listing.
+For a reproducible CI-built developer APK, open the [latest successful owner-triggered Android debug build](https://github.com/gamesbyian/Expository/actions/runs/40463621576) and download the `expository-ftp-developer-debug-apk` artifact. New builds contain `expository-ftp-developer-debug.apk` and `SHA256SUMS.txt`. GitHub retains this artifact for **five days**, so a newer owner-triggered `/transfer-native apk` run is necessary after expiry. This is debug-signed, not release-signed; it is not backed up and is not available as a permanent store listing.
 
 When testing, use **test-owned Android folders and separately authorized disposable SFTP/FTPS accounts**. Do not enter sensitive credentials or edit important remote data in this developer preview. Local tree grants are transient; the app does not request `MANAGE_EXTERNAL_STORAGE` or a global filesystem grant. Granting a folder in Android Files is a distinct action from selecting a source file and confirming a mutation in Expository.
+
+APK naming policy: distributable Android artifacts must include the literal `expository-ftp` in the **APK filename itself**, not just in the GitHub Actions artifact/ZIP title. Existing archived builds retain their historical names. The local Gradle output remains `app-debug.apk` until CI packages the distributable file.
 
 ## Build and verify
 
