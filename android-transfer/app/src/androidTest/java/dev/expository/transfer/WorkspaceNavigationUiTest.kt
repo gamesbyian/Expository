@@ -90,43 +90,52 @@ class WorkspaceNavigationUiTest {
                 device.wait(androidx.test.uiautomator.Until.hasObject(
                     androidx.test.uiautomator.By.pkg("com.android.documentsui")), 3_000L)
             assertTrue("Android DocumentsUI must own tree-picker step", pickerVisible)
-            val roots = device.findObject(androidx.test.uiautomator.By.desc("Show roots"))
-                ?: device.findObject(androidx.test.uiautomator.By.descContains("navigation"))
-            roots?.click()
-            // Downloads in the picker side rail may be a synthetic recent-
-            // downloads collection, not the physical Download directory.
-            // Try its content first, then explicitly navigate the external
-            // storage volume and the concrete Download child.
-            if (device.wait(androidx.test.uiautomator.Until.hasObject(
-                    androidx.test.uiautomator.By.text("Downloads")), 8_000L)) {
-                tapText("Downloads", "TREE_DOWNLOADS_ROOT")
-            }
-            val foundInDownloads = device.wait(
-                androidx.test.uiautomator.Until.hasObject(
-                    androidx.test.uiautomator.By.text(folder)), 2_000L)
-            if (!foundInDownloads) {
-                val reopen = device.findObject(
+            // Prefer the actual storage volume, not DocumentsUI's virtual
+            // Downloads collection (which can hide real child directories).
+            // No filesystem path or grant is manufactured by this test.
+            fun openRoots() {
+                val toggle = device.findObject(
                     androidx.test.uiautomator.By.desc("Show roots"))
                     ?: device.findObject(
                         androidx.test.uiautomator.By.descContains("navigation"))
-                reopen?.click()
-                // The disposable Google APIs emulator's physical storage
-                // label varies by image and configuration.
-                val physicalRoot = listOf(
-                    "Internal storage", "Internal shared storage",
-                    "sdk_gphone64_x86_64", "sdk_gphone_x86_64",
-                    "Pixel_6", "Pixel 6", "emulator"
-                ).firstOrNull { label ->
-                    device.wait(androidx.test.uiautomator.Until.hasObject(
-                        androidx.test.uiautomator.By.text(label)), 600L)
+                toggle?.click()
+            }
+            fun visible(label: String, timeout: Long = 500L) =
+                device.wait(androidx.test.uiautomator.Until.hasObject(
+                    androidx.test.uiautomator.By.text(label)), timeout)
+            val physicalLabels = listOf(
+                "Internal storage", "Internal shared storage",
+                "sdk_gphone64_x86_64", "sdk_gphone_x86_64",
+                "Pixel_6", "Pixel 6", "emulator")
+            openRoots()
+            val physicalRoot = physicalLabels.firstOrNull { visible(it) }
+            if (physicalRoot != null) {
+                tapText(physicalRoot, "TREE_PHYSICAL_VOLUME")
+                if (visible("Download", 3_000L)) {
+                    tapText("Download", "TREE_PHYSICAL_DOWNLOAD_DIRECTORY")
+                } else if (visible("Downloads", 2_000L)) {
+                    tapText("Downloads", "TREE_PHYSICAL_DOWNLOAD_DIRECTORY")
                 }
-                if (physicalRoot != null) {
-                    tapText(physicalRoot, "TREE_PHYSICAL_VOLUME")
-                    if (device.wait(androidx.test.uiautomator.Until.hasObject(
-                            androidx.test.uiautomator.By.text("Download")), 5_000L)) {
-                        tapText("Download", "TREE_PHYSICAL_DOWNLOAD_DIRECTORY")
-                    }
+            } else {
+                // Some OEM pickers expose only the Downloads location.
+                // Trying it remains useful, but absence of this generated
+                // folder is an E2 provider/picker obstacle, not Copy success.
+                if (visible("Downloads", 2_000L)) {
+                    tapText("Downloads", "TREE_DOWNLOADS_ROOT")
                 }
+            }
+            if (!visible(folder, 4_000L)) {
+                // The failure must be diagnostic without leaking arbitrary
+                // provider filenames from a connected real device into CI.
+                // Report only allowlisted common navigation labels and the
+                // synthetic fixture's presence/absence.
+                openRoots()
+                val labels = (physicalLabels +
+                    listOf("Downloads", "Download", "Documents", "Recent",
+                        "Browse", "Use this folder")).filter { visible(it, 100L) }
+                error("TREE_SUBFOLDER_MISSING: rootLabels=" +
+                    labels.joinToString(",") + "; syntheticVisible=" +
+                    visible(folder, 100L))
             }
             tapText(folder, "TREE_SUBFOLDER")
             assertTrue("The test's synthetic subfolder must be selectable",
