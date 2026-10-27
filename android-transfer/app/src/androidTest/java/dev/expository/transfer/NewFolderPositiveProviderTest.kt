@@ -7,6 +7,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
@@ -105,7 +106,8 @@ class NewFolderPositiveProviderTest {
             val before = AttemptRecoveryIndex.recover(ctx)
             compose.onNodeWithText("New folder…").assertIsEnabled()
                 .performSemanticsAction(SemanticsActions.OnClick)
-            compose.onNodeWithText("Folder name").performTextInput(child)
+            compose.onNodeWithTag("saf-new-folder-name").performTextInput(child)
+            compose.waitForIdle()
             compose.onNodeWithText("Review New Folder")
                 .performSemanticsAction(SemanticsActions.OnClick)
             compose.waitUntil(20_000L) {
