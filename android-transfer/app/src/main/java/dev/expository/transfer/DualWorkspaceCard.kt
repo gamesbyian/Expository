@@ -171,6 +171,16 @@ internal fun DualWorkspaceCard(
                     // Movable content keeps the authenticated session attached
                     // to its owner even when the user swaps A and B.
                     val first = (which == WorkspacePane.A) != remoteSwapped
+                    val peerLocal = if (which == WorkspacePane.A) {
+                        if (workspace.b.endpoint == BrowseEndpoint.LOCAL) b else null
+                    } else {
+                        if (workspace.a.endpoint == BrowseEndpoint.LOCAL) a else null
+                    }
+                    if (peerLocal != null && peerLocal.selected.size >
+                        ScopedUploadPicker.MAX_DOCUMENTS) {
+                        Text("Select at most 12 device files for SFTP Copy.",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
                     val peerSources = if (which == WorkspacePane.A) {
                         if (workspace.b.endpoint == BrowseEndpoint.LOCAL)
                             LocalPaneUploadSource.fromSelection(b) else emptyList()
