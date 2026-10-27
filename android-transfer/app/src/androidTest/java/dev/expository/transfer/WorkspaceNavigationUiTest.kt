@@ -2,10 +2,7 @@ package dev.expository.transfer
 
 import android.content.ClipData
 import android.content.ContentValues
-import android.content.ContentProvider
-import android.database.Cursor
 import android.database.MatrixCursor
-import android.test.mock.MockContentResolver
 import android.net.Uri
 import android.content.Intent
 import android.provider.MediaStore
@@ -32,65 +29,49 @@ class WorkspaceNavigationUiTest {
 
 
     /**
-     * E2 synthetic DocumentsProvider cursor: 200-row bounded prefix, expanded
-     * inspection and hard 2000-row cap. No Android grant or actual file write
-     * is simulated or inferred from this policy test.
+     * Synthetic Android MatrixCursor tests the same bounded decoder used by
+     * the actual DocumentsProvider query. This is not an OS-picked grant,
+     * external-provider interoperability or a successful payload Copy.
      */
     @Test fun boundedSafListingShowsMoreWithoutTreatingTruncationAsComplete() {
         var rows = 205
         var corruptFirst = false
-        val provider = object : ContentProvider() {
-            override fun onCreate() = true
-            override fun query(uri: Uri, projection: Array<out String>?,
-                selection: String?, selectionArgs: Array<out String>?,
-                sortOrder: String?): Cursor {
-                val columns = projection ?: arrayOf(
-                    android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                    android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                    android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE,
-                    android.provider.DocumentsContract.Document.COLUMN_SIZE
-                )
-                return MatrixCursor(columns).apply {
-                    repeat(rows) { i ->
-                        addRow(arrayOf(
-                            if (corruptFirst && i == 0) null else "id-$i",
-                            "Synthetic $i.txt", "text/plain", i.toLong()))
-                    }
+        fun decode(limit: Int = LocalTreeReader.MAX_VISIBLE): TreeListing {
+            val columns = arrayOf(
+                android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE,
+                android.provider.DocumentsContract.Document.COLUMN_SIZE
+            )
+            return MatrixCursor(columns).use { cursor ->
+                repeat(rows) { i ->
+                    cursor.addRow(arrayOf(
+                        if (corruptFirst && i == 0) null else "id-$i",
+                        "Synthetic $i.txt", "text/plain", i.toLong()))
                 }
+                LocalTreeReader.decodeRows(cursor, limit)
             }
-            override fun getType(uri: Uri): String? = null
-            override fun insert(uri: Uri, values: ContentValues?): Uri? = null
-            override fun delete(uri: Uri, selection: String?,
-                selectionArgs: Array<out String>?): Int = 0
-            override fun update(uri: Uri, values: ContentValues?,
-                selection: String?, selectionArgs: Array<out String>?): Int = 0
         }
-        val resolver = MockContentResolver().apply {
-            addProvider("synthetic.expository.test", provider)
-        }
-        val tree = Uri.parse("content://synthetic.expository.test/tree/root")
-        assertTrue(LocalTreeReader.validTree(tree))
-        val first = LocalTreeReader.list(resolver, tree, "root")
+        val first = decode()
         assertEquals(200, first.children.size)
         assertFalse(first.complete)
         assertTrue(first.hasMore)
 
-        val expanded = LocalTreeReader.list(resolver, tree, "root", 400)
+        val expanded = decode(400)
         assertEquals(205, expanded.children.size)
         assertTrue(expanded.complete)
         assertFalse(expanded.hasMore)
 
         rows = 2001
-        val hardCap = LocalTreeReader.list(resolver, tree, "root",
-            LocalTreeReader.MAX_BROWSE)
+        val hardCap = decode(LocalTreeReader.MAX_BROWSE)
         assertEquals(2000, hardCap.children.size)
         assertFalse(hardCap.complete)
         assertTrue(hardCap.hasMore)
         assertTrue("Invalid intermediate page size is refused",
-            runCatching { LocalTreeReader.list(resolver, tree, "root", 201) }.isFailure)
+            runCatching { decode(201) }.isFailure)
         rows = 10
         corruptFirst = true
-        val corrupt = LocalTreeReader.list(resolver, tree, "root")
+        val corrupt = decode()
         assertEquals(9, corrupt.children.size)
         assertFalse("Null provider metadata must invalidate a complete listing",
             corrupt.complete)
