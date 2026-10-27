@@ -385,6 +385,122 @@ internal fun SftpBrowseCard(
         }
     }
 
+    /** Read-only review for one file selected in the other SFTP pane. */
+    fun prepareRelay() {
+        val source = remotePaneSource ?: return
+        val destination = session ?: return
+        val destinationId = sessionId
+        val destinationFolder = folder
+        if (busy || pendingRelay != null || destinationId.isBlank() ||
+            source.session === destination) return
+        pendingRelay = null
+        busy = true
+        status = "Checking both authenticated servers and complete directory listings…"
+        scope.launch {
+            try {
+                val proposal = withContext(Dispatchers.IO) {
+                    SftpRelayCopy { digest ->
+                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                    }.prepare(SftpRelayRequest(
+                        source.session, source.sessionId, source.folder,
+                        source.absoluteFile, source.revision,
+                        destination, destinationId, destinationFolder))
+                }
+                if (session !== destination || sessionId != destinationId ||
+                    folder != destinationFolder || remotePaneSource != source) {
+                    pendingRelay = null
+                    status = "Other pane selection, session or destination changed. No copy approved."
+                } else if (proposal == null) {
+                    pendingRelay = null
+                    status = "SFTP-to-SFTP Copy blocked by stale source, collision, incomplete " +
+                        "folder listing or disconnected remote session."
+                } else {
+                    pendingRelay = proposal
+                    status = "Review SFTP-to-SFTP relay. No remote file has been written."
+                }
+            } catch (_: CancellationException) {
+                status = "Server-to-server Copy review canceled. Nothing written."
+            } catch (_: Exception) {
+                status = "Server-to-server Copy review unavailable. Nothing written."
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    fun executeRelay(confirmed: SftpRelayPreflight) {
+        val destination = session
+        val request = confirmed.request
+        val source = remotePaneSource
+        if (busy || destination == null || destination !== request.destination ||
+            sessionId != request.destinationSessionId ||
+            folder != request.destinationFolder ||
+            source == null || source.session !== request.source ||
+            source.sessionId != request.sourceSessionId ||
+            source.folder != request.sourceFolder ||
+            source.absoluteFile != request.sourceFile ||
+            source.revision != request.sourceRevision) {
+            pendingRelay = null
+            status = "Server or selected file changed. Copy approval discarded."
+            return
+        }
+        pendingRelay = null
+        val permit = AtomicBoolean(true)
+        continueCopy = permit
+        transferKind = "Server-to-server Copy"
+        transferred = 0L
+        busy = true
+        status = "Relaying one file through Android with an independent destination readback…"
+        scope.launch {
+            try {
+                val receipt = withContext(Dispatchers.IO) {
+                    val active = coroutineContext[Job]
+                    var lastDisplay = 0L
+                    SftpRelayCopy { digest ->
+                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                    }.copy(confirmed,
+                        continueRequested = { permit.get() && active?.isActive == true },
+                        onProgress = { bytes ->
+                            if (bytes - lastDisplay >= 256L * 1024L) {
+                                lastDisplay = bytes
+                                transferred = bytes
+                            }
+                        })
+                }
+                transferred = receipt.bytesWritten
+                status = when (receipt.proof) {
+                    CopyProof.BYTES_VERIFIED ->
+                        "Server-to-server Copy byte verified (" + receipt.bytesWritten +
+                            " bytes). Source unchanged; independent destination SHA-256 matched."
+                    CopyProof.WRITE_ACKNOWLEDGED ->
+                        "Remote server acknowledged the Copy, but independent byte proof is unavailable."
+                    CopyProof.UNCERTAIN ->
+                        "Remote Copy uncertain or partial. An exclusive-create destination may remain. " +
+                            "Review it before retrying."
+                    CopyProof.BLOCKED ->
+                        "Remote Copy blocked by fresh preflight, changed source or destination collision."
+                }
+                if (session === destination) {
+                    val current = withContext(Dispatchers.IO) {
+                        runCatching { destination.browse(folder) }
+                    }
+                    current.onSuccess {
+                        page = it
+                        browseLimit = SftpBrowseBounds.INITIAL
+                    }
+                }
+            } catch (_: CancellationException) {
+                status = "Server-to-server Copy interrupted; inspect possible partial destination."
+            } catch (_: Exception) {
+                status = "Server-to-server Copy outcome uncertain; inspect destination."
+            } finally {
+                continueCopy = null
+                transferKind = ""
+                busy = false
+            }
+        }
+    }
+
     fun browseTo(next: String,
         requestedLimit: Int = if (next == folder) browseLimit else SftpBrowseBounds.INITIAL) {
         val live = session ?: return
