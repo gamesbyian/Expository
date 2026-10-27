@@ -1,6 +1,7 @@
 package dev.expository.transfer
 
 import android.content.ContentResolver
+import android.database.Cursor
 import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.compose.foundation.layout.Arrangement
@@ -91,12 +92,24 @@ internal object LocalTreeReader {
             DocumentsContract.Document.COLUMN_MIME_TYPE,
             DocumentsContract.Document.COLUMN_SIZE
         )
+        return resolver.query(childrenUri, projection, null, null, null)?.use {
+            decodeRows(it, maxVisible)
+        } ?: throw SecurityException("Provider listing unavailable")
+    }
+
+    /**
+     * One deterministic, bounded cursor decoder shared by live SAF and
+     * synthetic instrumentation tests. No Android URI authority is fabricated
+     * for tests, and no partial cursor can authorize a mutation.
+     */
+    internal fun decodeRows(cursor: Cursor, maxVisible: Int = MAX_VISIBLE): TreeListing {
+        require(maxVisible in MAX_VISIBLE..MAX_BROWSE &&
+            maxVisible % MAX_VISIBLE == 0) { "INVALID_BROWSE_LIMIT" }
         val entries = ArrayList<TreeEntry>()
         val seen = HashSet<String>()
         var complete = true
         var hasMore = false
         var scanned = 0
-        resolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
             val idColumn = cursor.getColumnIndexOrThrow(
                 DocumentsContract.Document.COLUMN_DOCUMENT_ID)
             val nameColumn = cursor.getColumnIndexOrThrow(
@@ -135,7 +148,6 @@ internal object LocalTreeReader {
                         cursor.getLong(sizeColumn).takeIf { it >= 0L } else null
                 )
             }
-        } ?: throw SecurityException("Provider listing unavailable")
         return TreeListing(
             entries.sortedWith(compareByDescending<TreeEntry> { it.directory }
                 .thenBy(String.CASE_INSENSITIVE_ORDER) { it.title }),
