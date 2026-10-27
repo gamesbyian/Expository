@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -178,7 +179,8 @@ internal fun LocalTreePane(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     enabled = enabled && !state.loading,
-                    modifier = Modifier.heightIn(min = 48.dp),
+                    modifier = Modifier.heightIn(min = 48.dp)
+                        .testTag("local-tree-picker-" + label),
                     onClick = onPick
                 ) { Text(if (state.treeUri == null) "Choose folder" else "Change folder") }
                 if (state.treeUri != null) {
