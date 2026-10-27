@@ -114,9 +114,15 @@ internal object LocalTreeReader {
                     break
                 }
                 scanned++
-                val id = cursor.getString(idColumn) ?: continue
-                val name = cursor.getString(nameColumn) ?: continue
-                val mime = cursor.getString(typeColumn) ?: continue
+                val id = cursor.getString(idColumn)
+                val name = cursor.getString(nameColumn)
+                val mime = cursor.getString(typeColumn)
+                if (id == null || name == null || mime == null) {
+                    // A malformed provider row cannot silently disappear and
+                    // leave a mutation-authorizing "complete" snapshot.
+                    complete = false
+                    continue
+                }
                 if (id.isBlank() || name.isBlank() || !seen.add(id)) {
                     complete = false
                     continue
