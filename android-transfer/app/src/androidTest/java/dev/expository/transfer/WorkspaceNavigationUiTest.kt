@@ -182,12 +182,47 @@ class WorkspaceNavigationUiTest {
                 })).isEmpty())
     }
 
+    /** Source, grant and session are frozen without inventing actual grants. */
+    @Test fun remoteToLocalPeerTargetNeedsWritableScopedFolderAndFreshApproval() {
+        val tree = Uri.parse("content://synthetic.documents/tree/root")
+        val chosen = LocalTreeBrowseState(treeUri = tree,
+            crumbs = listOf(TreeCrumb("folder", "Synthetic")),
+            complete = true, canWrite = true, generation = 30L)
+        val target = requireNotNull(LocalPaneDownloadTarget.from(chosen))
+        assertEquals("folder", target.folderId)
+        assertEquals(30L, target.browseGeneration)
+        assertNull(LocalPaneDownloadTarget.from(chosen.copy(canWrite = false)))
+        assertNull(LocalPaneDownloadTarget.from(chosen.copy(complete = false)))
+        assertNull(LocalPaneDownloadTarget.from(chosen.copy(loading = true)))
+        assertNull(LocalPaneDownloadTarget.from(chosen.copy(treeUri = null)))
+        assertNull(LocalPaneDownloadTarget.from(chosen.copy(crumbs = emptyList())))
+        val witness = PeerSftpDownloadWitness(target, "session-1",
+            "/media", "/media/file.bin", "100:123:false")
+        assertTrue(witness.stillMatches(target, "session-1",
+            "/media", "/media/file.bin", "100:123:false"))
+        assertFalse(witness.stillMatches(target.copy(browseGeneration = 31L),
+            "session-1", "/media", "/media/file.bin", "100:123:false"))
+        assertFalse(witness.stillMatches(target, "session-2",
+            "/media", "/media/file.bin", "100:123:false"))
+        assertFalse(witness.stillMatches(target, "session-1",
+            "/other", "/media/file.bin", "100:123:false"))
+        assertFalse(witness.stillMatches(target, "session-1",
+            "/media", "/media/other.bin", "100:123:false"))
+        assertFalse(witness.stillMatches(target, "session-1",
+            "/media", "/media/file.bin", "200:123:false"))
+        assertFalse(PeerSftpDownloadWitness(target, "", "/media",
+            "/media/file.bin", "100:123:false").stillMatches(
+            target, "", "/media", "/media/file.bin", "100:123:false"))
+    }
+
     @Test fun anUnconnectedDualRemotePaneNeverOffersPeerUploadConfirmation() {
         compose.onNodeWithText("Dual view").performClick()
         compose.onNodeWithText("Device ↔ Server").performClick()
         compose.onNodeWithText("Pane B · SFTP").performClick()
         compose.onNodeWithText("SFTP file transfer").assertExists()
         compose.onNodeWithText("Confirm SFTP Copy").assertDoesNotExist()
+        compose.onNodeWithText("Confirm Device Copy").assertDoesNotExist()
+        compose.onNodeWithText("Copy into other device pane…").assertDoesNotExist()
         compose.onNodeWithText("Copy selected device file here…").assertDoesNotExist()
     }
     @Test fun secureWorkspacesStayDistinctAndSyntheticFilesRequireDemoTab() {
