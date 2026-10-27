@@ -124,6 +124,12 @@ class WorkspaceNavigationUiTest {
         assertFalse(policy.canName("é", listOf("e\u0301")))
         assertFalse(policy.canName("safe", listOf("SAME", "same")))
         assertFalse(policy.canName("name", listOf("folder/unsafe")))
+        assertTrue(policy.canObserveNewChild(0))
+        assertTrue(policy.canObserveNewChild(1999))
+        assertFalse("Post-create metadata must remain within 2,000 child cap",
+            policy.canObserveNewChild(2000))
+        assertFalse(policy.canObserveNewChild(2001))
+        assertFalse(policy.canObserveNewChild(-1))
         assertTrue(policy.canName("é".repeat(127), emptyList()))
         assertFalse(policy.canName("é".repeat(128), emptyList()))
         for (invalid in listOf("", ".", "..", "a/b", "a\\b",
