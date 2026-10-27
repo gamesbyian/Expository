@@ -759,3 +759,6 @@ test('image rotates four quarter turns without changing image bytes or leaving s
 
 // Exercise standalone ZIP archive security and extraction fixtures in the regular CI entrypoint.
 require('./zip-browser.test.cjs');
+
+// Keep the opt-in writer's security and ref-creation contract in ordinary PR CI.
+require('./zip-publisher.test.cjs');
