@@ -73,7 +73,49 @@ class RenamePreviewUiSmokeTest {
                 RemoteRenamePreviewCard("synthetic-session", "/test", truncated, true)
             }
         }
-        rule.onNodeWithText("Complete SFTP listing", substring = true).assertExists()
+        rule.onNodeWithText("A complete authenticated SFTP listing", substring = true).assertExists()
         rule.onNodeWithText("Select all").assertDoesNotExist()
     }
+
+    @Test fun completeExpanded205EntryDirectoryCanBePreviewedButNotApplied() {
+        // The real browser supports 200 -> 400 ... -> 2,000 entry windows.
+        // A complete 205-entry folder must not be rejected by the old
+        // independently hard-coded 200-entry rename preview cap.
+        val observed = SftpBrowsePage(
+            (1..205).map { n -> SftpRemoteEntry(
+                "Fixture" + n.toString().padStart(3, '0') + ".txt",
+                false, 128L, 1711111111000L
+            ) },
+            truncated = false
+        )
+        rule.setContent {
+            MaterialTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    RemoteRenamePreviewCard("synthetic-session", "/expanded", observed, true)
+                }
+            }
+        }
+        rule.onNodeWithText("Select all").performClick()
+        rule.onNodeWithText("Selection: 205 / 205").assertExists()
+        rule.onNodeWithText("Proposed changes: 0", substring = true).assertExists()
+        rule.onNodeWithText("Apply disabled.", substring = true).assertExists()
+    }
+
+    @Test fun truncatedExpandedDirectoryStillBlocksRenamePreview() {
+        val observed = SftpBrowsePage(
+            (1..400).map { n -> SftpRemoteEntry(
+                "Fixture" + n.toString().padStart(3, '0') + ".txt",
+                false, 128L, null
+            ) },
+            truncated = true
+        )
+        rule.setContent {
+            MaterialTheme {
+                RemoteRenamePreviewCard("synthetic-session", "/expanded", observed, true)
+            }
+        }
+        rule.onNodeWithText("A complete authenticated SFTP listing", substring = true).assertExists()
+        rule.onNodeWithText("Select all").assertDoesNotExist()
+    }
+
 }
