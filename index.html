@@ -76,6 +76,8 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 .items.list .gallery-card{flex-direction:row;align-items:stretch}.items.list .gallery-card .tile{min-width:0}.items.list .gallery-card .folder-jump{max-width:32%;flex:0 0 auto;align-self:stretch}
 .doc-thumbnail{box-sizing:border-box;width:100%;height:100%;padding:10px;display:flex;flex-direction:column;align-items:stretch;gap:7px;overflow:hidden;background:linear-gradient(145deg,#f9fafc,#dbe2ee);color:#263148;text-align:left}.doc-thumbnail .doc-type{font-size:9px;font-weight:800;letter-spacing:.14em;color:#5274a4}.doc-thumbnail .doc-title{font-size:12px;line-height:1.3;overflow-wrap:anywhere;max-height:36px;overflow:hidden}.doc-thumbnail .doc-excerpt{font-size:9px;line-height:1.45;color:#69768b;overflow:hidden;overflow-wrap:anywhere}.items.list .doc-thumbnail{padding:5px;gap:2px}.items.list .doc-thumbnail .doc-title{font-size:9px;max-height:22px}.items.list .doc-thumbnail .doc-excerpt{display:none}
 @media(max-width:420px){.items.list .gallery-card{flex-direction:column}.items.list .gallery-card .folder-jump{max-width:none}}
+
+.zip-browser{width:100%;min-width:0}.zip-controls{display:flex;gap:8px;flex-wrap:wrap}.zip-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:9px}.zip-list button{text-align:left;min-height:48px;overflow-wrap:anywhere}.zip-member{background:var(--panel2);border:1px solid var(--stroke);border-radius:10px;padding:10px;color:var(--text);display:flex;flex-direction:column;gap:5px}.zip-mini{height:88px;display:grid;place-items:center}.zip-mini img{max-width:100%;max-height:88px;object-fit:contain}
 </style>
 </head>
 <body>
@@ -97,13 +99,132 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 </aside>
 <section class="workspace" id="workspace" data-mode="files" aria-label="Repository files">
 <div class="toolbar"><button id="back" class="icon-btn" title="Parent folder" aria-label="Parent folder">↑</button><input id="filter" class="field" placeholder="Find by name…" aria-label="Filter files by name"><select id="scope" class="field" aria-label="Search and gallery scope"><option value="folder">This folder</option><option value="repo">Search entire repo</option><option value="descendants">This folder + subfolders</option><option value="allFiles">All files in repo</option><option value="images">Images in subfolders</option><option value="allImages">All repo images</option></select><button id="listBtn" class="pill" title="List view">☷</button><button id="gridBtn" class="pill active" title="Gallery view">▦</button><button id="copyFolder" class="pill" title="Copy folder link" aria-label="Copy folder link">↗</button><button id="refineToggle" class="pill" aria-expanded="true" aria-controls="refineControls">Filters</button><button id="storyToggle" class="pill" aria-pressed="false" title="Explore commits, releases and tags">Story</button><button id="sizeToggle" class="pill" aria-pressed="false" aria-controls="sizeView" title="Explore indexed files and folders by size">Sizes</button><button id="selectMode" class="pill" aria-pressed="false" title="Select up to 12 images for a contact sheet">Select images</button><button id="contactSheet" class="pill" hidden disabled>Contact sheet (0)</button><button id="clearSelection" class="pill" hidden>Clear</button></div>
-<div class="refine" id="refineControls"><label for="sortFiles">Sort</label><select id="sortFiles" class="field" aria-label="Sort files"><option value="name">Name</option><option value="size">Largest</option><option value="extension">Extension</option><option value="path">Path</option></select><label for="sortDirection">Order</label><select id="sortDirection" class="field" aria-label="Sort order"><option value="asc">Ascending</option><option value="desc">Descending</option></select><label for="groupFolders">Group</label><select id="groupFolders" class="field" aria-label="Gallery grouping"><option value="none">Continuous grid</option><option value="folder">By folder</option></select><label for="fileKind">Kind</label><select id="fileKind" class="field" aria-label="Filter by file category"><option value="all">Everything</option><option value="image">Images</option><option value="html">HTML</option><option value="previewable">Previewable files</option><option value="code">Code</option><option value="doc">Documents</option><option value="data">Data</option><option value="other">Other</option></select><label for="extFilter">Extensions</label><input id="extFilter" class="field" placeholder="png, svg, html…" aria-label="Filter by file extensions, separated by commas"><label for="density">Gallery size <input id="density" type="range" min="110" max="270" value="145" step="10" aria-label="Gallery thumbnail size"></label><button id="contentSearch" class="pill" title="Scan bounded text files for a phrase">Search contents</button></div>
+<div class="refine" id="refineControls"><label for="sortFiles">Sort</label><select id="sortFiles" class="field" aria-label="Sort files"><option value="name">Name</option><option value="size">Largest</option><option value="extension">Extension</option><option value="path">Path</option></select><label for="sortDirection">Order</label><select id="sortDirection" class="field" aria-label="Sort order"><option value="asc">Ascending</option><option value="desc">Descending</option></select><label for="groupFolders">Group</label><select id="groupFolders" class="field" aria-label="Gallery grouping"><option value="none">Continuous grid</option><option value="folder">By folder</option></select><label for="includeZip" title="Inspect up to 12 archives locally, showing at most 1,000 files from each."><input id="includeZip" type="checkbox"> Include ZIP contents</label><label for="fileKind">Kind</label><select id="fileKind" class="field" aria-label="Filter by file category"><option value="all">Everything</option><option value="image">Images</option><option value="html">HTML</option><option value="previewable">Previewable files</option><option value="code">Code</option><option value="doc">Documents</option><option value="data">Data</option><option value="other">Other</option></select><label for="extFilter">Extensions</label><input id="extFilter" class="field" placeholder="png, svg, html…" aria-label="Filter by file extensions, separated by commas"><label for="density">Gallery size <input id="density" type="range" min="110" max="270" value="145" step="10" aria-label="Gallery thumbnail size"></label><button id="contentSearch" class="pill" title="Scan bounded text files for a phrase">Search contents</button></div>
 <div class="path" id="breadcrumbs">No repository selected</div>
 <section id="storyView" class="story-view" hidden aria-label="Repository Story Mode"></section><section id="sizeView" class="size-view" hidden aria-label="Repository file-size map"></section><div id="items" class="items grid"><div class="empty"><strong>Browse in full colour.</strong>Open any public repository, or connect a read-only token for your private ones.</div></div><div class="status" id="status" aria-live="polite"></div><div id="searchResults" aria-live="polite"></div>
 </section></main>
 <section id="preview" class="preview" role="dialog" aria-modal="true" aria-label="File preview"><div class="preview-head"><button id="prevPreview" class="icon-btn" aria-label="Previous file" title="Previous file">‹</button><button id="nextPreview" class="icon-btn" aria-label="Next file" title="Next file">›</button><strong id="previewTitle"></strong><button id="compareAction" class="pill" hidden aria-label="Pin image for visual comparison">Pin A</button><button id="copyRaw" class="pill" hidden aria-label="Copy file text">Copy text</button><button id="downloadRaw" class="pill" hidden aria-label="Download original file">Download</button><button id="previewFolder" class="pill" title="Open containing folder" aria-label="Open containing folder">Folder ↳</button><button id="copyFile" class="pill" title="Copy file deep link" aria-label="Copy file deep link">Copy ↗</button><a id="fileLink" class="pill" target="_blank" rel="noopener noreferrer" aria-label="View file on GitHub">Git ↗</a><button id="closePreview" class="icon-btn" aria-label="Close preview">✕</button></div><div id="inspectTools" class="inspect-tools" hidden><button id="fileHistory" class="pill">History</button><button id="structuredToggle" class="pill" hidden>JSON tree</button></div><div class="preview-body" id="previewBody"></div></section>
 <script>
 (()=>{'use strict';
+
+const ZIP_MAX_BYTES=24*1024*1024,ZIP_ENTRY_MAX=16*1024*1024,ZIP_TOTAL_MAX=128*1024*1024,ZIP_MAX_FILES=2000;
+let zipContext=null,zipStartFolder='';const zipManifests=new Map();let zipGalleryEntries=[],zipScanSeq=0;
+function zipManifest(blob){
+ const fail=msg=>{throw Error('ZIP: '+msg)};
+ if(blob.size>ZIP_MAX_BYTES)fail('archive exceeds the 24 MB browser-inspection limit');
+ return blob.arrayBuffer().then(buffer=>{
+  const bytes=new Uint8Array(buffer),v=new DataView(buffer);let eocd=-1;
+  for(let i=bytes.length-22;i>=Math.max(0,bytes.length-65557);i--)if(v.getUint32(i,true)===0x06054b50){eocd=i;break}
+  if(eocd<0)fail('end directory not found');
+  const count=v.getUint16(eocd+10,true),size=v.getUint32(eocd+12,true),offset=v.getUint32(eocd+16,true);
+  if(count===65535||size===0xffffffff||offset===0xffffffff)fail('ZIP64 requires another reader');
+  if(count>ZIP_MAX_FILES)fail('too many files');
+  if(offset+size>eocd)fail('invalid central directory');
+  const decoder=new TextDecoder('utf-8',{fatal:false}),entries=[];let pos=offset,total=0;
+  for(let i=0;i<count;i++){
+   if(pos+46>bytes.length||v.getUint32(pos,true)!==0x02014b50)fail('bad central directory entry');
+   const flags=v.getUint16(pos+8,true),method=v.getUint16(pos+10,true),crc=v.getUint32(pos+16,true),
+    compressed=v.getUint32(pos+20,true),uncompressed=v.getUint32(pos+24,true),
+    nameLen=v.getUint16(pos+28,true),extraLen=v.getUint16(pos+30,true),commentLen=v.getUint16(pos+32,true),
+    local=v.getUint32(pos+42,true);
+   if(pos+46+nameLen+extraLen+commentLen>bytes.length)fail('truncated entry');
+   const name=decoder.decode(bytes.subarray(pos+46,pos+46+nameLen)).replace(/\\/g,'/');
+   pos+=46+nameLen+extraLen+commentLen;
+   if(!name||name.startsWith('/')||/[\x00-\x1f\x7f]/.test(name)||name.split('/').some(x=>x==='..'||x==='.'||!x)||/^[a-zA-Z]:/.test(name))continue;
+   if(name.endsWith('/'))continue;
+   if(uncompressed>ZIP_ENTRY_MAX||compressed>ZIP_MAX_BYTES)continue;
+   total+=uncompressed;if(total>ZIP_TOTAL_MAX)fail('uncompressed total exceeds 128 MB');
+   if(local+30>bytes.length||v.getUint32(local,true)!==0x04034b50)continue;
+   const start=local+30+v.getUint16(local+26,true)+v.getUint16(local+28,true);
+   if(start+compressed>bytes.length)continue;
+   entries.push({name,path:name,size:uncompressed,compressed,method,flags,crc,start,type:'file'});
+  }
+  return {blob,entries,skipped:count-entries.length};
+ });
+}
+function zipCRC(bytes){
+ let crc=0xffffffff;for(const b of bytes){crc^=b;for(let k=0;k<8;k++)crc=(crc>>>1)^((crc&1)?0xedb88320:0)}
+ return (crc^0xffffffff)>>>0
+}
+async function scanZipGallery(){
+ const seq=++zipScanSeq;zipGalleryEntries=[];zipManifests.clear();
+ if(!$('includeZip').checked||!state.repo||!state.branch){paint();return}
+ if(!state.indexReady){status('ZIP gallery will load after repository indexing.');return}
+ const eligible=state.indexEntries.filter(x=>x.type==='file'&&/\.zip$/i.test(x.name)&&x.size<=ZIP_MAX_BYTES);let budget=64*1024*1024;const archives=[];
+ for(const item of eligible){if(archives.length===12)break;if(item.size>budget)continue;archives.push(item);budget-=item.size}
+ const repo=state.repo,branch=state.branch;let failures=0,processed=0;
+ status('Inspecting up to '+archives.length+' ZIPs locally…');
+ for(const archive of archives){
+  if(seq!==zipScanSeq||repo!==state.repo||branch!==state.branch||!$('includeZip').checked)return;
+  try{
+   const manifest=await zipManifest(await fetchBlob(archive));
+   if(seq!==zipScanSeq||repo!==state.repo||branch!==state.branch)return;
+   zipManifests.set(archive.path,manifest);
+   for(const member of manifest.entries.slice(0,1000))zipGalleryEntries.push({path:archive.path+'!/'+member.name,name:member.name.split('/').at(-1),size:member.size,type:'file',zipMember:member,zipParent:archive});
+  }catch{failures++}
+  processed++;
+ }
+ if(seq===zipScanSeq&&repo===state.repo&&branch===state.branch){state.limit=80;paint();status('ZIP gallery: '+zipGalleryEntries.length+' files from '+(processed-failures)+' archives'+(failures?' · '+failures+' skipped':'')+(archives.length===12?' · maximum 12 eligible archives':'')+'.')}
+}
+async function unzipMember(manifest,entry){
+ if(entry.flags&1)throw Error('Encrypted ZIP entries are unsupported.');
+ if(entry.method!==0&&entry.method!==8)throw Error('Unsupported ZIP compression method '+entry.method);
+ const piece=manifest.blob.slice(entry.start,entry.start+entry.compressed);
+ let result=piece;
+ if(entry.method===8){
+  if(typeof DecompressionStream!=='function')throw Error('This browser cannot decode ZIP deflate streams.');
+  const reader=piece.stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader();
+  const chunks=[];let total=0;
+  try{for(;;){const {done,value}=await reader.read();if(done)break;total+=value.byteLength;if(total>entry.size||total>ZIP_ENTRY_MAX)throw Error('ZIP decompression exceeded declared size');chunks.push(value)}}
+  finally{reader.releaseLock()}
+  result=new Blob(chunks);
+ }
+ if(result.size!==entry.size||result.size>ZIP_ENTRY_MAX)throw Error('ZIP member length mismatch.');
+ const data=new Uint8Array(await result.arrayBuffer());
+ if(zipCRC(data)!==entry.crc)throw Error('ZIP member checksum mismatch.');
+ return withMediaType(new Blob([data]),entry.name.split('/').at(-1));
+}
+function zipViewer(manifest,parent,folder=''){
+ const root=elem('div','zip-browser');const heading=elem('div','zip-controls');
+ const up=elem('button','pill','← '+(folder?'Up a folder':'Repository file'));up.onclick=()=>folder?showContent(zipViewer(manifest,parent,folder.split('/').slice(0,-1).join('/'))):(clearPreview(),navigate(fileFolder(parent.path)));
+ const downloadAll=elem('button','pill','Extract all to device');
+ downloadAll.onclick=async()=>{
+  if(typeof window.showDirectoryPicker!=='function'){status('Folder extraction is unavailable in this browser. Open individual files to download them, or download the original ZIP.');return}
+  try{
+   const directory=await window.showDirectoryPicker({mode:'readwrite'});const errors=[];
+   for(const entry of manifest.entries){
+    try{
+     let dest=directory;const parts=entry.name.split('/');
+     for(const p of parts.slice(0,-1))dest=await dest.getDirectoryHandle(p,{create:true});
+     try{await dest.getFileHandle(parts.at(-1));errors.push(entry.name+': destination already exists');continue}catch(e){if(e.name!=='NotFoundError')throw e}
+     const file=await dest.getFileHandle(parts.at(-1),{create:true});
+     const writer=await file.createWritable();try{await writer.write(await unzipMember(manifest,entry));await writer.close()}catch(e){await writer.abort().catch(()=>{});throw e}
+    }catch(e){errors.push(entry.name+': '+e.message)}
+   }
+   status(errors.length?'ZIP extraction incomplete: '+errors.length+' entries failed.':'Extracted '+manifest.entries.length+' files to the selected device folder.');
+  }catch(e){status('ZIP extraction cancelled or failed: '+e.message)}
+ };
+ heading.append(up,downloadAll);root.append(heading);
+ const summary=elem('p','hint',manifest.entries.length+' safe files · '+manifest.skipped+' unsupported or excluded · local browser decoding, no repository changes');
+ root.append(summary);
+ const listing=elem('div','zip-list'),prefix=folder?folder+'/':'',folders=new Set(),files=[];
+ for(const entry of manifest.entries){if(!entry.name.startsWith(prefix))continue;const remain=entry.name.slice(prefix.length);if(remain.includes('/'))folders.add(remain.split('/')[0]);else files.push(entry)}
+ for(const dirname of [...folders].sort()){
+  const b=elem('button','pill','📁 '+dirname);b.onclick=()=>showContent(zipViewer(manifest,parent,prefix+dirname));listing.append(b)
+ }
+ for(const entry of files.sort((a,b)=>a.name.localeCompare(b.name))){
+  const b=elem('button','zip-member');b.append(elem('span','filename',entry.name.split('/').at(-1)),elem('span','meta',formatSize(entry.size)));
+  b.onclick=()=>openPreview({path:parent.path,name:entry.name.split('/').at(-1),size:entry.size,type:'file',zipMember:entry,zipParent:parent});
+  if(imageRx.test(entry.name)&&entry.size<=2e6){
+   const thumb=elem('span','zip-mini');b.prepend(thumb);
+   unzipMember(manifest,entry).then(blob=>{if(b.isConnected){const img=elem('img');img.alt='';img.src=blobUrl(blob,'preview');thumb.append(img)}}).catch(()=>{});
+  }
+  listing.append(b)
+ }
+ if(!files.length&&!folders.size)listing.append(elem('p','hint','Folder is empty.'));
+ root.append(listing);return root
+}
+
 const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0,selectionMode:false,selected:new Map(),sheetSeq:0,sheetOpen:false,activeRequests:new Set(),rateLimitedUntil:0,folderRecoveryKey:'',sizeOpen:false,imageFullscreenCleanup:null};
 const codeRx=/\.(?:js|jsx|mjs|ts|tsx|py|rs|go|java|kt|c|cpp|h|hpp|sh|css|scss|html|sql|gradle)$/i,docsRx=/\.(?:md|markdown|txt|pdf|rst)$/i,dataRx=/\.(?:json|csv|tsv|yaml|yml|xml|toml|ini|properties)$/i;
 const docThumbRx=/\.(?:html?|md|markdown|txt|json|csv|tsv|ya?ml|xml|pdf|css)$/i,previewableRx=/\.(?:png|jpe?g|webp|gif|svg|avif|bmp|html?|md|markdown|txt|json|csv|tsv|ya?ml|xml|pdf|css)$/i;
@@ -160,7 +281,7 @@ function clearUrls(kind){const set=kind==='thumb'?state.thumbUrls:state.previewU
 function clearObjects(){clearUrls('thumb');clearUrls('preview')}
 function withMediaType(blob,name){const ext=name.split('.').at(-1).toLowerCase();const mime={svg:'image/svg+xml',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',avif:'image/avif',bmp:'image/bmp',pdf:'application/pdf',mp4:'video/mp4',webm:'video/webm',mp3:'audio/mpeg',m4a:'audio/mp4',wav:'audio/wav',ogg:'audio/ogg'}[ext];return mime?new Blob([blob],{type:mime}):blob}
 function entryUrl(item){const p=pathPart(item.path);return '/repos/'+state.repo+'/contents/'+p+'?ref='+enc(state.branch)}
-async function fetchBlob(item){const r=await api(entryUrl(item),'application/vnd.github.raw+json');return withMediaType(await r.blob(),item.name)}
+async function fetchBlob(item){if(item.zipMember){const manifest=zipManifests.get(item.zipParent.path)||zipContext;if(!manifest)throw Error('ZIP archive no longer loaded.');return unzipMember(manifest,item.zipMember)}const r=await api(entryUrl(item),'application/vnd.github.raw+json');return withMediaType(await r.blob(),item.name)}
 function icon(item){return item.type==='dir'?'📁':imageRx.test(item.name)?'◈':/\.pdf$/i.test(item.name)?'▤':textRx.test(item.name)?'≡':'◇'}
 function formatSize(n){return n==null?'':n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB'}
 function elem(tag,cls,text){let el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=text;return el}
@@ -273,7 +394,7 @@ async function indexTree(repo,branch,request){
   state.indexTruncated=Boolean(result.truncated);state.indexReady=true;state.indexError=false;
   for(const entry of result.tree||[])if(entry.type==='tree')treeAdd(entry.path);
   const recovered=recoverLargeFolderFromIndex();
-  paintTree();if(recovered||$('scope').value!=='folder')paint();if(state.sizeOpen)renderSizeMap();
+  paintTree();if(recovered||$('scope').value!=='folder')paint();if(state.sizeOpen)renderSizeMap();if($('includeZip').checked)scanZipGallery();
   if(result.truncated){status('Repository tree index truncated by GitHub; search and very large directory listings may be incomplete.');if(state.items.length>=1000)recoverTargetedFolder()}
   else if(recovered)status(state.items.length+' items · '+(state.path||'/')+' · '+recovered+' additional files/folders recovered from complete Git tree index.');
  }catch(e){if(request===state.repoRequest){state.indexReady=false;state.indexError=true;if($('scope').value!=='folder')paint();if(state.sizeOpen)renderSizeMap();status('Folder indexing unavailable: '+e.message+' · Direct browsing still works.');if(state.items.length>=1000)recoverTargetedFolder()}}
@@ -496,11 +617,11 @@ function updateHash(filePath=''){
 }
 function currentMatches(){
  const query=$('filter').value.trim().toLowerCase(),scope=$('scope').value;
- if(scope==='folder')return gallerySort(state.items.filter(x=>x.name.toLowerCase().includes(query)));
+ if(scope==='folder')return gallerySort([...state.items,...zipGalleryEntries.filter(x=>fileFolder(x.zipParent.path)===state.path)].filter(x=>x.name.toLowerCase().includes(query)));
  if(!state.indexReady){if(state.indexError)return gallerySort(state.items.filter(x=>(!['images','allImages'].includes(scope)||x.type==='file'&&imageRx.test(x.name))&&x.name.toLowerCase().includes(query)));return null}
  if(scope==='repo'&&!query)return [];
  const prefix=state.path?state.path+'/':'',all=scope==='repo'||scope==='allFiles'||scope==='allImages';
- return gallerySort(state.indexEntries.filter(x=>(all||x.path.startsWith(prefix))&&(!['images','allImages'].includes(scope)||imageRx.test(x.name))&&x.path.toLowerCase().includes(query)));
+ return gallerySort([...state.indexEntries,...zipGalleryEntries].filter(x=>(all||x.path.startsWith(prefix))&&(!['images','allImages'].includes(scope)||imageRx.test(x.name))&&x.path.toLowerCase().includes(query)));
 }
 function updateSelectionControls(){
  const count=state.selected.size,active=state.selectionMode;
@@ -520,6 +641,7 @@ function selectImage(item){
 }
 function clearSelection(){state.selected.clear();state.selectionMode=false;updateSelectionControls()}
 function openContainingFolder(path){
+ const virtual=zipGalleryEntries.find(x=>x.path===path);if(virtual){zipStartFolder=fileFolder(virtual.zipMember.name);return openPreview(virtual.zipParent)}
  const folder=fileFolder(path);$('scope').value='folder';$('filter').value='';$('fileKind').value='all';$('extFilter').value='';state.limit=80;return navigate(folder)
 }
 function paint(more=false){
@@ -872,7 +994,8 @@ function jsonViewer(value){
 async function renderCurrentFile(){
  const item=state.preview,blob=state.currentBlob;if(!item||!blob)return;
  closeImageFullscreen();clearUrls('preview');const lower=item.name.toLowerCase();let node;
- if(imageRx.test(lower))node=imageViewer(blob,item);
+ if(/\.zip$/i.test(lower)&&!item.zipMember){zipContext=zipManifests.get(item.path)||await zipManifest(blob);const start=zipStartFolder;zipStartFolder='';node=zipViewer(zipContext,item,start)}
+ else if(imageRx.test(lower))node=imageViewer(blob,item);
  else if(/\.pdf$/i.test(lower)){node=elem('iframe');node.title=item.name;node.src=blobUrl(new Blob([blob],{type:'application/pdf'}))}
  else if(/\.(mp4|webm|ogg)$/i.test(lower)){node=elem('video');node.controls=true;node.src=blobUrl(blob)}
  else if(/\.(mp3|wav|m4a|flac)$/i.test(lower)){node=elem('audio');node.controls=true;node.src=blobUrl(blob)}
@@ -887,7 +1010,7 @@ async function renderCurrentFile(){
    node=state.structuredOpen?tableViewer(text.slice(0,500000),/\.tsv$/i.test(lower)?'\t':','):sourceViewer(text.slice(0,500000),item.name,text.length>500000);
   }else node=/\.(md|markdown)$/i.test(lower)?simpleMarkdown(text.slice(0,500000),item):sourceViewer(text.slice(0,500000),item.name,text.length>500000);
  }else node=elem('div','message','No inline preview for this format. Use the GitHub link.');
- showContent(node);updateCompareAction()
+ showContent(node);if(item.zipMember&&zipContext){const back=elem('button','pill','← Back to ZIP');back.onclick=()=>openPreview(item.zipParent);$('previewBody').prepend(back)}updateCompareAction()
 }
 async function toggleStructured(){if(!state.preview||!state.previewText)return;state.structuredOpen=!state.structuredOpen;await renderCurrentFile()}
 async function toggleHistory(){
@@ -1078,6 +1201,7 @@ function tableViewer(text,delimiter){
 
 async function openPreview(item){
  if(!safeRepoPath(item?.path)||!item.path){status('Invalid preview path.');return}
+ if(!item.zipMember)zipContext=null;else zipContext=zipManifests.get(item.zipParent.path)||zipContext;
  state.sheetOpen=false;++state.sheetSeq;
  for(const id of ['prevPreview','nextPreview','fileLink','copyFile'])$(id).hidden=false;
  if(!state.preview)state.returnFocus=document.activeElement;
@@ -1085,7 +1209,7 @@ async function openPreview(item){
  $('fileHistory').textContent='History';$('inspectTools').hidden=false;$('structuredToggle').hidden=true;
  $('copyRaw').hidden=true;$('downloadRaw').hidden=true;state.compareMode=false;
  previewButtons();updateCompareAction();updateHash(item.path);
- $('previewTitle').textContent=item.name;$('fileLink').href='https://github.com/'+state.repo+'/blob/'+enc(state.branch)+'/'+pathPart(item.path);
+ $('previewTitle').textContent=item.name;$('copyFile').hidden=Boolean(item.zipMember);$('fileLink').hidden=Boolean(item.zipMember);$('fileHistory').hidden=Boolean(item.zipMember);$('prevPreview').disabled=Boolean(item.zipMember);$('nextPreview').disabled=Boolean(item.zipMember);$('fileLink').href='https://github.com/'+state.repo+'/blob/'+enc(state.branch)+'/'+pathPart(item.path);
  $('preview').classList.add('open');$('scrim').classList.add('on');$('pageHeader').inert=true;$('pageMain').inert=true;$('closePreview').focus();
  showContent(elem('div','message','Loading preview…'));
  try{
@@ -1120,7 +1244,7 @@ async function openRepo(targetPath=''){
  $('branchPicker').hidden=true;$('branchPicker').replaceChildren(new Option('Choose a branch…',''));$('loadBranches').disabled=true;
  abortRequests();
  cancelContentScan();stopStory();hideSizeMap();state.storyData=null;const request=++state.repoRequest;state.repo=repo;state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;
- state.folderRecoveryKey='';clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
+ state.folderRecoveryKey='';++zipScanSeq;zipGalleryEntries=[];zipManifests.clear();zipContext=null;zipStartFolder='';clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
  clearObjects();clearPreview();++state.seq;status('Connecting to '+repo+'…');
  try{
   const info=await json('/repos/'+repo);if(request!==state.repoRequest)return;
@@ -1130,7 +1254,7 @@ async function openRepo(targetPath=''){
  }catch(e){if(request===state.repoRequest)status('Cannot open repository: '+e.message);return false}
 }
 function resetSession(){
- abortRequests();state.rateLimitedUntil=0;state.folderRecoveryKey='';cancelContentScan();stopStory();hideSizeMap();state.storyData=null;++state.repoRequest;++state.seq;state.token='';state.repo='';state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;state.cache.clear();state.items=[];state.visibleItems=[];
+ abortRequests();state.rateLimitedUntil=0;state.folderRecoveryKey='';++zipScanSeq;zipGalleryEntries=[];zipManifests.clear();zipContext=null;zipStartFolder='';cancelContentScan();stopStory();hideSizeMap();state.storyData=null;++state.repoRequest;++state.seq;state.token='';state.repo='';state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;state.cache.clear();state.items=[];state.visibleItems=[];
  state.tree.clear();state.expanded.clear();state.indexEntries=[];state.indexReady=false;state.indexError=false;state.indexTruncated=false;state.repoIsPrivate=true;
  clearSelection();state.renderEpoch++;if(state.thumbObserver){state.thumbObserver.disconnect();state.thumbObserver=null}thumbQueue.length=0;
  clearPreview();clearObjects();paintBookmarks();$('token').value='';$('branch').value='';$('loadBranches').disabled=true;$('loadBranches').textContent='Browse branches';$('branchPicker').hidden=true;$('branchPicker').replaceChildren(new Option('Choose a branch…',''));
@@ -1165,7 +1289,7 @@ function syncRefineToViewport(){
 }
 $('refineToggle').onclick=()=>{const controls=$('refineControls');controls.hidden=!controls.hidden;$('refineToggle').setAttribute('aria-expanded',String(!controls.hidden));$('refineToggle').textContent=controls.hidden?'Filters':'Hide filters'};
 if(typeof window!=='undefined'&&window.matchMedia){const mql=window.matchMedia('(max-width:760px)');syncRefineToViewport();mql.addEventListener('change',()=>{syncRefineToViewport();$('refineToggle').textContent='Filters'})}
-$('filter').oninput=()=>{state.limit=80;paint()};$('sortFiles').onchange=()=>{state.limit=80;paint()};$('sortDirection').onchange=()=>{state.limit=80;paint()};$('groupFolders').onchange=()=>{state.limit=80;paint()};$('fileKind').onchange=()=>{state.limit=80;paint()};$('extFilter').oninput=()=>{state.limit=80;paint()};$('density').oninput=()=>{$('items').style.setProperty('--tile-min',$('density').value+'px')};$('scope').onchange=()=>{if(['images','allImages'].includes($('scope').value)&&!['all','image'].includes($('fileKind').value))$('fileKind').value='image';state.limit=80;paint()};$('prevPreview').onclick=()=>adjacentPreview(-1);$('nextPreview').onclick=()=>adjacentPreview(1);$('back').onclick=()=>navigate(state.path.split('/').slice(0,-1).join('/'));$('gridBtn').onclick=()=>{state.mode='grid';$('gridBtn').classList.add('active');$('listBtn').classList.remove('active');paint()};$('listBtn').onclick=()=>{state.mode='list';$('listBtn').classList.add('active');$('gridBtn').classList.remove('active');paint()};
+$('filter').oninput=()=>{state.limit=80;paint()};$('sortFiles').onchange=()=>{state.limit=80;paint()};$('sortDirection').onchange=()=>{state.limit=80;paint()};$('groupFolders').onchange=()=>{state.limit=80;paint()};$('fileKind').onchange=()=>{state.limit=80;paint()};$('includeZip').onchange=scanZipGallery;$('extFilter').oninput=()=>{state.limit=80;paint()};$('density').oninput=()=>{$('items').style.setProperty('--tile-min',$('density').value+'px')};$('scope').onchange=()=>{if(['images','allImages'].includes($('scope').value)&&!['all','image'].includes($('fileKind').value))$('fileKind').value='image';state.limit=80;paint()};$('prevPreview').onclick=()=>adjacentPreview(-1);$('nextPreview').onclick=()=>adjacentPreview(1);$('back').onclick=()=>navigate(state.path.split('/').slice(0,-1).join('/'));$('gridBtn').onclick=()=>{state.mode='grid';$('gridBtn').classList.add('active');$('listBtn').classList.remove('active');paint()};$('listBtn').onclick=()=>{state.mode='list';$('listBtn').classList.add('active');$('gridBtn').classList.remove('active');paint()};
 $('theme').onclick=()=>{document.body.classList.toggle('light');$('theme').textContent=document.body.classList.contains('light')?'☾':'☀︎';try{localStorage.setItem('expository-theme',document.body.classList.contains('light')?'light':'dark')}catch{}};
 try{if(localStorage.getItem('expository-theme')==='light')$('theme').click()}catch{}
 $('navToggle').onclick=()=>{$('sidebar').classList.add('open');$('scrim').classList.add('on')};$('closePreview').onclick=clearPreview;$('scrim').onclick=()=>{clearPreview();closeNav()};
