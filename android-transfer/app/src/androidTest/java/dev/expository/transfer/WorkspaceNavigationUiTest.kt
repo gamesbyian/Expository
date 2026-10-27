@@ -2,6 +2,10 @@ package dev.expository.transfer
 
 import android.content.ClipData
 import android.content.ContentValues
+import android.content.ContentProvider
+import android.database.Cursor
+import android.database.MatrixCursor
+import android.test.mock.MockContentResolver
 import android.net.Uri
 import android.content.Intent
 import android.provider.MediaStore
@@ -25,6 +29,63 @@ import java.util.UUID
 @RunWith(AndroidJUnit4::class)
 class WorkspaceNavigationUiTest {
     @get:Rule val compose = createAndroidComposeRule<TransferActivity>()
+
+
+    /**
+     * E2 synthetic DocumentsProvider cursor: 200-row bounded prefix, expanded
+     * inspection and hard 2000-row cap. No Android grant or actual file write
+     * is simulated or inferred from this policy test.
+     */
+    @Test fun boundedSafListingShowsMoreWithoutTreatingTruncationAsComplete() {
+        var rows = 205
+        val provider = object : ContentProvider() {
+            override fun onCreate() = true
+            override fun query(uri: Uri, projection: Array<out String>?,
+                selection: String?, selectionArgs: Array<out String>?,
+                sortOrder: String?): Cursor {
+                val columns = projection ?: arrayOf(
+                    android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                    android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                    android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE,
+                    android.provider.DocumentsContract.Document.COLUMN_SIZE
+                )
+                return MatrixCursor(columns).apply {
+                    repeat(rows) { i ->
+                        addRow(arrayOf("id-$i", "Synthetic $i.txt", "text/plain", i.toLong()))
+                    }
+                }
+            }
+            override fun getType(uri: Uri): String? = null
+            override fun insert(uri: Uri, values: ContentValues?): Uri? = null
+            override fun delete(uri: Uri, selection: String?,
+                selectionArgs: Array<out String>?): Int = 0
+            override fun update(uri: Uri, values: ContentValues?,
+                selection: String?, selectionArgs: Array<out String>?): Int = 0
+        }
+        val resolver = MockContentResolver().apply {
+            addProvider("synthetic.expository.test", provider)
+        }
+        val tree = Uri.parse("content://synthetic.expository.test/tree/root")
+        assertTrue(LocalTreeReader.validTree(tree))
+        val first = LocalTreeReader.list(resolver, tree, "root")
+        assertEquals(200, first.children.size)
+        assertFalse(first.complete)
+        assertTrue(first.hasMore)
+
+        val expanded = LocalTreeReader.list(resolver, tree, "root", 400)
+        assertEquals(205, expanded.children.size)
+        assertTrue(expanded.complete)
+        assertFalse(expanded.hasMore)
+
+        rows = 2001
+        val hardCap = LocalTreeReader.list(resolver, tree, "root",
+            LocalTreeReader.MAX_BROWSE)
+        assertEquals(2000, hardCap.children.size)
+        assertFalse(hardCap.complete)
+        assertTrue(hardCap.hasMore)
+        assertTrue("Invalid intermediate page size is refused",
+            runCatching { LocalTreeReader.list(resolver, tree, "root", 201) }.isFailure)
+    }
 
     @Test fun secureWorkspacesStayDistinctAndSyntheticFilesRequireDemoTab() {
         compose.onNodeWithText("✓ Local").assertExists()
