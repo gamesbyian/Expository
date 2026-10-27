@@ -45,6 +45,7 @@ internal fun DualWorkspaceCard(
     onFocus: (WorkspacePane) -> Unit,
     onPick: (WorkspacePane) -> Unit,
     onNavigate: (WorkspacePane, List<TreeCrumb>) -> Unit,
+    onLoadMore: (WorkspacePane) -> Unit,
     onSelect: (WorkspacePane, TreeEntry) -> Unit,
     busy: Boolean,
     copyStatus: String,
@@ -111,6 +112,7 @@ internal fun DualWorkspaceCard(
                                 onNavigate(which, tree.crumbs.dropLast(1))
                         },
                         onRefresh = { onNavigate(which, tree.crumbs) },
+                        onLoadMore = { onLoadMore(which) },
                         onSelect = { entry -> onSelect(which, entry) }
                     )
                 } else {
