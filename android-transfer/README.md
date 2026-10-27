@@ -28,7 +28,7 @@ APK naming policy: distributable Android artifacts must include the literal `exp
 From `android-transfer/`, using JDK 17 and Gradle 8.13:
 
 ```sh
-gradle :core:planner:scenarios :core:planner:directoryScenarios :core:planner:moveScenarios :core:planner:workspaceScenarios :core:planner:sessionAccessScenarios :core:engine:scenarios :core:engine:journalScenarios :core:engine:journaledCopyScenarios :core:engine:renameScenarios :adapter:ftps:scenarios :adapter:sftp:scenarios :testing:fake-endpoints:scenarios --no-daemon
+gradle :core:planner:scenarios :core:planner:locationScenarios :core:planner:directoryScenarios :core:planner:moveScenarios :core:planner:workspaceScenarios :core:planner:sessionAccessScenarios :core:engine:scenarios :core:engine:journalScenarios :core:engine:journaledCopyScenarios :core:engine:renameScenarios :adapter:ftps:scenarios :adapter:sftp:scenarios :testing:fake-endpoints:scenarios --no-daemon
 gradle -PwithAndroid=true :app:assembleDebug --no-daemon
 ```
 
