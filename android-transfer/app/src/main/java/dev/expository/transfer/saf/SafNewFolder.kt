@@ -154,7 +154,7 @@ internal class SafNewFolder(
             val cols = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID,
                 DocumentsContract.Document.COLUMN_DISPLAY_NAME,
                 DocumentsContract.Document.COLUMN_MIME_TYPE)
-            resolver.query(created, cols, null, null, null)?.use { cursor ->
+            val exactMetadata = resolver.query(created, cols, null, null, null)?.use { cursor ->
                 if (!cursor.moveToFirst()) false else {
                     val observedId = cursor.getString(cursor.getColumnIndexOrThrow(
                         DocumentsContract.Document.COLUMN_DOCUMENT_ID))
@@ -167,6 +167,12 @@ internal class SafNewFolder(
                         observedMime == DocumentsContract.Document.MIME_TYPE_DIR
                 }
             } == true
+            val members = LocalTreeReader.list(resolver, req.treeUri,
+                req.parentId, LocalTreeReader.MAX_BROWSE)
+            exactMetadata && members.complete &&
+                members.children.count {
+                    it.documentId == id && it.title == req.name && it.directory
+                } == 1
         }.getOrDefault(false)
         if (!verified) return SafFolderCreateReceipt(
             SafFolderCreateProof.ACKNOWLEDGED,
