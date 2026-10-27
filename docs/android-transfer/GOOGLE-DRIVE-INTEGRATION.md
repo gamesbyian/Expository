@@ -115,3 +115,7 @@ Drive/Docs P0 cannot be marked delivered until **D01–D20** across [the hardene
 - [Drive files.create and MIME settings](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/create)
 - [Drive resumable uploads and importFormats](https://developers.google.com/workspace/drive/api/guides/manage-uploads)
 - [Android provider operation flags](https://developer.android.com/guide/topics/providers/create-document-provider)
+
+## Approved browseable-source expansion (2026-10-27)
+
+The destination-oriented P0 contract above remains binding. The new [universal locations contract](UNIVERSAL-LOCATIONS.md) additionally calls for Drive folders/accounts as selectable browsable sources **and destinations** in either native workspace pane, including Drive ↔ SFTP/FTPS and Drive ↔ GitHub reviewed Copy. SAF folder access depends on the installed provider's supported tree grants; whole-account access may need separate Google OAuth scopes and compliance review. Keep native Workspace format export distinct from byte-preserving original-file Copy. This is planned behavior only, not an implemented or E4-tested Drive integration.
