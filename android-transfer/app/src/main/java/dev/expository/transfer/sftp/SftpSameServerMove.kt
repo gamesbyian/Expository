@@ -44,7 +44,13 @@ class SftpSameServerMove(private val storageForPlan: (String) -> AtomicAttemptSt
 
         fun plan(now: Long): TransferPlan {
             val observed = session.statFile(source)
-            val siblings = session.browse(destFolder)
+            // Moving out must also be verifiable after the command: an
+            // unbounded/incomplete source parent would make absence ambiguous.
+            val sourceRows = session.completeMutationListing(sourceParent)
+            require(sourceRows.entries.any {
+                it.name == name && !it.directory && it.revision == observed.revision
+            }) { "SOURCE_NOT_IN_COMPLETE_PARENT" }
+            val siblings = session.completeMutationListing(destFolder)
             val records = siblings.entries.sortedBy { it.name }
             val stamp = records.joinToString("\n") {
                 it.name + ":" + it.revision
@@ -124,7 +130,7 @@ class SftpSameServerMove(private val storageForPlan: (String) -> AtomicAttemptSt
         // Do not turn a failed stat() into proof of source disappearance.
         // Independently list the complete old parent and observe new file.
         val moved = try {
-            val oldListing = session.browse(sourceParent)
+            val oldListing = session.completeMutationListing(sourceParent)
             val newStat = session.statFile(destination)
             oldListing.truncated.not() &&
                 oldListing.entries.none { it.name == name } &&

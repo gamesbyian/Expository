@@ -266,7 +266,7 @@ internal fun SftpBrowseCard(
                             ) { "SCOPED_SOURCE_NAME_CHANGED" }
                             SftpPath.validateChild(name)
                         }
-                        val listing = live.browse(directory)
+                        val listing = live.completeMutationListing(directory)
                         require(!listing.truncated) { "TRUNCATED_LISTING" }
                         require(names.distinct().size == names.size) {
                             "DUPLICATE_SOURCE_NAME"

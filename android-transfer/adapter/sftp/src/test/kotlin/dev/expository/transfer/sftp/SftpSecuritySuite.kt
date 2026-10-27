@@ -52,6 +52,27 @@ object SftpSecuritySuite {
             for (invalid in listOf(64, 201, 1999))
                 check(runCatching { SftpBrowseBounds.next(invalid) }.isFailure)
         }
+        checkCase("complete mutation witness accepts 205 but refuses partial and overlimit") {
+            val complete205 = SftpBrowsePage(
+                (1..205).map { SftpRemoteEntry("synthetic-" + it, false, 1, null) },
+                truncated = false)
+            check(SftpMutationListing.requireComplete(complete205) === complete205)
+            check(runCatching { SftpMutationListing.requireComplete(
+                complete205.copy(truncated = true)
+            ) }.isFailure)
+            val exactly2000 = SftpBrowsePage(
+                (1..SftpBrowseBounds.MAX).map {
+                    SftpRemoteEntry("synthetic-" + it, false, 1, null)
+                }, truncated = false)
+            check(SftpMutationListing.requireComplete(exactly2000) === exactly2000)
+            check(runCatching { SftpMutationListing.requireComplete(
+                exactly2000.copy(truncated = true)
+            ) }.isFailure)
+            check(runCatching { SftpMutationListing.requireComplete(
+                exactly2000.copy(entries = exactly2000.entries +
+                    SftpRemoteEntry("extra", false, 0, null))
+            ) }.isFailure)
+        }
         checkCase("invalid target blocked before network") {
             check(runCatching { SftpTarget("user@example.invalid", trustedHostKey = pin) }.isFailure)
             check(runCatching { SftpTarget("example.invalid", 65536, pin) }.isFailure)

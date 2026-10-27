@@ -64,7 +64,7 @@ class SafToSftpUpload(private val resolver: ContentResolver,
             if (scopedSource != null) require(observed.displayName == scopedSource.expectedName) {
                 "SCOPED_SOURCE_NAME_CHANGED"
             }
-            val page = session.browse(folder)
+            val page = session.completeMutationListing(folder)
             // Never claim a complete namespace from a truncated preview.
             val siblings = page.entries.map { it.name }.sorted()
             val names = siblings.joinToString("\n").toByteArray(Charsets.UTF_8)

@@ -74,6 +74,37 @@ object SftpServerLabSuite {
                 check(session.openRead("/many/entry-0204.txt").use { it.readBytes() }
                     .contentEquals("synthetic child 204".toByteArray(StandardCharsets.UTF_8)))
                 println("PASS SFTP LAB 205 remote items, bounded 200/400 windows, no overwrite")
+
+                val mutationWindow = session.completeMutationListing("/many")
+                check(mutationWindow.entries.size == 205 && !mutationWindow.truncated)
+                check(mutationWindow.entries.map { it.name }.toSet().size == 205)
+                check(runCatching {
+                    SftpMutationListing.requireComplete(mutationWindow.copy(truncated = true))
+                }.isFailure)
+                val mutationCap = CapabilityProof(
+                    Support.SUPPORTED, "verified-synthetic-205-mutation", Long.MAX_VALUE)
+                val mutationParent = LocationRef(
+                    LocationKey(LocationKind.REMOTE_SFTP, "isolated-session",
+                        "synthetic-root", "/many"),
+                    listOf("many"), "full-205-child-witness",
+                    mapOf(Capability.WRITE to mutationCap,
+                        Capability.CREATE_CHILD to mutationCap),
+                    verifiedNamespace = "isolated-session",
+                    verifiedStorageDomain = "synthetic-server"
+                )
+                val largeFolderPlan = DirectoryCreatePlanner.plan(
+                    DirectoryCreateRequest(mutationParent, "new-after-205",
+                        DestinationListing("full-205-child-witness", true,
+                            mutationWindow.entries.map { it.name })), 100L)
+                check(largeFolderPlan.executable)
+                session.createPlannedDirectory(largeFolderPlan)
+                check(session.observeDirectory("/many/new-after-205"))
+                check(session.completeMutationListing("/many").entries.any {
+                    it.name == "new-after-205" && it.directory
+                })
+                check(runCatching { session.createPlannedDirectory(largeFolderPlan) }.isFailure)
+                println("PASS SFTP LAB complete 205-entry mutation witness + guarded MKDIR")
+
                 val observed = session.statFile("/synthetic.txt")
                 check(observed.size == payload.toByteArray(StandardCharsets.UTF_8).size.toLong())
                 check(runCatching { session.statFile("/") }.isFailure)
@@ -157,6 +188,7 @@ object SftpServerLabSuite {
                 runCatching { Files.deleteIfExists(many.resolve(
                     "entry-" + index.toString().padStart(4, '0') + ".txt")) }
             }
+            runCatching { Files.deleteIfExists(many.resolve("new-after-205")) }
             runCatching { Files.deleteIfExists(many) }
             runCatching { Files.deleteIfExists(tmp.resolve("synthetic.txt")) }
             runCatching { Files.deleteIfExists(tmp.resolve("synthetic-upload.txt")) }
