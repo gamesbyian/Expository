@@ -39,6 +39,11 @@ internal object SafFolderPolicy {
     fun normalized(value: String): String =
         Normalizer.normalize(value, Normalizer.Form.NFC).lowercase(Locale.ROOT)
 
+    // An exact 2,000-child preflight can be complete, but after creation
+    // the 2,001st row would exceed the post-create observation cap.
+    fun canObserveNewChild(siblingCount: Int): Boolean =
+        siblingCount >= 0 && siblingCount < LocalTreeReader.MAX_BROWSE
+
     fun canName(name: String, siblings: List<String>): Boolean {
         if (!validName(name) || siblings.any { !validName(it) }) return false
         val names = siblings.map(::normalized)
@@ -95,6 +100,9 @@ internal class SafNewFolder(
         val siblings = LocalTreeReader.list(
             resolver, req.treeUri, req.parentId, LocalTreeReader.MAX_BROWSE)
         require(siblings.complete) { "INCOMPLETE_PARENT_LISTING" }
+        require(SafFolderPolicy.canObserveNewChild(siblings.children.size)) {
+            "POSTCREATE_OBSERVATION_WOULD_EXCEED_LIMIT"
+        }
         require(SafFolderPolicy.canName(
             req.name, siblings.children.map { it.title }
         )) { "COLLISION_OR_AMBIGUOUS_SIBLING_NAMES" }
