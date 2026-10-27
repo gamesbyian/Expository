@@ -154,10 +154,10 @@ private fun DeveloperPreview(
     var scrollSingle by remember { mutableStateOf(LazyListState()) }
     var scrollA by remember { mutableStateOf(LazyListState()) }
     var scrollB by remember { mutableStateOf(LazyListState()) }
-    var proposedCopy by remember { mutableStateOf<TreeCopyPreflight?>(null) }
+    var proposedCopy by remember { mutableStateOf<List<TreeCopyPreflight>?>(null) }
     var copyBusy by remember { mutableStateOf(false) }
     var copyStatus by remember { mutableStateOf(
-        "Choose two writable/readable device folders, then select one source file for Copy.") }
+        "Choose two device folders and select 1–12 source files for reviewed Copy.") }
     var copyPermit by remember { mutableStateOf<AtomicBoolean?>(null) }
 
     fun tree(which: WorkspacePane): LocalTreeBrowseState = when (which) {
@@ -338,34 +338,43 @@ private fun DeveloperPreview(
         val destinationPane = if (sourcePane == WorkspacePane.A)
             WorkspacePane.B else WorkspacePane.A
         val to = tree(destinationPane)
-        val selectedId = from.selected.singleOrNull() ?: return
-        val file = from.entries.singleOrNull {
-            it.documentId == selectedId && !it.directory
-        } ?: return
+        val chosen = from.entries.filter {
+            it.documentId in from.selected && !it.directory
+        }.sortedWith(compareBy<TreeEntry> { it.title }.thenBy { it.documentId })
         if (model.pane(sourcePane).endpoint != BrowseEndpoint.LOCAL ||
             model.pane(destinationPane).endpoint != BrowseEndpoint.LOCAL ||
-            !from.complete || !to.complete || !to.canWrite) {
-            copyStatus = "Copy blocked: both folders and a writable destination grant are required."
+            !from.complete || !to.complete || !to.canWrite ||
+            from.selected.size !in 1..12 || chosen.size != from.selected.size ||
+            chosen.map { java.text.Normalizer.normalize(it.title,
+                java.text.Normalizer.Form.NFC).lowercase(java.util.Locale.ROOT) }
+                .toSet().size != chosen.size) {
+            copyStatus = "Copy blocked: select 1–12 distinct files and two fully listed, granted device folders."
             return
         }
-        val request = TreeCopyRequest(
-            from.treeUri ?: return, from.folderId ?: return,
-            selectedId, file.title,
-            to.treeUri ?: return, to.folderId ?: return, to.canWrite
-        )
+        val sourceTree = from.treeUri ?: return
+        val sourceFolder = from.folderId ?: return
+        val destinationTree = to.treeUri ?: return
+        val destinationFolder = to.folderId ?: return
+        val requests = chosen.map { file ->
+            TreeCopyRequest(sourceTree, sourceFolder, file.documentId, file.title,
+                destinationTree, destinationFolder, to.canWrite)
+        }
         val sourceGeneration = from.generation
         val destinationGeneration = to.generation
-        val sourceTree = from.treeUri
-        val destinationTree = to.treeUri
-        val sourceFolder = from.folderId
-        val destinationFolder = to.folderId
+        val selectedIds = from.selected.toSet()
         copyBusy = true
-        copyStatus = "Checking scoped source, destination provider create authority and collisions…"
+        copyStatus = "Checking every selected source, destination create authority and collisions…"
         scope.launch {
-            val candidate = withContext(Dispatchers.IO) {
-                SafTreeToTreeCopy(context.contentResolver) { digest ->
+            // All items must pass before review. No provider mutation occurs
+            // during prepare; each Copy still revalidates its exact plan
+            // immediately before opening its separately journaled destination.
+            val candidates = withContext(Dispatchers.IO) {
+                val engine = SafTreeToTreeCopy(context.contentResolver) { digest ->
                     AndroidAtomicAttemptStorage(context.applicationContext, digest)
-                }.prepare(request)
+                }
+                requests.map { engine.prepare(it) }.takeIf { list ->
+                    list.all { it != null }
+                }?.filterNotNull()
             }
             if (tree(sourcePane).generation != sourceGeneration ||
                 tree(destinationPane).generation != destinationGeneration ||
@@ -373,17 +382,18 @@ private fun DeveloperPreview(
                 tree(destinationPane).treeUri != destinationTree ||
                 tree(sourcePane).folderId != sourceFolder ||
                 tree(destinationPane).folderId != destinationFolder ||
-                tree(sourcePane).selected != setOf(selectedId) ||
+                tree(sourcePane).selected != selectedIds ||
                 model.pane(sourcePane).endpoint != BrowseEndpoint.LOCAL ||
                 model.pane(destinationPane).endpoint != BrowseEndpoint.LOCAL) {
                 proposedCopy = null
-                copyStatus = "Folder or selected source changed during preflight. No file was created."
-            } else if (candidate == null) {
+                copyStatus = "Folder or source selection changed during preflight. No file was created."
+            } else if (candidates == null || candidates.size != chosen.size) {
                 proposedCopy = null
-                copyStatus = "Copy preflight refused: incomplete listing, collision, permission or provider capability. No file was created."
+                copyStatus = "Batch Copy preflight refused: permissions, incomplete listing, ambiguous name or collision. No file was created."
             } else {
-                proposedCopy = candidate
-                copyStatus = "Review the one-file Copy plan. No destination has been created."
+                proposedCopy = candidates
+                copyStatus = "Review " + candidates.size +
+                    " selected files. No destination has been created."
             }
             copyBusy = false
         }
@@ -391,46 +401,85 @@ private fun DeveloperPreview(
 
     fun confirmDeviceCopy() {
         val pending = proposedCopy ?: return
-        if (copyBusy || model.view != WorkspaceView.DUAL) return
+        if (copyBusy || model.view != WorkspaceView.DUAL || pending.isEmpty()) return
         proposedCopy = null
         val permit = AtomicBoolean(true)
         val lastReportNs = AtomicLong(0L)
         copyPermit = permit
         copyBusy = true
-        copyStatus = "Copying to a newly created Android provider document. Keep Expository open."
+        copyStatus = "Starting " + pending.size +
+            " separately journaled device Copy operations. Keep Expository open."
         scope.launch {
-            val receipt = withContext(Dispatchers.IO) {
-                SafTreeToTreeCopy(context.contentResolver) { digest ->
-                    AndroidAtomicAttemptStorage(context.applicationContext, digest)
-                }.copy(pending,
-                    continueRequested = { permit.get() },
-                    onProgress = { bytesWritten ->
-                        // Engine reports actual bytes, not estimated metadata.
-                        // Throttle main-thread updates on large streams and
-                        // never let queued progress overwrite a final receipt.
-                        val now = System.nanoTime()
-                        val previous = lastReportNs.get()
-                        if ((previous == 0L || now - previous >= 250_000_000L) &&
-                            lastReportNs.compareAndSet(previous, now)) {
-                            scope.launch {
-                                if (copyBusy && copyPermit === permit && permit.get())
-                                    copyStatus = "Copying: " + bytesWritten +
-                                        " bytes written. Source remains untouched."
+            var verified = 0
+            var verifiedBytes = 0L
+            var failure: CopyProof? = null
+            for ((index, plan) in pending.withIndex()) {
+                if (!permit.get()) {
+                    failure = CopyProof.UNCERTAIN
+                    break
+                }
+                // A verified earlier file has necessarily changed the
+                // destination listing revision. For subsequent approved items,
+                // obtain a fresh exclusive-create plan rather than attempting
+                // to replay a stale digest. Keep the *reviewed source version*,
+                // filename, MIME and scoped endpoints immutable. The executor
+                // independently revalidates the newly issued plan before I/O.
+                val current = if (index == 0) plan else withContext(Dispatchers.IO) {
+                    SafTreeToTreeCopy(context.contentResolver) { digest ->
+                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                    }.prepare(plan.request)
+                }
+                if (current == null || current.request != plan.request ||
+                    current.sourceName != plan.sourceName ||
+                    current.sourceMime != plan.sourceMime ||
+                    current.sourceRevision.isBlank() ||
+                    current.sourceRevision != plan.sourceRevision) {
+                    failure = CopyProof.BLOCKED
+                    break
+                }
+                val receipt = withContext(Dispatchers.IO) {
+                    SafTreeToTreeCopy(context.contentResolver) { digest ->
+                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                    }.copy(current,
+                        continueRequested = { permit.get() },
+                        onProgress = { bytes ->
+                            val now = System.nanoTime()
+                            val prev = lastReportNs.get()
+                            if ((prev == 0L || now - prev >= 250_000_000L) &&
+                                lastReportNs.compareAndSet(prev, now)) {
+                                scope.launch {
+                                    if (copyBusy && copyPermit === permit && permit.get())
+                                        copyStatus = "Copying file " + (index + 1) +
+                                            "/" + pending.size + ": " + bytes +
+                                            " bytes written. Originals untouched."
+                                }
                             }
-                        }
-                    })
+                        })
+                }
+                if (receipt.proof != CopyProof.BYTES_VERIFIED) {
+                    failure = receipt.proof
+                    break  // never retry an ambiguous destination
+                }
+                verified++
+                verifiedBytes += receipt.bytesWritten
             }
-            copyStatus = when (receipt.proof) {
-                CopyProof.BYTES_VERIFIED ->
-                    "Copy verified: Android destination readback SHA-256 matched " +
-                        receipt.bytesWritten + " source bytes. Cloud sync not confirmed. Refresh destination."
-                CopyProof.WRITE_ACKNOWLEDGED ->
-                    "Provider acknowledged " + receipt.bytesWritten +
-                        " bytes but readback was unavailable; completion unverified. Inspect destination."
-                CopyProof.UNCERTAIN ->
-                    "Copy uncertain or partial. Source was not deleted. Inspect destination before retry."
-                CopyProof.BLOCKED ->
-                    "Copy blocked by changed permissions, listing or source metadata. No transfer stream started."
+            copyStatus = if (failure == null) {
+                "Copy verified: " + verified + "/" + pending.size +
+                    " files (" + verifiedBytes +
+                    " bytes) matched destination readback SHA-256. Cloud sync not confirmed."
+            } else {
+                val detail = when (failure) {
+                    CopyProof.WRITE_ACKNOWLEDGED ->
+                        "Provider acknowledged unverified bytes. Inspect before any retry."
+                    CopyProof.BLOCKED ->
+                        "Remaining file blocked by changed provider data or permission."
+                    CopyProof.UNCERTAIN ->
+                        "Copy cancelled, incomplete or uncertain. Inspect destination before retry."
+                    else -> "Transfer was not verified."
+                }
+                "Batch stopped: " + verified + "/" + pending.size +
+                    " files independently verified. " + detail +
+                    " Original sources were not deleted."
             }
             copyPermit = null
             copyBusy = false

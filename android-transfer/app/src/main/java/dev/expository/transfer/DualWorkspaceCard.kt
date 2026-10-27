@@ -66,7 +66,7 @@ internal fun DualWorkspaceCard(
     onSelect: (WorkspacePane, TreeEntry) -> Unit,
     busy: Boolean,
     copyStatus: String,
-    proposedCopy: TreeCopyPreflight?,
+    proposedCopy: List<TreeCopyPreflight>?,
     onCopy: (WorkspacePane) -> Unit,
     onConfirmCopy: () -> Unit,
     onCancelCopy: () -> Unit,
@@ -260,9 +260,9 @@ internal fun DualWorkspaceCard(
         }
         val bothLocal = workspace.a.endpoint == BrowseEndpoint.LOCAL &&
             workspace.b.endpoint == BrowseEndpoint.LOCAL
-        val readyA = bothLocal && a.selected.size == 1 && a.treeUri != null &&
+        val readyA = bothLocal && a.selected.size in 1..12 && a.treeUri != null &&
             b.treeUri != null && b.canWrite && a.complete && b.complete
-        val readyB = bothLocal && b.selected.size == 1 && b.treeUri != null &&
+        val readyB = bothLocal && b.selected.size in 1..12 && b.treeUri != null &&
             a.treeUri != null && a.canWrite && a.complete && b.complete
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -278,10 +278,12 @@ internal fun DualWorkspaceCard(
                 Column(Modifier.padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Review Device Copy", style = MaterialTheme.typography.titleMedium)
-                    Text("File: " + proposedCopy.sourceName)
-                    Text("Route: Device → Device · Copy original; never delete source")
-                    Text("Plan: " + proposedCopy.plan.digest.take(12) + "…")
-                    Text("A new destination document will be created only after plan revalidation and a durable attempt journal. No overwrite. On partial failure the destination may need inspection.",
+                    Text("Files (" + proposedCopy.size + "): " +
+                        proposedCopy.joinToString(", ") { it.sourceName })
+                    Text("Route: Device → Device · Copy originals; never delete sources")
+                    Text("Initial reviewed source plans: " +
+                        proposedCopy.joinToString(", ") { it.plan.digest.take(8) } + "…")
+                    Text("Each file has a fresh provider preflight, a pinned original source version, a separate durable journal and independent byte verification. Later destination snapshots are refreshed after verified earlier files. The batch stops at the first uncertain result; prior verified files remain. No overwrite or automatic retry.",
                         style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
@@ -296,7 +298,7 @@ internal fun DualWorkspaceCard(
             Text("Cancel transfer")
         }
         Text(copyStatus, style = MaterialTheme.typography.bodySmall)
-        Text("Local-to-SFTP Copy is available for up to 12 selected device files after explicit review in the authenticated SFTP pane. Other cross-pane routes and Move remain unavailable.",
+        Text("Device-to-Device Copy supports 1–12 selected files with separate journals and verification. Local-to-SFTP Copy also supports up to 12 after explicit review. Folder recursion, remaining remote routes and cross-pane Move are still unavailable.",
             style = MaterialTheme.typography.bodySmall)
     }
 }
