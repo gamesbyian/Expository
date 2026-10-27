@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path("android-transfer/app/build/outputs/androidTest-results/connected")
 TEST_IDENTIFIER = re.compile(r"[^a-zA-Z0-9_.$#-]")
-SOURCE_FRAME = re.compile(r"\\b([A-Za-z][A-Za-z0-9_]*\\.(?:kt|java)):(\\d{1,6})\\b")
+SOURCE_FRAME = re.compile(r"\b([A-Za-z][A-Za-z0-9_]*\.(?:kt|java)):(\d{1,6})\b")
 
 
 def main() -> None:
