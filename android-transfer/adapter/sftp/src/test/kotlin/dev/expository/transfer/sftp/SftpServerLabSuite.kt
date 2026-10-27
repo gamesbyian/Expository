@@ -1,6 +1,9 @@
 package dev.expository.transfer.sftp
 
 import dev.expository.transfer.planner.*
+import dev.expository.transfer.engine.AtomicAttemptStorage
+import dev.expository.transfer.engine.CopyProof
+import dev.expository.transfer.engine.DurableAttemptJournal
 import org.apache.sshd.server.SshServer
 import org.apache.sshd.common.keyprovider.KeyPairProvider
 import org.apache.sshd.sftp.server.SftpSubsystemFactory
@@ -179,6 +182,74 @@ object SftpServerLabSuite {
                 check(session.openRead("/move-source.txt").use { it.readBytes() }
                     .contentEquals(sourceBytes))
                 println("PASS SFTP LAB no-overwrite Move out/back to root, unchanged bytes")
+                // Two separately authenticated sessions, same synthetic
+                // disposable host. Their bytes travel via the stream engine;
+                // neither a server rename nor a same-session shortcut is used.
+                val independentDestination = SecureSftp.connect(
+                    SftpTarget("127.0.0.1", port, correct),
+                    "synthetic", "synthetic-password".toCharArray())
+                independentDestination.use { destination ->
+                    val committed = mutableMapOf<String, ByteArray>()
+                    fun store(digest: String) = object : AtomicAttemptStorage {
+                        override fun readCommitted(): ByteArray? = committed[digest]?.clone()
+                        override fun replaceAtomically(bytes: ByteArray) {
+                            committed[digest] = bytes.clone()
+                        }
+                    }
+                    val relay = SftpRelayCopy(::store)
+                    val copy = SftpRelayRequest(
+                        session, "source-pinned-session", "/", "/synthetic.txt",
+                        observed.revision, destination, "destination-pinned-session", "/new-dir")
+                    val reviewed = requireNotNull(relay.prepare(copy)) {
+                        "E3 source/destination review must permit a fresh file"
+                    }
+                    check(reviewed.plan.executable &&
+                        reviewed.plan.route == TransferRoute.DEVICE_RELAY)
+                    check(committed.isEmpty()) { "Preparation must never write" }
+                    val verified = relay.copy(reviewed)
+                    check(verified.proof == CopyProof.BYTES_VERIFIED &&
+                        verified.bytesWritten == payload.toByteArray(StandardCharsets.UTF_8).size.toLong())
+                    check(DurableAttemptJournal(store(reviewed.plan.digest))
+                        .recoverAfterRestart()?.state == JournalState.VERIFIED)
+                    check(destination.openRead("/new-dir/synthetic.txt").use { it.readBytes() }
+                        .contentEquals(payload.toByteArray(StandardCharsets.UTF_8)))
+                    check(session.openRead("/synthetic.txt").use { it.readBytes() }
+                        .contentEquals(payload.toByteArray(StandardCharsets.UTF_8)))
+                    check(relay.prepare(copy) == null) {
+                        "Second review must reject occupied destination"
+                    }
+                    check(relay.prepare(copy.copy(destinationFolder = "/")) == null) {
+                        "Pre-existing destination source name must never be replaced"
+                    }
+                    check(relay.prepare(copy.copy(
+                        destination = session, destinationSessionId = "source-pinned-session")) == null) {
+                        "One SFTP control session may not relay into itself"
+                    }
+                    check(relay.prepare(copy.copy(sourceRevision = "stale-version")) == null)
+
+                    val largeBytes = ByteArray(170_111) { ((it * 13 + 7) and 255).toByte() }
+                    session.openExclusiveWrite("/relay-large.bin").use { it.write(largeBytes) }
+                    val large = copy.copy(
+                        sourceFile = "/relay-large.bin",
+                        sourceRevision = session.statFile("/relay-large.bin").revision)
+                    val largeReview = requireNotNull(relay.prepare(large))
+                    var cancel = false
+                    val uncertain = relay.copy(largeReview,
+                        continueRequested = { !cancel },
+                        onProgress = { if (it >= 65_536L) cancel = true })
+                    check(uncertain.proof == CopyProof.UNCERTAIN &&
+                        uncertain.bytesWritten in 1 until largeBytes.size.toLong())
+                    check(DurableAttemptJournal(store(largeReview.plan.digest))
+                        .recoverAfterRestart()?.state == JournalState.UNCERTAIN)
+                    check(session.openRead("/relay-large.bin").use { it.readBytes() }
+                        .contentEquals(largeBytes))
+                    check(relay.prepare(large) == null) {
+                        "Partial destination must prevent blind retry"
+                    }
+                    println("PASS SFTP LAB journaled two-session relay verified bytes, " +
+                        "collision refusal, stale source, cancellation and uncertain replay")
+                }
+
             }
             println("PASS SFTP LAB trusted host fingerprint + authenticated directory read")
             val refused = runCatching {
@@ -197,6 +268,9 @@ object SftpServerLabSuite {
             runCatching { Files.deleteIfExists(many) }
             runCatching { Files.deleteIfExists(tmp.resolve("synthetic.txt")) }
             runCatching { Files.deleteIfExists(tmp.resolve("synthetic-upload.txt")) }
+            runCatching { Files.deleteIfExists(tmp.resolve("new-dir/synthetic.txt")) }
+            runCatching { Files.deleteIfExists(tmp.resolve("new-dir/relay-large.bin")) }
+            runCatching { Files.deleteIfExists(tmp.resolve("relay-large.bin")) }
             runCatching { Files.deleteIfExists(tmp.resolve("new-dir/move-source.txt")) }
             runCatching { Files.deleteIfExists(tmp.resolve("move-source.txt")) }
             runCatching { Files.deleteIfExists(tmp.resolve("new-dir")) }

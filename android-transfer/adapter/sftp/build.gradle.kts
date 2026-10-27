@@ -2,6 +2,7 @@ plugins { id("org.jetbrains.kotlin.jvm") version "2.2.20" }
 kotlin { jvmToolchain(17) }
 dependencies {
     implementation(project(":core:planner"))
+    implementation(project(":core:engine"))
     implementation("org.apache.sshd:sshd-sftp:2.20.0")
 }
 tasks.register<JavaExec>("scenarios") {

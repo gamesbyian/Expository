@@ -44,6 +44,9 @@ import dev.expository.transfer.sftp.SftpPath
 import dev.expository.transfer.sftp.SftpSession
 import dev.expository.transfer.sftp.SftpTarget
 import dev.expository.transfer.sftp.SftpToSafSave
+import dev.expository.transfer.sftp.SftpRelayCopy
+import dev.expository.transfer.sftp.SftpRelayRequest
+import dev.expository.transfer.sftp.SftpRelayPreflight
 import dev.expository.transfer.sftp.SafToSftpUpload
 import dev.expository.transfer.sftp.SftpToSafTreeCopy
 import dev.expository.transfer.sftp.SftpTreeCopyRequest
@@ -80,6 +83,16 @@ internal data class PeerUploadReview(
             sessionId == liveSessionId && folder == liveFolder
 }
 
+/** In-memory selected remote file from the other independent pane. Never serialized. */
+internal data class PeerSftpSource(
+    val session: SftpSession,
+    val sessionId: String,
+    val folder: String,
+    val absoluteFile: String,
+    val revision: String,
+    val size: Long
+)
+
 internal data class PendingPeerSftpDownload(
     val witness: PeerSftpDownloadWitness,
     val preflight: SftpTreeCopyPreflight
@@ -105,7 +118,10 @@ internal data class RemotePickerWitness(
 internal fun SftpBrowseCard(
     incomingShare: IncomingShareRequest? = null,
     localPaneSources: List<LocalPaneUploadSource> = emptyList(),
-    localPaneTarget: LocalPaneDownloadTarget? = null
+    localPaneTarget: LocalPaneDownloadTarget? = null,
+    remotePaneSource: PeerSftpSource? = null,
+    allowRemoteSelection: Boolean = false,
+    onRemoteSource: (PeerSftpSource?) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -124,6 +140,7 @@ internal fun SftpBrowseCard(
     var pendingFile by remember { mutableStateOf<String?>(null) }
     var pendingPeerUpload by remember { mutableStateOf<PeerUploadReview?>(null) }
     var pendingPeerDownload by remember { mutableStateOf<PendingPeerSftpDownload?>(null) }
+    var pendingRelay by remember { mutableStateOf<SftpRelayPreflight?>(null) }
     var pendingSaveWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
     var pendingUploadWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
     var pendingMove by remember { mutableStateOf<String?>(null) }
@@ -369,6 +386,122 @@ internal fun SftpBrowseCard(
         }
     }
 
+    /** Read-only review for one file selected in the other SFTP pane. */
+    fun prepareRelay() {
+        val source = remotePaneSource ?: return
+        val destination = session ?: return
+        val destinationId = sessionId
+        val destinationFolder = folder
+        if (busy || pendingRelay != null || destinationId.isBlank() ||
+            source.session === destination) return
+        pendingRelay = null
+        busy = true
+        status = "Checking both authenticated servers and complete directory listings…"
+        scope.launch {
+            try {
+                val proposal = withContext(Dispatchers.IO) {
+                    SftpRelayCopy { digest ->
+                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                    }.prepare(SftpRelayRequest(
+                        source.session, source.sessionId, source.folder,
+                        source.absoluteFile, source.revision,
+                        destination, destinationId, destinationFolder))
+                }
+                if (session !== destination || sessionId != destinationId ||
+                    folder != destinationFolder || remotePaneSource != source) {
+                    pendingRelay = null
+                    status = "Other pane selection, session or destination changed. No copy approved."
+                } else if (proposal == null) {
+                    pendingRelay = null
+                    status = "SFTP-to-SFTP Copy blocked by stale source, collision, incomplete " +
+                        "folder listing or disconnected remote session."
+                } else {
+                    pendingRelay = proposal
+                    status = "Review SFTP-to-SFTP relay. No remote file has been written."
+                }
+            } catch (_: CancellationException) {
+                status = "Server-to-server Copy review canceled. Nothing written."
+            } catch (_: Exception) {
+                status = "Server-to-server Copy review unavailable. Nothing written."
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    fun executeRelay(confirmed: SftpRelayPreflight) {
+        val destination = session
+        val request = confirmed.request
+        val source = remotePaneSource
+        if (busy || destination == null || destination !== request.destination ||
+            sessionId != request.destinationSessionId ||
+            folder != request.destinationFolder ||
+            source == null || source.session !== request.source ||
+            source.sessionId != request.sourceSessionId ||
+            source.folder != request.sourceFolder ||
+            source.absoluteFile != request.sourceFile ||
+            source.revision != request.sourceRevision) {
+            pendingRelay = null
+            status = "Server or selected file changed. Copy approval discarded."
+            return
+        }
+        pendingRelay = null
+        val permit = AtomicBoolean(true)
+        continueCopy = permit
+        transferKind = "Server-to-server Copy"
+        transferred = 0L
+        busy = true
+        status = "Relaying one file through Android with an independent destination readback…"
+        scope.launch {
+            try {
+                val receipt = withContext(Dispatchers.IO) {
+                    val active = coroutineContext[Job]
+                    var lastDisplay = 0L
+                    SftpRelayCopy { digest ->
+                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                    }.copy(confirmed,
+                        continueRequested = { permit.get() && active?.isActive == true },
+                        onProgress = { bytes ->
+                            if (bytes - lastDisplay >= 256L * 1024L) {
+                                lastDisplay = bytes
+                                transferred = bytes
+                            }
+                        })
+                }
+                transferred = receipt.bytesWritten
+                status = when (receipt.proof) {
+                    CopyProof.BYTES_VERIFIED ->
+                        "Server-to-server Copy byte verified (" + receipt.bytesWritten +
+                            " bytes). Source unchanged; independent destination SHA-256 matched."
+                    CopyProof.WRITE_ACKNOWLEDGED ->
+                        "Remote server acknowledged the Copy, but independent byte proof is unavailable."
+                    CopyProof.UNCERTAIN ->
+                        "Remote Copy uncertain or partial. An exclusive-create destination may remain. " +
+                            "Review it before retrying."
+                    CopyProof.BLOCKED ->
+                        "Remote Copy blocked by fresh preflight, changed source or destination collision."
+                }
+                if (session === destination) {
+                    val current = withContext(Dispatchers.IO) {
+                        runCatching { destination.browse(folder) }
+                    }
+                    current.onSuccess {
+                        page = it
+                        browseLimit = SftpBrowseBounds.INITIAL
+                    }
+                }
+            } catch (_: CancellationException) {
+                status = "Server-to-server Copy interrupted; inspect possible partial destination."
+            } catch (_: Exception) {
+                status = "Server-to-server Copy outcome uncertain; inspect destination."
+            } finally {
+                continueCopy = null
+                transferKind = ""
+                busy = false
+            }
+        }
+    }
+
     fun browseTo(next: String,
         requestedLimit: Int = if (next == folder) browseLimit else SftpBrowseBounds.INITIAL) {
         val live = session ?: return
@@ -388,6 +521,8 @@ internal fun SftpBrowseCard(
                     pendingFile = null
                     pendingPeerUpload = null
                     pendingPeerDownload = null
+                    pendingRelay = null
+                    onRemoteSource(null)
                     showRenamePreview = false
                     status = if (it.truncated) {
                         "Showing " + it.entries.size + " entries. " +
@@ -560,6 +695,8 @@ internal fun SftpBrowseCard(
                                 browseLimit = SftpBrowseBounds.INITIAL
                                 pendingPeerUpload = null
                                 pendingPeerDownload = null
+                                pendingRelay = null
+                                onRemoteSource(null)
                                 page = directory
                                 status = "Pinned SFTP session authenticated. Select a remote file."
                             }.onFailure {
@@ -578,6 +715,8 @@ internal fun SftpBrowseCard(
                         pendingFile = null
                         pendingPeerUpload = null
                         pendingPeerDownload = null
+                        pendingRelay = null
+                        onRemoteSource(null)
                         pendingMove = null
                         showRenamePreview = false
                         status = "Disconnected. Remote session cleared."
@@ -822,6 +961,62 @@ internal fun SftpBrowseCard(
                         }
                     }
                 }
+                if (remotePaneSource != null && session != null) {
+                    val source = remotePaneSource
+                    Text("Other server selection: " +
+                        source.absoluteFile.substringAfterLast('/'),
+                        style = MaterialTheme.typography.bodySmall)
+                    Button(enabled = !busy && pendingRelay == null &&
+                        source.session !== session,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        onClick = { prepareRelay() }) {
+                        Text("Review Copy from other SFTP pane…")
+                    }
+                }
+                pendingRelay?.let { approved ->
+                    val req = approved.request
+                    val selected = remotePaneSource
+                    val valid = !busy && session === req.destination &&
+                        sessionId == req.destinationSessionId &&
+                        folder == req.destinationFolder &&
+                        selected != null && selected.session === req.source &&
+                        selected.sessionId == req.sourceSessionId &&
+                        selected.absoluteFile == req.sourceFile &&
+                        selected.revision == req.sourceRevision &&
+                        selected.folder == req.sourceFolder
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Review SFTP → SFTP Copy",
+                                style = MaterialTheme.typography.titleMedium)
+                            Text("Source: " + approved.filename +
+                                " (" + approved.bytes + " bytes)")
+                            Text("Destination: this server's current folder")
+                            Text("Plan: " + approved.plan.digest.take(12) + "…")
+                            Text("Two separately authenticated SFTP connections. " +
+                                "Android relays bytes; destination uses exclusive create " +
+                                "and SHA-256 readback. No overwrite, Move, source delete " +
+                                "or automatic retry. Interrupted copies may leave a partial file.",
+                                style = MaterialTheme.typography.bodySmall)
+                            if (!valid) {
+                                Text("Remote selection or destination changed. Review again.",
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(enabled = valid,
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    onClick = { executeRelay(approved) }) {
+                                    Text("Confirm Server Copy")
+                                }
+                                Button(enabled = !busy,
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    onClick = { pendingRelay = null }) {
+                                    Text("Cancel proposal")
+                                }
+                            }
+                        }
+                    }
+                }
                 val entries = page?.entries.orEmpty()
                 LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -853,6 +1048,21 @@ internal fun SftpBrowseCard(
                                                 putExtra(Intent.EXTRA_TITLE, entry.name)
                                             })
                                         }) { Text("Save As…") }
+                                    if (allowRemoteSelection) {
+                                        Button(enabled = !busy && session != null &&
+                                            sessionId.isNotBlank(),
+                                            modifier = Modifier.heightIn(min = 48.dp),
+                                            onClick = {
+                                                val live = session
+                                                if (live != null) {
+                                                    onRemoteSource(PeerSftpSource(
+                                                        live, sessionId, folder,
+                                                        path, entry.revision, entry.size))
+                                                    status = "Selected for Copy into the other " +
+                                                        "SFTP pane. Review and confirm there."
+                                                }
+                                            }) { Text("Select for other SFTP pane") }
+                                    }
                                     if (localPaneTarget != null) {
                                         Button(
                                             enabled = !busy && pendingPeerDownload == null,
