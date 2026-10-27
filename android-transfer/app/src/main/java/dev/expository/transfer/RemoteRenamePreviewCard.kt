@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.expository.transfer.planner.*
+import dev.expository.transfer.sftp.SftpBrowseBounds
 import dev.expository.transfer.sftp.SftpBrowsePage
 import java.security.MessageDigest
 
@@ -45,7 +46,7 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
     var extensionLocked by remember(folder) { mutableStateOf(true) }
     var numberAtFront by remember(folder) { mutableStateOf(true) }
     val rows = remember(folder, page) { page.entries.sortedBy { it.name } }
-    val complete = !page.truncated && rows.size <= 200
+    val complete = !page.truncated && rows.size <= SftpBrowseBounds.MAX
     val selectedExisting = rows.filter { it.name in selected }.map { it.name }
     val blocked = !complete || opaqueSessionId.isBlank()
     val recipe = when (mode) {
@@ -98,7 +99,7 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
             Text("Preview only. No remote files will be renamed until a separately verified Apply feature exists.",
                 style = MaterialTheme.typography.bodySmall)
             if (blocked) {
-                Text("Complete SFTP listing and authenticated session required. Large folders need paging before bulk operations.")
+                Text("A complete authenticated SFTP listing is required. Load more entries if available; directories beyond the 2,000-entry safety cap cannot be previewed.")
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(enabled = enabled, modifier = Modifier.heightIn(min = 48.dp),
