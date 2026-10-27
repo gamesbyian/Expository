@@ -4,6 +4,8 @@ import android.content.ContentResolver
 import android.database.Cursor
 import android.net.Uri
 import android.provider.DocumentsContract
+import androidx.compose.foundation.border
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,7 +19,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -27,6 +28,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import dev.expository.transfer.saf.SafNewFolder
 import dev.expository.transfer.saf.SafFolderCreateRequest
 import dev.expository.transfer.saf.SafFolderCreatePreflight
@@ -305,6 +310,8 @@ internal fun SafFolderCreateCard(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
     val currentState by rememberUpdatedState(state)
     val service = remember(context) {
         SafNewFolder(context.contentResolver) { digest ->
@@ -331,17 +338,30 @@ internal fun SafFolderCreateCard(
         Text(if (editing) "Close New Folder" else "New folder…")
     }
     if (editing) {
-        TextField(
+        // Material3's floating TextField label may invalidate a detached
+        // ChildSemanticsNode when an OS picker/IME returns and the reviewed
+        // preflight changes state. Keep the input semantics stable instead.
+        Text("Folder name", style = MaterialTheme.typography.bodySmall)
+        BasicTextField(
             value = name,
             onValueChange = { name = it; pending = null },
-            enabled = available && pending == null,
-            label = { Text("Folder name") },
-            singleLine = true
+            enabled = available,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = MaterialTheme.colorScheme.onSurface),
+            modifier = Modifier.fillMaxWidth()
+                .border(1.dp, MaterialTheme.colorScheme.outline,
+                    MaterialTheme.shapes.small)
+                .padding(14.dp)
+                .testTag("saf-new-folder-name")
+                .semantics { contentDescription = "Folder name" }
         )
         if (pending == null) {
             Button(enabled = available && name.isNotBlank(),
                 modifier = Modifier.heightIn(min = 48.dp),
                 onClick = {
+                    keyboard?.hide()
+                    focusManager.clearFocus()
                     val snapshot = currentState
                     val uri = snapshot.treeUri ?: return@Button
                     val parent = snapshot.folderId ?: return@Button
