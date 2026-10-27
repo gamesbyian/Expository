@@ -142,15 +142,14 @@ class SftpSession internal constructor(
     private val session: ClientSession,
     private val sftp: SftpClient
 ) : AutoCloseable {
+    /**
+     * Legacy list convenience is bounded as strictly as a fresh mutation
+     * witness. Never consume a potentially unbounded remote Iterable into
+     * memory or pretend that the first 2,000 results were the whole folder.
+     * Call browse() for progressive, explicitly incomplete UI previews.
+     */
     fun list(absoluteFolder: String): List<String> =
-        sftp.readDir(SftpPath.requireAbsolute(absoluteFolder))
-            .mapNotNull {
-                val name = it.filename
-                when (name) {
-                    ".", ".." -> null
-                    else -> SftpPath.validateChild(name)
-                }
-            }.toList()
+        completeMutationListing(absoluteFolder).entries.map { it.name }
 
     fun openRead(absoluteFile: String): InputStream =
         sftp.read(SftpPath.requireAbsolute(absoluteFile))
