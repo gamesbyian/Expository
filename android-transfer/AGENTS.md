@@ -1,6 +1,6 @@
 # Expository Transfer: native-agent operating instructions
 
-Expository Transfer is the **Android-native** writing app under `android-transfer/`. Root Pages `index.html` stays a **separate read-only GitHub browser**. The app is a developer preview, not beta-ready. This guide is a stable router, not a diary of completed PRs.
+Expository Transfer is the **Android-native file-transfer** app under `android-transfer/`. Root Pages `index.html` stays a **separate read-only GitHub browser**. The app is a developer preview, not beta-ready. This guide is a stable router, not a diary of completed PRs.
 
 ## Read and reconcile in this order
 
@@ -16,7 +16,7 @@ Expository Transfer is the **Android-native** writing app under `android-transfe
 - No `MANAGE_EXTERNAL_STORAGE`, guessed SAF filesystem paths, assumed persistent URI grants, trust-all certificates, ignored SFTP host key, automatic plaintext FTP fallback or hidden Google OAuth scope expansion. Android target currently 36; test Android 17 LAN `ACCESS_LOCAL_NETWORK` before upgrading target to 37.
 - UI, picker, drag and accessibility actions produce the same immutable, reviewed operation plan. Revalidate right before mutation; journal before changes. Copy preserves originals. **Never optimize Copy into remote rename.** Same-server Move requires verified authority/capability; cross-authority Move needs verified Copy then separately approved source deletion.
 - On ambiguous write/rename/commit/Drive create **stop and reconcile**, never auto-retry or delete unknown staged data. Receipts may claim `CONTENT_HASH_VERIFIED` only on real comparable content proof; Share/External Open are handoffs, not Drive/Docs saves.
-- The required UX offers a **permanent full-featured single-location browser by default** and an **optional dual-location view** (Local/Local, Local/Remote, Remote/Remote); responsive A/B tabs in dual view are not the single-location mode. The existing `TransferActivity` switches Local/SFTP/FTPS *cards*. It is **not** the promised first-class single/dual workspace. SFTP rename currently previews only. Do not relabel either as delivered.
+- The required UX offers a **permanent full-featured single-location browser by default** and an **optional dual-location view** (Local/Local, Local/Remote, Remote/Remote); responsive A/B tabs in dual view are not the single-location mode. **Already implemented, still incomplete:** default Single has a separately scoped Local SAF browser and route-specific SFTP/FTPS browser cards; optional Dual has independently selectable Local/Local, Local/Remote and Remote/Remote panes with live trusted SFTP/FTPS cards, A/B tab collapse, swap and two limited reviewed SFTP Copy directions. This is not full feature parity with a unified single-location browser, all six cross-endpoint Copy/Move routes, native drag support or physical-device acceptance. SFTP bulk rename currently previews only. Do not relabel those remaining gaps as delivered.
 
 ## Implement, verify, integrate
 
@@ -27,4 +27,4 @@ Expository Transfer is the **Android-native** writing app under `android-transfe
 - [PR #103](https://github.com/gamesbyian/Expository/pull/103) **merged**: its precise PR-head `32dae9449` passed targeted [API 35 E2 #40403069744](https://github.com/gamesbyian/Expository/actions/runs/40403069744) with 2/2 tests, including in-flight Save As + new Share no-journal/no-wrong-source guard. Scope is disposable emulator provider only; no physical/Drive proof. Avoid reopening the former fixture issue without fresh failure evidence.
 - Finish each PR: review concurrent changes, test exact head, merge only qualified changes, update ranked queue/ledger *without duplicating history*, link evidence, hand off next runnable step. Do not open routine planning-only PRs when a functional slice can be delivered.
 
-**Do not claim:** physical Pixel, TalkBack, live Android SFTP upload, real Google Drive write, native Docs conversion, complete dual panes, executed remote bulk rename or process-death recovery without observed proof.
+**Do not claim:** physical Pixel, TalkBack, live Android SFTP transfer bytes, real Google Drive write, native Docs conversion, complete six-route cross-pane operations, executed remote bulk rename or process-death recovery without observed proof. A passing API35 UI class does not supply live authenticated network receipts.
