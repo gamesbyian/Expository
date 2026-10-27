@@ -33,7 +33,7 @@ data class FtpsTarget(
     init {
         require(host.isNotBlank() && host.length <= 253 &&
             host.none { it.isWhitespace() || it == '/' || it == '\\' ||
-                it == '@' || it == '\u0000' || it == ':' }) { "INVALID_HOST" }
+                it == '@' || it == ':' || it.code < 32 || it.code == 127 }) { "INVALID_HOST" }
         require(port in 1..65535) { "INVALID_PORT" }
     }
 }
@@ -84,13 +84,12 @@ object FtpsPath {
     fun checkedChild(name: String): String {
         require(name.isNotBlank() && name != "." && name != ".." &&
             name.toByteArray(StandardCharsets.UTF_8).size <= 255 &&
-            name.none { it == '/' || it == '\\' || it == '\u0000' ||
-                it == '\r' || it == '\n' }) { "INVALID_REMOTE_CHILD_NAME" }
+            name.none { it == '/' || it == '\\' || it.code < 32 || it.code == 127 }) { "INVALID_REMOTE_CHILD_NAME" }
         return name
     }
     fun checked(absolute: String): String {
         require(absolute.startsWith("/") && absolute.length <= 4096) { "PATH_MUST_BE_ABSOLUTE" }
-        require(absolute.none { it == '\\' || it == '\u0000' || it == '\r' || it == '\n' }) {
+        require(absolute.none { it == '\\' || it.code < 32 || it.code == 127 }) {
             "PATH_CONTROL_CHAR"
         }
         require(absolute.toByteArray(StandardCharsets.UTF_8).size <= 4096)

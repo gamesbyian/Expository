@@ -36,9 +36,10 @@ object SftpSecuritySuite {
         }
         checkCase("absolute paths and children are conservatively validated") {
             check(SftpPath.requireAbsolute("/Downloads/Season 01") == "/Downloads/Season 01")
+            check(SftpPath.validateChild("Café (2026).mkv") == "Café (2026).mkv")
             for (v in listOf("relative", "/../bad", "/safe/./bad", "/safe//bad",
-                "/safe\nCOMMAND")) check(runCatching { SftpPath.requireAbsolute(v) }.isFailure)
-            for (v in listOf("", ".", "..", "a/b", "foo\rbar"))
+                "/safe\nCOMMAND", "/hidden\tname", "/control\u001bname", "/delete\u007fname")) check(runCatching { SftpPath.requireAbsolute(v) }.isFailure)
+            for (v in listOf("", ".", "..", "a/b", "foo\rbar", "foo\tbar", "a\u0001b", "a\u007fb"))
                 check(runCatching { SftpPath.validateChild(v) }.isFailure)
         }
         checkCase("bounded incremental listing windows keep narrow compatibility") {
@@ -51,8 +52,35 @@ object SftpSecuritySuite {
             for (invalid in listOf(64, 201, 1999))
                 check(runCatching { SftpBrowseBounds.next(invalid) }.isFailure)
         }
+        checkCase("complete mutation witness accepts 205 but refuses partial and overlimit") {
+            val complete205 = SftpBrowsePage(
+                (1..205).map { SftpRemoteEntry("synthetic-" + it, false, 1, null) },
+                truncated = false)
+            check(SftpMutationListing.requireComplete(complete205) === complete205)
+            check(runCatching { SftpMutationListing.requireComplete(
+                complete205.copy(truncated = true)
+            ) }.isFailure)
+            val exactly2000 = SftpBrowsePage(
+                (1..SftpBrowseBounds.MAX).map {
+                    SftpRemoteEntry("synthetic-" + it, false, 1, null)
+                }, truncated = false)
+            check(SftpMutationListing.requireComplete(exactly2000) === exactly2000)
+            check(runCatching { SftpMutationListing.requireComplete(
+                exactly2000.copy(truncated = true)
+            ) }.isFailure)
+            check(runCatching { SftpMutationListing.requireComplete(
+                exactly2000.copy(entries = exactly2000.entries +
+                    SftpRemoteEntry("extra", false, 0, null))
+            ) }.isFailure)
+        }
         checkCase("invalid target blocked before network") {
             check(runCatching { SftpTarget("user@example.invalid", trustedHostKey = pin) }.isFailure)
+            for (host in listOf("host\u0000x", "host\u001bx", "host\u007fx", "host\tname")) {
+                check(runCatching {
+                    SftpTarget(host, trustedHostKey = pin)
+                }.isFailure)
+            }
+            check(SftpTarget("example.invalid", trustedHostKey = pin).host == "example.invalid")
             check(runCatching { SftpTarget("example.invalid", 65536, pin) }.isFailure)
         }
         println("PASS SFTP total=" + passed + " evidence=synthetic-host-key-only")

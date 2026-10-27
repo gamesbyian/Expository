@@ -40,7 +40,7 @@ data class SftpTarget(val host: String, val port: Int = 22, val trustedHostKey: 
     init {
         require(host.isNotBlank() && host.length <= 253 &&
             host.none { it.isWhitespace() || it == '/' || it == '\\' ||
-                it == '@' || it == ':' || it == '\r' || it == '\n' }) { "INVALID_HOST" }
+                it == '@' || it == ':' || it.code < 32 || it.code == 127 }) { "INVALID_HOST" }
         require(port in 1..65535) { "INVALID_PORT" }
     }
 }
@@ -48,7 +48,7 @@ data class SftpTarget(val host: String, val port: Int = 22, val trustedHostKey: 
 object SftpPath {
     fun requireAbsolute(path: String): String {
         require(path.startsWith("/") && path.toByteArray(StandardCharsets.UTF_8).size <= 4096)
-        require(path.none { it == '\\' || it == '\u0000' || it == '\r' || it == '\n' })
+        require(path.none { it == '\\' || it.code < 32 || it.code == 127 })
         if (path != "/") require(path.split('/').drop(1).all {
             it.isNotEmpty() && it != "." && it != ".."
         })
@@ -57,8 +57,7 @@ object SftpPath {
     fun validateChild(name: String): String {
         require(name.isNotBlank() && name != "." && name != ".." &&
             name.toByteArray(StandardCharsets.UTF_8).size <= 255 &&
-            name.none { it == '/' || it == '\\' || it == '\u0000' ||
-                it == '\r' || it == '\n' }) { "INVALID_SFTP_CHILD" }
+            name.none { it == '/' || it == '\\' || it.code < 32 || it.code == 127 }) { "INVALID_SFTP_CHILD" }
         return name
     }
 
@@ -103,6 +102,20 @@ data class SftpRemoteEntry(val name: String, val directory: Boolean, val size: L
     val revision: String get() = listOf(size, modifiedMillis ?: -1L, directory).joinToString(":")
 }
 data class SftpBrowsePage(val entries: List<SftpRemoteEntry>, val truncated: Boolean)
+
+/**
+ * Mutation authorization requires the ENTIRE bounded destination namespace,
+ * never the first screenful. A truncated listing is informational UI only.
+ * This remains conservative for unknown servers with >2,000 children.
+ */
+object SftpMutationListing {
+    fun requireComplete(page: SftpBrowsePage): SftpBrowsePage {
+        require(!page.truncated && page.entries.size <= SftpBrowseBounds.MAX) {
+            "INCOMPLETE_SFTP_MUTATION_LISTING"
+        }
+        return page
+    }
+}
 
 /** Explicit, bounded rescans. No server paging cursor or complete-write proof is inferred. */
 object SftpBrowseBounds {
@@ -162,6 +175,17 @@ class SftpSession internal constructor(
         }
         return SftpBrowsePage(entries.take(maxEntries), entries.size > maxEntries)
     }
+
+    /**
+     * Authoritative bounded sibling witness for upload, Move and New Folder.
+     * The existing preview API stays progressive and can show partial pages,
+     * but a mutation must fail CLOSED until the full <=2,000-child parent is
+     * observed. No caching or cursor reuse between preflight rescans.
+     */
+    fun completeMutationListing(absoluteFolder: String): SftpBrowsePage =
+        SftpMutationListing.requireComplete(
+            browse(absoluteFolder, SftpBrowseBounds.MAX)
+        )
 
     /**
      * Exclusive create, never truncate, append or replace an existing file.

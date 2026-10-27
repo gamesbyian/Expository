@@ -32,3 +32,7 @@ All future downloadable Android Transfer APKs must include the exact token `expo
 - Finish each PR: review concurrent changes, test exact head, merge only qualified changes, update ranked queue/ledger *without duplicating history*, link evidence, hand off next runnable step. Do not open routine planning-only PRs when a functional slice can be delivered.
 
 **Do not claim:** physical Pixel, TalkBack, live Android SFTP transfer bytes, real Google Drive write, native Docs conversion, complete six-route cross-pane operations, executed remote bulk rename or process-death recovery without observed proof. A passing API35 UI class does not supply live authenticated network receipts.
+
+## Future universal location scope
+
+Read [universal locations](../docs/android-transfer/UNIVERSAL-LOCATIONS.md) before changing endpoint abstractions, provider pickers or cross-pane transfer planning. Approved future native adapters include scoped Android DocumentsProvider/Google Drive, separately authorized Drive API and GitHub repository trees; neither Drive nor GitHub is currently a verified browseable pane. Default Single remains first-class, Dual chooses any two authorized locations. GitHub writes are reviewed branch/commit operations and must **never** leak into read-only root Pages app. Keep pending scope separate from the release evidence ledger.

@@ -41,7 +41,7 @@ object FtpsSecuritySuite {
             check(FtpsTarget("example.invalid", 21).port == 21)
         }
         checkCase("host and port injection rejected before sockets") {
-            for (h in listOf("", "host\nPASS", "user@server", "host/path", "host:21")) {
+            for (h in listOf("", "host\nPASS", "user@server", "host/path", "host:21", "host\u0000x", "host\u001bx", "host\u007fx")) {
                 check(runCatching { FtpsTarget(h) }.isFailure)
             }
             check(runCatching { FtpsTarget("valid.invalid", 65536) }.isFailure)
@@ -49,13 +49,14 @@ object FtpsSecuritySuite {
         checkCase("absolute path no ambiguous traversals") {
             check(FtpsPath.checked("/Downloads/Season 01") == "/Downloads/Season 01")
             for (p in listOf("relative", "/safe/../oops", "/safe/./oops", "/safe//oops",
-                "/safe\nNOOP", "/safe\\oops")) {
+                "/safe\nNOOP", "/safe\\oops", "/safe\tname", "/safe\u001bname", "/safe\u007fname")) {
                 check(runCatching { FtpsPath.checked(p) }.isFailure)
             }
         }
         checkCase("malformed MLSD child names must fail closed") {
             check(FtpsPath.checkedChild("Episode 02.mkv") == "Episode 02.mkv")
-            for (name in listOf("", "..", ".", "a/b", "a\\\\b", "x\u0000y")) {
+            check(FtpsPath.checkedChild("Café (2026).mkv") == "Café (2026).mkv")
+            for (name in listOf("", "..", ".", "a/b", "a\\\\b", "x\u0000y", "x\ty", "x\u001by", "x\u007fy")) {
                 check(runCatching { FtpsPath.checkedChild(name) }.isFailure)
             }
         }

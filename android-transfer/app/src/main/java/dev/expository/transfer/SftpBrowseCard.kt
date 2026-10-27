@@ -266,7 +266,7 @@ internal fun SftpBrowseCard(
                             ) { "SCOPED_SOURCE_NAME_CHANGED" }
                             SftpPath.validateChild(name)
                         }
-                        val listing = live.browse(directory)
+                        val listing = live.completeMutationListing(directory)
                         require(!listing.truncated) { "TRUNCATED_LISTING" }
                         require(names.distinct().size == names.size) {
                             "DUPLICATE_SOURCE_NAME"
@@ -589,8 +589,9 @@ internal fun SftpBrowseCard(
                     Text("Selected to move: " + sourceToMove,
                         style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(enabled = !busy && page?.truncated != true &&
-                            folder != "/" &&
+                        Button(enabled = !busy && page?.truncated == false &&
+                            // Root is a valid verified destination. Only the
+                            // source's same folder and partial listings block.
                             folder != sourceToMove.substringBeforeLast('/', "").ifBlank { "/" },
                             modifier = Modifier.heightIn(min = 48.dp),
                             onClick = {

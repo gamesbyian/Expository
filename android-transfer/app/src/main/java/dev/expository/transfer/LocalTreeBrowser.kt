@@ -4,7 +4,13 @@ import android.content.ContentResolver
 import android.database.Cursor
 import android.net.Uri
 import android.provider.DocumentsContract
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,7 +23,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,7 +31,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import dev.expository.transfer.saf.SafNewFolder
 import dev.expository.transfer.saf.SafFolderCreateRequest
 import dev.expository.transfer.saf.SafFolderCreatePreflight
@@ -293,6 +304,34 @@ internal fun LocalTreePane(
 }
 
 /**
+ * Lightweight, testable foundation action without Material3's traversable
+ * ChildSemanticsNode. Dynamically inserting/removing Material3 Surface buttons
+ * while the system picker/IME resumes has crashed Compose's snapshot
+ * semantics traversal on API 35; this control keeps an ordinary clickable
+ * semantic node with a genuine Button role and a >=48dp touch target.
+ */
+@Composable
+private fun FolderActionControl(
+    label: String, enabled: Boolean, modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val background = if (enabled) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.surfaceVariant
+    val foreground = if (enabled) MaterialTheme.colorScheme.onPrimary
+        else MaterialTheme.colorScheme.onSurfaceVariant
+    Box(
+        modifier = modifier.heightIn(min = 48.dp)
+            .clip(MaterialTheme.shapes.small)
+            .background(background)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = foreground, style = MaterialTheme.typography.labelLarge)
+    }
+}
+
+/**
  * Inline Android SAF New Folder; deliberately no server or broad-storage path.
  * The immutable proposal is revoked on every tree/navigation/refresh/selection
  * epoch. The actual create is journaled before DocumentsContract mutation.
@@ -305,6 +344,8 @@ internal fun SafFolderCreateCard(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
     val currentState by rememberUpdatedState(state)
     val service = remember(context) {
         SafNewFolder(context.contentResolver) { digest ->
@@ -326,25 +367,42 @@ internal fun SafFolderCreateCard(
     val available = enabled && !processing && !state.loading && state.complete &&
         state.canWrite && state.treeUri != null && state.folderId != null
 
-    Button(enabled = available, modifier = Modifier.heightIn(min = 48.dp),
-        onClick = { editing = !editing; pending = null }) {
-        Text(if (editing) "Close New Folder" else "New folder…")
-    }
+    FolderActionControl(
+        label = if (editing) "Close New Folder" else "New folder…",
+        enabled = available,
+        modifier = Modifier.testTag("saf-new-folder-open"),
+        onClick = { editing = !editing; pending = null }
+    )
     if (editing) {
-        TextField(
+        // Material3's floating TextField label may invalidate a detached
+        // ChildSemanticsNode when an OS picker/IME returns and the reviewed
+        // preflight changes state. Keep the input semantics stable instead.
+        Text("Folder name", style = MaterialTheme.typography.bodySmall)
+        BasicTextField(
             value = name,
             onValueChange = { name = it; pending = null },
-            enabled = available && pending == null,
-            label = { Text("Folder name") },
-            singleLine = true
+            enabled = available,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = MaterialTheme.colorScheme.onSurface),
+            modifier = Modifier.fillMaxWidth()
+                .border(1.dp, MaterialTheme.colorScheme.outline,
+                    MaterialTheme.shapes.small)
+                .padding(14.dp)
+                .testTag("saf-new-folder-name")
+                .semantics { contentDescription = "Folder name" }
         )
         if (pending == null) {
-            Button(enabled = available && name.isNotBlank(),
-                modifier = Modifier.heightIn(min = 48.dp),
+            FolderActionControl(
+                label = "Review New Folder",
+                enabled = available && name.isNotBlank(),
+                modifier = Modifier.testTag("saf-new-folder-review"),
                 onClick = {
+                    keyboard?.hide()
+                    focusManager.clearFocus()
                     val snapshot = currentState
-                    val uri = snapshot.treeUri ?: return@Button
-                    val parent = snapshot.folderId ?: return@Button
+                    val uri = snapshot.treeUri ?: return@FolderActionControl
+                    val parent = snapshot.folderId ?: return@FolderActionControl
                     val epoch = snapshot.generation
                     val proposedName = name
                     processing = true
@@ -369,7 +427,7 @@ internal fun SafFolderCreateCard(
                         }
                         processing = false
                     }
-                }) { Text("Review New Folder") }
+                })
         } else {
             val proposal = pending
             if (proposal != null) {
@@ -380,9 +438,10 @@ internal fun SafFolderCreateCard(
                 Text("No existing folder is opened or overwritten. " +
                     "Provider ambiguity leaves a review-required journal.")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(enabled = available &&
-                        pendingEpoch == state.generation,
-                        modifier = Modifier.heightIn(min = 48.dp),
+                    FolderActionControl(
+                        label = "Confirm New Folder",
+                        enabled = available && pendingEpoch == state.generation,
+                        modifier = Modifier.testTag("saf-new-folder-confirm"),
                         onClick = {
                             val frozen = proposal
                             val epoch = pendingEpoch
@@ -392,7 +451,7 @@ internal fun SafFolderCreateCard(
                                 live.folderId != frozen.request.parentId) {
                                 pending = null
                                 status = "Folder changed. Create approval expired."
-                                return@Button
+                                return@FolderActionControl
                             }
                             pending = null
                             processing = true
@@ -415,10 +474,11 @@ internal fun SafFolderCreateCard(
                                 if (receipt.proof == SafFolderCreateProof.DIRECTORY_CONFIRMED)
                                     onRefresh()
                             }
-                        }) { Text("Confirm New Folder") }
-                    Button(enabled = !processing,
-                        modifier = Modifier.heightIn(min = 48.dp),
-                        onClick = { pending = null }) { Text("Cancel") }
+                        })
+                    FolderActionControl(
+                        label = "Cancel", enabled = !processing,
+                        onClick = { pending = null }
+                    )
                 }
             }
         }

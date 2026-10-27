@@ -75,3 +75,7 @@ Performance/stress gates include >2GiB streams, 2,000-child/large directories, 1
 - [Live native queue](../../android-transfer/WORK-QUEUE.md): authoritative ranked *next jobs*.
 
 For conflicting statements use: **observed exact-head source/tests/evidence for implementation truth; this contract plus detailed linked specs for requirements; ledger for gate claims; queue for immediate execution order.** Historical October 23 design sections remain useful requirements but do not override later merged code. Changes to beta scope require edits to this contract, corresponding detailed spec/acceptance row, queue and ledger if evidence genuinely changes. Avoid repeating PR histories in the queue.
+
+## Approved expansion: universal cloud and repository locations (2026-10-27)
+
+[Universal locations contract](UNIVERSAL-LOCATIONS.md) specifies independently navigable Android document-provider (including Google Drive when available), Google Drive API, and GitHub repository locations in both default single and optional dual workspace. Device ↔ cloud ↔ FTP/FTPS/SFTP ↔ GitHub Copy, folder transfer, capability-gated edits and explicit reviewed Move are future requirements; these are **unimplemented** until independently evidenced. The current P0 real Drive **destination** promise remains unchanged, while account-wide Drive browsing and GitHub writes can be staged. Preserve read-only Pages app isolation and all existing planner/credential invariants.

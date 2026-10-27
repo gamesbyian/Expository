@@ -176,6 +176,18 @@ async function main(){
   await until("document.querySelectorAll('#items .tile').length===2",'recursive image gallery');
   await evaluate("document.querySelector('#sortFiles').value='size';document.querySelector('#sortFiles').dispatchEvent(new Event('change'))");
   await until("document.querySelectorAll('#items .tile').length===2",'sorted gallery');
+
+  await evaluate("(()=>{const scope=document.querySelector('#scope'),kind=document.querySelector('#fileKind'),group=document.querySelector('#groupFolders');scope.value='allFiles';kind.value='previewable';group.value='folder';scope.dispatchEvent(new Event('change'))})()");
+  await until("document.querySelectorAll('#items .gallery-card').length===5",'all-file recursive visual gallery');
+  assert.equal(await evaluate("document.querySelectorAll('#items .gallery-divider').length"),2,'gallery groups nested folders');
+  await until("document.querySelectorAll('#items .doc-thumbnail').length>=1",'lazy inert document thumbnail');
+  assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'grouped gallery fits mobile viewport');
+  await evaluate("document.querySelector('#items .folder-jump').click()");
+  await until("document.querySelector('#breadcrumbs').textContent.includes('proposals')",'containing folder jump');
+  assert.equal(await evaluate("document.querySelector('#scope').value"),'folder','jump switches to direct folder view');
+  await evaluate("(()=>{document.querySelector('#groupFolders').value='none';document.querySelector('#fileKind').value='all';const scope=document.querySelector('#scope');scope.value='images';scope.dispatchEvent(new Event('change'))})()");
+  await until("document.querySelectorAll('#items .tile').length===2",'recursive image gallery restored after jump');
+
   await evaluate("document.querySelector('#density').value='210';document.querySelector('#density').dispatchEvent(new Event('input'))");
   assert.equal(await evaluate("document.querySelector('#items').style.getPropertyValue('--tile-min')"),'210px','resizable gallery');
   await evaluate("document.querySelector('#filter').value='circle';document.querySelector('#contentSearch').click()");
