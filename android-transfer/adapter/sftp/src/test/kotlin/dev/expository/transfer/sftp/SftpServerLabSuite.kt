@@ -61,6 +61,11 @@ object SftpServerLabSuite {
                 }
                 val nextWindow = session.browse("/many", maxEntries = 400)
                 check(!nextWindow.truncated && nextWindow.entries.size == 205)
+                // Legacy list may not silently return a truncated sample:
+                // the existing 205-item fixture must be fully represented.
+                check(session.list("/many").size == 205)
+                check(session.list("/many").toSet() ==
+                    nextWindow.entries.map { it.name }.toSet())
                 check(nextWindow.entries.map { it.name }.toSet().size == 205)
                 check(nextWindow.entries.any { it.name == "entry-0204.txt" })
                 check(session.openRead("/many/entry-0204.txt").use { it.readBytes() }
