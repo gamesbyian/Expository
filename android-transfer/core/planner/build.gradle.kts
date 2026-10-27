@@ -33,3 +33,11 @@ tasks.register<JavaExec>("workspaceScenarios") {
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("dev.expository.transfer.planner.WorkspaceStateSuite")
 }
+
+tasks.register<JavaExec>("sessionAccessScenarios") {
+    group = "verification"
+    description = "RAM-only Android biometric/device-credential access cadence and replay policy"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.planner.SessionAccessGateSuite")
+}
