@@ -1,6 +1,7 @@
 package dev.expository.transfer
 
 import android.content.ContentResolver
+import android.database.Cursor
 import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.compose.foundation.layout.Arrangement
@@ -34,7 +35,12 @@ internal data class TreeEntry(
     val directory: Boolean,
     val bytes: Long?
 )
-internal data class TreeListing(val children: List<TreeEntry>, val complete: Boolean)
+internal data class TreeListing(
+    val children: List<TreeEntry>,
+    val complete: Boolean,
+    /** A bounded cursor read stopped at the UI limit; never proof of absence. */
+    val hasMore: Boolean = false
+)
 internal data class LocalTreeBrowseState(
     val treeUri: Uri? = null,
     val crumbs: List<TreeCrumb> = emptyList(),
@@ -43,6 +49,8 @@ internal data class LocalTreeBrowseState(
     val canWrite: Boolean = false,
     val loading: Boolean = false,
     val complete: Boolean = false,
+    val visibleLimit: Int = LocalTreeReader.MAX_VISIBLE,
+    val hasMore: Boolean = false,
     val generation: Long = 0L,
     val status: String = "Choose a device folder with Android Files. No broad storage permission."
 ) {
@@ -58,6 +66,7 @@ internal data class LocalTreeBrowseState(
 /** Bounded read-only SAF traversal. A truncated listing never proves absence. */
 internal object LocalTreeReader {
     const val MAX_VISIBLE = 200
+    const val MAX_BROWSE = 2000
 
     fun validTree(uri: Uri?): Boolean = uri != null &&
         uri.scheme == ContentResolver.SCHEME_CONTENT &&
@@ -70,8 +79,12 @@ internal object LocalTreeReader {
         }
     }
 
-    fun list(resolver: ContentResolver, tree: Uri, folderId: String): TreeListing {
+    fun list(resolver: ContentResolver, tree: Uri, folderId: String,
+        maxVisible: Int = MAX_VISIBLE): TreeListing {
         require(validTree(tree) && folderId.isNotBlank())
+        // Bounded repeatable provider scans, not guessed continuation tokens.
+        require(maxVisible in MAX_VISIBLE..MAX_BROWSE &&
+            maxVisible % MAX_VISIBLE == 0) { "INVALID_BROWSE_LIMIT" }
         val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(tree, folderId)
         val projection = arrayOf(
             DocumentsContract.Document.COLUMN_DOCUMENT_ID,
@@ -79,43 +92,67 @@ internal object LocalTreeReader {
             DocumentsContract.Document.COLUMN_MIME_TYPE,
             DocumentsContract.Document.COLUMN_SIZE
         )
+        return resolver.query(childrenUri, projection, null, null, null)?.use {
+            decodeRows(it, maxVisible)
+        } ?: throw SecurityException("Provider listing unavailable")
+    }
+
+    /**
+     * One deterministic, bounded cursor decoder shared by live SAF and
+     * synthetic instrumentation tests. No Android URI authority is fabricated
+     * for tests, and no partial cursor can authorize a mutation.
+     */
+    internal fun decodeRows(cursor: Cursor, maxVisible: Int = MAX_VISIBLE): TreeListing {
+        require(maxVisible in MAX_VISIBLE..MAX_BROWSE &&
+            maxVisible % MAX_VISIBLE == 0) { "INVALID_BROWSE_LIMIT" }
         val entries = ArrayList<TreeEntry>()
         val seen = HashSet<String>()
         var complete = true
-        resolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
-            val idColumn = cursor.getColumnIndexOrThrow(
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-            val nameColumn = cursor.getColumnIndexOrThrow(
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-            val typeColumn = cursor.getColumnIndexOrThrow(
-                DocumentsContract.Document.COLUMN_MIME_TYPE)
-            val sizeColumn = cursor.getColumnIndex(
-                DocumentsContract.Document.COLUMN_SIZE)
-            while (cursor.moveToNext()) {
-                if (entries.size >= MAX_VISIBLE) {
-                    complete = false
-                    break
-                }
-                val id = cursor.getString(idColumn) ?: continue
-                val name = cursor.getString(nameColumn) ?: continue
-                val mime = cursor.getString(typeColumn) ?: continue
-                if (id.isBlank() || name.isBlank() || !seen.add(id)) {
-                    complete = false
-                    continue
-                }
-                entries += TreeEntry(
-                    documentId = id,
-                    title = name.take(255),
-                    directory = mime == DocumentsContract.Document.MIME_TYPE_DIR,
-                    bytes = if (sizeColumn >= 0 && !cursor.isNull(sizeColumn))
-                        cursor.getLong(sizeColumn).takeIf { it >= 0L } else null
-                )
+        var hasMore = false
+        var scanned = 0
+        val idColumn = cursor.getColumnIndexOrThrow(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+        val nameColumn = cursor.getColumnIndexOrThrow(
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+        val typeColumn = cursor.getColumnIndexOrThrow(
+            DocumentsContract.Document.COLUMN_MIME_TYPE)
+        val sizeColumn = cursor.getColumnIndex(
+            DocumentsContract.Document.COLUMN_SIZE)
+        while (cursor.moveToNext()) {
+            // Count *every* cursor row, including malformed/duplicate
+            // rows, so a hostile provider cannot defeat this scan cap.
+            if (scanned >= maxVisible) {
+                complete = false
+                hasMore = true
+                break
             }
-        } ?: throw SecurityException("Provider listing unavailable")
+            scanned++
+            val id = cursor.getString(idColumn)
+            val name = cursor.getString(nameColumn)
+            val mime = cursor.getString(typeColumn)
+            if (id == null || name == null || mime == null) {
+                // A malformed provider row cannot silently disappear and
+                // leave a mutation-authorizing "complete" snapshot.
+                complete = false
+                continue
+            }
+            if (id.isBlank() || name.isBlank() || !seen.add(id)) {
+                complete = false
+                continue
+            }
+            entries += TreeEntry(
+                documentId = id,
+                title = name.take(255),
+                directory = mime == DocumentsContract.Document.MIME_TYPE_DIR,
+                bytes = if (sizeColumn >= 0 && !cursor.isNull(sizeColumn))
+                    cursor.getLong(sizeColumn).takeIf { it >= 0L } else null
+            )
+        }
         return TreeListing(
             entries.sortedWith(compareByDescending<TreeEntry> { it.directory }
                 .thenBy(String.CASE_INSENSITIVE_ORDER) { it.title }),
-            complete
+            complete,
+            hasMore
         )
     }
 }
@@ -131,6 +168,7 @@ internal fun LocalTreePane(
     onOpen: (TreeEntry) -> Unit,
     onParent: () -> Unit,
     onRefresh: () -> Unit,
+    onLoadMore: () -> Unit,
     onSelect: (TreeEntry) -> Unit
 ) {
     Card(Modifier.fillMaxWidth()) {
@@ -164,8 +202,21 @@ internal fun LocalTreePane(
                 style = MaterialTheme.typography.bodySmall
             )
             if (!state.complete && state.treeUri != null && !state.loading) {
-                Text("Listing incomplete: some files may be hidden. No transfer is authorized.",
-                    style = MaterialTheme.typography.bodySmall)
+                Text(
+                    if (state.hasMore) "Showing a bounded prefix of the provider listing. More items may exist; incomplete listings cannot authorize writes."
+                    else "Provider listing incomplete or ambiguous. No transfer is authorized.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                if (state.hasMore && state.visibleLimit < LocalTreeReader.MAX_BROWSE) {
+                    Button(enabled = enabled,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        onClick = onLoadMore) {
+                        Text("Show next 200 (clears selection)")
+                    }
+                } else if (state.hasMore) {
+                    Text("2000-item browse safety limit reached. Choose a smaller folder.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
             }
             Text("Destination creation: " + (if (state.canWrite)
                 "folder grant supports write; capability rechecked before Copy"
@@ -204,7 +255,7 @@ internal fun LocalTreePane(
                     }
                 }
             }
-            Text("Read-only pane browsing. Cross-pane Copy and Move require a verified destination and journaled executor.",
+            Text("Browsing never changes files. A Copy needs complete preflight, explicit confirmation and a journal; remote cross-pane transfers and Move are not yet enabled.",
                 style = MaterialTheme.typography.bodySmall)
         }
     }

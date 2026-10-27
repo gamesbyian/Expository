@@ -2,6 +2,7 @@ package dev.expository.transfer
 
 import android.content.ClipData
 import android.content.ContentValues
+import android.database.MatrixCursor
 import android.net.Uri
 import android.content.Intent
 import android.provider.MediaStore
@@ -25,6 +26,56 @@ import java.util.UUID
 @RunWith(AndroidJUnit4::class)
 class WorkspaceNavigationUiTest {
     @get:Rule val compose = createAndroidComposeRule<TransferActivity>()
+
+    /**
+     * Synthetic Android MatrixCursor tests the same bounded decoder used by
+     * the actual DocumentsProvider query. This is not an OS-picked grant,
+     * external-provider interoperability or a successful payload Copy.
+     */
+    @Test fun boundedSafListingShowsMoreWithoutTreatingTruncationAsComplete() {
+        var rows = 205
+        var corruptFirst = false
+        fun decode(limit: Int = LocalTreeReader.MAX_VISIBLE): TreeListing {
+            val columns = arrayOf(
+                android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE,
+                android.provider.DocumentsContract.Document.COLUMN_SIZE
+            )
+            return MatrixCursor(columns).use { cursor ->
+                repeat(rows) { i ->
+                    cursor.addRow(arrayOf(
+                        if (corruptFirst && i == 0) null else "id-$i",
+                        "Synthetic $i.txt", "text/plain", i.toLong()))
+                }
+                LocalTreeReader.decodeRows(cursor, limit)
+            }
+        }
+        val first = decode()
+        assertEquals(200, first.children.size)
+        assertFalse(first.complete)
+        assertTrue(first.hasMore)
+
+        val expanded = decode(400)
+        assertEquals(205, expanded.children.size)
+        assertTrue(expanded.complete)
+        assertFalse(expanded.hasMore)
+
+        rows = 2001
+        val hardCap = decode(LocalTreeReader.MAX_BROWSE)
+        assertEquals(2000, hardCap.children.size)
+        assertFalse(hardCap.complete)
+        assertTrue(hardCap.hasMore)
+        assertTrue("Invalid intermediate page size is refused",
+            runCatching { decode(201) }.isFailure)
+        rows = 10
+        corruptFirst = true
+        val corrupt = decode()
+        assertEquals(9, corrupt.children.size)
+        assertFalse("Null provider metadata must invalidate a complete listing",
+            corrupt.complete)
+        assertFalse(corrupt.hasMore)
+    }
 
     @Test fun secureWorkspacesStayDistinctAndSyntheticFilesRequireDemoTab() {
         compose.onNodeWithText("✓ Local").assertExists()
