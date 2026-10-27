@@ -41,8 +41,8 @@ import dev.expository.transfer.saf.TreeCopyPreflight
  * disconnected by changing tabs. A/B Swap moves the same remembered session
  * with its endpoint using Compose movable content, not a new connection.
  * The separate Single view remains available. Only reviewed, journaled
- * local-to-local Copy is executed between panes; remote cross-pane writes
- * still require a dedicated executor and are not implied by browsing.
+ * local-to-local Copy and explicitly requested one-file Local-to-SFTP
+ * uploads can run between panes. Other remote cross-pane writes remain gated.
  */
 @Composable
 internal fun DualWorkspaceCard(
@@ -72,18 +72,18 @@ internal fun DualWorkspaceCard(
     // unrelated connection; switching endpoint tears down its old session.
     var remoteSwapped by remember { mutableStateOf(false) }
     val connectionA = remember {
-        movableContentOf<BrowseEndpoint> { endpoint ->
+        movableContentOf<BrowseEndpoint, LocalPaneUploadSource?> { endpoint, peerSource ->
             when (endpoint) {
-                BrowseEndpoint.SFTP -> SftpBrowseCard()
+                BrowseEndpoint.SFTP -> SftpBrowseCard(localPaneSource = peerSource)
                 BrowseEndpoint.FTPS -> FtpsBrowseCard()
                 else -> Unit
             }
         }
     }
     val connectionB = remember {
-        movableContentOf<BrowseEndpoint> { endpoint ->
+        movableContentOf<BrowseEndpoint, LocalPaneUploadSource?> { endpoint, peerSource ->
             when (endpoint) {
-                BrowseEndpoint.SFTP -> SftpBrowseCard()
+                BrowseEndpoint.SFTP -> SftpBrowseCard(localPaneSource = peerSource)
                 BrowseEndpoint.FTPS -> FtpsBrowseCard()
                 else -> Unit
             }
@@ -93,7 +93,7 @@ internal fun DualWorkspaceCard(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Dual-location workspace", style = MaterialTheme.typography.titleLarge)
         Text(
-            "A and B have independent device-folder browsers or separately authenticated SFTP/FTPS connections. Device-to-Device Copy requires an explicit verified preflight. Remote cross-pane Copy and Move are not yet available.",
+            "A and B have independent device-folder browsers or separately authenticated SFTP/FTPS connections. Device-to-Device Copy requires an explicit verified preflight. One-file Local-to-SFTP Copy uses explicit approval and a verified, journaled upload. Other cross-pane remote Copy and Move remain unavailable.",
             style = MaterialTheme.typography.bodySmall
         )
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -171,8 +171,15 @@ internal fun DualWorkspaceCard(
                     // Movable content keeps the authenticated session attached
                     // to its owner even when the user swaps A and B.
                     val first = (which == WorkspacePane.A) != remoteSwapped
-                    if (first) connectionA(pane.endpoint)
-                    else connectionB(pane.endpoint)
+                    val peerSource = if (which == WorkspacePane.A) {
+                        if (workspace.b.endpoint == BrowseEndpoint.LOCAL)
+                            LocalPaneUploadSource.from(b) else null
+                    } else {
+                        if (workspace.a.endpoint == BrowseEndpoint.LOCAL)
+                            LocalPaneUploadSource.from(a) else null
+                    }
+                    if (first) connectionA(pane.endpoint, peerSource)
+                    else connectionB(pane.endpoint, peerSource)
                 }
             }
         }
@@ -256,7 +263,7 @@ internal fun DualWorkspaceCard(
             Text("Cancel transfer")
         }
         Text(copyStatus, style = MaterialTheme.typography.bodySmall)
-        Text("Remote cross-pane Copy/Move and local Move remain unavailable. Each remote pane may independently browse and use its own explicitly initiated endpoint actions. No cross-pane remote write is implied by a successful connection.",
+        Text("One-file Local-to-SFTP Copy is available only by explicit action in the authenticated SFTP destination pane. Other cross-pane Copy/Move and local Move remain unavailable.",
             style = MaterialTheme.typography.bodySmall)
     }
 }

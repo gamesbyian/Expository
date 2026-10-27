@@ -64,6 +64,18 @@ import kotlin.coroutines.coroutineContext
  * outlive the composing screen, so their result must never silently adopt a
  * newly connected server, folder, or selected remote file.
  */
+/** Review is tied to the exact authenticated destination and selected SAF child. */
+internal data class PeerUploadReview(
+    val source: LocalPaneUploadSource,
+    val sessionId: String,
+    val folder: String
+) {
+    fun stillMatches(liveSource: LocalPaneUploadSource?,
+        liveSessionId: String, liveFolder: String): Boolean =
+        sessionId.isNotBlank() && source == liveSource &&
+            sessionId == liveSessionId && folder == liveFolder
+}
+
 internal data class RemotePickerWitness(
     val sessionId: String,
     val folder: String,
@@ -81,7 +93,10 @@ internal data class RemotePickerWitness(
  * implicit upload, background service or promise of process-death recovery.
  */
 @Composable
-fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
+fun SftpBrowseCard(
+    incomingShare: IncomingShareRequest? = null,
+    localPaneSource: LocalPaneUploadSource? = null
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var host by remember { mutableStateOf("") }
@@ -97,6 +112,7 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
     var page by remember { mutableStateOf<SftpBrowsePage?>(null) }
     var browseLimit by remember { mutableStateOf(SftpBrowseBounds.INITIAL) }
     var pendingFile by remember { mutableStateOf<String?>(null) }
+    var pendingPeerUpload by remember { mutableStateOf<PeerUploadReview?>(null) }
     var pendingSaveWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
     var pendingUploadWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
     var pendingMove by remember { mutableStateOf<String?>(null) }
@@ -185,13 +201,21 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
      * journaled, exclusive-create and read-back-verified operation.
      * This is deliberately not an atomic multi-file transaction.
      */
-    fun uploadSources(sources: List<Uri>) {
+    fun uploadSources(
+        sources: List<Uri>, scopedSource: LocalPaneUploadSource? = null
+    ) {
         val live = session
         val directory = folder
         val opaque = sessionId
         if (live == null || opaque.isBlank()) {
             busy = false
             status = "SFTP session expired. Reconnect to upload."
+            return
+        }
+        if (scopedSource != null &&
+            (sources.size != 1 || sources[0] != scopedSource.documentUri ||
+                localPaneSource != scopedSource)) {
+            status = "Opposite pane selection changed. No upload started."
             return
         }
         if (sources.isEmpty() || sources.size > ScopedUploadPicker.MAX_DOCUMENTS ||
@@ -216,6 +240,9 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                 // destination with exclusive-create semantics.
                 val ready = withContext(Dispatchers.IO) {
                     runCatching {
+                        if (scopedSource != null) require(
+                            scopedSource.membershipStillVerified(context.contentResolver)
+                        ) { "SCOPED_SOURCE_MEMBERSHIP_UNVERIFIED" }
                         val observer = dev.expository.transfer.saf.SafSingleDocumentCopy(
                             context.contentResolver)
                         val names = sources.map {
@@ -251,6 +278,7 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                         val active = coroutineContext[Job]
                         var lastDisplayed = 0L
                         uploader.copy(live, opaque, source, directory,
+                            scopedSource = scopedSource,
                             continueRequested = {
                                 permit.get() && active?.isActive == true
                             },
@@ -340,6 +368,7 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                     page = it
                     browseLimit = limit
                     pendingFile = null
+                    pendingPeerUpload = null
                     showRenamePreview = false
                     status = if (it.truncated) {
                         "Showing " + it.entries.size + " entries. " +
@@ -415,6 +444,7 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                                 sessionId = UUID.randomUUID().toString()
                                 folder = chosenFolder
                                 browseLimit = SftpBrowseBounds.INITIAL
+                                pendingPeerUpload = null
                                 page = directory
                                 status = "Pinned SFTP session authenticated. Select a remote file."
                             }.onFailure {
@@ -431,6 +461,7 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                         page = null
                         browseLimit = SftpBrowseBounds.INITIAL
                         pendingFile = null
+                        pendingPeerUpload = null
                         pendingMove = null
                         showRenamePreview = false
                         status = "Disconnected. Remote session cleared."
@@ -551,6 +582,56 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                 }) { Text("Upload files here…") }
                 Text("Choose up to 12 files. Each is copied separately; the batch stops on the first unverified result. Earlier verified uploads remain.",
                     style = MaterialTheme.typography.bodySmall)
+                // This action proposes a reviewed one-file cross-pane
+                // Copy. It never uploads merely on selection or tab switch.
+                if (localPaneSource != null) {
+                    Text("Other pane selected: " + localPaneSource.expectedName,
+                        style = MaterialTheme.typography.bodySmall)
+                    Button(
+                        enabled = !busy && session != null && sessionId.isNotBlank() &&
+                            pendingPeerUpload == null,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        onClick = {
+                            pendingPeerUpload = PeerUploadReview(
+                                localPaneSource, sessionId, folder)
+                        }
+                    ) { Text("Copy selected device file here…") }
+                }
+                pendingPeerUpload?.let { review ->
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Review device → SFTP Copy",
+                                style = MaterialTheme.typography.titleMedium)
+                            Text("Source file: " + review.source.expectedName)
+                            Text("Destination: authenticated SFTP folder " + review.folder)
+                            Text("One file, no overwrite, no source deletion. " +
+                                "Destination collisions and complete source membership " +
+                                "are rechecked before exclusive creation. " +
+                                "An uncertain upload requires inspection before retry.",
+                                style = MaterialTheme.typography.bodySmall)
+                            val valid = review.stillMatches(
+                                localPaneSource, sessionId, folder) && session != null
+                            if (!valid) Text("Selection, folder or connection changed. " +
+                                "Discard this proposal and review again.",
+                                style = MaterialTheme.typography.bodySmall)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(enabled = !busy && valid,
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    onClick = {
+                                        pendingPeerUpload = null
+                                        uploadSources(listOf(review.source.documentUri),
+                                            scopedSource = review.source)
+                                    }) { Text("Confirm SFTP Copy") }
+                                Button(enabled = !busy,
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    onClick = { pendingPeerUpload = null }) {
+                                    Text("Cancel proposal")
+                                }
+                            }
+                        }
+                    }
+                }
                 val sharedFiles = incomingShare?.batch?.map { it.uri }
                     ?: incomingShare?.payload?.let { listOf(it.uri) }
                 if (!sharedFiles.isNullOrEmpty()) {
