@@ -171,8 +171,10 @@ private fun DeveloperPreview(
             maxVisible !in LocalTreeReader.MAX_VISIBLE..LocalTreeReader.MAX_BROWSE ||
             maxVisible % LocalTreeReader.MAX_VISIBLE != 0 ||
             model.pane(which).endpoint != BrowseEndpoint.LOCAL) return
-        // Refresh and navigation invalidate a reviewed destination snapshot.
+        // Refresh and every incremental load revoke both UI selection and
+        // immutable planner selection before any asynchronous provider read.
         proposedCopy = null
+        model = model.update(which, model.pane(which).clearSelection())
         val nextGeneration = treeReadGeneration.incrementAndGet()
         replaceTree(which, LocalTreeBrowseState(
             treeUri = uri, crumbs = crumbs, loading = true,
