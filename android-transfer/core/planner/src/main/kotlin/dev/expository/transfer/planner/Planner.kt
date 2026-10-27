@@ -9,7 +9,7 @@ import java.util.Locale
  * No Android, networking, credentials, filesystem writes, or logging live in this module.
  * All authority identifiers are opaque. Names only enter a local digest, never CI logs.
  */
-enum class LocationKind { LOCAL_SAF, REMOTE_FTP, REMOTE_FTPS, REMOTE_SFTP, DRIVE_SAF, DRIVE_API }
+enum class LocationKind { LOCAL_SAF, REMOTE_FTP, REMOTE_FTPS, REMOTE_SFTP, DRIVE_SAF, DRIVE_API, GITHUB_REPOSITORY }
 enum class Capability { READ, WRITE, CREATE_CHILD, RENAME, TEMP_RENAME, SERVER_COPY, PROVIDER_MOVE, DELETE_SOURCE }
 enum class Support { SUPPORTED, UNSUPPORTED, UNKNOWN }
 enum class ItemKind { FILE, DIRECTORY }
@@ -216,15 +216,24 @@ object OperationPlanner {
         val sameRemote = from != null && from.key.kind.isRemote() && sameNamespace
         val anyDrive = (from?.key?.kind in listOf(LocationKind.DRIVE_API, LocationKind.DRIVE_SAF)) ||
             dest.key.kind in listOf(LocationKind.DRIVE_API, LocationKind.DRIVE_SAF)
+        val anyGitHub = from?.key?.kind == LocationKind.GITHUB_REPOSITORY ||
+            dest.key.kind == LocationKind.GITHUB_REPOSITORY
 
         val route: TransferRoute = when (request.operation) {
             Operation.COPY -> when {
+                // GitHub writes need a base-HEAD-pinned, reviewed tree commit;
+                // generic stream-to-path Copy must not imply a safe commit.
+                dest.key.kind == LocationKind.GITHUB_REPOSITORY -> {
+                    blockers += "GITHUB_COMMIT_REVIEW_REQUIRED"
+                    TransferRoute.BLOCKED
+                }
                 sameRemote && from!!.supports(Capability.SERVER_COPY, nowMillis) &&
                     dest.supports(Capability.SERVER_COPY, nowMillis) ->
                     TransferRoute.SERVER_COPY
                 else -> TransferRoute.DEVICE_RELAY
             }
             Operation.MOVE -> when {
+                anyGitHub -> { blockers += "GITHUB_MOVE_OUT_OF_SCOPE"; TransferRoute.BLOCKED }
                 anyDrive -> { blockers += "DRIVE_MOVE_OUT_OF_SCOPE"; TransferRoute.BLOCKED }
                 sameRemote && from!!.supports(Capability.RENAME, nowMillis) &&
                     dest.supports(Capability.RENAME, nowMillis) ->

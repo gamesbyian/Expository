@@ -10,6 +10,14 @@ tasks.register<JavaExec>("scenarios") {
     mainClass.set("dev.expository.transfer.planner.ScenarioSuite")
 }
 
+tasks.register<JavaExec>("locationScenarios") {
+    group = "verification"
+    description = "Bounded provider-neutral paged listing and GitHub/Drive transfer guards"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.planner.PagedLocationSuite")
+}
+
 tasks.register<JavaExec>("directoryScenarios") {
     group = "verification"
     description = "Remote create-directory immutable plan and collision checks"
