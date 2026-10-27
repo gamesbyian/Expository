@@ -48,7 +48,7 @@ data class SftpTarget(val host: String, val port: Int = 22, val trustedHostKey: 
 object SftpPath {
     fun requireAbsolute(path: String): String {
         require(path.startsWith("/") && path.toByteArray(StandardCharsets.UTF_8).size <= 4096)
-        require(path.none { it == '\\' || it == '\u0000' || it == '\r' || it == '\n' })
+        require(path.none { it == '\\' || it.code < 32 || it.code == 127 })
         if (path != "/") require(path.split('/').drop(1).all {
             it.isNotEmpty() && it != "." && it != ".."
         })
@@ -57,8 +57,7 @@ object SftpPath {
     fun validateChild(name: String): String {
         require(name.isNotBlank() && name != "." && name != ".." &&
             name.toByteArray(StandardCharsets.UTF_8).size <= 255 &&
-            name.none { it == '/' || it == '\\' || it == '\u0000' ||
-                it == '\r' || it == '\n' }) { "INVALID_SFTP_CHILD" }
+            name.none { it == '/' || it == '\\' || it.code < 32 || it.code == 127 }) { "INVALID_SFTP_CHILD" }
         return name
     }
 

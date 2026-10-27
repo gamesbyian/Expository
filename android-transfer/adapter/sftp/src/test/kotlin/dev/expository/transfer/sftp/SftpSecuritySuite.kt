@@ -36,9 +36,10 @@ object SftpSecuritySuite {
         }
         checkCase("absolute paths and children are conservatively validated") {
             check(SftpPath.requireAbsolute("/Downloads/Season 01") == "/Downloads/Season 01")
+            check(SftpPath.validateChild("Café (2026).mkv") == "Café (2026).mkv")
             for (v in listOf("relative", "/../bad", "/safe/./bad", "/safe//bad",
-                "/safe\nCOMMAND")) check(runCatching { SftpPath.requireAbsolute(v) }.isFailure)
-            for (v in listOf("", ".", "..", "a/b", "foo\rbar"))
+                "/safe\nCOMMAND", "/hidden\tname", "/control\u001bname", "/delete\u007fname")) check(runCatching { SftpPath.requireAbsolute(v) }.isFailure)
+            for (v in listOf("", ".", "..", "a/b", "foo\rbar", "foo\tbar", "a\u0001b", "a\u007fb"))
                 check(runCatching { SftpPath.validateChild(v) }.isFailure)
         }
         checkCase("bounded incremental listing windows keep narrow compatibility") {
