@@ -12,9 +12,11 @@ package dev.expository.transfer.saf
  */
 internal object SafNewDocumentIdentity {
     fun matches(expectedName: String, observedName: String,
-        newDocumentId: String, existingDocumentIds: Set<String>): Boolean =
+        newDocumentId: String, existingDocumentIds: Set<String>,
+        forbiddenDocumentIds: Set<String> = emptySet()): Boolean =
         expectedName.isNotBlank() &&
             observedName == expectedName &&
             newDocumentId.isNotBlank() &&
-            newDocumentId !in existingDocumentIds
+            newDocumentId !in existingDocumentIds &&
+            newDocumentId !in forbiddenDocumentIds
 }

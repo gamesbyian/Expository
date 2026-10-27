@@ -210,7 +210,8 @@ class SafTreeToTreeCopy(
                     uri.authority != request.targetTree.authority ||
                     !SafNewDocumentIdentity.matches(
                         confirmed.sourceName, observedName, newId,
-                        confirmed.existingTargetDocumentIds)
+                        confirmed.existingTargetDocumentIds,
+                        setOf(request.sourceDocumentId))
                 ) throw java.io.IOException("SAF_NEW_DOCUMENT_IDENTITY_UNVERIFIED")
                 return resolver.openOutputStream(uri, "w") ?: throw FileNotFoundException()
             }
