@@ -447,7 +447,7 @@ class LocalPickerPositiveCopyTest {
                 // already shows '✓ Select'. The extra fixture sorts second;
                 // target that exact row and require the selected count to
                 // become two before opening the destination pane.
-                compose.onAllNodesWithText("Select").onLast()
+                compose.onAllNodesWithText("Select")[1]
                     .performSemanticsAction(SemanticsActions.OnClick)
                 compose.waitUntil(15_000L) {
                     compose.onAllNodesWithText("Selected: 2").fetchSemanticsNodes()
