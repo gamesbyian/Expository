@@ -377,11 +377,28 @@ class LocalPickerPositiveCopyTest {
             compose.runOnUiThread {
                 compose.activity.folderPickerStage = "NOT_REQUESTED"
             }
+            val clicksBefore = FolderPickerTrace.button.get()
+            val launchesBefore = FolderPickerTrace.launch.get()
             compose.onNodeWithTag("local-tree-picker-Location " + pane)
                 .assertIsEnabled().performClick()
-            compose.waitUntil(5_000L) {
-                compose.activity.folderPickerStage != "NOT_REQUESTED"
+            compose.waitForIdle()
+            // If synthetic Compose action is not dispatched as a real click,
+            // exercise the physically visible button via UiAutomator once.
+            // This is NOT a shortcut to a grant: both OS result and provider
+            // SHA-256 still have to succeed below.
+            if (FolderPickerTrace.button.get() == clicksBefore) {
+                val visibleButton = device.wait(
+                    Until.findObject(By.text("Choose folder")), 2_000L)
+                if (visibleButton != null) {
+                    visibleButton.click()
+                    device.waitForIdle(500L)
+                }
             }
+            assertTrue("SAF picker click did not dispatch; trace=" +
+                FolderPickerTrace.snapshot() + "; activityStage=" +
+                compose.activity.folderPickerStage,
+                FolderPickerTrace.button.get() > clicksBefore &&
+                    FolderPickerTrace.launch.get() > launchesBefore)
             val pickerVisible = device.wait(androidx.test.uiautomator.Until.hasObject(
                 androidx.test.uiautomator.By.pkg("com.google.android.documentsui")), 12_000L) ||
                 device.wait(androidx.test.uiautomator.Until.hasObject(
