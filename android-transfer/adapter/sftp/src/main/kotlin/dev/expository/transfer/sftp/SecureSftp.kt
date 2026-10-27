@@ -103,6 +103,20 @@ data class SftpRemoteEntry(val name: String, val directory: Boolean, val size: L
 }
 data class SftpBrowsePage(val entries: List<SftpRemoteEntry>, val truncated: Boolean)
 
+/**
+ * Mutation authorization requires the ENTIRE bounded destination namespace,
+ * never the first screenful. A truncated listing is informational UI only.
+ * This remains conservative for unknown servers with >2,000 children.
+ */
+object SftpMutationListing {
+    fun requireComplete(page: SftpBrowsePage): SftpBrowsePage {
+        require(!page.truncated && page.entries.size <= SftpBrowseBounds.MAX) {
+            "INCOMPLETE_SFTP_MUTATION_LISTING"
+        }
+        return page
+    }
+}
+
 /** Explicit, bounded rescans. No server paging cursor or complete-write proof is inferred. */
 object SftpBrowseBounds {
     const val INITIAL = 200
@@ -161,6 +175,17 @@ class SftpSession internal constructor(
         }
         return SftpBrowsePage(entries.take(maxEntries), entries.size > maxEntries)
     }
+
+    /**
+     * Authoritative bounded sibling witness for upload, Move and New Folder.
+     * The existing preview API stays progressive and can show partial pages,
+     * but a mutation must fail CLOSED until the full <=2,000-child parent is
+     * observed. No caching or cursor reuse between preflight rescans.
+     */
+    fun completeMutationListing(absoluteFolder: String): SftpBrowsePage =
+        SftpMutationListing.requireComplete(
+            browse(absoluteFolder, SftpBrowseBounds.MAX)
+        )
 
     /**
      * Exclusive create, never truncate, append or replace an existing file.
