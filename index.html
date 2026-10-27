@@ -520,7 +520,7 @@ function selectImage(item){
 }
 function clearSelection(){state.selected.clear();state.selectionMode=false;updateSelectionControls()}
 function openContainingFolder(path){
- const folder=fileFolder(path);$('scope').value='folder';$('filter').value='';state.limit=80;return navigate(folder)
+ const folder=fileFolder(path);$('scope').value='folder';$('filter').value='';$('fileKind').value='all';$('extFilter').value='';state.limit=80;return navigate(folder)
 }
 function paint(more=false){
  const host=$('items');host.style.setProperty('--tile-min',($('density').value||145)+'px');if(!more)state.renderEpoch++;const epoch=state.renderEpoch;
