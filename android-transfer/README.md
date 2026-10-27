@@ -11,7 +11,7 @@ Expository Transfer is the **native Android** app in this repository's `android-
 - **SFTP:** SSH host-key SHA-256 pinning, browsable 200→2000 listings, foreground Save As, bounded 1–12-file local→SFTP reviewed uploads, one-file SFTP→opposite Local folder Copy, guarded single-file on-server Move and New Folder. Source bytes are preserved for Copy; remote destination writes use no-overwrite semantics and durable attempt records.
 - **FTPS:** explicit and implicit TLS-validated browsing/Save As, metadata checks, progressive encrypted listings and protected data connections. Plain FTP remains intentionally disabled pending secure opt-in UX. No automatic plaintext fallback.
 - **New Folder (local):** in a chosen writable SAF folder, review the name and collision-free complete parent listing, then create a **new** direct-child directory with write-ahead journal and exact post-create metadata verification.
-- **Safety and preview tools:** app-private AtomicFile recovery index, cancellation/uncertain receipts, honest read-back verification, preview-only SFTP bulk renamer and offline immutable planner/replay-policy scenarios.
+- **Safety and preview tools:** app-private AtomicFile recovery index, cancellation/uncertain receipts, honest read-back verification, preview-only SFTP bulk renamer and offline immutable planner/replay-policy scenarios. A pure JVM per-step journaled bulk-rename executor now stops on uncertain replies and parent drift, but it is **not connected to a real SFTP/SAF rename adapter or Apply UI** until stable remote child identity and true atomic no-replace semantics are demonstrated.
 
 The optional **Local/Remote app-session access gate** has only a pure policy foundation ([#155](https://github.com/gamesbyian/Expository/pull/155)). The native BiometricPrompt/device credential callback, UI privacy gate and Android Keystore password vault are **not yet implemented**. Existing connection passwords stay in memory rather than being saved between launches. See [session authentication design](../docs/android-transfer/SESSION-AUTHENTICATION.md).
 
@@ -28,7 +28,7 @@ APK naming policy: distributable Android artifacts must include the literal `exp
 From `android-transfer/`, using JDK 17 and Gradle 8.13:
 
 ```sh
-gradle :core:planner:scenarios :core:planner:directoryScenarios :core:planner:moveScenarios :core:planner:workspaceScenarios :core:planner:sessionAccessScenarios :core:engine:scenarios :core:engine:journalScenarios :core:engine:journaledCopyScenarios :adapter:ftps:scenarios :adapter:sftp:scenarios :testing:fake-endpoints:scenarios --no-daemon
+gradle :core:planner:scenarios :core:planner:directoryScenarios :core:planner:moveScenarios :core:planner:workspaceScenarios :core:planner:sessionAccessScenarios :core:engine:scenarios :core:engine:journalScenarios :core:engine:journaledCopyScenarios :core:engine:renameScenarios :adapter:ftps:scenarios :adapter:sftp:scenarios :testing:fake-endpoints:scenarios --no-daemon
 gradle -PwithAndroid=true :app:assembleDebug --no-daemon
 ```
 
