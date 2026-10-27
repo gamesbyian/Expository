@@ -1,64 +1,49 @@
-# Expository Transfer · native Android developer preview
+# Expository Transfer · Android developer preview
 
-The web Expository explorer remains **strictly read-only**. Expository Transfer is a separate Kotlin/Compose Android-native developer preview under `android-transfer/`, portable to a dedicated repo. The first real local SAF Copy came from [merged PR #33](https://github.com/gamesbyian/Expository/pull/33) and is now joined by secure SFTP and FTPS file operations. Actual API 35 emulator tests verify synthetic local MediaStore provider copying, cancellation and the system Open Document picker cancel path ([six-test run #40154825166](https://github.com/gamesbyian/Expository/actions/runs/40154825166)). **A complete user-picked Save As, real Google Drive provider, physical device and signed beta remain unverified.** The app is functional experimental code, not yet release-ready.
+Expository Transfer is the **native Android** app in this repository's `android-transfer/` directory. The repository's GitHub Pages app is a separate **read-only** repository explorer. Native Transfer currently has real scoped Android file operations and authenticated SFTP/FTPS foundations, but **is not a signed beta or a complete FTP file manager**.
 
-- `core/planner`: pure JVM module. Immutable transfer and rename proposals, explicit capability proofs, source/destination identity, SHA-256 digest, same-namespace Move fast path only, conservative case/Unicode collisions, temporary-hop rename graph, journal state guard. No I/O.
-- `app`: native Kotlin/Compose developer preview with real Local SAF Copy, pinned SFTP browse + SAF Save As/exclusive Upload and now **FTPS explicit/implicit TLS browse → one user-created SAF file Save As**. The new FTPS path checks MLST metadata, journals attempts and verifies provider bytes when possible, compiled in [PR-head Android run #40139897851](https://github.com/gamesbyian/Expository/actions/runs/40139897851). INTERNET only; no broad storage, saved account or remote password; physical Android/provider proof remains pending. This developer UI also contains a **non-destructive SFTP bulk rename preview** (merged [#59](https://github.com/gamesbyian/Expository/pull/59)), with server-side Apply disabled until journaled rename execution is verified.
-- `AGENTS.md`: module ownership and security constraints.
-- `core/engine` also contains a versioned SHA-256-integrity-checked atomic attempt journal and 12 pure Kotlin crash/corruption scenarios. The app has a `noBackupFilesDir` Android AtomicFile adapter; all active one-file foreground Copy routes use it since PR #42. There is still no independently verified device restart/resume/remote reconciliation.
-- `core/engine`: pure JVM bounded-memory stream copy, injected adapters, fail-closed drift and explicit byte-readback proof with fault-injection cases; foreground-only with no durable recovery.
-- `app/.../sftp`: PR #37 foreground SFTP-to-new-SAF-file adapter reuses immutable planner, remote stat recheck and read-back digest; debug APK compile and pinned synthetic lab passed [run #40127485028](https://github.com/gamesbyian/Expository/actions/runs/40127485028), physical-device/provider validation still outstanding.
-- `app/.../sftp/SftpSameServerMove`: merged PR #47 wires explicit one-file Move to direct SFTP rename, version/listing checked immutable plan, private atomic journal, and old/new metadata proof. Eight planner and controlled collision/refusal/bytes tests passed [run #40137145475](https://github.com/gamesbyian/Expository/actions/runs/40137145475), APK compiled [run #40137278521](https://github.com/gamesbyian/Expository/actions/runs/40137278521); no general server/device acceptance.
-- `app/.../sftp/SftpNewFolder`: merged PR #46 adds a planner-gated, journaled direct SFTP MKDIR action with stat verification; synthetic live server acceptance and APK compile [run #40136358327](https://github.com/gamesbyian/Expository/actions/runs/40136358327). No device or Move acceptance.
-- `adapter/sftp`: Apache MINA SSH/SFTP read/list module with mandatory explicit SHA-256 host-key pin; synthetic ephemeral-server correct-key and changed-key rejection plus file read passed [run #40117260270](https://github.com/gamesbyian/Expository/actions/runs/40117260270), reconfirmed on rebuilt main-backed [run #40126372217](https://github.com/gamesbyian/Expository/actions/runs/40126372217); Android integration still pending.
-- `adapter/ftps`: verified TLS certificate/hostname and PROT P for explicit/implicit FTPS, CWD + MLSD listing, non-authoritative legacy LIST **preview only**, MLST individual-file observation and read with final FTP acknowledgement. Controlled encrypted MLST/list/read + bad-cert rejection passed [#40139120011](https://github.com/gamesbyian/Expository/actions/runs/40139120011). Live owner Seedhost explicit and independent Wing implicit protected MLSD listings passed; Rebex's known sample RETR ends in 425, tracked in #54. No plaintext downgrade, Android physical acceptance or broad server compatibility claim.
-- `testing/fake-endpoints`: synthetic-only local SAF/remote/Drive capability fixtures; no network or user data.
-- `app/.../saf`: Android ContentResolver implementation for user-selected `ACTION_OPEN_DOCUMENT` / `ACTION_CREATE_DOCUMENT` URIs; no broad filesystem permission.
-- `.github/workflows/transfer-native.yml` (repository root): changed-path JVM scenario jobs and opt-in debug APK build with SHA256 artifact evidence.
+**Authoritative status:** [ranked work queue](WORK-QUEUE.md), [release-evidence ledger](../docs/android-transfer/RELEASE-READINESS.md), [product contract](../docs/android-transfer/CURRENT-CONTRACT.md), and [agent instructions](AGENTS.md). Check live `main` and CI rather than inferring delivery from dated milestones.
 
-## Build and test
-From this folder with JDK 17 and Gradle 8.13:
+## What is working now
+
+- **Single view (default):** its own navigable Android Storage Access Framework (SAF) folder browser, system Open/Create pickers for reviewed file Copy, local Open and Android Sharesheet, and separate authenticated SFTP/FTPS browser cards.
+- **Optional Dual view:** independently configured Local/Local, Local/Remote and Remote/Remote panes, A/B swap, active-pane tabs on phones, preserved authenticated remote sessions and a near-top **Choose Pane A/B folder** shortcut. Select one file in Local A/B for a reviewed, journaled **Local → Local Copy** into the opposite picked directory. Review is explicit; never silently Move or delete.
+- **SFTP:** SSH host-key SHA-256 pinning, browsable 200→2000 listings, foreground Save As, bounded 1–12-file local→SFTP reviewed uploads, one-file SFTP→opposite Local folder Copy, guarded single-file on-server Move and New Folder. Source bytes are preserved for Copy; remote destination writes use no-overwrite semantics and durable attempt records.
+- **FTPS:** explicit and implicit TLS-validated browsing/Save As, metadata checks, progressive encrypted listings and protected data connections. Plain FTP remains intentionally disabled pending secure opt-in UX. No automatic plaintext fallback.
+- **New Folder (local):** in a chosen writable SAF folder, review the name and collision-free complete parent listing, then create a **new** direct-child directory with write-ahead journal and exact post-create metadata verification.
+- **Safety and preview tools:** app-private AtomicFile recovery index, cancellation/uncertain receipts, honest read-back verification, preview-only SFTP bulk renamer and offline immutable planner/replay-policy scenarios.
+
+The optional **Local/Remote app-session access gate** has only a pure policy foundation ([#155](https://github.com/gamesbyian/Expository/pull/155)). The native BiometricPrompt/device credential callback, UI privacy gate and Android Keystore password vault are **not yet implemented**. Existing connection passwords stay in memory rather than being saved between launches. See [session authentication design](../docs/android-transfer/SESSION-AUTHENTICATION.md).
+
+## Download an experimental APK
+
+For a reproducible CI-built developer APK, open the [latest successful owner-triggered Android debug build](https://github.com/gamesbyian/Expository/actions/runs/40463621576) and download the `expository-transfer-developer-debug-apk` artifact. The archive contains `app-debug.apk` and `SHA256SUMS.txt`. GitHub retains this artifact for **five days**, so a newer owner-triggered `/transfer-native apk` run is necessary after expiry. This is debug-signed, not release-signed; it is not backed up and is not available as a permanent store listing.
+
+When testing, use **test-owned Android folders and separately authorized disposable SFTP/FTPS accounts**. Do not enter sensitive credentials or edit important remote data in this developer preview. Local tree grants are transient; the app does not request `MANAGE_EXTERNAL_STORAGE` or a global filesystem grant. Granting a folder in Android Files is a distinct action from selecting a source file and confirming a mutation in Expository.
+
+## Build and verify
+
+From `android-transfer/`, using JDK 17 and Gradle 8.13:
+
 ```sh
-gradle :core:planner:scenarios :core:planner:directoryScenarios :core:planner:moveScenarios :core:engine:scenarios :core:engine:journalScenarios :core:engine:journaledCopyScenarios :adapter:ftps:scenarios :adapter:sftp:scenarios :testing:fake-endpoints:scenarios --no-daemon
+gradle :core:planner:scenarios :core:planner:directoryScenarios :core:planner:moveScenarios :core:planner:workspaceScenarios :core:planner:sessionAccessScenarios :core:engine:scenarios :core:engine:journalScenarios :core:engine:journaledCopyScenarios :adapter:ftps:scenarios :adapter:sftp:scenarios :testing:fake-endpoints:scenarios --no-daemon
 gradle -PwithAndroid=true :app:assembleDebug --no-daemon
 ```
-The latter also requires Android SDK platform 36, Build Tools and the Google Maven artifacts. Android module is excluded from default JVM tests to avoid accidental SDK downloads. A repository relocation should preserve this Gradle root intact. Version baseline: AGP 8.11.1, Kotlin 2.2.20, Compose BOM 2025.12.00, minSdk 26/targetSdk 36. Revalidate Android 17 (API 37+) permission behavior before release.
 
-A focused Android PR-head debug build of the rename UI passed
-[run #40140507004](https://github.com/gamesbyian/Expository/actions/runs/40140507004).
-An independent opt-in Android API 35 emulator Compose smoke was introduced by
-[PR #61](https://github.com/gamesbyian/Expository/pull/61); a workflow
-invocation is not a passing runtime/device verdict.
+Android compilation additionally requires Android SDK platform 36, build tools 36.0.0 and Google Maven dependencies. Current baseline: AGP 8.11.1, Kotlin 2.2.20, Compose BOM 2025.12.00, minimum Android API 26, target 36. Don't infer target-37 Android 17 LAN permission acceptance from target 36.
 
-## Evidence honesty
-Pure JVM scenarios support **E1**; the opt-in FTPS localhost server suite separately provides narrowly scoped **E3** proof. G0 native Android compile and debug signing are proven by [GitHub Actions run #40071709212](https://github.com/gamesbyian/Expository/actions/runs/40071709212), source SHA `1329362c788eea9c028cebde95ea67f7d1f6e7a2` and APK SHA256 `d6301095b09f7b0f4a050ccb62e8e29c255883572db889fb56e1486a81e8528d`. This does **not** satisfy dedicated repository, device, or independent privacy proof. Android picker code exists but lacks E2/E4 device acceptance; no device screenshots, TalkBack review, physical protocol/Drive acceptance, persistent executor, production server test or installed beta is claimed. Do not mark G1 complete until performance/fuzz and crash-reconciliation coverage meet the release ledger.
+**CI routes:** the changed-path JVM pipeline runs E1 scenarios on every native PR. Owner-authored `/transfer-native apk-pr` compiles an immutable same-repo PR head. `/transfer-native emulator-pr WorkspaceNavigationUiTest` runs the targeted Android UI suite; exact allowlisted method selectors support cost-conscious positive picker/provider tests. Owner `/transfer-native apk` on a PR comment builds `main`, publishes SHA256 and an expiring debug APK. See [agent guidance](AGENTS.md) and [CI workflows](../.github/workflows/transfer-native.yml) for authorization and provenance.
 
-## Android provider acceptance (synthetic, no personal files)
+## Evidence and limitations
 
-[Run #40153876798](https://github.com/gamesbyian/Expository/actions/runs/40153876798)
-executed five API 35 instrumented tests, including two that copy and
-interrupt actual app-owned Android MediaStore `content://` streams. They
-verify destination byte readback, original preservation, and the persisted
-`VERIFIED` / `UNCERTAIN` AtomicFile journal states. Fixture documents are
-marked pending and cleaned up by their exact URIs. This is E2 real emulator
-provider evidence **without launching either system document picker** and
-without using private files, a cloud account, remote server or physical
-device. The signed developer debug APK is not a production release.
+**Actually accepted on an Android 15/API 35 emulator:**
 
-## First actual Android system picker interaction (E2)
+- A complete system Open→Create Document Copy with byte-for-byte source preservation and provider-readback proof, plus inbound Share race safety ([#103](https://github.com/gamesbyian/Expository/pull/103)).
+- **Two independently real OS-picked SAF folder grants and a Local→Local document Copy**, with a verified journal receipt and preserved 131,099-byte source ([#151](https://github.com/gamesbyian/Expository/pull/151), [exact test run #40462489116](https://github.com/gamesbyian/Expository/actions/runs/40462489116), 1/1). The test uses disposable MediaStore Downloads fixtures, not fabricated picker grants.
+- 20/20 Dual workspace and folder-picker shortcut UI assertions [#40458822027](https://github.com/gamesbyian/Expository/actions/runs/40458822027); New Folder local flow's **UI/policy** tests 19/19 [#40457974299](https://github.com/gamesbyian/Expository/actions/runs/40457974299). These latter UI runs are not positive New Folder provider-write acceptance.
+- Local→SFTP batch review 14/14 UI assertions ([#139](https://github.com/gamesbyian/Expository/pull/139)) and SFTP→Local review 15/15 ([#140](https://github.com/gamesbyian/Expository/pull/140)). They do **not** establish actual Android-to-live-server transfer bytes.
+- Synthetic localhost **SFTP host-key/collision** and **FTPS TLS/data-read** labs, separate from the Android UI/providing actual network from the handset.
 
-[PR #75](https://github.com/gamesbyian/Expository/pull/75) added a
-nondestructive UI Automator check of the actual Android
-`ACTION_OPEN_DOCUMENT` system picker. A checked-out immutable PR head was
-compiled (run #40154800622), then [API 35 emulator run
-#40154825166](https://github.com/gamesbyian/Expository/actions/runs/40154825166)
-passed six tests. Its new scenario opens the system picker, presses Back,
-observes the cancelled result in Expository, and verifies that Save copy
-remains disabled without a selected source. The test opens no personal file
-and performs no document write. PR #76 introduced the reusable trusted-main
-owner-comment `/transfer-native emulator-pr` workflow for this premerge
-evidence. Real source URI grants, save-picker completion, cloud providers
-and physical Android remain unverified.
+**Still required:** positive real local New Folder creation through an OS-picked provider, live Android SFTP/FTPS byte transfers, true recursive folders, six cross-pane Copy/Move directions, executed/undo-safe bulk rename, durable transfer queue/recovery after app death, protected remembered credentials, actual Drive/Docs destination delivery, accessibility/responsiveness matrix, physical Android and independently signed beta. The exact evidence and gate state live in the [release ledger](../docs/android-transfer/RELEASE-READINESS.md); no release should bypass G0–G9.
 
-## Active implementation frontier (26 October 2026)
-The existing Local/SFTP/FTPS navigation selects **cards**, not two independently navigable panes. Secure SFTP/FTPS protocol foundations and a write-ahead attempt journal **already exist**; do not rebuild them. Next work is enumerated in the [ranked native workboard](WORK-QUEUE.md) and specified by the [current contract](../docs/android-transfer/CURRENT-CONTRACT.md): advance actual independent Local/Local, Local/Remote and Remote/Remote pane state, SAF folder trees, journaled queue/recovery, executed (currently preview-only) bulk rename, and authentic Google Drive/Docs destinations. Preserve honest E1–E5 distinctions in the [release ledger](../docs/android-transfer/RELEASE-READINESS.md).
+The app and its Android Gradle root are intentionally relocatable; do not migrate or alter the public Pages explorer without separate approval.
