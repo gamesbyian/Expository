@@ -39,7 +39,7 @@ class RecoveryIndexFailurePolicyTest {
 
     @Test fun twoRenameStepsHaveSeparateRealAtomicJournalsAndRestartReview() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val digest = "f".repeat(64)
+        val digest = UUID.randomUUID().toString().replace("-", "").repeat(2)
         val firstKey = AndroidRenameStepStorage.privateKey(digest, 0)
         val secondKey = AndroidRenameStepStorage.privateKey(digest, 1)
         assertTrue(firstKey != secondKey)
