@@ -46,7 +46,7 @@ enum class LocationIndexState { OPEN, COMPLETE, INVALID }
  * Bad tokens, changed grants/branches, duplicate identities, ambiguous names,
  * oversized pages and silent partial listings poison the whole observation.
  */
-data class PagedLocationIndex private constructor(
+class PagedLocationIndex private constructor(
     val location: LocationRef,
     val state: LocationIndexState,
     val snapshotId: String?,
@@ -67,7 +67,19 @@ data class PagedLocationIndex private constructor(
             )
     }
 
-    private fun invalid(reason: String) = copy(
+    // Do not generate a public data-class copy(): callers must not be able
+    // to forge a COMPLETE listing or change its validated children.
+    private fun rebuilt(
+        state: LocationIndexState = this.state,
+        snapshotId: String? = this.snapshotId,
+        nextToken: String? = this.nextToken,
+        children: List<ObservedLocationChild> = this.children,
+        seenTokens: Set<String> = this.seenTokens,
+        errorCode: String? = this.errorCode
+    ) = PagedLocationIndex(location, state, snapshotId, nextToken, children,
+        seenTokens, errorCode)
+
+    private fun invalid(reason: String) = rebuilt(
         state = LocationIndexState.INVALID, children = emptyList(),
         errorCode = reason, nextToken = null
     )
@@ -120,14 +132,15 @@ data class PagedLocationIndex private constructor(
                 return invalid("LOCATION_DUPLICATE_CHILD")
         }
 
-        return copy(
+        return rebuilt(
             state = if (page.nextToken == null)
                 LocationIndexState.COMPLETE else LocationIndexState.OPEN,
             snapshotId = snapshotId ?: page.snapshotId,
             nextToken = page.nextToken,
             seenTokens = if (page.nextToken == null) seenTokens
                 else seenTokens + page.nextToken,
-            children = children + page.children.toList()
+            children = java.util.Collections.unmodifiableList(
+                children + page.children.toList())
         )
     }
 
