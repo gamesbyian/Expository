@@ -125,6 +125,16 @@ internal fun DualWorkspaceCard(
                 remoteSwapped = !remoteSwapped
                 onSwap()
             }) { Text("Swap A and B") }
+        // Keep a direct scoped folder-picker action visible near the top of
+        // dual mode. On a phone the chosen local pane's own Browse card can
+        // sit far below the outer scrolling toolbar and controls.
+        if (workspace.pane(workspace.activeDual).endpoint == BrowseEndpoint.LOCAL) {
+            Button(
+                modifier = Modifier.heightIn(min = 48.dp),
+                enabled = !busy,
+                onClick = { onPick(workspace.activeDual) }
+            ) { Text("Choose Pane " + workspace.activeDual.name + " folder…") }
+        }
 
         @Composable
         fun endpointPane(which: WorkspacePane) {
