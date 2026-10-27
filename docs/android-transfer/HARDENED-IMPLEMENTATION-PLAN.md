@@ -123,3 +123,7 @@ Sources: [Drive narrow scopes](https://developers.google.com/workspace/drive/api
 Silent overwrite, silent source deletion, trust verification disabled, plaintext FTP entered without warning, a failed provider write marked "Saved", an unverified Drive share marked "uploaded", duplicate Drive files after uncertain retry, a destroyed source after an uncertain remote rename, unrecoverable collision swap, leaking paths/secrets in public artifacts, drag-only critical operation, fixed-height split with offscreen Apply, or a queue that cannot determine which items did/didn't commit after process death.
 
 This file is an engineering execution contract; changing scope, priority or required proof needs an updated acceptance receipt, not just a UI mock.
+
+## Approved extensibility constraint: universal cloud/repository locations (2026-10-27)
+
+See [universal locations](UNIVERSAL-LOCATIONS.md). Implement per-authority capability/identity adapters so scoped Android DocumentsProviders, Drive API accounts and GitHub branches can participate in the existing immutable planner without weakening G1–G9 gates. SAF document grants are per-tree/file, not whole-Drive account authority. GitHub mutations are revision-pinned, reviewed Git tree/commit changes, not FTP-style atomic renames; unknown commit outcomes demand reconciliation. Relay via the phone with bounded streams and verified Copy before separately authorized cross-provider deletion. Preserve the currently prioritized functional work and add independent E2/E4 evidence gates for each provider.
