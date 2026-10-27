@@ -41,6 +41,16 @@ object SftpSecuritySuite {
             for (v in listOf("", ".", "..", "a/b", "foo\rbar"))
                 check(runCatching { SftpPath.validateChild(v) }.isFailure)
         }
+        checkCase("bounded incremental listing windows keep narrow compatibility") {
+            check(SftpBrowseBounds.requireValid(64) == 64) // manual smoke compatibility
+            check(SftpBrowseBounds.next(200) == 400)
+            check(SftpBrowseBounds.next(1800) == 2000)
+            check(SftpBrowseBounds.next(2000) == 2000)
+            for (invalid in listOf(0, -1, 2001, Int.MAX_VALUE))
+                check(runCatching { SftpBrowseBounds.requireValid(invalid) }.isFailure)
+            for (invalid in listOf(64, 201, 1999))
+                check(runCatching { SftpBrowseBounds.next(invalid) }.isFailure)
+        }
         checkCase("invalid target blocked before network") {
             check(runCatching { SftpTarget("user@example.invalid", trustedHostKey = pin) }.isFailure)
             check(runCatching { SftpTarget("example.invalid", 65536, pin) }.isFailure)

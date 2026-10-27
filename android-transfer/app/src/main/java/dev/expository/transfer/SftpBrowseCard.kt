@@ -38,6 +38,7 @@ import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 import dev.expository.transfer.sftp.SecureSftp
 import dev.expository.transfer.sftp.SftpBrowsePage
+import dev.expository.transfer.sftp.SftpBrowseBounds
 import dev.expository.transfer.sftp.SftpHostKeyPin
 import dev.expository.transfer.sftp.SftpPath
 import dev.expository.transfer.sftp.SftpSession
@@ -94,6 +95,7 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
     var folder by remember { mutableStateOf("/") }
     var newFolderName by remember { mutableStateOf("") }
     var page by remember { mutableStateOf<SftpBrowsePage?>(null) }
+    var browseLimit by remember { mutableStateOf(SftpBrowseBounds.INITIAL) }
     var pendingFile by remember { mutableStateOf<String?>(null) }
     var pendingSaveWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
     var pendingUploadWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
@@ -282,7 +284,10 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                     val refreshed = withContext(Dispatchers.IO) {
                         runCatching { live.browse(directory) }
                     }
-                    refreshed.onSuccess { page = it }
+                    refreshed.onSuccess {
+                        page = it
+                        browseLimit = SftpBrowseBounds.INITIAL
+                    }
                 }
             } catch (_: CancellationException) {
                 status = "Upload interrupted after " + verified +
@@ -318,20 +323,30 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
         }
     }
 
-    fun browseTo(next: String) {
+    fun browseTo(next: String,
+        requestedLimit: Int = if (next == folder) browseLimit else SftpBrowseBounds.INITIAL) {
         val live = session ?: return
+        val limit = runCatching { SftpBrowseBounds.requireValid(requestedLimit) }
+            .getOrNull() ?: return
         busy = true
         status = "Loading remote directory…"
         scope.launch {
-            val result = withContext(Dispatchers.IO) { runCatching { live.browse(next) } }
+            val result = withContext(Dispatchers.IO) {
+                runCatching { live.browse(next, maxEntries = limit) }
+            }
             if (session === live) {
                 result.onSuccess {
                     folder = next
                     page = it
+                    browseLimit = limit
                     pendingFile = null
                     showRenamePreview = false
-                    status = if (it.truncated) "Showing the first 200 entries. More exist; full pagination is pending."
-                             else "Remote listing received; choose a file to save."
+                    status = if (it.truncated) {
+                        "Showing " + it.entries.size + " entries. " +
+                            (if (limit < SftpBrowseBounds.MAX)
+                                "Load the next 200 to inspect more."
+                            else "2000-item safety cap reached; some entries remain unseen.")
+                    } else "Remote listing received; select a file to Save As."
                 }.onFailure {
                     status = "Unable to browse. Server permission, connection or listing may have changed."
                 }
@@ -399,6 +414,7 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                                 session = live
                                 sessionId = UUID.randomUUID().toString()
                                 folder = chosenFolder
+                                browseLimit = SftpBrowseBounds.INITIAL
                                 page = directory
                                 status = "Pinned SFTP session authenticated. Select a remote file."
                             }.onFailure {
@@ -413,6 +429,7 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                         session = null
                         sessionId = ""
                         page = null
+                        browseLimit = SftpBrowseBounds.INITIAL
                         pendingFile = null
                         pendingMove = null
                         showRenamePreview = false
@@ -465,7 +482,10 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                                             val refreshed = withContext(Dispatchers.IO) {
                                                 runCatching { live.browse(chosenFolder) }
                                             }
-                                            refreshed.onSuccess { page = it }
+                                            refreshed.onSuccess {
+                        page = it
+                        browseLimit = SftpBrowseBounds.INITIAL
+                    }
                                         }
                                         busy = false
                                     }
@@ -508,7 +528,10 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                                     val refreshed = withContext(Dispatchers.IO) {
                                         runCatching { live.browse(chosenParent) }
                                     }
-                                    refreshed.onSuccess { page = it }
+                                    refreshed.onSuccess {
+                        page = it
+                        browseLimit = SftpBrowseBounds.INITIAL
+                    }
                                     if (receipt.proof == FolderCreateProof.DIRECTORY_CONFIRMED)
                                         newFolderName = ""
                                 }
@@ -597,8 +620,22 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                         }
                     }
                 }
-                if (page?.truncated == true) Text("Directory truncated at 200 items. No unseen item is selectable.",
-                    style = MaterialTheme.typography.bodySmall)
+                if (page?.truncated == true) {
+                    if (browseLimit < SftpBrowseBounds.MAX) {
+                        Button(enabled = !busy,
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = {
+                                browseTo(folder, SftpBrowseBounds.next(browseLimit))
+                            }) { Text("Show next 200") }
+                    }
+                    Text("Remote listing incomplete: unseen items are not selectable. No action may assume their absence.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                if (browseLimit > SftpBrowseBounds.INITIAL) {
+                    Text("Expanded browsing enables navigation and Save As. Upload and Move " +
+                        "still use separate, stricter write preflights and may be blocked.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
             }
             if (continueCopy != null) {
                 Text(transferKind + ": " + transferred + " bytes written (not verified)",
