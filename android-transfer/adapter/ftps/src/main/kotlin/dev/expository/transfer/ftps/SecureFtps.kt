@@ -189,12 +189,20 @@ object SecureFtps {
  * a partial directory is authoritative.
  */
 internal object FtpsMlsdEntries {
-    fun decode(files: Array<FTPFile>): List<FtpsEntry> =
-        files.asSequence()
+    fun decode(files: Array<FTPFile>): List<FtpsEntry> {
+        val entries = files.asSequence()
             .filter { it.name != "." && it.name != ".." }
             .map {
                 FtpsEntry(FtpsPath.checkedChild(it.name ?: ""), it.isDirectory, it.size)
             }.toList()
+        // A hostile or faulty server can return two identically named rows.
+        // They are not unique file identities, and keyed Compose previews
+        // would otherwise crash or offer ambiguous source selection.
+        require(entries.map { it.name }.toSet().size == entries.size) {
+            "AMBIGUOUS_FTPS_DIRECTORY"
+        }
+        return entries
+    }
 }
 
 /** Single-threaded control connection. Do not start a second command mid-RETR. */
