@@ -106,6 +106,7 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 (()=>{'use strict';
 const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0,selectionMode:false,selected:new Map(),sheetSeq:0,sheetOpen:false,activeRequests:new Set(),rateLimitedUntil:0,folderRecoveryKey:'',sizeOpen:false,imageFullscreenCleanup:null};
 const codeRx=/\.(?:js|jsx|mjs|ts|tsx|py|rs|go|java|kt|c|cpp|h|hpp|sh|css|scss|html|sql|gradle)$/i,docsRx=/\.(?:md|markdown|txt|pdf|rst)$/i,dataRx=/\.(?:json|csv|tsv|yaml|yml|xml|toml|ini|properties)$/i;
+const docThumbRx=/\.(?:html?|md|markdown|txt|json|csv|tsv|ya?ml|xml|pdf|css)$/i,previewableRx=/\.(?:png|jpe?g|webp|gif|svg|avif|bmp|html?|md|markdown|txt|json|csv|tsv|ya?ml|xml|pdf|css)$/i;
 const imageRx=/\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i,textRx=/\.(md|markdown|txt|json|ya?ml|xml|csv|tsv|js|jsx|ts|tsx|css|scss|html|py|kt|java|rs|go|sh|toml|ini|svg|sql|log|gradle|properties)$/i;
 function hideSizeMap(){
  state.sizeOpen=false;$('sizeView').hidden=true;$('sizeView').replaceChildren();$('items').hidden=state.storyOpen;
@@ -164,7 +165,22 @@ function icon(item){return item.type==='dir'?'📁':imageRx.test(item.name)?'◈
 function formatSize(n){return n==null?'':n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB'}
 function elem(tag,cls,text){let el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=text;return el}
 function typeOf(item){if(item.type==='dir')return 'dir';if(imageRx.test(item.name))return 'image';if(codeRx.test(item.name))return 'code';if(docsRx.test(item.name))return 'doc';if(dataRx.test(item.name))return 'data';return 'other'}
-function filterSort(list){const kind=$('fileKind').value||'all',sort=$('sortFiles').value||'name';return list.filter(x=>kind==='all'||typeOf(x)===kind).sort((a,b)=>{const d=(a.type==='dir'?0:1)-(b.type==='dir'?0:1);if(d)return d;if(sort==='size'){const diff=(b.size||0)-(a.size||0);if(diff)return diff}else if(sort==='extension'){const ext=x=>x.name.includes('.')?x.name.split('.').at(-1).toLowerCase():'';const diff=ext(a).localeCompare(ext(b));if(diff)return diff}return a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'})})}
+function fileFolder(path){const slash=path.lastIndexOf('/');return slash<0?'':path.slice(0,slash)}
+function filterSort(list){
+ const kind=$('fileKind').value||'all',sort=$('sortFiles').value||'name';
+ return list.filter(x=>kind==='all'||(kind==='html'?x.type==='file'&&/\.html?$/i.test(x.name):kind==='previewable'?x.type==='file'&&previewableRx.test(x.name):typeOf(x)===kind)).sort((a,b)=>{
+  const d=(a.type==='dir'?0:1)-(b.type==='dir'?0:1);if(d)return d;
+  if(sort==='size'){const diff=(b.size||0)-(a.size||0);if(diff)return diff}
+  else if(sort==='extension'){const ext=x=>x.name.includes('.')?x.name.split('.').at(-1).toLowerCase():'';const diff=ext(a).localeCompare(ext(b));if(diff)return diff}
+  else if(sort==='path'){const diff=a.path.localeCompare(b.path,undefined,{numeric:true,sensitivity:'base'});if(diff)return diff}
+  return a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'})
+ })
+}
+function gallerySort(list){
+ const ordered=filterSort(list);if($('sortDirection').value==='desc')ordered.reverse();
+ if($('groupFolders').value==='folder'&&$('scope').value!=='folder')ordered.sort((a,b)=>fileFolder(a.path).localeCompare(fileFolder(b.path),undefined,{numeric:true,sensitivity:'base'}));
+ return ordered
+}
 function loadBookmarks(){try{const data=JSON.parse(localStorage.getItem('expository-public-bookmarks')||'[]');if(Array.isArray(data))for(const name of data.slice(0,24))if(typeof name==='string'&&/^[\w.-]+\/[\w.-]+$/.test(name))state.bookmarks.add(name)}catch{}}
 function paintBookmarks(){const host=$('favorites');host.replaceChildren();for(const name of [...state.bookmarks].sort()){const b=elem('button','pill','★ '+name);b.onclick=()=>{$('repo').value=name;$('branch').value='';openRepo()};host.append(b)}if(!state.bookmarks.size)host.append(elem('span','hint','None yet. Only public repo names are saved.'));const b=$('bookmark');b.disabled=!state.repo||state.repoIsPrivate;b.textContent=state.bookmarks.has(state.repo)?'★ Unstar public repo':'☆ Star public repo'}
 function toggleBookmark(){if(state.repoIsPrivate||!state.repo)return;if(state.bookmarks.has(state.repo))state.bookmarks.delete(state.repo);else{if(state.bookmarks.size>=24){status('Maximum 24 public bookmarks. Unstar one first.');return}state.bookmarks.add(state.repo)}try{localStorage.setItem('expository-public-bookmarks',JSON.stringify([...state.bookmarks]))}catch{}paintBookmarks()}
@@ -480,11 +496,11 @@ function updateHash(filePath=''){
 }
 function currentMatches(){
  const query=$('filter').value.trim().toLowerCase(),scope=$('scope').value;
- if(scope==='folder')return filterSort(state.items.filter(x=>x.name.toLowerCase().includes(query)));
- if(!state.indexReady){if(state.indexError)return filterSort(scope==='images'?state.items.filter(x=>x.type==='file'&&imageRx.test(x.name)&&x.name.toLowerCase().includes(query)):state.items.filter(x=>x.name.toLowerCase().includes(query)));return null}
- if(scope==='repo')return query?filterSort(state.indexEntries.filter(x=>x.path.toLowerCase().includes(query))): [];
- const prefix=state.path?state.path+'/':'';
- return filterSort(state.indexEntries.filter(x=>x.path.startsWith(prefix)&&imageRx.test(x.name)&&x.path.toLowerCase().includes(query)));
+ if(scope==='folder')return gallerySort(state.items.filter(x=>x.name.toLowerCase().includes(query)));
+ if(!state.indexReady){if(state.indexError)return gallerySort(state.items.filter(x=>(scope!=='images'||x.type==='file'&&imageRx.test(x.name))&&x.name.toLowerCase().includes(query)));return null}
+ if(scope==='repo'&&!query)return [];
+ const prefix=state.path?state.path+'/':'',all=scope==='repo'||scope==='allFiles';
+ return gallerySort(state.indexEntries.filter(x=>(all||x.path.startsWith(prefix))&&(scope!=='images'||imageRx.test(x.name))&&x.path.toLowerCase().includes(query)));
 }
 function updateSelectionControls(){
  const count=state.selected.size,active=state.selectionMode;
@@ -1114,14 +1130,14 @@ function currentShareUrl(){
  return base
 }
 async function copyCurrentLink(){try{await navigator.clipboard.writeText(currentShareUrl());status(state.repoIsPrivate?'GitHub link copied. Private paths stay out of Expository URLs.':'Shareable Expository link copied; credentials are never included.')}catch{status('Clipboard unavailable; use the GitHub file link or your browser address bar.')}}
-$('openRepo').onclick=()=>openRepo();$('disconnect').onclick=()=>{resetSession();status('Credentials and private browsing state cleared from this tab.')};$('copyFolder').onclick=copyCurrentLink;$('copyFile').onclick=copyCurrentLink;$('compareAction').onclick=compareAction;$('downloadRaw').onclick=downloadOriginal;$('copyRaw').onclick=copyText;$('fileHistory').onclick=toggleHistory;$('structuredToggle').onclick=toggleStructured;$('bookmark').onclick=toggleBookmark;$('contentSearch').onclick=scanContents;$('storyToggle').onclick=toggleStory;$('sizeToggle').onclick=toggleSizeMap;$('selectMode').onclick=()=>{state.selectionMode=!state.selectionMode;updateSelectionControls()};$('contactSheet').onclick=openContactSheet;$('clearSelection').onclick=clearSelection;$('connect').onclick=connect;$('loadBranches').onclick=loadBranches;$('branchPicker').onchange=()=>{const selected=$('branchPicker').value;if(!selected)return;$('branch').value=selected;openRepo()};$('repoSelect').onchange=()=>{if($('repoSelect').value){$('repo').value=$('repoSelect').value;$('branch').value='';openRepo()}};
+$('openRepo').onclick=()=>openRepo();$('disconnect').onclick=()=>{resetSession();status('Credentials and private browsing state cleared from this tab.')};$('copyFolder').onclick=copyCurrentLink;$('copyFile').onclick=copyCurrentLink;$('previewFolder').onclick=()=>{if(state.preview)openContainingFolder(state.preview.path)};$('compareAction').onclick=compareAction;$('downloadRaw').onclick=downloadOriginal;$('copyRaw').onclick=copyText;$('fileHistory').onclick=toggleHistory;$('structuredToggle').onclick=toggleStructured;$('bookmark').onclick=toggleBookmark;$('contentSearch').onclick=scanContents;$('storyToggle').onclick=toggleStory;$('sizeToggle').onclick=toggleSizeMap;$('selectMode').onclick=()=>{state.selectionMode=!state.selectionMode;updateSelectionControls()};$('contactSheet').onclick=openContactSheet;$('clearSelection').onclick=clearSelection;$('connect').onclick=connect;$('loadBranches').onclick=loadBranches;$('branchPicker').onchange=()=>{const selected=$('branchPicker').value;if(!selected)return;$('branch').value=selected;openRepo()};$('repoSelect').onchange=()=>{if($('repoSelect').value){$('repo').value=$('repoSelect').value;$('branch').value='';openRepo()}};
 function syncRefineToViewport(){
  const mobile=typeof window!=='undefined'&&window.matchMedia('(max-width:760px)').matches;
  $('refineControls').hidden=mobile;$('refineToggle').setAttribute('aria-expanded',String(!mobile))
 }
 $('refineToggle').onclick=()=>{const controls=$('refineControls');controls.hidden=!controls.hidden;$('refineToggle').setAttribute('aria-expanded',String(!controls.hidden));$('refineToggle').textContent=controls.hidden?'Filters':'Hide filters'};
 if(typeof window!=='undefined'&&window.matchMedia){const mql=window.matchMedia('(max-width:760px)');syncRefineToViewport();mql.addEventListener('change',()=>{syncRefineToViewport();$('refineToggle').textContent='Filters'})}
-$('filter').oninput=()=>{state.limit=80;paint()};$('sortFiles').onchange=()=>{state.limit=80;paint()};$('fileKind').onchange=()=>{state.limit=80;paint()};$('density').oninput=()=>{$('items').style.setProperty('--tile-min',$('density').value+'px')};$('scope').onchange=()=>{state.limit=80;paint()};$('prevPreview').onclick=()=>adjacentPreview(-1);$('nextPreview').onclick=()=>adjacentPreview(1);$('back').onclick=()=>navigate(state.path.split('/').slice(0,-1).join('/'));$('gridBtn').onclick=()=>{state.mode='grid';$('gridBtn').classList.add('active');$('listBtn').classList.remove('active');paint()};$('listBtn').onclick=()=>{state.mode='list';$('listBtn').classList.add('active');$('gridBtn').classList.remove('active');paint()};
+$('filter').oninput=()=>{state.limit=80;paint()};$('sortFiles').onchange=()=>{state.limit=80;paint()};$('sortDirection').onchange=()=>{state.limit=80;paint()};$('groupFolders').onchange=()=>{state.limit=80;paint()};$('fileKind').onchange=()=>{state.limit=80;paint()};$('density').oninput=()=>{$('items').style.setProperty('--tile-min',$('density').value+'px')};$('scope').onchange=()=>{state.limit=80;paint()};$('prevPreview').onclick=()=>adjacentPreview(-1);$('nextPreview').onclick=()=>adjacentPreview(1);$('back').onclick=()=>navigate(state.path.split('/').slice(0,-1).join('/'));$('gridBtn').onclick=()=>{state.mode='grid';$('gridBtn').classList.add('active');$('listBtn').classList.remove('active');paint()};$('listBtn').onclick=()=>{state.mode='list';$('listBtn').classList.add('active');$('gridBtn').classList.remove('active');paint()};
 $('theme').onclick=()=>{document.body.classList.toggle('light');$('theme').textContent=document.body.classList.contains('light')?'☾':'☀︎';try{localStorage.setItem('expository-theme',document.body.classList.contains('light')?'light':'dark')}catch{}};
 try{if(localStorage.getItem('expository-theme')==='light')$('theme').click()}catch{}
 $('navToggle').onclick=()=>{$('sidebar').classList.add('open');$('scrim').classList.add('on')};$('closePreview').onclick=clearPreview;$('scrim').onclick=()=>{clearPreview();closeNav()};
