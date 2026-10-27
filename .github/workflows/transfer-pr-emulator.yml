@@ -98,7 +98,7 @@ jobs:
           import pathlib, re, xml.etree.ElementTree as ET
           root = pathlib.Path("android-transfer/app/build/outputs/androidTest-results/connected")
           safe = re.compile(r"[^A-Za-z0-9_.$#-]")
-          frame = re.compile(r"\\b([A-Za-z][A-Za-z0-9_]*\\.(?:kt|java)):(\\d{1,6})\\b")
+          frame = re.compile(r"\b([A-Za-z][A-Za-z0-9_]*\.(?:kt|java)):(\d{1,6})\b")
           failed = 0
           for path in sorted(root.rglob("*.xml"))[:300]:
               try:
