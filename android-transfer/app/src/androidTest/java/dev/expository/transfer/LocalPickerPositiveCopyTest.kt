@@ -383,8 +383,10 @@ class LocalPickerPositiveCopyTest {
             // reports our foreground package. Require picker-specific roots or
             // known DocumentsUI package; the following real folder navigation
             // and grant checks must still succeed before acceptance.
-            assertTrue("Android tree picker structure missing; foreground=" +
-                (device.currentPackageName ?: "none") + "; recent=" +
+            assertTrue("Android tree picker structure missing; lifecycle=" +
+                compose.activity.folderPickerStage +
+                "; foregroundIsApp=" + (device.currentPackageName == context.packageName) +
+                "; recent=" +
                 device.hasObject(androidx.test.uiautomator.By.text("Recent")) +
                 "; downloads=" +
                 device.hasObject(androidx.test.uiautomator.By.text("Downloads")),
