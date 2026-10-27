@@ -37,7 +37,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'issue_comment' && 'main' || github.ref }}
+          # PR refs/pull/N/merge disappears quickly after squash merge.
+          # Validate the immutable PR head instead of racing its merge ref.
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
