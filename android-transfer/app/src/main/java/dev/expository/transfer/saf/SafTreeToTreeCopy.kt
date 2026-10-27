@@ -121,6 +121,12 @@ class SafTreeToTreeCopy(
             metadata.mimeType != DocumentsContract.Document.MIME_TYPE_DIR)
         val siblings = LocalTreeReader.list(resolver, request.targetTree,
             request.targetFolderId, LocalTreeReader.MAX_BROWSE)
+        // After create, the new direct-child entry must still fit the bounded
+        // authoritative scan. Otherwise we cannot prove where bytes would go.
+        require(siblings.complete &&
+            siblings.children.size < LocalTreeReader.MAX_BROWSE) {
+            "POSTCREATE_MEMBERSHIP_WOULD_EXCEED_LIMIT"
+        }
         val revision = hash(siblings.children.flatMap {
             listOf(it.documentId, it.title, it.directory.toString(),
                 it.bytes?.toString().orEmpty())
@@ -213,10 +219,28 @@ class SafTreeToTreeCopy(
                         confirmed.existingTargetDocumentIds,
                         setOf(request.sourceDocumentId))
                 ) throw java.io.IOException("SAF_NEW_DOCUMENT_IDENTITY_UNVERIFIED")
+                // Some providers return an unexpected child or defer indexing.
+                // Fail closed BEFORE opening a potentially destructive "w".
+                val parentEntries = LocalTreeReader.list(resolver,
+                    request.targetTree, request.targetFolderId,
+                    LocalTreeReader.MAX_BROWSE)
+                if (!SafNewDocumentIdentity.isDirectChild(
+                    confirmed.sourceName, newId, parentEntries))
+                    throw java.io.IOException("SAF_NEW_DOCUMENT_PARENT_UNVERIFIED")
                 return resolver.openOutputStream(uri, "w") ?: throw FileNotFoundException()
             }
-            override fun openDestinationReadBack(): InputStream? =
-                created?.let { resolver.openInputStream(it) }
+            override fun openDestinationReadBack(): InputStream? {
+                val uri = created ?: return null
+                val newId = DocumentsContract.getDocumentId(uri)
+                val parentEntries = LocalTreeReader.list(resolver,
+                    request.targetTree, request.targetFolderId,
+                    LocalTreeReader.MAX_BROWSE)
+                // Byte identity is insufficient if the provider has moved the
+                // new document away from the reviewed destination folder.
+                if (!SafNewDocumentIdentity.isDirectChild(
+                    confirmed.sourceName, newId, parentEntries)) return null
+                return resolver.openInputStream(uri)
+            }
         }
         return JournaledCopyEngine.copy(
             initial,
