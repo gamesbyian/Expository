@@ -589,8 +589,9 @@ internal fun SftpBrowseCard(
                     Text("Selected to move: " + sourceToMove,
                         style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(enabled = !busy && page?.truncated != true &&
-                            folder != "/" &&
+                        Button(enabled = !busy && page?.truncated == false &&
+                            // Root is a valid verified destination. Only the
+                            // source's same folder and partial listings block.
                             folder != sourceToMove.substringBeforeLast('/', "").ifBlank { "/" },
                             modifier = Modifier.heightIn(min = 48.dp),
                             onClick = {
