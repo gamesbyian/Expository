@@ -181,7 +181,10 @@ internal fun LocalTreePane(
                     enabled = enabled && !state.loading,
                     modifier = Modifier.heightIn(min = 48.dp)
                         .testTag("local-tree-picker-" + label),
-                    onClick = onPick
+                    onClick = {
+                        FolderPickerTrace.button.incrementAndGet()
+                        onPick()
+                    }
                 ) { Text(if (state.treeUri == null) "Choose folder" else "Change folder") }
                 if (state.treeUri != null) {
                     Button(enabled = enabled && !state.loading,
