@@ -192,6 +192,37 @@ async function unzipMember(manifest,entry){
  return withMediaType(new Blob([data]),entry.name.split('/').at(-1));
 }
 
+const ZIP_PUBLISH_MAX=100,ZIP_PUBLISH_BYTES=32*1024*1024;
+function publishZip(manifest,parent){
+ if(typeof BroadcastChannel!=='function'||typeof crypto?.getRandomValues!=='function'){status('This browser cannot open the secure in-memory publishing handoff. Download the ZIP and use GitHub directly.');return}
+ const selection=zipChoice(parent),entries=manifest.entries.filter(e=>!selection.size||selection.has(e.name));
+ const total=entries.reduce((n,e)=>n+e.size,0);
+ if(!entries.length||entries.length>ZIP_PUBLISH_MAX||total>ZIP_PUBLISH_BYTES){status('Publishing is limited to 100 files / 32 MB. Select a smaller subset and try again.');return}
+ const bytes=crypto.getRandomValues(new Uint8Array(16)),nonce=[...bytes].map(x=>x.toString(16).padStart(2,'0')).join('');
+ const channel=new BroadcastChannel('expository-zip-'+nonce),repo=state.repo,base=state.branch,request=state.repoRequest;
+ let sent=false;
+ channel.onmessage=async event=>{
+  if(event.data?.nonce!==nonce||event.data?.type!=='ready'||sent)return;
+  sent=true;
+  try{
+   const files=[];
+   for(let i=0;i<entries.length;i++){
+    if(request!==state.repoRequest||state.repo!==repo||state.branch!==base)throw Error('Repository changed during handoff');
+    status('Preparing verified GitHub handoff '+(i+1)+'/'+entries.length+'…');
+    const member=entries[i],blob=await unzipMember(manifest,member);
+    files.push({path:member.name,blob})
+   }
+   channel.postMessage({type:'bundle',nonce,repo,base,sourceName:parent.name,entries:files});
+   status('Verified '+files.length+' files handed to the separate publishing tab. Complete the destination review there.');
+  }catch(e){status('Publishing handoff cancelled: '+e.message)}
+  finally{setTimeout(()=>channel.close(),1000)}
+ };
+ const url=new URL('zip-publisher.html',location.href);url.hash=nonce;
+ window.open(url.href,'_blank','noopener');
+ // The nonce carries no filenames, repository information, or credentials.
+ setTimeout(()=>{if(!sent)channel.close()},45000)
+}
+
 const ZIP_SHARE_MAX=12,ZIP_SHARE_BYTES=12*1024*1024;
 function zipChoice(parent){if(!zipSelections.has(parent.path))zipSelections.set(parent.path,new Set());return zipSelections.get(parent.path)}
 function zipShareSelected(files){
@@ -305,8 +336,13 @@ function zipViewer(manifest,parent,folder='',visible=120){
  const extract=elem('button','pill','Extract selected to folder');extract.disabled=!choice.size;
  extract.onclick=()=>zipExtractFolder(manifest,selected,extract,progress);
  const share=elem('button','pill','Share selected…');share.disabled=true;
- heading.append(up,selectAll,clear,all,extract,share);root.append(heading);
- root.append(elem('p','hint',manifest.entries.length+' safe files · '+manifest.skipped+' excluded · '+selected.length+' selected · browser-local extraction'));
+ const toGithub=elem('button','pill',selected.length?'Publish selected to GitHub…':'Publish ZIP to GitHub…');
+ const publishing=selected.length?selected:manifest.entries;
+ toGithub.disabled=publishing.length>ZIP_PUBLISH_MAX||publishing.reduce((n,e)=>n+e.size,0)>ZIP_PUBLISH_BYTES;
+ toGithub.title='Opens a separate, explicitly authorized publisher; always creates a new branch';
+ toGithub.onclick=()=>publishZip(manifest,parent);
+ heading.append(up,selectAll,clear,all,extract,share,toGithub);root.append(heading);
+ root.append(elem('p','hint',manifest.entries.length+' safe files · '+manifest.skipped+' excluded · '+selected.length+' selected · browser-local extraction'+(toGithub.disabled?' · publish limit: 100 files / 32 MB (select fewer files)':'')));
  root.append(progress);
  const listing=elem('div','zip-list'),prefix=folder?folder+'/':'',folders=new Set(),files=[];
  for(const entry of manifest.entries){if(!entry.name.startsWith(prefix))continue;const remain=entry.name.slice(prefix.length);if(remain.includes('/'))folders.add(remain.split('/')[0]);else files.push(entry)}
