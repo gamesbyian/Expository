@@ -13,6 +13,8 @@
 | E07 | Planned | Real device/owner acceptance: Pixel 6 Pro portrait touch/focus/Chrome, private token use, 200% font, reduced motion and large gallery |
 | E08 | In progress | Read-only manual Pages source-parity and published-path audit added; app-only publish-path migration requires verified Pages configuration and rollback plan; optional PWA only after privacy review |
 | E09 | Complete (#15; synthetic reviewed) | Size treemap from already fetched Git blob index, bounded groups with keyboard/touch list, folder/file drill-down, truncation disclosure; mobile visual atlas and actual Pixel acceptance separate |
+| E10 | Complete (#172; unit CI green) | Recursive all-file and all-image gallery scopes, exact-extension and HTML filters, folder grouping and direct containing-folder jumps, path/direction sorting, inert bounded document thumbnails. Browser smoke assertions added but dedicated Chromium/Pixel validation remains outstanding. |
+| E11 | Planned | Truthful per-file last-change/date sorting: opt-in, bounded commit-history enrichment with explicit date coverage, caching in tab memory only and rate-limit/cancellation handling. Do not synthesize timestamps from Git tree contents. |
 
 ## Separate Expository Transfer (native Android)
 
