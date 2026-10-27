@@ -75,6 +75,12 @@ object SftpSecuritySuite {
         }
         checkCase("invalid target blocked before network") {
             check(runCatching { SftpTarget("user@example.invalid", trustedHostKey = pin) }.isFailure)
+            for (host in listOf("host\u0000x", "host\u001bx", "host\u007fx", "host\tname")) {
+                check(runCatching {
+                    SftpTarget(host, trustedHostKey = pin)
+                }.isFailure)
+            }
+            check(SftpTarget("example.invalid", trustedHostKey = pin).host == "example.invalid")
             check(runCatching { SftpTarget("example.invalid", 65536, pin) }.isFailure)
         }
         println("PASS SFTP total=" + passed + " evidence=synthetic-host-key-only")
