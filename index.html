@@ -219,8 +219,9 @@ function publishZip(manifest,parent){
  };
  const url=new URL('zip-publisher.html',location.href);url.hash=nonce;
  window.open(url.href,'_blank','noopener');
+ status('Opening the separate publishing tab. If it does not open, allow pop-ups for Expository.');
  // The nonce carries no filenames, repository information, or credentials.
- setTimeout(()=>{if(!sent)channel.close()},45000)
+ setTimeout(()=>{if(!sent){channel.close();if(request===state.repoRequest)status('No publishing tab responded. Allow pop-ups and retry Publish to GitHub.')}},45000)
 }
 
 const ZIP_SHARE_MAX=12,ZIP_SHARE_BYTES=12*1024*1024;
