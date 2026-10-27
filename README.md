@@ -16,7 +16,7 @@ Expository browses **public repositories without login** and can browse selected
 - Search paths across a repository; browse every image across the entire repository or galleries of images and other files in any folder and its descendants
 - Switch between gallery thumbnails and compact file lists
 - Browse up to 100 branches on demand from the repository menu, or enter any branch manually; private branch names stay in tab memory
-- Sort by name, size, extension or full path (ascending/descending); filter by file category including HTML and previewable documents, optionally group gallery rows by containing folder, and adjust thumbnail density using collapsible phone filters
+- Sort by name, size, extension or full path (ascending/descending); filter by file category and exact file extensions (such as png, svg, html), including HTML and previewable documents, optionally group gallery rows by containing folder, and adjust thumbnail density using collapsible phone filters
 - Run bounded, opt-in full-text scans with matching-line snippets
 - Read source with line numbers and lightweight syntax colours; copy or download originals
 - Find text across the loaded source preview, cycle matching lines and jump directly to any loaded line. Source rendering is windowed to 500 lines at a time instead of creating thousands of DOM rows; the first 500,000 characters of a file can be inspected, with a clear warning when truncated. Expand the optional, **heuristic** symbol outline to jump directly to likely functions, classes and types in JS/TS, Python, Rust, Go, Java or Kotlin. Outlines are heuristic rather than full language parsing and scan only the first 2,600 loaded lines.
