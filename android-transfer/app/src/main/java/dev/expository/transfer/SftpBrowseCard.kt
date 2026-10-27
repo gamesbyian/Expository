@@ -284,7 +284,10 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                     val refreshed = withContext(Dispatchers.IO) {
                         runCatching { live.browse(directory) }
                     }
-                    refreshed.onSuccess { page = it }
+                    refreshed.onSuccess {
+                        page = it
+                        browseLimit = SftpBrowseBounds.INITIAL
+                    }
                 }
             } catch (_: CancellationException) {
                 status = "Upload interrupted after " + verified +
@@ -479,7 +482,10 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                                             val refreshed = withContext(Dispatchers.IO) {
                                                 runCatching { live.browse(chosenFolder) }
                                             }
-                                            refreshed.onSuccess { page = it }
+                                            refreshed.onSuccess {
+                        page = it
+                        browseLimit = SftpBrowseBounds.INITIAL
+                    }
                                         }
                                         busy = false
                                     }
@@ -522,7 +528,10 @@ fun SftpBrowseCard(incomingShare: IncomingShareRequest? = null) {
                                     val refreshed = withContext(Dispatchers.IO) {
                                         runCatching { live.browse(chosenParent) }
                                     }
-                                    refreshed.onSuccess { page = it }
+                                    refreshed.onSuccess {
+                        page = it
+                        browseLimit = SftpBrowseBounds.INITIAL
+                    }
                                     if (receipt.proof == FolderCreateProof.DIRECTORY_CONFIRMED)
                                         newFolderName = ""
                                 }
