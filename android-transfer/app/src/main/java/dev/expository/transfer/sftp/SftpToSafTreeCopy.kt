@@ -74,17 +74,22 @@ internal class SftpToSafTreeCopy(
 
     private fun canCreate(target: LocalPaneDownloadTarget): Boolean {
         if (!LocalTreeReader.validTree(target.treeUri)) return false
-        val columns = arrayOf(DocumentsContract.Document.COLUMN_MIME_TYPE,
+        val columns = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
             DocumentsContract.Document.COLUMN_FLAGS)
         return resolver.query(document(target.treeUri, target.folderId),
             columns, null, null, null)?.use { cursor ->
             if (!cursor.moveToFirst()) return@use false
+            val observedId = cursor.getString(cursor.getColumnIndexOrThrow(
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID))
             val mime = cursor.getString(cursor.getColumnIndexOrThrow(
                 DocumentsContract.Document.COLUMN_MIME_TYPE))
             val flags = cursor.getInt(cursor.getColumnIndexOrThrow(
                 DocumentsContract.Document.COLUMN_FLAGS))
-            mime == DocumentsContract.Document.MIME_TYPE_DIR &&
-                flags and DocumentsContract.Document.FLAG_DIR_SUPPORTS_CREATE != 0
+            observedId == target.folderId &&
+                mime == DocumentsContract.Document.MIME_TYPE_DIR &&
+                flags and DocumentsContract.Document.FLAG_DIR_SUPPORTS_CREATE != 0 &&
+                !cursor.moveToNext()
         } == true
     }
 
