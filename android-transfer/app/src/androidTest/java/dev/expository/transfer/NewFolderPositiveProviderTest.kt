@@ -125,10 +125,20 @@ class NewFolderPositiveProviderTest {
             fun clickApp(label: String) {
                 val node = appText(label)
                     ?: error("APP_CONTROL_NOT_VISIBLE_" + label.replace(' ', '_'))
-                node.click()
+                // Compose may export label Text as a non-clickable child of
+                // a foundation Box. UiObject2.click on that label need not
+                // dispatch the parent Button-role action.
+                val clickable = generateSequence(node) { it.parent }
+                    .take(6).firstOrNull { it.isClickable }
+                    ?: error("APP_CONTROL_NOT_CLICKABLE_" + label.replace(' ', '_'))
+                clickable.click()
                 device.waitForIdle(400L)
             }
             clickApp("New folder…")
+            compose.waitUntil(10_000L) {
+                compose.onAllNodesWithText("Close New Folder")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
             // The dynamically inserted editor can be below the fold after
             // tapping New Folder, even though its opener was visible.
             var editor: androidx.test.uiautomator.UiObject2? = null
