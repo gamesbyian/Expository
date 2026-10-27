@@ -142,7 +142,10 @@ internal fun DualWorkspaceCard(
                         state = tree,
                         scroll = scroll,
                         enabled = !busy,
-                        onPick = { onPick(which) },
+                        onPick = {
+                            FolderPickerTrace.pane.incrementAndGet()
+                            onPick(which)
+                        },
                         onOpen = { entry ->
                             onNavigate(which, tree.crumbs +
                                 TreeCrumb(entry.documentId, entry.title))
