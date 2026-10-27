@@ -157,8 +157,12 @@ class NewFolderPositiveProviderTest {
                         width / 2, height / 4, 18)
                 }
             }
-            val nameEditor = editor ?: error("APP_FOLDER_NAME_EDITOR_MISSING")
-            nameEditor.setText(child)
+            check(editor != null) { "APP_FOLDER_NAME_EDITOR_MISSING" }
+            // UiAutomator's accessibility setText() can report an updated
+            // framework node without dispatching BasicTextField.onValueChange.
+            // Use Compose's actual editable semantics to change app state,
+            // after UiAutomator has verified and scrolled to the real field.
+            compose.onNodeWithTag("saf-new-folder-name").performTextInput(child)
             // The test tag names the actual Foundation Button-role action.
             // A UiAutomator text-row ancestor may be clickable without
             // activating this dynamically inserted, keyboard-adjacent action.
