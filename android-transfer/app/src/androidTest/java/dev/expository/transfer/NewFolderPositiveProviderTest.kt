@@ -98,49 +98,42 @@ class NewFolderPositiveProviderTest {
             clickText(selectLabel, "REAL_TREE_GRANT_SELECTION")
             if (visible("Allow", 2_000L)) clickText("Allow", "REAL_TREE_GRANT")
             else if (visible("ALLOW", 1_000L)) clickText("ALLOW", "REAL_TREE_GRANT")
-            compose.waitUntil(25_000L) {
-                compose.onAllNodesWithText(
-                    "Folder opened. Scoped Android browser", substring = true)
-                    .fetchSemanticsNodes().isNotEmpty()
-            }
-            // The picker causes Activity STOP/START and async tree loading.
-            // Target stable, test-only semantics rather than a transient text
-            // node in the recomposing pane, and let idling settle every stage.
-            compose.waitUntil(15_000L) {
-                compose.onAllNodesWithText("Destination creation:", substring = true)
-                    .fetchSemanticsNodes().isNotEmpty()
-            }
-            compose.waitForIdle()
+            // Observe real Android accessibility after returning from the OS
+            // picker. Compose's test harness has repeatedly crashed inside
+            // Material3 ChildSemanticsNode while idling its synthetic tree; a
+            // native UiAutomator journey is also closer to actual user input.
+            assertTrue("Returned scoped browser must finish opening",
+                device.wait(Until.hasObject(By.textContains(
+                    "Folder opened. Scoped Android browser")), 25_000L))
             val before = AttemptRecoveryIndex.recover(ctx)
-            compose.onNodeWithTag("saf-new-folder-open")
-                .assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
-            // A floating input label may be merged or not yet laid out in
-            // Android semantics. Wait for the actual editable control.
-            compose.waitUntil(15_000L) {
-                compose.onAllNodes(
-                    androidx.compose.ui.test.hasTestTag("saf-new-folder-name"))
-                    .fetchSemanticsNodes().isNotEmpty()
+            fun appText(label: String): androidx.test.uiautomator.UiObject2? {
+                repeat(8) {
+                    device.wait(Until.findObject(By.text(label)), 1_500L)?.let { return it }
+                    val width = device.displayWidth
+                    val height = device.displayHeight
+                    device.swipe(width / 2, height * 3 / 4,
+                        width / 2, height / 4, 18)
+                }
+                return null
             }
-            compose.onNodeWithTag("saf-new-folder-name").performTextInput(child)
-            compose.waitForIdle()
-            compose.onNodeWithTag("saf-new-folder-review")
-                .assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
-            compose.waitUntil(20_000L) {
-                compose.onAllNodesWithText("Confirm New Folder")
-                    .fetchSemanticsNodes().isNotEmpty()
+            fun clickApp(label: String) {
+                val node = appText(label)
+                    ?: error("APP_CONTROL_NOT_VISIBLE_" + label.replace(' ', '_'))
+                node.click()
+                device.waitForIdle(400L)
             }
-            compose.waitForIdle()
-            compose.onNodeWithTag("saf-new-folder-confirm")
-                .assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
-            compose.waitUntil(30_000L) {
-                compose.onAllNodesWithText(
-                    "Folder created and its exact identity verified.",
-                    substring = true).fetchSemanticsNodes().isNotEmpty()
-            }
-            compose.waitUntil(20_000L) {
-                compose.onAllNodesWithText(child).fetchSemanticsNodes()
-                    .isNotEmpty()
-            }
+            clickApp("New folder…")
+            val editor = device.wait(Until.findObject(By.desc("Folder name")),
+                12_000L) ?: device.wait(Until.findObject(
+                    By.clazz("android.widget.EditText")), 3_000L)
+                ?: error("APP_FOLDER_NAME_EDITOR_MISSING")
+            editor.setText(child)
+            clickApp("Review New Folder")
+            clickApp("Confirm New Folder")
+            assertTrue("Provider-confirmed folder creation receipt must be visible",
+                device.wait(Until.hasObject(By.textContains(
+                    "Folder created and its exact identity verified.")), 30_000L)
+                    || appText("Folder created and its exact identity verified.") != null)
             val after = AttemptRecoveryIndex.recover(ctx)
             assertTrue("One new durable verified mkdir record is required",
                 after.verifiedReceipts >= before.verifiedReceipts + 1)
