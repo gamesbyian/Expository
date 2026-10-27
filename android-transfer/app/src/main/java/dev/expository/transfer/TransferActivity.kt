@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.content.Intent
 import android.app.Activity
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.lazy.LazyListState
@@ -147,8 +148,10 @@ private fun DeveloperPreview(
     // One lifetime-wide monotonic generation prevents a stale provider query
     // from matching a newly reselected tree after endpoint reset or A/B swap.
     val treeReadGeneration = remember { AtomicLong(0L) }
+    var treeSingle by remember { mutableStateOf(LocalTreeBrowseState()) }
     var treeA by remember { mutableStateOf(LocalTreeBrowseState()) }
     var treeB by remember { mutableStateOf(LocalTreeBrowseState()) }
+    var scrollSingle by remember { mutableStateOf(LazyListState()) }
     var scrollA by remember { mutableStateOf(LazyListState()) }
     var scrollB by remember { mutableStateOf(LazyListState()) }
     var proposedCopy by remember { mutableStateOf<TreeCopyPreflight?>(null) }
@@ -157,11 +160,18 @@ private fun DeveloperPreview(
         "Choose two writable/readable device folders, then select one source file for Copy.") }
     var copyPermit by remember { mutableStateOf<AtomicBoolean?>(null) }
 
-    fun tree(which: WorkspacePane): LocalTreeBrowseState =
-        if (which == WorkspacePane.A) treeA else treeB
+    fun tree(which: WorkspacePane): LocalTreeBrowseState = when (which) {
+        WorkspacePane.SINGLE -> treeSingle
+        WorkspacePane.A -> treeA
+        WorkspacePane.B -> treeB
+    }
 
     fun replaceTree(which: WorkspacePane, next: LocalTreeBrowseState) {
-        if (which == WorkspacePane.A) treeA = next else treeB = next
+        when (which) {
+            WorkspacePane.SINGLE -> treeSingle = next
+            WorkspacePane.A -> treeA = next
+            WorkspacePane.B -> treeB = next
+        }
     }
 
     fun readTree(which: WorkspacePane, uri: Uri, crumbs: List<TreeCrumb>,
@@ -259,6 +269,8 @@ private fun DeveloperPreview(
             writeGranted = grant and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0)
     }
 
+    val treePickerSingle = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()) { pickerResult(WorkspacePane.SINGLE, it) }
     val treePickerA = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()) { pickerResult(WorkspacePane.A, it) }
     val treePickerB = rememberLauncherForActivityResult(
@@ -270,8 +282,11 @@ private fun DeveloperPreview(
                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         }
         runCatching {
-            if (which == WorkspacePane.A) treePickerA.launch(intent)
-            else treePickerB.launch(intent)
+            when (which) {
+                WorkspacePane.SINGLE -> treePickerSingle.launch(intent)
+                WorkspacePane.A -> treePickerA.launch(intent)
+                WorkspacePane.B -> treePickerB.launch(intent)
+            }
         }.onFailure {
             replaceTree(which, tree(which).copy(
                 status = "Android folder picker unavailable. No data accessed."
@@ -466,7 +481,60 @@ private fun DeveloperPreview(
             item { RecoveryStatusCard() }
             when (workspace) {
                 TransferWorkspace.LOCAL -> item {
-                    LocalCopyCard(incomingShare, currentShareEpoch)
+                    // Keep browser and Copy actions in one lazy item so the
+                    // second card is composed and accessible before scrolling.
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        // Conventional Single is a real, independently scoped
+                        // browser, not the narrow-screen Dual A/B tab.
+                        LocalTreePane(
+                            label = "Location Single",
+                            state = treeSingle,
+                            scroll = scrollSingle,
+                            onPick = { launchTreePicker(WorkspacePane.SINGLE) },
+                            onOpen = { entry ->
+                                treeSingle.treeUri?.let { uri ->
+                                    readTree(WorkspacePane.SINGLE, uri,
+                                        treeSingle.crumbs + TreeCrumb(entry.documentId, entry.title))
+                                }
+                            },
+                            onParent = {
+                                treeSingle.treeUri?.let { uri ->
+                                    if (treeSingle.crumbs.size > 1)
+                                        readTree(WorkspacePane.SINGLE, uri,
+                                            treeSingle.crumbs.dropLast(1))
+                                }
+                            },
+                            onRefresh = {
+                                treeSingle.treeUri?.let { uri ->
+                                    readTree(WorkspacePane.SINGLE, uri, treeSingle.crumbs,
+                                        maxVisible = treeSingle.visibleLimit)
+                                }
+                            },
+                            onLoadMore = {
+                                val current = treeSingle
+                                if (!current.loading && current.hasMore &&
+                                    current.visibleLimit < LocalTreeReader.MAX_BROWSE) {
+                                    current.treeUri?.let { uri ->
+                                        readTree(WorkspacePane.SINGLE, uri, current.crumbs,
+                                            maxVisible = (current.visibleLimit +
+                                                LocalTreeReader.MAX_VISIBLE)
+                                                .coerceAtMost(LocalTreeReader.MAX_BROWSE))
+                                    }
+                                }
+                            },
+                            onSelect = { entry ->
+                                toggleTreeSelection(WorkspacePane.SINGLE, entry)
+                            }
+                        )
+                        val pickedId = treeSingle.selected.singleOrNull()
+                        val source = if (pickedId != null && treeSingle.treeUri != null)
+                            runCatching {
+                                DocumentsContract.buildDocumentUriUsingTree(
+                                    treeSingle.treeUri!!, pickedId)
+                            }.getOrNull() else null
+                        LocalCopyCard(incomingShare, currentShareEpoch,
+                            externalSource = source)
+                    }
                 }
                 TransferWorkspace.SFTP -> item { SftpBrowseCard(incomingShare) }
                 TransferWorkspace.FTPS -> item { FtpsBrowseCard() }

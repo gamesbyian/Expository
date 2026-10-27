@@ -54,7 +54,8 @@ internal fun shareEpochUnchanged(launched: Long, current: Long): Boolean =
 @Composable
 fun LocalCopyCard(
     incomingShare: IncomingShareRequest? = null,
-    currentShareEpoch: () -> Long
+    currentShareEpoch: () -> Long,
+    externalSource: Uri? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -78,6 +79,54 @@ fun LocalCopyCard(
     var openPickerShareEpoch by remember { mutableLongStateOf(-1L) }
     var savePickerShareEpoch by remember { mutableLongStateOf(-1L) }
     var frozenSaveSource by remember { mutableStateOf<Uri?>(null) }
+    var adoptedTreeSource by remember { mutableStateOf<Uri?>(null) }
+
+    // A selected child from the Single-view SAF browser is an explicitly
+    // chosen file, not an implicit Copy. Observe it through the same scoped
+    // ContentResolver path as an OS-picked file before enabling Save As.
+    // Changes invalidate any Save As witness from the previous selection.
+    LaunchedEffect(externalSource) {
+        if (externalSource == null) {
+            if (adoptedTreeSource != null && selected == adoptedTreeSource && !busy) {
+                selectionRevision += 1L
+                selected = null
+                displayName = null
+                receipt = null
+                destinationName = null
+                mime = "application/octet-stream"
+                status = "Scoped folder selection cleared. Choose one file or use Android Files."
+            }
+            adoptedTreeSource = null
+            return@LaunchedEffect
+        }
+        if (busy) {
+            status = "Finish the current Copy before choosing another folder source."
+            return@LaunchedEffect
+        }
+        selectionRevision += 1L
+        val revision = selectionRevision
+        selected = null
+        displayName = null
+        destinationName = null
+        receipt = null
+        adoptedTreeSource = null
+        mime = "application/octet-stream"
+        status = "Checking access to the selected scoped folder file…"
+        val observed = withContext(Dispatchers.IO) {
+            runCatching { service.observe(externalSource) }.getOrNull()
+        }
+        if (selectionRevision != revision) return@LaunchedEffect
+        if (observed == null) {
+            status = "Cannot read that folder file. Re-select it or use Android Files."
+        } else {
+            adoptedTreeSource = externalSource
+            selected = externalSource
+            displayName = observed.displayName
+            mime = observed.mimeType.takeUnless { it.isBlank() }
+                ?: "application/octet-stream"
+            status = "Scoped folder file selected. Choose Save copy, Open with or Share. No transfer started."
+        }
+    }
 
     LaunchedEffect(incomingShare?.sequence) {
         val request = incomingShare ?: return@LaunchedEffect
