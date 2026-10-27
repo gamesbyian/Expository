@@ -7,6 +7,7 @@ import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.engine.CopyReceipt
 import dev.expository.transfer.engine.CopyStreams
 import dev.expository.transfer.engine.JournaledCopyEngine
+import dev.expository.transfer.engine.SourceConsistencyStream
 import dev.expository.transfer.engine.AtomicAttemptStorage
 import dev.expository.transfer.engine.DurableAttemptJournal
 import dev.expository.transfer.planner.*
@@ -116,7 +117,15 @@ class SafToSftpUpload(private val resolver: ContentResolver,
                 if ((scopedSource != null && !scopedSource.membershipStillVerified(resolver)) ||
                     observer.observe(source).revision != original.revision)
                     throw FileNotFoundException("LOCAL_SOURCE_CHANGED")
-                return resolver.openInputStream(source) ?: throw FileNotFoundException()
+                val input = resolver.openInputStream(source)
+                    ?: throw FileNotFoundException()
+                return SourceConsistencyStream(input) {
+                    val current = observer.observe(source)
+                    current.revision == original.revision &&
+                        current.displayName == checkedName &&
+                        (scopedSource == null ||
+                            scopedSource.membershipStillVerified(resolver))
+                }
             }
             override fun openNewDestination(): OutputStream =
                 session.openExclusiveWrite(remotePath)
