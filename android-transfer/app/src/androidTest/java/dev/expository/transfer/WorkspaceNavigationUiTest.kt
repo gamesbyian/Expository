@@ -110,6 +110,8 @@ class WorkspaceNavigationUiTest {
 
         compose.onNodeWithText("Dual view").performClick()
         compose.onNodeWithText("Location Single · Device").assertDoesNotExist()
+        // Initial dual pair is Local/SFTP; choose the Local/Local preset.
+        compose.onNodeWithText("Device ↔ Device").performClick()
         compose.onNodeWithText("Location A · Device").assertExists()
         compose.onNodeWithText("Pane B · LOCAL").performClick()
         compose.onNodeWithText("Location B · Device").assertExists()
