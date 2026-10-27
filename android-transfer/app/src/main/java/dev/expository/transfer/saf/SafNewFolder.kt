@@ -155,15 +155,17 @@ internal class SafNewFolder(
                 DocumentsContract.Document.COLUMN_DISPLAY_NAME,
                 DocumentsContract.Document.COLUMN_MIME_TYPE)
             resolver.query(created, cols, null, null, null)?.use { cursor ->
-                cursor.moveToFirst() && !cursor.moveToNext().also {
-                    if (it) cursor.moveToFirst()
-                } && cursor.getString(cursor.getColumnIndexOrThrow(
-                    DocumentsContract.Document.COLUMN_DOCUMENT_ID)) == id &&
-                    cursor.getString(cursor.getColumnIndexOrThrow(
-                        DocumentsContract.Document.COLUMN_DISPLAY_NAME)) == req.name &&
-                    cursor.getString(cursor.getColumnIndexOrThrow(
-                        DocumentsContract.Document.COLUMN_MIME_TYPE)) ==
-                        DocumentsContract.Document.MIME_TYPE_DIR
+                if (!cursor.moveToFirst()) false else {
+                    val observedId = cursor.getString(cursor.getColumnIndexOrThrow(
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID))
+                    val observedName = cursor.getString(cursor.getColumnIndexOrThrow(
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME))
+                    val observedMime = cursor.getString(cursor.getColumnIndexOrThrow(
+                        DocumentsContract.Document.COLUMN_MIME_TYPE))
+                    !cursor.moveToNext() &&
+                        observedId == id && observedName == req.name &&
+                        observedMime == DocumentsContract.Document.MIME_TYPE_DIR
+                }
             } == true
         }.getOrDefault(false)
         if (!verified) return SafFolderCreateReceipt(
