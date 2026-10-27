@@ -50,6 +50,14 @@ class AndroidContentProviderCopyTest {
         assertFalse("Duplicated provider identities are ambiguous",
             SafNewDocumentIdentity.isDirectChild("Destination.txt", "id-new",
                 TreeListing(listOf(observed, observed), true)))
+        assertFalse("A second file with the same name is a collision",
+            SafNewDocumentIdentity.isDirectChild("Destination.txt", "id-new",
+                TreeListing(listOf(observed,
+                    TreeEntry("id-other", "Destination.txt", false, 4L)), true)))
+        assertFalse("Case-folded sibling collisions must fail closed",
+            SafNewDocumentIdentity.isDirectChild("Destination.txt", "id-new",
+                TreeListing(listOf(observed,
+                    TreeEntry("id-other", "DESTINATION.TXT", false, 4L)), true)))
         assertFalse("Returned ID absent from chosen parent must stop",
             SafNewDocumentIdentity.isDirectChild("Destination.txt", "id-new",
                 TreeListing(listOf(TreeEntry("elsewhere", "Destination.txt",
