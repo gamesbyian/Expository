@@ -51,3 +51,7 @@
 ## Gates
 
 G0 isolated Android ownership; G1 immutable planning; G2 Android picker/Compose journeys; G3 verified FTP/FTPS/SFTP; G4 scoped Android I/O; G5 durable queue/recovery; G6 complete three-pairing workspace; G7 executable renamer; G8 real Google Drive/Docs; G9 independent signed beta. **All G0–G8 remain IN PROGRESS and G9 NOT STARTED unless the ledger is updated with direct evidence.**
+
+## Approved future work: provider-neutral locations (2026-10-27)
+
+**Status: specification only, not shipped.** See [universal locations contract](../docs/android-transfer/UNIVERSAL-LOCATIONS.md). Preserve higher-ranked currently runnable correctness tasks. Schedule independently testable slices: (1) LocationAdapter/capability model plus fake-provider pair matrix; (2) Android SAF DocumentsProvider as selectable full-pane destination/source, including Drive provider if offered by Android, revocation and real provider validation; (3) bounded streaming and recursive cross-provider Copy with verified receipts and separately approved cross-authority Move; (4) dedicated Google Drive API where SAF cannot meet destination/full-account requirements, with explicit OAuth scope review; (5) public GitHub read-only repository/branch tree adapter; (6) private GitHub auth + reviewed branch/tree commits and PR option. All pairs must work in both single-location Copy-to and independent dual-pane drag preflight, with A/B phone collapse. No proof of real Google Drive or GitHub integration exists yet. Do not convert a narrow SAF grant into claims of whole-account access.
