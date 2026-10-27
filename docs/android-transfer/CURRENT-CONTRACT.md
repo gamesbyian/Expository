@@ -10,6 +10,8 @@ Expository Transfer is a **native Android file-transfer application** using its 
 
 **P0 means required for the target beta, not currently implemented.** The narrow current developer preview has functional scoped local picker Copy; pinned SFTP browse, Save As, exclusive uploads, New Folder and one-file Move; FTPS encrypted browsing/Save As; local open/share and bounded incoming shares; private attempt journals and a preview-only SFTP renamer. These are separate route-specific cards, **not the required any-two-pane workspace**. No verified Android→production SFTP batch, real Drive/Docs destination, remote Rename Apply, process-death recovery, physical-device or signed beta acceptance. See ledger for exact runs; always reconfirm live `main`.
 
+**Additional binding authentication requirement:** optional Local and Remote access lock, configurable cadence (once per app session by default when enabled, return, idle or each protected operation), Android fingerprint/biometric and device credential where supported, profile-bound Keystore security for any saved remote credentials. This is a separate UI gate from the real protocol login and the Android file-provider permission. See [session authentication](SESSION-AUTHENTICATION.md). E1 policy exists before E2/E4 enforcement; do not call it delivered.
+
 ## Traceable beta requirements
 
 | ID / gate | Required user-visible behavior | Minimum delivery proof |
