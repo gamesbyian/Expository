@@ -394,6 +394,7 @@ private fun DeveloperPreview(
         if (copyBusy || model.view != WorkspaceView.DUAL) return
         proposedCopy = null
         val permit = AtomicBoolean(true)
+        val lastReportNs = AtomicLong(0L)
         copyPermit = permit
         copyBusy = true
         copyStatus = "Copying to a newly created Android provider document. Keep Expository open."
@@ -401,7 +402,23 @@ private fun DeveloperPreview(
             val receipt = withContext(Dispatchers.IO) {
                 SafTreeToTreeCopy(context.contentResolver) { digest ->
                     AndroidAtomicAttemptStorage(context.applicationContext, digest)
-                }.copy(pending, continueRequested = { permit.get() })
+                }.copy(pending,
+                    continueRequested = { permit.get() },
+                    onProgress = { bytesWritten ->
+                        // Engine reports actual bytes, not estimated metadata.
+                        // Throttle main-thread updates on large streams and
+                        // never let queued progress overwrite a final receipt.
+                        val now = System.nanoTime()
+                        val previous = lastReportNs.get()
+                        if ((previous == 0L || now - previous >= 250_000_000L) &&
+                            lastReportNs.compareAndSet(previous, now)) {
+                            scope.launch {
+                                if (copyBusy && copyPermit === permit && permit.get())
+                                    copyStatus = "Copying: " + bytesWritten +
+                                        " bytes written. Source remains untouched."
+                            }
+                        }
+                    })
             }
             copyStatus = when (receipt.proof) {
                 CopyProof.BYTES_VERIFIED ->
