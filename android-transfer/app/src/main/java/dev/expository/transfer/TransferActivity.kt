@@ -70,6 +70,9 @@ class TransferActivity : ComponentActivity() {
     /** Synchronous, process-wide and never persisted across launches. */
     val incomingShareEpoch: Long get() = processShareEpoch.get()
     private val pendingShare = mutableStateOf<IncomingShareRequest?>(null)
+    // Diagnostic stage only. No URI, provider authority, document name,
+    // credential, path, or user data is recorded or persisted.
+    @Volatile internal var folderPickerStage: String = "NOT_REQUESTED"
 
     /** Isolated share ingestion: OS lifecycle delegates to this method. */
     fun ingestIncomingShare(inbound: Intent) {
@@ -244,11 +247,13 @@ private fun DeveloperPreview(
         val uri = result.data?.data
         val grant = result.data?.flags ?: 0
         if (result.resultCode != Activity.RESULT_OK || uri == null) {
+            (context as? TransferActivity)?.folderPickerStage = "RESULT_CANCELLED"
             // Cancellation leaves the existing working pane intact.
             return
         }
         if (!LocalTreeReader.validTree(uri) ||
             grant and Intent.FLAG_GRANT_READ_URI_PERMISSION == 0) {
+            (context as? TransferActivity)?.folderPickerStage = "GRANT_INVALID"
             replaceTree(which, tree(which).copy(
                 status = "Android did not grant a readable folder. No data accessed."
             ))
@@ -262,6 +267,7 @@ private fun DeveloperPreview(
             return
         }
         // A new OS-picked tree invalidates any previous Copy approval.
+        (context as? TransferActivity)?.folderPickerStage = "READABLE_TREE_GRANTED"
         proposedCopy = null
         // No takePersistableUriPermission; no serialized grants or implicit
         // access after process recreation. User can explicitly choose again.
@@ -281,13 +287,18 @@ private fun DeveloperPreview(
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         }
+        (context as? TransferActivity)?.folderPickerStage = "LAUNCH_REQUESTED"
         runCatching {
             when (which) {
                 WorkspacePane.SINGLE -> treePickerSingle.launch(intent)
                 WorkspacePane.A -> treePickerA.launch(intent)
                 WorkspacePane.B -> treePickerB.launch(intent)
             }
+            // Do not overwrite a synchronously delivered cancellation/result.
+            if ((context as? TransferActivity)?.folderPickerStage == "LAUNCH_REQUESTED")
+                (context as? TransferActivity)?.folderPickerStage = "LAUNCH_DISPATCHED"
         }.onFailure {
+            (context as? TransferActivity)?.folderPickerStage = "LAUNCH_FAILED"
             replaceTree(which, tree(which).copy(
                 status = "Android folder picker unavailable. No data accessed."
             ))
