@@ -41,7 +41,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -345,7 +344,6 @@ internal fun SafFolderCreateCard(
         // preflight changes state. Keep the input semantics stable instead.
         Text("Folder name", style = MaterialTheme.typography.bodySmall)
         BasicTextField(
-            modifier = Modifier.testTag("saf-new-folder-name"),
             value = name,
             onValueChange = { name = it; pending = null },
             enabled = available,
