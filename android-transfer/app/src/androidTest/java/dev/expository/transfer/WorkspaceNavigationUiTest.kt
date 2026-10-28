@@ -57,6 +57,29 @@ class WorkspaceNavigationUiTest {
     @get:Rule val compose = createAndroidComposeRule<TransferActivity>()
 
     /**
+     * Failure-only, synthetic-emulator diagnostics for #222. Do not log file
+     * names, documents, window text, content descriptions or raw third-party
+     * package IDs. These coarse flags cannot stand in for an actual OS grant.
+     */
+    private fun pickerWindowKinds(): String = runCatching {
+        val windows = InstrumentationRegistry.getInstrumentation().uiAutomation.windows
+        windows.take(12).joinToString(",") { window ->
+            val pkg = window.root?.packageName?.toString().orEmpty()
+            val category = when (pkg) {
+                "com.google.android.documentsui" -> "google-documentsui"
+                "com.android.documentsui" -> "aosp-documentsui"
+                "android" -> "system-android"
+                "dev.expository.transfer" -> "expository"
+                "" -> "unresolved"
+                else -> "other-app"
+            }
+            category + ":type=" + window.type +
+                ":focus=" + window.isFocused + ":active=" + window.isActive
+        }.ifEmpty { "zero-accessibility-windows" }
+    }.getOrElse { "window-metadata-unavailable" }
+
+
+    /**
      * Synthetic Android MatrixCursor tests the same bounded decoder used by
      * the actual DocumentsProvider query. This is not an OS-picked grant,
      * external-provider interoperability or a successful payload Copy.
@@ -797,7 +820,8 @@ class WorkspaceNavigationUiTest {
                 device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 3_000L) ||
                 device.wait(Until.hasObject(By.text("Recent")), 3_000L) ||
                 device.wait(Until.hasObject(By.text("Downloads")), 3_000L)
-            assertTrue("Android system folder picker required", picker)
+            assertTrue("Android system folder picker required; windows=" +
+                pickerWindowKinds(), picker)
             var visible = false
             repeat(3) {
                 if (!visible) {
