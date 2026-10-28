@@ -8,7 +8,7 @@ import java.util.Locale
  * the original TreeListing remains authoritative for source membership,
  * destination collision checks and its independent completeness flag.
  */
-internal enum class LocalTreeSort { NAME, SIZE, TYPE }
+internal enum class LocalTreeSort { NAME, SIZE, TYPE, NEWEST }
 
 internal object LocalTreePresentation {
     fun rows(entries: List<TreeEntry>, filter: String,
@@ -26,6 +26,9 @@ internal object LocalTreePresentation {
                 .then(name)
             LocalTreeSort.TYPE -> compareBy<TreeEntry>(
                 { it.title.substringAfterLast('.', "").lowercase(Locale.ROOT) })
+                .then(name)
+            LocalTreeSort.NEWEST -> compareBy<TreeEntry> { it.modifiedMillis == null }
+                .thenByDescending { it.modifiedMillis ?: 0L }
                 .then(name)
         }
         return visible.sortedWith(compareByDescending<TreeEntry> {
