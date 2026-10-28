@@ -204,7 +204,19 @@ object RecursiveFolderCopyEngineSuite {
                 valid.copy(digest = "invalid"),
                 valid.copy(entries = valid.entries.reversed()),
                 valid.copy(entries = valid.entries + valid.entries.last(), files = 2),
-                valid.copy(files = 2), valid.copy(directories = 0))
+                valid.copy(files = 2), valid.copy(directories = 0),
+                valid.copy(entries = valid.entries.toMutableList().also {
+                    it[0] = it[0].copy(source = it[0].source.copy(name = ".."),
+                        relativePath = listOf(".."))
+                }),
+                valid.copy(entries = valid.entries.toMutableList().also {
+                    it[1] = it[1].copy(source = it[1].source.copy(
+                        location = it[1].source.location.copy(
+                            key = it[1].source.location.key.copy(grantId = "other"))))
+                }),
+                valid.copy(entries = listOf(valid.entries[0], valid.entries[2],
+                    valid.entries[1].copy(relativePath =
+                        listOf("Shows", "Episode.bin", "Empty")))))
             for (m in bad) {
                 val f = Fake()
                 check(f.run(m).result == RecursiveCopyResult.BLOCKED)
