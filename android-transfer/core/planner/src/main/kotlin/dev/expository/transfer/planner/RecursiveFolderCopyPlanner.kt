@@ -183,9 +183,9 @@ object RecursiveFolderCopyPlanner {
                 continue
             }
             digestParts += listOf("FOLDER_SNAPSHOT", index.location.key.containerId,
-                index.location.revision, index.snapshotId, children.size.toString())
+                index.location.revision, index.snapshotId.orEmpty(), children.size.toString())
             // Directory iteration order is not semantic: stable manifest across page sizes.
-            val sorted = children.sortedWith(compareBy< ItemRef > {
+            val sorted = children.sortedWith(compareBy<ItemRef> {
                 Normalizer.normalize(it.name, Normalizer.Form.NFC).lowercase(Locale.ROOT)
             }.thenBy { it.key.opaqueItemId })
             for (child in sorted.asReversed()) pending.add(child to (relative + child.name))
