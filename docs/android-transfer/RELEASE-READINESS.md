@@ -323,5 +323,5 @@ routing. **It does not prove an authenticated Single-view picked-tree batch,
 production SFTP server, real Google Drive provider, Pixel hardware, or signed E5 beta.**
 The earlier superseded #260 head's
 [API35 run #40754999452](https://github.com/gamesbyian/Expository/actions/runs/40754999452)
-failed in the broader test suite; the fixed final head passed. Do not silently
+failed in the broader test suite; the later final head passed. The earlier failure cause was not established by this documentation-only audit. Do not silently
 conflate their code revisions or overgeneralize the new scope.
