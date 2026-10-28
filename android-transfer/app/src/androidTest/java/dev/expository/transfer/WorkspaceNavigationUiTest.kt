@@ -103,6 +103,11 @@ class WorkspaceNavigationUiTest {
         // changing its endpoint. Inactive panes remain composed, not placed.
         compose.onNodeWithText("Pane A · LOCAL", substring = true).performClick()
         compose.onNodeWithTag("endpoint-A-DOCUMENTS").performClick()
+        // Assert the actual button state and visible summary before querying
+        // a separately merged accessibility state-description.
+        compose.onNodeWithTag("endpoint-A-DOCUMENTS").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Selected"))
+        compose.onNodeWithText("Locations: A · DOCUMENTS / B · SFTP").assertExists()
         compose.onNodeWithText("Dual-location workspace").performScrollTo()
         val pair = compose.onNodeWithTag("workspace-location-summary")
             .fetchSemanticsNode().config[SemanticsProperties.StateDescription]
