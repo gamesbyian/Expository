@@ -218,7 +218,12 @@ class GithubPublicDirectoryAndroidTest {
                 .copy(source, uri, continueRequested = { true })
             assertEquals(CopyProof.BLOCKED, receipt.proof)
             assertEquals(0L, receipt.bytesWritten)
-            assertEquals(0, resolver.openInputStream(uri)!!.use { it.readBytes() }.size)
+            // Some providers do not materialize a newly inserted pending row until
+            // its first write; an absent read stream also proves no bytes were written.
+            val untouched = runCatching {
+                resolver.openInputStream(uri)?.use { it.readBytes() }
+            }.getOrNull()
+            assertTrue(untouched == null || untouched.isEmpty())
         } finally {
             resolver.delete(uri, null, null)
         }
