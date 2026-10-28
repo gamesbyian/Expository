@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.expository.transfer.planner.BrowseEndpoint
@@ -139,6 +140,10 @@ internal fun DualWorkspaceCard(
         Text("Dual-location workspace", style = MaterialTheme.typography.titleLarge)
         Text("Locations: A · " + workspace.a.endpoint.name +
             " / B · " + workspace.b.endpoint.name,
+            modifier = Modifier.testTag("workspace-location-summary").semantics {
+                stateDescription = "A:" + workspace.a.endpoint.name +
+                    ";B:" + workspace.b.endpoint.name
+            },
             style = MaterialTheme.typography.bodySmall)
         Text(
             "A and B browse independent device folders, authenticated SFTP/FTPS sessions or opt-in read-only FTP / public GitHub. Device-to-Device and Local-to-SFTP copies require reviewed, journaled preflights. SFTP-to-Device and 1–12-file SFTP-to-SFTP Copy are also available after explicit review. Other remote routes and cross-pane Move remain unavailable.",
