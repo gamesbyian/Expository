@@ -11,6 +11,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -213,6 +215,12 @@ internal fun LocalTreePane(
     onLoadMore: () -> Unit,
     onSelect: (TreeEntry) -> Unit
 ) {
+    var fileFilter by remember(state.treeUri, state.folderId) { mutableStateOf("") }
+    var sortMode by remember { mutableStateOf(LocalTreeSort.NAME) }
+    val visibleEntries = LocalTreePresentation.rows(state.entries, fileFilter, sortMode)
+    LaunchedEffect(fileFilter, sortMode, state.treeUri, state.folderId) {
+        scroll.scrollToItem(0)
+    }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -266,12 +274,37 @@ internal fun LocalTreePane(
             Text("Selected: " + state.selected.size,
                 style = MaterialTheme.typography.bodySmall)
             SafFolderCreateCard(state, enabled, onRefresh)
+            OutlinedTextField(
+                value = fileFilter, onValueChange = { fileFilter = it },
+                label = { Text("Filter observed names") },
+                singleLine = true, enabled = enabled,
+                modifier = Modifier.fillMaxWidth())
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                LocalTreeSort.entries.forEach { choice ->
+                    Button(enabled = enabled,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        onClick = { sortMode = choice }) {
+                        Text((if (sortMode == choice) "✓ " else "") +
+                            when (choice) {
+                                LocalTreeSort.NAME -> "Name"
+                                LocalTreeSort.SIZE -> "Size"
+                                LocalTreeSort.TYPE -> "Type"
+                            })
+                    }
+                }
+            }
+            Text("Showing " + visibleEntries.size + " of " + state.entries.size +
+                " observed item(s)" +
+                (if (!state.complete && state.treeUri != null) " (incomplete listing)" else "") +
+                ". Hidden items remain selected; filters never prove an absent filename.",
+                style = MaterialTheme.typography.bodySmall)
             LazyColumn(
                 state = scroll,
                 modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                items(state.entries, key = { it.documentId }) { entry ->
+                items(visibleEntries, key = { it.documentId }) { entry ->
                     Row(Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Column(Modifier.weight(1f)) {

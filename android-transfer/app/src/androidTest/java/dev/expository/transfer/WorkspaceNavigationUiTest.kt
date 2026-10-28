@@ -63,6 +63,36 @@ import java.util.UUID
 class WorkspaceNavigationUiTest {
     @get:Rule val compose = createAndroidComposeRule<TransferActivity>()
 
+    /** SAF sorting/filtering is presentation only, not a mutation witness. */
+    @Test fun localTreeDisplayFilterDoesNotChangeSourceOrSelection() {
+        val entries = listOf(
+            TreeEntry("folder", "Folder", true, null),
+            TreeEntry("a", "Alpha.txt", false, 15),
+            TreeEntry("z", "zeta.PNG", false, null),
+            TreeEntry("b", "beta.TXT", false, 8),
+            TreeEntry("h", ".hidden", false, 0)
+        )
+        fun ids(filter: String, sort: LocalTreeSort): List<String> =
+            LocalTreePresentation.rows(entries, filter, sort).map { it.documentId }
+        assertEquals(listOf("folder", "h", "a", "b", "z"),
+            ids("", LocalTreeSort.NAME))
+        assertEquals(listOf("folder", "h", "b", "a", "z"),
+            ids("", LocalTreeSort.SIZE))
+        assertEquals(listOf("folder", "h", "z", "a", "b"),
+            ids("", LocalTreeSort.TYPE))
+        assertEquals(listOf("a", "b"), ids(" tXt ", LocalTreeSort.NAME))
+        val source = LocalTreeBrowseState(
+            entries = entries, selected = setOf("z"), complete = false,
+            hasMore = true)
+        assertTrue(LocalTreePresentation.rows(source.entries, "missing",
+            LocalTreeSort.NAME).isEmpty())
+        assertEquals(5, source.entries.size)
+        assertEquals(setOf("z"), source.selected)
+        assertFalse(source.complete)
+    }
+
+
+
     /**
      * Failure-only, synthetic-emulator diagnostics for #222. Do not log file
      * names, documents, window text, content descriptions or raw third-party
