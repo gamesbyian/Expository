@@ -31,10 +31,9 @@ class LocalTreePresentationAndroidTest {
     )
 
     @Test fun unicodeAndCaseEquivalentProviderNamesCannotAuthorizeWrites() {
-        val d = DocumentsContract.Document
         fun list(vararg names: String): TreeListing {
-            val cursor = MatrixCursor(arrayOf(d.COLUMN_DOCUMENT_ID,
-                d.COLUMN_DISPLAY_NAME, d.COLUMN_MIME_TYPE, d.COLUMN_SIZE))
+            val cursor = MatrixCursor(arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE, DocumentsContract.Document.COLUMN_SIZE))
             names.forEachIndexed { i, name ->
                 cursor.addRow(arrayOf("different-provider-id-$i", name,
                     "application/octet-stream", 4L))
@@ -57,8 +56,8 @@ class LocalTreePresentationAndroidTest {
         assertEquals(2, case.children.size)
 
         // Repeated provider identity remains an independently invalid listing.
-        val duplicateId = MatrixCursor(arrayOf(d.COLUMN_DOCUMENT_ID,
-            d.COLUMN_DISPLAY_NAME, d.COLUMN_MIME_TYPE, d.COLUMN_SIZE))
+        val duplicateId = MatrixCursor(arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE, DocumentsContract.Document.COLUMN_SIZE))
         duplicateId.addRow(arrayOf("same-id", "Alpha", "text/plain", 0L))
         duplicateId.addRow(arrayOf("same-id", "Beta", "text/plain", 0L))
         val repeated = duplicateId.use { LocalTreeReader.decodeRows(it) }
