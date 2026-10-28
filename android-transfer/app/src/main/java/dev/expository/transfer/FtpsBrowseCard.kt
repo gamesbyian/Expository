@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.ftps.FtpsBrowsePreview
 import dev.expository.transfer.ftps.FtpsBrowseBounds
+import dev.expository.transfer.ftps.FtpsTlsPolicy
 import dev.expository.transfer.ftps.FtpsMode
 import dev.expository.transfer.ftps.FtpsPath
 import dev.expository.transfer.ftps.FtpsSession
@@ -54,6 +55,22 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
 
 /**
+ * OS Save As may outlive a remote directory listing. Bind consent to the
+ * observed MLST revision before the picker is launched. Remote writes or
+ * file replacement while the picker is open invalidate this approval.
+ */
+internal data class FtpsPickerWitness(
+    val sessionId: String,
+    val folder: String,
+    val path: String,
+    val revision: String
+) {
+    fun matches(liveSessionId: String, liveFolder: String, livePath: String): Boolean =
+        sessionId.isNotBlank() && revision.isNotBlank() &&
+            sessionId == liveSessionId && folder == liveFolder && path == livePath
+}
+
+/**
  * Minimal live secure FTPS browser. Copy-only, foreground-only and session-only
  * authentication. LIST previews may be incomplete; MLST file stat is mandatory
  * before streaming to a user-created SAF document. No source mutation.
@@ -65,6 +82,7 @@ fun FtpsBrowseCard() {
     var host by remember { mutableStateOf("") }
     var port by remember { mutableStateOf("21") }
     var mode by remember { mutableStateOf(FtpsMode.EXPLICIT_TLS) }
+    var tlsPolicy by remember { mutableStateOf(FtpsTlsPolicy.MODERN) }
     var startFolder by remember { mutableStateOf("/") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -74,7 +92,7 @@ fun FtpsBrowseCard() {
     var page by remember { mutableStateOf<FtpsBrowsePreview?>(null) }
     var browseLimit by remember { mutableStateOf(FtpsBrowseBounds.INITIAL) }
     var pendingFile by remember { mutableStateOf<String?>(null) }
-    var pendingSaveWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
+    var pendingSaveWitness by remember { mutableStateOf<FtpsPickerWitness?>(null) }
     var busy by remember { mutableStateOf(false) }
     var transferred by remember { mutableLongStateOf(0L) }
     var continueCopy by remember { mutableStateOf<AtomicBoolean?>(null) }
@@ -116,6 +134,7 @@ fun FtpsBrowseCard() {
                             AndroidAtomicAttemptStorage(context.applicationContext, digest)
                         }.copy(
                             live, sessionId, source, destination,
+                            expectedSourceRevision = witness?.revision.orEmpty(),
                             continueRequested = { permit.get() && active?.isActive == true },
                             onProgress = { bytes ->
                                 // Progress is written bytes, never proof of completion.
@@ -208,6 +227,22 @@ fun FtpsBrowseCard() {
                             port = "990"
                         }) { Text(if (mode == FtpsMode.IMPLICIT_TLS) "✓ Implicit TLS" else "Implicit TLS") }
                 }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("TLS protocol policy", style = MaterialTheme.typography.bodySmall)
+                    Button(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        enabled = !busy, onClick = { tlsPolicy = FtpsTlsPolicy.MODERN }) {
+                        Text(if (tlsPolicy == FtpsTlsPolicy.MODERN) "✓ TLS 1.3 / 1.2"
+                            else "TLS 1.3 / 1.2")
+                    }
+                    Button(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        enabled = !busy, onClick = { tlsPolicy = FtpsTlsPolicy.TLS12_ONLY }) {
+                        Text(if (tlsPolicy == FtpsTlsPolicy.TLS12_ONLY)
+                            "✓ TLS 1.2 only (compatibility)" else "TLS 1.2 only (compatibility)")
+                    }
+                    Text("TLS 1.2 compatibility retains certificate-chain, hostname and " +
+                        "encrypted data-channel verification. No TLS 1.0/1.1 or plaintext.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
                 OutlinedTextField(host, { host = it }, label = { Text("FTPS host") },
                     enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(port, { port = it }, label = { Text("Port") },
@@ -228,6 +263,7 @@ fun FtpsBrowseCard() {
                         val chosenHost = host.trim()
                         val chosenPort = port.toIntOrNull() ?: -1
                         val chosenMode = mode
+                        val chosenPolicy = tlsPolicy
                         val chosenUser = username
                         val chosenRoot = startFolder.trim()
                         val secret = password.toCharArray()
@@ -238,7 +274,7 @@ fun FtpsBrowseCard() {
                             val result = withContext(Dispatchers.IO) {
                                 try {
                                     runCatching {
-                                        val target = FtpsTarget(chosenHost, chosenPort, chosenMode)
+                                        val target = FtpsTarget(chosenHost, chosenPort, chosenMode, chosenPolicy)
                                         val root = FtpsPath.checked(chosenRoot)
                                         val live = SecureFtps.connect(target, chosenUser, secret)
                                         try { live to live.browseReadOnly(root) }
@@ -317,7 +353,8 @@ fun FtpsBrowseCard() {
                                                 } else {
                                                     preflight.onSuccess {
                                                         pendingFile = fullPath
-                                                        pendingSaveWitness = RemotePickerWitness(sessionId, folder, fullPath)
+                                                        pendingSaveWitness = FtpsPickerWitness(sessionId, folder, fullPath,
+                                                            it.revision)
                                                         val extension = entry.name
                                                             .substringAfterLast('.', "").lowercase()
                                                         val mime = MimeTypeMap.getSingleton()
