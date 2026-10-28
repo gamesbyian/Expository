@@ -202,7 +202,9 @@ internal fun DualWorkspaceCard(
                     for (endpoint in BrowseEndpoint.entries) {
                         Button(
                             enabled = !workspaceBusy,
-                            modifier = Modifier.heightIn(min = 48.dp).semantics {
+                            modifier = Modifier.heightIn(min = 48.dp)
+                                .testTag("endpoint-" + which.name + "-" + endpoint.name)
+                                .semantics {
                                 stateDescription = if (pane.endpoint == endpoint)
                                     "Selected" else "Not selected"
                             },
