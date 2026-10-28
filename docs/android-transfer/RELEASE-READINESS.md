@@ -276,3 +276,52 @@ source `fc76aa6d8c9b6879ab63918cc526379179a94af0` passed
 [native E1 #40742386079](https://github.com/gamesbyian/Expository/actions/runs/40742386079),
 including the new normalization and invalid-name fixture. No live server or
 remote mutation was tested in this slice; G3/G4/G6 remain incomplete.
+
+## 28 October: recursive identity, complete upload batch and default Single SFTP destination
+
+[Merged PR #258](https://github.com/gamesbyian/Expository/pull/258), exact
+feature head `e63fed5719b6e43b9ef9cf711580abd6dfe5301f`, upgrades
+the *read-only* recursive folder manifest (#254): an independently observed
+subfolder's provider container ID must equal its selected parent's opaque
+child identity, even when its display path matches. Different versions of the
+same opaque source item no longer bypass duplicate/cycle rejection. The
+[exact-head E1 native JVM #40753669785](https://github.com/gamesbyian/Expository/actions/runs/40753669785)
+and general checks both passed. This is still **no recursive destination write**.
+
+[Merged PR #259](https://github.com/gamesbyian/Expository/pull/259),
+exact head `6cca695728386ba5dbac9ffb1a93dfa6938128f3`, upgrades the
+actual Android 1–12-file picker/Share-to-SFTP batch's **initial read-only
+preflight**. All selected source filenames and all fully enumerated remote
+siblings must be individually valid and mutually unique after conservative
+Unicode NFC/case normalization. It rejects partial, ambiguous, occupied and
+13+-file batches *before the first upload*, while retaining independent
+per-file revalidation, no-replace writes, journals and readback. The
+[exact-head E1 #40754033269](https://github.com/gamesbyian/Expository/actions/runs/40754033269),
+[Android app+instrumented APK compile #40754057591](https://github.com/gamesbyian/Expository/actions/runs/40754057591),
+and general checks passed. **No live server mutation or physical-device E4** was
+executed in this change.
+
+[Merged PR #260](https://github.com/gamesbyian/Expository/pull/260), exact
+head `99434a0ce721d8bd40deb91928493660d9a56bdb`, adds a
+**1–12-file SFTP→Android DocumentsProvider batch** to the *default Single*
+workspace, without requiring another pane. An explicit OS tree chooser
+must return both read/write grants and a currently authorized, exactly named
+folder with directory-create capability and an unambiguous, complete
+(under 2,000-child post-create) listing. Its transient grant is bound to the
+authenticated SFTP session/folder on picker return, cleared on disconnect/new
+session, never persisted or promoted to account-wide Drive permission. It
+reuses the existing journaled, fresh-per-file plan and exclusive SAF create
+with destination SHA-256 readback, source preservation and stop-on-uncertainty.
+Route switching is disabled during an active Single batch. The final exact
+head passed [native JVM #40755163685](https://github.com/gamesbyian/Expository/actions/runs/40755163685),
+[Android app and androidTest compile #40755205531](https://github.com/gamesbyian/Expository/actions/runs/40755205531)
+and [API35 Pixel 6 emulator WorkspaceNavigationUiTest 29/29 #40755210473](https://github.com/gamesbyian/Expository/actions/runs/40755210473).
+The 29-case workspace run exercises many preexisting approved paths including
+synthetic localhost and Android providers, but the *new Single-specific
+test* asserts disconnected destination controls and independent Single/Dual
+routing. **It does not prove an authenticated Single-view picked-tree batch,
+production SFTP server, real Google Drive provider, Pixel hardware, or signed E5 beta.**
+The earlier superseded #260 head's
+[API35 run #40754999452](https://github.com/gamesbyian/Expository/actions/runs/40754999452)
+failed in the broader test suite; the later final head passed. The earlier failure cause was not established by this documentation-only audit. Do not silently
+conflate their code revisions or overgeneralize the new scope.
