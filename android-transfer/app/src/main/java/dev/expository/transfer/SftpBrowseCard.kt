@@ -45,6 +45,7 @@ import dev.expository.transfer.sftp.SftpPath
 import dev.expository.transfer.sftp.SftpSession
 import dev.expository.transfer.sftp.SftpTarget
 import dev.expository.transfer.sftp.SftpToSafSave
+import dev.expository.transfer.saf.SafSingleDocumentCopy
 import dev.expository.transfer.sftp.SftpRelayCopy
 import dev.expository.transfer.sftp.SftpRelayRequest
 import dev.expository.transfer.sftp.SftpRelayPreflight
@@ -148,6 +149,7 @@ internal fun SftpBrowseCard(
     var pendingRelay by remember { mutableStateOf<SftpRelayPreflight?>(null) }
     var pendingSaveWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
     var pendingUploadWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
+    var pendingPickedUpload by remember { mutableStateOf<PendingPickedSftpUpload?>(null) }
     var pendingMove by remember { mutableStateOf<String?>(null) }
     var showRenamePreview by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Enter a known SHA-256 SSH host-key fingerprint. Unknown keys are never trusted automatically.") }
@@ -237,7 +239,8 @@ internal fun SftpBrowseCard(
      * This is deliberately not an atomic multi-file transaction.
      */
     fun uploadSources(
-        sources: List<Uri>, scopedSources: List<LocalPaneUploadSource>? = null
+        sources: List<Uri>, scopedSources: List<LocalPaneUploadSource>? = null,
+        reviewedPick: PendingPickedSftpUpload? = null
     ) {
         val live = session
         val directory = folder
@@ -245,6 +248,11 @@ internal fun SftpBrowseCard(
         if (live == null || opaque.isBlank()) {
             busy = false
             status = "SFTP session expired. Reconnect to upload."
+            return
+        }
+        if (reviewedPick != null && !reviewedPick.stillMatches(
+            sessionId, folder, sources)) {
+            status = "Picker upload approval changed. No remote write started."
             return
         }
         if (scopedSources != null &&
@@ -284,7 +292,12 @@ internal fun SftpBrowseCard(
                         val observer = dev.expository.transfer.saf.SafSingleDocumentCopy(
                             context.contentResolver)
                         val names = sources.mapIndexed { index, uri ->
-                            val name = observer.observe(uri).displayName
+                            val observed = observer.observe(uri)
+                            val name = observed.displayName
+                            if (reviewedPick != null) require(
+                                observed.revision == reviewedPick.items[index].revision &&
+                                name == reviewedPick.items[index].name
+                            ) { "PICKER_REVIEWED_SOURCE_CHANGED" }
                             if (scopedSources != null) require(
                                 name == scopedSources[index].expectedName
                             ) { "SCOPED_SOURCE_NAME_CHANGED" }
@@ -316,6 +329,21 @@ internal fun SftpBrowseCard(
                     }
                     status = "Uploading document " + (index + 1) + " of " +
                         sources.size + " with independent remote read-back."
+                    if (reviewedPick != null) {
+                        val fresh = withContext(Dispatchers.IO) {
+                            runCatching {
+                                SafSingleDocumentCopy(context.contentResolver)
+                                    .observe(source)
+                            }.getOrNull()
+                        }
+                        if (fresh == null ||
+                            fresh.revision != reviewedPick.items[index].revision ||
+                            fresh.displayName != reviewedPick.items[index].name) {
+                            status = "Stopped after " + verified + " verified file(s): " +
+                                "the reviewed Android document changed. No blind retry."
+                            break
+                        }
+                    }
                     val receipt = withContext(Dispatchers.IO) {
                         val active = coroutineContext[Job]
                         var lastDisplayed = 0L
@@ -378,10 +406,14 @@ internal fun SftpBrowseCard(
     ) { result ->
         val witness = pendingUploadWitness
         pendingUploadWitness = null
+        pendingPickedUpload = null
+        val live = session
+        val selectedFolder = folder
+        val opaque = sessionId
         if (result.resultCode != Activity.RESULT_OK) {
             busy = false
             status = "Upload picker canceled. No remote file created."
-        } else if (session == null || witness?.matches(sessionId, folder) != true) {
+        } else if (live == null || witness?.matches(opaque, selectedFolder) != true) {
             busy = false
             status = "Remote folder or session changed during file selection. No upload started."
         } else {
@@ -389,7 +421,45 @@ internal fun SftpBrowseCard(
             if (sources == null || sources.isEmpty()) {
                 busy = false
                 status = "Upload selection invalid or exceeds 12 documents. Nothing uploaded."
-            } else uploadSources(sources)
+            } else {
+                // Android's source picker is *selection*, never remote write
+                // consent. Inspect observed names/revisions and the complete
+                // remote namespace without creating a destination.
+                busy = true
+                status = "Inspecting selected documents for an explicit SFTP upload review…"
+                scope.launch {
+                    try {
+                        val review = withContext(Dispatchers.IO) {
+                            val observer = SafSingleDocumentCopy(context.contentResolver)
+                            val versions = sources.map { observer.observe(it) }
+                            val selected = requireNotNull(PendingPickedSftpUpload.freeze(
+                                sources, versions, opaque, selectedFolder))
+                            val existing = live.completeMutationListing(selectedFolder)
+                                .entries.map { it.name }.toSet()
+                            require(selected.items.none { it.name in existing }) {
+                                "REMOTE_NAME_OCCUPIED"
+                            }
+                            selected
+                        }
+                        if (session !== live || sessionId != opaque ||
+                            folder != selectedFolder) {
+                            status = "SFTP destination changed while reading picker metadata. " +
+                                "No upload approved."
+                        } else {
+                            pendingPickedUpload = review
+                            status = "Review selected Android files and explicitly confirm " +
+                                "before any SFTP destination is created."
+                        }
+                    } catch (_: CancellationException) {
+                        status = "Document review canceled; no remote upload."
+                    } catch (_: Exception) {
+                        status = "Picker upload blocked: source unreadable, duplicate name, " +
+                            "remote collision or incomplete listing. No file created."
+                    } finally {
+                        busy = false
+                    }
+                }
+            }
         }
     }
 
@@ -530,6 +600,7 @@ internal fun SftpBrowseCard(
                     pendingFile = null
                     pendingPeerUpload = null
                     pendingPeerDownload = null
+                    pendingPickedUpload = null
                     peerBatchSelection = SftpBatchSelection()
                     pendingPeerBatch = null
                     pendingRelay = null
@@ -870,6 +941,7 @@ internal fun SftpBrowseCard(
                                 browseLimit = SftpBrowseBounds.INITIAL
                                 pendingPeerUpload = null
                                 pendingPeerDownload = null
+                                pendingPickedUpload = null
                                 peerBatchSelection = SftpBatchSelection()
                                 pendingPeerBatch = null
                                 pendingRelay = null
@@ -892,6 +964,7 @@ internal fun SftpBrowseCard(
                         pendingFile = null
                         pendingPeerUpload = null
                         pendingPeerDownload = null
+                        pendingPickedUpload = null
                         peerBatchSelection = SftpBatchSelection()
                         pendingPeerBatch = null
                         pendingRelay = null
@@ -1007,6 +1080,7 @@ internal fun SftpBrowseCard(
                     }) { Text("Create folder") }
                 Button(enabled = !busy && !peerRelayLocked, modifier = Modifier.heightIn(min = 48.dp), onClick = {
                     busy = true // freeze session while Android picks a local source
+                    pendingPickedUpload = null
                     pendingUploadWitness = RemotePickerWitness(sessionId, folder)
                     chooseUpload.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
@@ -1015,7 +1089,45 @@ internal fun SftpBrowseCard(
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     })
                 }) { Text("Upload files here…") }
-                Text("Choose up to 12 files. Each is copied separately; the batch stops on the first unverified result. Earlier verified uploads remain.",
+                pendingPickedUpload?.let { review ->
+                    val valid = session != null && !busy && !peerRelayLocked &&
+                        review.stillMatches(sessionId, folder)
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Review Android Picker → SFTP Upload",
+                                style = MaterialTheme.typography.titleMedium)
+                            Text("Files (" + review.items.size + "): " +
+                                review.items.joinToString(", ") { it.name })
+                            Text("Destination: authenticated SFTP folder " + review.folder)
+                            Text("Choosing files did not upload anything. Confirm " +
+                                "to recheck all source versions, remote names and " +
+                                "permissions, then create each new remote document " +
+                                "exclusively with its own journal and SHA-256 readback. " +
+                                "No overwrite, source deletion or automatic retry.",
+                                style = MaterialTheme.typography.bodySmall)
+                            if (!valid) Text("Session or remote folder changed. " +
+                                "Discard and select files again.",
+                                style = MaterialTheme.typography.bodySmall)
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Button(enabled = valid,
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    onClick = {
+                                        pendingPickedUpload = null
+                                        uploadSources(review.uris, reviewedPick = review)
+                                    }) { Text("Confirm selected Upload") }
+                                Button(enabled = !busy && !peerRelayLocked,
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    onClick = {
+                                        pendingPickedUpload = null
+                                        status = "Selected upload canceled before mutation."
+                                    }) { Text("Cancel upload review") }
+                            }
+                        }
+                    }
+                }
+                Text("Choose up to 12 files, review their identities and explicitly confirm before any remote write. Each is copied separately; the batch stops on the first unverified result. Earlier verified uploads remain.",
                     style = MaterialTheme.typography.bodySmall)
                 // This action proposes a reviewed one-file cross-pane
                 // Copy. It never uploads merely on selection or tab switch.

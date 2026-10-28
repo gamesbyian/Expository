@@ -37,6 +37,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import dev.expository.transfer.saf.SafDocumentObservation
 import dev.expository.transfer.planner.Operation
 import dev.expository.transfer.planner.TransferPlan
 import dev.expository.transfer.planner.TransferRoute
@@ -959,6 +960,51 @@ class WorkspaceNavigationUiTest {
             stat = observed.copy(size = 42L)))
         assertFalse(valid(SftpBrowsePage(listOf(observed), false),
             stat = observed.copy(directory = true)))
+    }
+
+    /** Selecting files freezes a proposal; it does not grant remote write. */
+    @Test fun pickerSftpUploadNeedsFreshSessionAndExactReviewedDocumentVersions() {
+        val a = Uri.parse("content://synthetic.documents/one")
+        val b = Uri.parse("content://synthetic.documents/two")
+        val obs = listOf(
+            SafDocumentObservation("one.txt", 91L, 42L, "text/plain"),
+            SafDocumentObservation("two.txt", 123L, 43L, "text/plain"))
+        val selected = PendingPickedSftpUpload.freeze(
+            listOf(a, b), obs, "pinned-sftp-session", "/destination")
+        assertNotNull(selected)
+        val review = requireNotNull(selected)
+        assertEquals(listOf(a, b), review.uris)
+        assertEquals(listOf("one.txt", "two.txt"), review.items.map { it.name })
+        assertEquals(obs.map { it.revision }, review.items.map { it.revision })
+        assertTrue(review.stillMatches("pinned-sftp-session", "/destination"))
+        assertFalse(review.stillMatches("new-session", "/destination"))
+        assertFalse(review.stillMatches("pinned-sftp-session", "/other"))
+        assertFalse(review.stillMatches("pinned-sftp-session",
+            "/destination", listOf(b, a)))
+        assertNull(PendingPickedSftpUpload.freeze(
+            listOf(a, a), obs, "pinned-sftp-session", "/destination"))
+        assertNull(PendingPickedSftpUpload.freeze(
+            listOf(a, b), obs, "", "/destination"))
+        assertNull(PendingPickedSftpUpload.freeze(
+            listOf(Uri.parse("file:///unsafe"), b), obs,
+            "pinned-sftp-session", "/destination"))
+        assertNull(PendingPickedSftpUpload.freeze(
+            listOf(a, b), obs.take(1), "pinned-sftp-session", "/destination"))
+        assertNull(PendingPickedSftpUpload.freeze(
+            listOf(a, b), listOf(
+                obs[0], obs[1].copy(displayName = "ONE.TXT")),
+            "pinned-sftp-session", "/destination"))
+        assertNull(PendingPickedSftpUpload.freeze(
+            listOf(a, b), listOf(obs[0],
+                obs[1].copy(displayName = "folder/unsafe.txt")),
+            "pinned-sftp-session", "/destination"))
+        val tooMany = (0..ScopedUploadPicker.MAX_DOCUMENTS).map {
+            Uri.parse("content://synthetic.documents/$it")
+        }
+        assertNull(PendingPickedSftpUpload.freeze(
+            tooMany, tooMany.indices.map { SafDocumentObservation(
+                "file-$it.txt", 9L, 1L, "text/plain") },
+            "pinned-sftp-session", "/destination"))
     }
 
 }
