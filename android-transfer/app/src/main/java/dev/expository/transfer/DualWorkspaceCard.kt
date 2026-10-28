@@ -137,6 +137,9 @@ internal fun DualWorkspaceCard(
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Dual-location workspace", style = MaterialTheme.typography.titleLarge)
+        Text("Locations: A · " + workspace.a.endpoint.name +
+            " / B · " + workspace.b.endpoint.name,
+            style = MaterialTheme.typography.bodySmall)
         Text(
             "A and B browse independent device folders, authenticated SFTP/FTPS sessions or opt-in read-only FTP / public GitHub. Device-to-Device and Local-to-SFTP copies require reviewed, journaled preflights. SFTP-to-Device and 1–12-file SFTP-to-SFTP Copy are also available after explicit review. Other remote routes and cross-pane Move remain unavailable.",
             style = MaterialTheme.typography.bodySmall
