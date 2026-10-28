@@ -100,8 +100,7 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("Dual view").performClick()
         compose.onNodeWithText("DOCUMENTS").performClick()
         compose.onNodeWithText("Dual-location workspace").performScrollTo()
-        compose.onNodeWithTag("workspace-location-summary").assert(
-            SemanticsMatcher.expectValue(
+        compose.onNodeWithTag("workspace-location-summary").assert(SemanticsMatcher.expectValue(
                 SemanticsProperties.StateDescription, "A:DOCUMENTS;B:SFTP"))
         compose.onNodeWithText("Choose Pane A folder…").assertExists()
         compose.onNodeWithText("Copy A → B…").assertIsNotEnabled()
@@ -110,8 +109,7 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("Location B · SFTP", substring = true).assertExists()
         compose.onNodeWithText("Pane A · DOCUMENTS").performClick()
         compose.onNodeWithText("Dual-location workspace").performScrollTo()
-        compose.onNodeWithTag("workspace-location-summary").assert(
-            SemanticsMatcher.expectValue(
+        compose.onNodeWithTag("workspace-location-summary").assert(SemanticsMatcher.expectValue(
                 SemanticsProperties.StateDescription, "A:DOCUMENTS;B:SFTP"))
         compose.onNodeWithText("Choose Pane A folder…").assertExists()
     }
