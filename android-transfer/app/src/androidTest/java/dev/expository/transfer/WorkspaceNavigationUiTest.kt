@@ -12,6 +12,9 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performSemanticsAction
@@ -97,7 +100,9 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("Dual view").performClick()
         compose.onNodeWithText("DOCUMENTS").performClick()
         compose.onNodeWithText("Dual-location workspace").performScrollTo()
-        compose.onNodeWithText("Locations: A · DOCUMENTS / B · SFTP").assertExists()
+        compose.onNodeWithTag("workspace-location-summary").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription, "A:DOCUMENTS;B:SFTP"))
         compose.onNodeWithText("Choose Pane A folder…").assertExists()
         compose.onNodeWithText("Copy A → B…").assertIsNotEnabled()
         compose.onNodeWithText("Copy B → A…").assertIsNotEnabled()
@@ -105,7 +110,9 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("Location B · SFTP", substring = true).assertExists()
         compose.onNodeWithText("Pane A · DOCUMENTS").performClick()
         compose.onNodeWithText("Dual-location workspace").performScrollTo()
-        compose.onNodeWithText("Locations: A · DOCUMENTS / B · SFTP").assertExists()
+        compose.onNodeWithTag("workspace-location-summary").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription, "A:DOCUMENTS;B:SFTP"))
         compose.onNodeWithText("Choose Pane A folder…").assertExists()
     }
 
