@@ -174,7 +174,7 @@ class SftpRelayAndroidLoopbackTest {
                 assertArrayEquals("Android original must remain unchanged",
                     bytes, resolver.openInputStream(source)!!.use { it.readBytes() })
                 assertEquals(JournalState.VERIFIED, DurableAttemptJournal(
-                    AndroidAtomicAttemptStorage(context.applicationContext, result.digest)
+                    AndroidAtomicAttemptStorage(context.applicationContext, result.planDigest)
                 ).recoverAfterRestart()?.state)
                 // No-overwrite and no auto-retry, even when an earlier upload
                 // is fully verified and the remote name remains occupied.
