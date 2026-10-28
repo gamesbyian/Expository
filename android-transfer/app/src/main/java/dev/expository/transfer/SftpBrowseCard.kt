@@ -43,6 +43,8 @@ import dev.expository.transfer.security.SavedSftpBookmarkSlot
 import dev.expository.transfer.sftp.SecureSftp
 import dev.expository.transfer.sftp.SftpBrowsePage
 import dev.expository.transfer.sftp.SftpBrowseBounds
+import dev.expository.transfer.sftp.SftpBrowsePresentation
+import dev.expository.transfer.sftp.SftpFolderSort
 import dev.expository.transfer.sftp.SftpHostKeyPin
 import dev.expository.transfer.sftp.SftpPath
 import dev.expository.transfer.sftp.SftpSession
@@ -148,6 +150,8 @@ internal fun SftpBrowseCard(
     var newFolderName by remember { mutableStateOf("") }
     var page by remember { mutableStateOf<SftpBrowsePage?>(null) }
     var browseLimit by remember { mutableStateOf(SftpBrowseBounds.INITIAL) }
+    var fileFilter by remember { mutableStateOf("") }
+    var sortMode by remember { mutableStateOf(SftpFolderSort.NAME) }
     var pendingFile by remember { mutableStateOf<String?>(null) }
     var pendingPeerUpload by remember { mutableStateOf<PeerUploadReview?>(null) }
     var pendingPeerDownload by remember { mutableStateOf<PendingPeerSftpDownload?>(null) }
@@ -734,6 +738,7 @@ internal fun SftpBrowseCard(
             }
             if (session === live) {
                 result.onSuccess {
+                    if (folder != next) fileFilter = ""
                     folder = next
                     page = it
                     browseLimit = limit
@@ -1735,7 +1740,35 @@ internal fun SftpBrowseCard(
                         "the other pane relays files. Cancel the transfer there to stop.",
                         style = MaterialTheme.typography.bodySmall)
                 }
-                val entries = page?.entries.orEmpty()
+                // These controls only reorder the observed preview. Source
+                // membership, mutations and copy preflights still consult the
+                // original listing and independently refreshed server proofs.
+                OutlinedTextField(
+                    value = fileFilter, onValueChange = { fileFilter = it },
+                    label = { Text("Filter observed SFTP names") },
+                    singleLine = true, modifier = Modifier.fillMaxWidth())
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SftpFolderSort.entries.forEach { choice ->
+                        Button(modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = { sortMode = choice }) {
+                            Text((if (sortMode == choice) "✓ " else "") +
+                                when (choice) {
+                                    SftpFolderSort.NAME -> "Name"
+                                    SftpFolderSort.SIZE -> "Size"
+                                    SftpFolderSort.TYPE -> "Type"
+                                    SftpFolderSort.NEWEST -> "Newest"
+                                })
+                        }
+                    }
+                }
+                val observedEntries = page?.entries.orEmpty()
+                val entries = SftpBrowsePresentation.rows(observedEntries, fileFilter, sortMode)
+                Text("Showing " + entries.size + " of " + observedEntries.size +
+                    " observed item(s)" +
+                    (if (page?.truncated == true) " (listing incomplete)" else "") +
+                    ". Sorting and filtering never check unseen files.",
+                    style = MaterialTheme.typography.bodySmall)
                 LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(entries, key = { it.name }) { entry ->
