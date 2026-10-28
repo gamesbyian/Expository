@@ -43,6 +43,7 @@ import dev.expository.transfer.security.SavedSftpBookmarkSlot
 import dev.expository.transfer.sftp.SecureSftp
 import dev.expository.transfer.sftp.SftpBrowsePage
 import dev.expository.transfer.sftp.SftpBrowseBounds
+import dev.expository.transfer.sftp.SftpUploadBatchNames
 import dev.expository.transfer.sftp.SftpBrowsePresentation
 import dev.expository.transfer.sftp.SftpFolderSort
 import dev.expository.transfer.sftp.SftpHostKeyPin
@@ -317,12 +318,10 @@ internal fun SftpBrowseCard(
                         }
                         val listing = live.completeMutationListing(directory)
                         require(!listing.truncated) { "TRUNCATED_LISTING" }
-                        require(names.distinct().size == names.size) {
-                            "DUPLICATE_SOURCE_NAME"
-                        }
-                        val occupied = listing.entries.map { it.name }.toSet()
-                        require(names.none { it in occupied }) {
-                            "REMOTE_NAME_OCCUPIED"
+                        // Batch-wide Unicode/case-equivalent collisions block
+                        // before even the first separately journaled upload.
+                        require(SftpUploadBatchNames.collisionFree(names, listing)) {
+                            "UPLOAD_BATCH_NAME_COLLISION_OR_INCOMPLETE_LISTING"
                         }
                     }.isSuccess
                 }
