@@ -987,6 +987,9 @@ private fun DeveloperPreview(
                                 "Android provider" else "Device",
                             state = treeSingle,
                             scroll = scrollSingle,
+                            // Freeze source browser navigation while a verified
+                            // transfer holds this scoped URI and approval.
+                            enabled = !copyBusy && !remoteRelayBusy,
                             onPick = { launchTreePicker(WorkspacePane.SINGLE) },
                             onOpen = { entry ->
                                 treeSingle.treeUri?.let { uri ->
