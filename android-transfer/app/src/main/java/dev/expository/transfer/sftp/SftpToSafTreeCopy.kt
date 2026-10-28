@@ -43,6 +43,35 @@ internal data class SftpTreeCopyPreflight(
     val existingTargetDocumentIds: Set<String>
 )
 
+/** A bare stat(path) cannot establish the reviewed folder membership. */
+internal object SftpToSafSourceWitness {
+    fun matches(
+        folder: String,
+        absoluteFile: String,
+        expectedRevision: String,
+        stat: SftpRemoteEntry,
+        listing: SftpBrowsePage
+    ): Boolean {
+        if (listing.truncated || expectedRevision.isBlank() ||
+            stat.directory || stat.size < 0L) return false
+        val parent = runCatching { SftpPath.requireAbsolute(folder) }.getOrNull()
+            ?: return false
+        val source = runCatching { SftpPath.requireAbsolute(absoluteFile) }.getOrNull()
+            ?: return false
+        val name = source.substringAfterLast('/')
+        if (source == "/" ||
+            runCatching { SftpPath.childPath(parent, name) }.getOrNull() != source)
+            return false
+        val matching = listing.entries.filter { it.name == name }
+        return matching.size == 1 && matching[0].let { child ->
+            !child.directory && child.name == stat.name &&
+                child.size == stat.size && child.revision == stat.revision &&
+                child.revision == expectedRevision
+        }
+    }
+}
+
+
 /**
  * Single-file authenticated SFTP -> user-picked SAF folder Copy.
  *
@@ -109,9 +138,15 @@ internal class SftpToSafTreeCopy(
         val absolute = SftpPath.requireAbsolute(request.absoluteSource)
         require(absolute != "/")
         val current = session.statFile(absolute)
-        require(current.revision == request.expectedRevision &&
-            current.name == absolute.substringAfterLast('/') &&
-            current.size >= 0L) { "REMOTE_SOURCE_CHANGED" }
+        val remoteFolder = absolute.substringBeforeLast('/', "").ifBlank { "/" }
+        // A stat result proves there is a file at a path, but does not prove
+        // it is a unique direct child of the folder the user reviewed.
+        // Fail closed for source parents beyond the 2,000-child safety cap.
+        val sourcePage = session.completeMutationListing(remoteFolder)
+        require(SftpToSafSourceWitness.matches(remoteFolder, absolute,
+            request.expectedRevision, current, sourcePage)) {
+            "REMOTE_SOURCE_PARENT_MEMBERSHIP_NOT_VERIFIED"
+        }
         val target = request.target
         require(canCreate(target)) { "SAF_CREATE_UNAVAILABLE" }
         // Full direct-child scan is essential. A 200/2000-item *preview* is
@@ -128,7 +163,6 @@ internal class SftpToSafTreeCopy(
         })
         val proof = CapabilityProof(Support.SUPPORTED,
             "pinned-sftp-and-scoped-android-tree", issuedMillis + 60_000)
-        val remoteFolder = absolute.substringBeforeLast('/', "").ifBlank { "/" }
         val remotePath = if (remoteFolder == "/") emptyList()
             else remoteFolder.split('/').drop(1)
         val from = LocationRef(
