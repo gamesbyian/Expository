@@ -582,6 +582,7 @@ private fun DeveloperPreview(
                 ) {
                     TransferWorkspace.entries.forEach { choice ->
                         Button(
+                            enabled = !copyBusy && !remoteRelayBusy,
                             modifier = Modifier.heightIn(min = 48.dp).semantics {
                                 stateDescription = if (workspace == choice) "Selected" else "Not selected"
                             },
@@ -677,7 +678,13 @@ private fun DeveloperPreview(
                             externalSource = source)
                     }
                 }
-                TransferWorkspace.SFTP -> item { SftpBrowseCard(incomingShare) }
+                TransferWorkspace.SFTP -> item {
+                    SftpBrowseCard(
+                        incomingShare = incomingShare,
+                        enableSingleBatchDownload = true,
+                        onRelaySourceActive = { remoteRelayBusy = it != null }
+                    )
+                }
                 TransferWorkspace.FTPS -> item { FtpsBrowseCard() }
                 TransferWorkspace.FTP -> item { PlainFtpBrowseCard() }
                 TransferWorkspace.GITHUB -> item { PublicGithubBrowseCard() }
