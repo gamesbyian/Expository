@@ -13,8 +13,6 @@ import java.io.FileNotFoundException
 import java.io.InputStream
 import java.io.OutputStream
 import java.security.MessageDigest
-import java.text.Normalizer
-import java.util.Locale
 
 /**
  * Explicitly confirmed, foreground-only Android scoped DocumentsProvider folder Copy.
@@ -123,7 +121,7 @@ internal class SafRecursiveTreeCopy(
                     ?: error("PARENT_HAS_NOT_BEEN_INDEPENDENTLY_VERIFIED")
         }
 
-        private fun parent(path: List<String>): TargetParent {
+        private fun parent(path: List<String>, requireSpace: Boolean = true): TargetParent {
             val id = parentId(path)
             val uri = document(request.destinationTree, id)
             val columns = arrayOf(
@@ -150,7 +148,7 @@ internal class SafRecursiveTreeCopy(
                 id, LocalTreeReader.MAX_BROWSE)
             // A created child must still fit into the next exact provider read.
             require(listing.complete && !listing.hasMore &&
-                listing.children.size < LocalTreeReader.MAX_BROWSE) {
+                (!requireSpace || listing.children.size < LocalTreeReader.MAX_BROWSE)) {
                 "DESTINATION_PARENT_LISTING_INCOMPLETE"
             }
             val digest = hash(listOf("SAF_RECURSIVE_PARENT_V1",
@@ -233,7 +231,7 @@ internal class SafRecursiveTreeCopy(
                         mime == DocumentsContract.Document.MIME_TYPE_DIR
                 }
             } == true
-            val current = parent(entry.relativePath.dropLast(1))
+            val current = parent(entry.relativePath.dropLast(1), requireSpace = false)
             val key = SafFolderPolicy.normalized(entry.source.name)
             exact && current.id == ticket.verifiedParentIdentity &&
                 current.siblings.count {
@@ -338,7 +336,7 @@ internal class SafRecursiveTreeCopy(
                 override fun openDestinationReadBack(): InputStream? {
                     val uri = created ?: error("CREATED_FILE_IDENTITY_MISSING")
                     val id = DocumentsContract.getDocumentId(uri)
-                    val current = parent(entry.relativePath.dropLast(1))
+                    val current = parent(entry.relativePath.dropLast(1), requireSpace = false)
                     val membership = LocalTreeReader.list(resolver,
                         request.destinationTree, current.id, LocalTreeReader.MAX_BROWSE)
                     SafNewDocumentIdentity.requireDirectChildForReadback(
