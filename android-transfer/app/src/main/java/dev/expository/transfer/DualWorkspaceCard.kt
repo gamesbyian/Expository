@@ -85,7 +85,6 @@ internal fun DualWorkspaceCard(
     // not the visible positions. Swap transports session state and closes no
     // unrelated connection; switching endpoint tears down its old session.
     var remoteSwapped by remember { mutableStateOf(false) }
-    var lastEndpointTap by remember { mutableStateOf<String?>(null) }
     // These are transient session objects, never persisted or serialized.
     // Swap their *owners* together with the movable authenticated panes.
     var selectedRemoteA by remember { mutableStateOf<PeerSftpSource?>(null) }
@@ -139,11 +138,6 @@ internal fun DualWorkspaceCard(
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Dual-location workspace", style = MaterialTheme.typography.titleLarge)
-        lastEndpointTap?.let { tapped ->
-            Text("Endpoint request: " + tapped,
-                modifier = Modifier.testTag("last-endpoint-request"),
-                style = MaterialTheme.typography.bodySmall)
-        }
         Text("Locations: A · " + workspace.a.endpoint.name +
             " / B · " + workspace.b.endpoint.name,
             modifier = Modifier.testTag("workspace-location-summary").semantics {
@@ -224,7 +218,6 @@ internal fun DualWorkspaceCard(
                                         selectedRemoteBatchB = null
                                     }
                                 }
-                                lastEndpointTap = which.name + ":" + endpoint.name
                                 onEndpoint(which, endpoint)
                             }
                         ) { Text(if (pane.endpoint == endpoint) "✓ " + endpoint.name
