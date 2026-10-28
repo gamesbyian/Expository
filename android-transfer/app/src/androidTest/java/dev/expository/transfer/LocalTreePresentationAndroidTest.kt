@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -68,7 +69,7 @@ class LocalTreePresentationAndroidTest {
         compose.onNodeWithText("Selected: 1").assertExists()
         compose.onNodeWithText("Showing 5 of 5 observed item(s)", substring = true)
             .assertExists()
-        compose.onNodeWithText("Filter observed names").performTextReplacement("txt")
+        compose.onNode(hasSetTextAction()).performTextReplacement("txt")
         compose.onNodeWithText("Showing 2 of 5 observed item(s)", substring = true)
             .assertExists()
         compose.onNodeWithText("zeta.PNG").assertDoesNotExist()
