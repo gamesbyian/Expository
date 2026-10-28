@@ -26,7 +26,26 @@ class FtpsUiSmokeTest {
         rule.onNodeWithText("✓ Implicit TLS").assertExists()
         rule.onNodeWithText("Explicit TLS").performClick()
         rule.onNodeWithText("✓ Explicit TLS").assertExists()
+        rule.onNodeWithText("TLS 1.2 only (compatibility)").performClick()
+        rule.onNodeWithText("✓ TLS 1.2 only (compatibility)").assertExists()
+        rule.onNodeWithText("TLS 1.3 / 1.2").performClick()
+        rule.onNodeWithText("✓ TLS 1.3 / 1.2").assertExists()
         rule.onNodeWithText("FTPS requires a trusted TLS certificate", substring = true)
             .assertExists()
+    }
+    @Test fun pickerWitnessRefusesChangedSessionFolderSourceOrUnobservedRevision() {
+        val frozen = FtpsPickerWitness("tls-session", "/files", "/files/a.dat",
+            "128:1770000000000")
+        org.junit.Assert.assertTrue(
+            frozen.matches("tls-session", "/files", "/files/a.dat"))
+        org.junit.Assert.assertFalse(
+            frozen.matches("new-session", "/files", "/files/a.dat"))
+        org.junit.Assert.assertFalse(
+            frozen.matches("tls-session", "/", "/files/a.dat"))
+        org.junit.Assert.assertFalse(
+            frozen.matches("tls-session", "/files", "/files/b.dat"))
+        org.junit.Assert.assertFalse(
+            frozen.copy(revision = "").matches("tls-session", "/files",
+                "/files/a.dat"))
     }
 }
