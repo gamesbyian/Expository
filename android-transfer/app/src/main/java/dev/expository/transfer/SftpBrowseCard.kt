@@ -45,6 +45,7 @@ import dev.expository.transfer.sftp.SftpPath
 import dev.expository.transfer.sftp.SftpSession
 import dev.expository.transfer.sftp.SftpTarget
 import dev.expository.transfer.sftp.SftpToSafSave
+import dev.expository.transfer.saf.SafSingleDocumentCopy
 import dev.expository.transfer.sftp.SftpRelayCopy
 import dev.expository.transfer.sftp.SftpRelayRequest
 import dev.expository.transfer.sftp.SftpRelayPreflight
@@ -148,6 +149,7 @@ internal fun SftpBrowseCard(
     var pendingRelay by remember { mutableStateOf<SftpRelayPreflight?>(null) }
     var pendingSaveWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
     var pendingUploadWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
+    var pendingPickedUpload by remember { mutableStateOf<PendingPickedSftpUpload?>(null) }
     var pendingMove by remember { mutableStateOf<String?>(null) }
     var showRenamePreview by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Enter a known SHA-256 SSH host-key fingerprint. Unknown keys are never trusted automatically.") }
@@ -237,7 +239,8 @@ internal fun SftpBrowseCard(
      * This is deliberately not an atomic multi-file transaction.
      */
     fun uploadSources(
-        sources: List<Uri>, scopedSources: List<LocalPaneUploadSource>? = null
+        sources: List<Uri>, scopedSources: List<LocalPaneUploadSource>? = null,
+        reviewedPick: PendingPickedSftpUpload? = null
     ) {
         val live = session
         val directory = folder
@@ -245,6 +248,11 @@ internal fun SftpBrowseCard(
         if (live == null || opaque.isBlank()) {
             busy = false
             status = "SFTP session expired. Reconnect to upload."
+            return
+        }
+        if (reviewedPick != null && !reviewedPick.stillMatches(
+            sessionId, folder, sources)) {
+            status = "Picker upload approval changed. No remote write started."
             return
         }
         if (scopedSources != null &&
@@ -284,7 +292,12 @@ internal fun SftpBrowseCard(
                         val observer = dev.expository.transfer.saf.SafSingleDocumentCopy(
                             context.contentResolver)
                         val names = sources.mapIndexed { index, uri ->
-                            val name = observer.observe(uri).displayName
+                            val observed = observer.observe(uri)
+                            val name = observed.displayName
+                            if (reviewedPick != null) require(
+                                observed.revision == reviewedPick.items[index].revision &&
+                                name == reviewedPick.items[index].name
+                            ) { "PICKER_REVIEWED_SOURCE_CHANGED" }
                             if (scopedSources != null) require(
                                 name == scopedSources[index].expectedName
                             ) { "SCOPED_SOURCE_NAME_CHANGED" }
@@ -316,6 +329,21 @@ internal fun SftpBrowseCard(
                     }
                     status = "Uploading document " + (index + 1) + " of " +
                         sources.size + " with independent remote read-back."
+                    if (reviewedPick != null) {
+                        val fresh = withContext(Dispatchers.IO) {
+                            runCatching {
+                                SafSingleDocumentCopy(context.contentResolver)
+                                    .observe(source)
+                            }.getOrNull()
+                        }
+                        if (fresh == null ||
+                            fresh.revision != reviewedPick.items[index].revision ||
+                            fresh.displayName != reviewedPick.items[index].name) {
+                            status = "Stopped after " + verified + " verified file(s): " +
+                                "the reviewed Android document changed. No blind retry."
+                            break
+                        }
+                    }
                     val receipt = withContext(Dispatchers.IO) {
                         val active = coroutineContext[Job]
                         var lastDisplayed = 0L
@@ -530,6 +558,7 @@ internal fun SftpBrowseCard(
                     pendingFile = null
                     pendingPeerUpload = null
                     pendingPeerDownload = null
+                    pendingPickedUpload = null
                     peerBatchSelection = SftpBatchSelection()
                     pendingPeerBatch = null
                     pendingRelay = null
@@ -870,6 +899,7 @@ internal fun SftpBrowseCard(
                                 browseLimit = SftpBrowseBounds.INITIAL
                                 pendingPeerUpload = null
                                 pendingPeerDownload = null
+                                pendingPickedUpload = null
                                 peerBatchSelection = SftpBatchSelection()
                                 pendingPeerBatch = null
                                 pendingRelay = null
@@ -892,6 +922,7 @@ internal fun SftpBrowseCard(
                         pendingFile = null
                         pendingPeerUpload = null
                         pendingPeerDownload = null
+                        pendingPickedUpload = null
                         peerBatchSelection = SftpBatchSelection()
                         pendingPeerBatch = null
                         pendingRelay = null
