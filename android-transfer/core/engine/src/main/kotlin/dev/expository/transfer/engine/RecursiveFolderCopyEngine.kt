@@ -100,6 +100,7 @@ object RecursiveFolderCopyEngine {
             return outcome(RecursiveCopyResult.BLOCKED, "INVALID_RECURSIVE_APPROVAL")
         val seen = HashSet<Pair<String, String>>()
         val allPaths = HashSet<List<String>>()
+        val directoryPaths = HashSet<List<String>>()
         for ((position, item) in approved.entries.withIndex()) {
             if (item.relativePath.isEmpty() || item.relativePath.size > 16 ||
                 item.relativePath.last() != item.source.name ||
@@ -107,8 +108,10 @@ object RecursiveFolderCopyEngine {
                 !seen.add(item.source.key.authorityId to item.source.key.opaqueItemId) ||
                 item.source.key.authorityId.isBlank() ||
                 item.source.key.opaqueItemId.isBlank() || item.source.key.version.isBlank() ||
-                (position > 0 && item.relativePath.dropLast(1) !in allPaths))
+                (position > 0 && item.relativePath.dropLast(1) !in directoryPaths))
                 return outcome(RecursiveCopyResult.BLOCKED, "INVALID_RECURSIVE_ENTRY")
+            if (item.source.kind == ItemKind.DIRECTORY)
+                directoryPaths.add(item.relativePath)
         }
 
         for ((index, entry) in approved.entries.withIndex()) {
