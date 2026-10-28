@@ -295,6 +295,77 @@ internal class SafRecursiveSourceScanner(
         return current.takeIf { it.reviewable && it == approved }
     }
 
+    /**
+     * Revalidate ONE manifest entry against actual Android provider queries
+     * after earlier destination mutations have legitimately changed the
+     * destination tree. Unlike full-tree reobserve(), this must NOT compare
+     * the original destination collision listing after folders are created.
+     *
+     * Walk the source ancestry using opaque provider IDs, never display names
+     * as authorization. Verify direct membership, exact document metadata
+     * and the original short-lived READ proof; a weak source metadata version
+     * is NOT proof of immutable file bytes. Actual Copy streams still require
+     * post-read checks and independent destination SHA-256 readback.
+     */
+    fun sourceEntryStillCurrent(
+        request: ScopedRecursiveSourceRequest,
+        entry: RecursiveCopyEntry
+    ): Boolean = runCatching {
+        require(LocalTreeReader.validTree(request.sourceTree) &&
+            request.sourceParentId == LocalTreeReader.rootId(request.sourceTree) &&
+            entry.relativePath.isNotEmpty() &&
+            entry.relativePath.size <= RecursiveFolderCopyPlanner.MAX_DEPTH &&
+            entry.relativePath.first() == request.expectedName &&
+            entry.relativePath.last() == entry.source.name &&
+            entry.relativePath.all(SafFolderPolicy::validName))
+        val authority = requireNotNull(request.sourceTree.authority)
+        val location = entry.source.location
+        val key = location.key
+        require(key.kind == LocationKind.LOCAL_SAF &&
+            key.authorityId == authority &&
+            key.rootId == request.sourceParentId &&
+            key.grantId == request.sourceTree.toString() &&
+            location.folder == entry.relativePath.dropLast(1) &&
+            entry.source.parent == location.folder &&
+            entry.source.key.authorityId == authority)
+        val witness = location.capabilities[Capability.READ]
+            ?: error("SOURCE_READ_PROOF_MISSING")
+        val now = clockMillis()
+        require(witness.support == Support.SUPPORTED &&
+            witness.observationId == "real-scoped-saf-tree-observation" &&
+            now >= witness.expiresAtMillis - APPROVAL_LIFETIME_MILLIS &&
+            now <= witness.expiresAtMillis)
+        // The complete selected root must still be the exact originally
+        // chosen provider document, not merely a different directory that
+        // acquired its display name.
+        require(completeEntries(request.sourceTree, request.sourceParentId).count {
+            it.documentId == request.sourceDirectoryId &&
+                it.title == request.expectedName && it.directory
+        } == 1) { "SELECTED_SOURCE_ROOT_REPLACED" }
+        var actualParentId = request.sourceParentId
+        // This is a bounded <=16 level ancestry walk. Every parent listing
+        // MUST be complete and unambiguous; an alias no longer authorizes
+        // reading a same-named object in some other folder.
+        for (ancestor in entry.relativePath.dropLast(1)) {
+            val match = completeEntries(request.sourceTree, actualParentId)
+                .singleOrNull { it.directory && it.title == ancestor }
+                ?: error("SOURCE_ANCESTOR_MEMBERSHIP_CHANGED")
+            actualParentId = match.documentId
+        }
+        require(actualParentId == key.containerId) {
+            "SOURCE_PARENT_CONTAINER_CHANGED"
+        }
+        val matches = completeEntries(request.sourceTree, actualParentId)
+            .filter { it.documentId == entry.source.key.opaqueItemId &&
+                it.title == entry.source.name &&
+                it.directory == (entry.source.kind == ItemKind.DIRECTORY) }
+        require(matches.size == 1) { "SOURCE_ENTRY_MEMBERSHIP_CHANGED" }
+        val observed = meta(request.sourceTree, entry.source.key.opaqueItemId)
+        observed.name == entry.source.name &&
+            observed.directory == (entry.source.kind == ItemKind.DIRECTORY) &&
+            observed.revision == entry.source.key.version
+    }.getOrDefault(false)
+
     private companion object {
         const val APPROVAL_LIFETIME_MILLIS = 60_000L
     }

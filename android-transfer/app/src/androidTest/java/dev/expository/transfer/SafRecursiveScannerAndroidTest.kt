@@ -96,6 +96,54 @@ class SafRecursiveScannerAndroidTest {
         assertNull(e.scanner.reobserve(e.request(), approved))
     }
 
+    @Test fun perEntrySourceCheckBindsActualAncestorsEvenAfterTargetChanges() {
+        val e = Environment()
+        val m = requireNotNull(e.scanner.prepare(e.request()))
+        val root = m.entries.single { it.relativePath == listOf("Shows") }
+        val empty = m.entries.single { it.relativePath == listOf("Shows", "Empty") }
+        val file = m.entries.single { it.relativePath == listOf("Shows", "Episode.bin") }
+        assertTrue(m.entries.all { e.scanner.sourceEntryStillCurrent(e.request(), it) })
+
+        // A destination mutation invalidates full-tree collision approval,
+        // but must NOT make the unchanged source impossible to verify per step.
+        e.mode("targetCollision")
+        assertNull(e.scanner.reobserve(e.request(), m))
+        assertTrue(e.scanner.sourceEntryStillCurrent(e.request(), file))
+        e.mode("reset")
+
+        assertFalse(e.scanner.sourceEntryStillCurrent(
+            e.request().copy(sourceDirectoryId = "wrong-root-id"), file))
+        val wrongParentId = file.copy(source = file.source.copy(
+            location = file.source.location.copy(
+                key = file.source.location.key.copy(containerId = "alien"))))
+        assertFalse(e.scanner.sourceEntryStillCurrent(e.request(), wrongParentId))
+        val wrongAncestry = file.copy(relativePath =
+            listOf("Shows", "Unknown", "Episode.bin"))
+        assertFalse(e.scanner.sourceEntryStillCurrent(e.request(), wrongAncestry))
+        val wrongVersion = file.copy(source = file.source.copy(
+            key = file.source.key.copy(version = "old-version")))
+        assertFalse(e.scanner.sourceEntryStillCurrent(e.request(), wrongVersion))
+        val wrongGrant = file.copy(source = file.source.copy(
+            location = file.source.location.copy(
+                key = file.source.location.key.copy(grantId = "other-tree"))))
+        assertFalse(e.scanner.sourceEntryStillCurrent(e.request(), wrongGrant))
+
+        e.mode("changedName")
+        // Only the file's metadata changed; the directory remains current.
+        assertTrue(e.scanner.sourceEntryStillCurrent(e.request(), root))
+        assertFalse(e.scanner.sourceEntryStillCurrent(e.request(), file))
+        e.mode("reset")
+        e.mode("missingEmptyMeta")
+        assertFalse(e.scanner.sourceEntryStillCurrent(e.request(), empty))
+        e.mode("reset")
+        e.mode("duplicate")
+        assertFalse(e.scanner.sourceEntryStillCurrent(e.request(), file))
+        e.mode("reset")
+
+        e.observedAtMillis += 60_001L
+        assertFalse(e.scanner.sourceEntryStillCurrent(e.request(), file))
+    }
+
     @Test fun changedSourceMetadataAndAmbiguousNamesInvalidateWholeProposal() {
         val e = Environment()
         e.mode("changedName")
