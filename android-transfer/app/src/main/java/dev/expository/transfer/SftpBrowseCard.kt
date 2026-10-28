@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -1103,7 +1104,8 @@ internal fun SftpBrowseCard(
                     Text("SFTP → Device batch: " + count + "/12 files selected " +
                         "(the opposite Android folder is the destination).",
                         style = MaterialTheme.typography.bodySmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Button(
                             enabled = !busy && !peerRelayLocked &&
                                 count > 0 && pendingPeerBatch == null &&
@@ -1148,7 +1150,8 @@ internal fun SftpBrowseCard(
                                     "Server, selected sources or Android folder changed. " +
                                         "Cancel and review again.",
                                     style = MaterialTheme.typography.bodySmall)
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Button(enabled = valid,
                                         modifier = Modifier.heightIn(min = 48.dp),
                                         onClick = { executePeerBatch(pending) }) {
