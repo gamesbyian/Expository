@@ -99,7 +99,7 @@ class LocalTreePresentationAndroidTest {
             TreeEntry("missing", "Unknown.txt", false, null),
             TreeEntry("invalid", "Unreported.txt", false, 7)
         )
-        assertEquals(listOf("folder", "late", "same", "early", "invalid", "missing"),
+        assertEquals(listOf("folder", "late", "same", "early", "missing", "invalid"),
             LocalTreePresentation.rows(rows, "", LocalTreeSort.NEWEST)
                 .map { it.documentId })
 
