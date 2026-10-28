@@ -55,6 +55,8 @@ internal fun PublicGithubBrowseCard() {
     var path by remember { mutableStateOf("") }
     var listing by remember { mutableStateOf<PublicGithubListing?>(null) }
     var visibleLimit by remember { mutableIntStateOf(GithubPublicDirectory.FIRST_PAGE) }
+    var folderFilter by remember { mutableStateOf("") }
+    var folderSort by remember { mutableStateOf(GithubFolderSort.NAME) }
     var busy by remember { mutableStateOf(false) }
     var pendingSave by remember { mutableStateOf<PublicGithubSaveSource?>(null) }
     var savePermit by remember { mutableStateOf<AtomicBoolean?>(null) }
@@ -121,6 +123,7 @@ internal fun PublicGithubBrowseCard() {
                     listing = it
                     path = nextPath
                     visibleLimit = GithubPublicDirectory.FIRST_PAGE
+                    folderFilter = ""
                     status = if (it.maybeIncomplete)
                         "GitHub returned its 1,000-entry limit. Additional files may exist."
                     else "Public folder received. This view cannot modify repository files."
@@ -234,9 +237,30 @@ internal fun PublicGithubBrowseCard() {
                 }
                 val current = listing
                 if (current != null) {
-                    val displayRows = current.entries.take(visibleLimit)
+                    OutlinedTextField(folderFilter, {
+                        folderFilter = it.take(256)
+                        visibleLimit = GithubPublicDirectory.FIRST_PAGE
+                    }, modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Filter names in this folder") },
+                        singleLine = true, enabled = !busy)
+                    Button(
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        enabled = !busy,
+                        onClick = {
+                            folderSort = when (folderSort) {
+                                GithubFolderSort.NAME -> GithubFolderSort.SIZE
+                                GithubFolderSort.SIZE -> GithubFolderSort.TYPE
+                                GithubFolderSort.TYPE -> GithubFolderSort.NAME
+                            }
+                        }
+                    ) { Text("Sort: " + folderSort.name.lowercase()
+                        .replaceFirstChar { it.uppercase() }) }
+                    val matched = GithubFolderPresentation.rows(
+                        current.entries, folderFilter, folderSort)
+                    val displayRows = matched.take(visibleLimit)
                     Text("Showing " + displayRows.size + " of " +
-                        current.entries.size + " GitHub entries" +
+                        matched.size + " matching entries (folder total " +
+                        current.entries.size + ")" +
                         if (current.maybeIncomplete) " (possibly incomplete)" else "",
                         style = MaterialTheme.typography.bodySmall)
                     LazyColumn(Modifier.fillMaxWidth().heightIn(max = 340.dp),
@@ -288,7 +312,7 @@ internal fun PublicGithubBrowseCard() {
                             }
                         }
                     }
-                    if (current.entries.size > visibleLimit) {
+                    if (matched.size > visibleLimit) {
                         Button(enabled = !busy,
                             modifier = Modifier.heightIn(min = 48.dp),
                             onClick = {
