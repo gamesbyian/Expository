@@ -790,14 +790,27 @@ class WorkspaceNavigationUiTest {
             return false
         }
         fun browseToSyntheticTarget() {
-            compose.onNodeWithText("Choose Pane A folder…")
-                .performSemanticsAction(SemanticsActions.OnClick)
-            val picker = device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")),
-                10_000L) ||
+            // API35 DocumentsUI occasionally starts late after a Compose
+            // navigation transition. Observe the actual OS surface, and
+            // retry the launch only while Expository is still foregrounded.
+            // Never tap through an existing system dialog or fake a SAF grant.
+            fun systemPickerVisible(): Boolean =
+                device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")),
+                    10_000L) ||
                 device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 3_000L) ||
                 device.wait(Until.hasObject(By.text("Recent")), 3_000L) ||
                 device.wait(Until.hasObject(By.text("Downloads")), 3_000L)
-            assertTrue("Android system folder picker required", picker)
+            compose.onNodeWithText("Choose Pane A folder…")
+                .performSemanticsAction(SemanticsActions.OnClick)
+            var picker = systemPickerVisible()
+            if (!picker && device.currentPackageName == context.packageName) {
+                device.waitForIdle(500L)
+                compose.onNodeWithText("Choose Pane A folder…")
+                    .performSemanticsAction(SemanticsActions.OnClick)
+                picker = systemPickerVisible()
+            }
+            assertTrue("Android system folder picker required; foreground=" +
+                (device.currentPackageName ?: "none"), picker)
             var visible = false
             repeat(3) {
                 if (!visible) {
