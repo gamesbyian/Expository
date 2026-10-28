@@ -24,6 +24,32 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.UUID
 
+/**
+ * Android's Save As provider receives a truthful content type for ordinary
+ * original files. It is a hint, never a request to convert a Google Doc; the
+ * byte-for-byte destination readback remains mandatory for verified receipts.
+ */
+internal object GithubOriginalMime {
+    fun forFile(name: String): String {
+        val extension = name.substringAfterLast('.', "").lowercase(java.util.Locale.ROOT)
+        val known = when (extension) {
+            "md", "markdown" -> "text/markdown"
+            "txt", "log", "csv" -> if (extension == "csv") "text/csv" else "text/plain"
+            "json" -> "application/json"
+            "yaml", "yml" -> "application/yaml"
+            "svg" -> "image/svg+xml"
+            "html", "htm" -> "text/html"
+            "xml" -> "application/xml"
+            "pdf" -> "application/pdf"
+            else -> null
+        }
+        return known ?: android.webkit.MimeTypeMap.getSingleton()
+            .getMimeTypeFromExtension(extension)
+            ?.takeIf { it.matches(Regex("[A-Za-z0-9.+-]+/[A-Za-z0-9.+-]+")) }
+            ?: "application/octet-stream"
+    }
+}
+
 /** A frozen, read-only public GitHub file and its direct parent at picker launch. */
 internal data class PublicGithubSaveSource(
     val repository: PublicGithubRepository,
