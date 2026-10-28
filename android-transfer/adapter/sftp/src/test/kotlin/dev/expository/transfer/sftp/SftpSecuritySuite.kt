@@ -73,6 +73,29 @@ object SftpSecuritySuite {
                     SftpRemoteEntry("extra", false, 0, null))
             ) }.isFailure)
         }
+        checkCase("NFC and casefold ambiguous SFTP sibling names refuse mutation") {
+            fun rows(first: String, second: String) = SftpBrowsePage(listOf(
+                SftpRemoteEntry(first, false, 10L, 1L),
+                SftpRemoteEntry(second, false, 20L, 2L)), false)
+            val ordinary = rows("Café.txt", "Different.txt")
+            check(SftpMutationListing.requireComplete(ordinary) === ordinary)
+            for (ambiguous in listOf(
+                rows("Café.txt", "Cafe\u0301.txt"),
+                rows("Episode01.mkv", "episode01.MKV"),
+                rows("Folder", "folder"),
+                rows("exact", "exact"),
+                rows("safe", "../unsafe")
+            )) {
+                check(runCatching {
+                    SftpMutationListing.requireComplete(ambiguous)
+                }.isFailure)
+            }
+            // An incomplete browse page must remain blocked regardless of
+            // whether currently shown names happen to be unique.
+            check(runCatching {
+                SftpMutationListing.requireComplete(ordinary.copy(truncated = true))
+            }.isFailure)
+        }
         checkCase("display-only SFTP filter and stable name/size/type/newest sort") {
             val original = listOf(
                 SftpRemoteEntry("Zeta.mkv", false, 400, 100L),

@@ -15,6 +15,8 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
+import java.text.Normalizer
+import java.util.Locale
 import java.security.PublicKey
 
 /**
@@ -113,6 +115,15 @@ object SftpMutationListing {
         require(!page.truncated && page.entries.size <= SftpBrowseBounds.MAX) {
             "INCOMPLETE_SFTP_MUTATION_LISTING"
         }
+        // A case-sensitive server may expose two distinct paths that a target
+        // provider treats as the same name. Browsing can show both, but write
+        // preflights may never treat this namespace as collision-free.
+        val normalizedNames = HashSet<String>()
+        require(page.entries.all { entry ->
+            runCatching { SftpPath.validateChild(entry.name) }.isSuccess &&
+                normalizedNames.add(Normalizer.normalize(
+                    entry.name, Normalizer.Form.NFC).lowercase(Locale.ROOT))
+        }) { "AMBIGUOUS_SFTP_MUTATION_NAMES" }
         return page
     }
 }
