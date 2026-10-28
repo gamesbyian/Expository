@@ -36,7 +36,12 @@ internal data class ScopedRecursiveSourceRequest(
     val destinationWriteGranted: Boolean
 )
 
-internal class SafRecursiveSourceScanner(private val resolver: ContentResolver) {
+internal class SafRecursiveSourceScanner(
+    private val resolver: ContentResolver,
+    // Capability issue/expiry is part of the immutable approval digest.
+    // Preserve the production clock; tests can pin observation time.
+    private val clockMillis: () -> Long = System::currentTimeMillis
+) {
     private data class DocumentMeta(
         val id: String, val name: String, val mime: String, val flags: Int,
         val revision: String
@@ -183,7 +188,7 @@ internal class SafRecursiveSourceScanner(private val resolver: ContentResolver) 
             require(sourceAuthority != targetAuthority) {
                 "SAME_PROVIDER_ANCESTRY_NOT_VERIFIED"
             }
-            val issued = System.currentTimeMillis()
+            val issued = clockMillis()
             val proof = CapabilityProof(Support.SUPPORTED,
                 "real-scoped-saf-tree-observation", issued + 60_000)
             val source = index(request.sourceTree, request.sourceParentId,
