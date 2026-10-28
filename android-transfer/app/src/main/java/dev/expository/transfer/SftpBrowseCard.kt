@@ -1034,24 +1034,6 @@ internal fun SftpBrowseCard(
                         " Connect to a trusted SFTP server, then choose a destination folder and explicitly upload.",
                         style = MaterialTheme.typography.bodySmall)
                 }
-                OutlinedTextField(host, { host = it }, label = { Text("SFTP host") },
-                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(port, { port = it }, label = { Text("Port") },
-                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(startFolder, { startFolder = it },
-                    label = { Text("Starting folder (absolute path)") },
-                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(username, { username = it }, label = { Text("Username") },
-                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(password, { password = it },
-                    label = { Text("Password (session only)") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(fingerprint, { fingerprint = it },
-                    label = { Text("Trusted SSH key: SHA256:…") },
-                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Button(modifier = Modifier.heightIn(min = 48.dp),
                         enabled = !busy && !peerRelayLocked,
                         onClick = {
@@ -1077,40 +1059,6 @@ internal fun SftpBrowseCard(
                             }
                         }) { Text(if (savedBookmarks == null)
                             "Saved connections" else "Hide saved connections") }
-                    Button(modifier = Modifier.heightIn(min = 48.dp),
-                        enabled = !busy && !peerRelayLocked &&
-                            host.isNotBlank() && username.isNotBlank() &&
-                            fingerprint.isNotBlank() && startFolder.isNotBlank(),
-                        onClick = {
-                            val snapshot = runCatching {
-                                SavedSftpBookmark(host.trim(), port.toInt(),
-                                    startFolder.trim(), username, fingerprint.trim())
-                            }.getOrNull()
-                            if (snapshot == null) {
-                                status = "Bookmark refused: check host, port, path, username and SSH pin."
-                            } else {
-                                busy = true
-                                status = "Encrypting a new connection-only bookmark. Password excluded."
-                                scope.launch {
-                                    val result = withContext(Dispatchers.IO) {
-                                        runCatching {
-                                            val store = SavedSftpBookmarks(context)
-                                            store.save(snapshot)
-                                            store.list()
-                                        }
-                                    }
-                                    result.onSuccess {
-                                        savedBookmarks = it
-                                        pendingBookmarkDelete = null
-                                        status = "Connection details encrypted locally. Password was not stored."
-                                    }.onFailure {
-                                        status = "Bookmark could not be stored. Existing records remain unchanged."
-                                    }
-                                    busy = false
-                                }
-                            }
-                        }) { Text("Save connection (no password)") }
-                }
                 savedBookmarks?.forEach { slot ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(slot.bookmark?.let {
@@ -1131,6 +1079,7 @@ internal fun SftpBrowseCard(
                                     password = ""
                                     pendingBookmarkDelete = null
                                     status = "Bookmark loaded without a password. Verify SSH pin and enter your password to connect."
+                                    savedBookmarks = null
                                 }
                             }) { Text("Load") }
                         Button(enabled = !busy && !peerRelayLocked,
@@ -1172,6 +1121,58 @@ internal fun SftpBrowseCard(
                             }
                         }
                     }
+                }
+                OutlinedTextField(host, { host = it }, label = { Text("SFTP host") },
+                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(port, { port = it }, label = { Text("Port") },
+                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(startFolder, { startFolder = it },
+                    label = { Text("Starting folder (absolute path)") },
+                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(username, { username = it }, label = { Text("Username") },
+                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(password, { password = it },
+                    label = { Text("Password (session only)") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(fingerprint, { fingerprint = it },
+                    label = { Text("Trusted SSH key: SHA256:…") },
+                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Button(modifier = Modifier.heightIn(min = 48.dp),
+                        enabled = !busy && !peerRelayLocked &&
+                            host.isNotBlank() && username.isNotBlank() &&
+                            fingerprint.isNotBlank() && startFolder.isNotBlank(),
+                        onClick = {
+                            val snapshot = runCatching {
+                                SavedSftpBookmark(host.trim(), port.toInt(),
+                                    startFolder.trim(), username, fingerprint.trim())
+                            }.getOrNull()
+                            if (snapshot == null) {
+                                status = "Bookmark refused: check host, port, path, username and SSH pin."
+                            } else {
+                                busy = true
+                                status = "Encrypting a new connection-only bookmark. Password excluded."
+                                scope.launch {
+                                    val result = withContext(Dispatchers.IO) {
+                                        runCatching {
+                                            val store = SavedSftpBookmarks(context)
+                                            store.save(snapshot)
+                                            store.list()
+                                        }
+                                    }
+                                    result.onSuccess {
+                                        savedBookmarks = it
+                                        pendingBookmarkDelete = null
+                                        status = "Connection details encrypted locally. Password was not stored."
+                                    }.onFailure {
+                                        status = "Bookmark could not be stored. Existing records remain unchanged."
+                                    }
+                                    busy = false
+                                }
+                            }
+                        }) { Text("Save connection (no password)") }
                 }
                 Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !busy && !peerRelayLocked &&
                     host.isNotBlank() && username.isNotBlank() &&
