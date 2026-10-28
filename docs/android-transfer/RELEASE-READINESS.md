@@ -251,6 +251,22 @@ with **14/14 new recursive E1 scenarios** and existing suite checks.
 This **does not** execute recursively, authenticate a live provider, create a
 destination folder, verify any copied file bytes, or constitute E2/E4 acceptance.
 
+[Merged PR #255](https://github.com/gamesbyian/Expository/pull/255)
+makes Android DocumentsProvider cursor decoding reject a *write-authorizing*
+complete-listing claim when two distinct opaque document IDs have
+NFC/casefold-equivalent display names, while keeping both observable for
+read-only UI. Exact merged feature head `9e0763d95064af640ddd6308189b5eca2a67b2eb`
+passed [native E1 #40741971766](https://github.com/gamesbyian/Expository/actions/runs/40741971766),
+[app + instrumented test APK compilation #40742455740](https://github.com/gamesbyian/Expository/actions/runs/40742455740),
+and [targeted API35 E2 #40742457361](https://github.com/gamesbyian/Expository/actions/runs/40742457361)
+(**3/3** `LocalTreePresentationAndroidTest` cases, synthetic provider
+cursor/Compose UI). The initial superseded head's native check
+[#40741653697](https://github.com/gamesbyian/Expository/actions/runs/40741653697)
+failed only because its branch did not yet include the newly added
+`recursiveFolderScenarios` task from #254; it was safely reconciled with
+main before the successful exact-head run. No real Drive provider, authorized
+third-party grant, file mutation, physical E4 or signed E5 is implied.
+
 [Merged PR #256](https://github.com/gamesbyian/Expository/pull/256)
 requires unique NFC/case-folded SFTP sibling display names in a complete
 write-authorizing remote listing. A case-sensitive server's browse preview
