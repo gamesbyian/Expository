@@ -64,6 +64,38 @@ class SafRecursiveScannerAndroidTest {
         assertFalse(approved.digest == renewed.digest)
     }
 
+    @Test fun freshWholeTreeReobservationRetainsOriginalExpiryAndBlocksDrift() {
+        val e = Environment()
+        val approved = requireNotNull(e.scanner.prepare(e.request()))
+        val originalDigest = approved.digest
+        // Real requery, same approved expiration and independent data objects.
+        val same = requireNotNull(e.scanner.reobserve(e.request(), approved))
+        assertFalse(same === approved)
+        assertEquals(originalDigest, same.digest)
+        e.observedAtMillis += 10_000L
+        assertEquals(originalDigest, e.scanner.reobserve(e.request(), approved)?.digest)
+        // New approval minted at the new time is distinct: it cannot silently
+        // supersede the old frozen review.
+        assertFalse(originalDigest == e.scanner.prepare(e.request())?.digest)
+        e.mode("changedName")
+        assertNull(e.scanner.reobserve(e.request(), approved))
+        e.mode("reset")
+        e.mode("duplicate")
+        assertNull(e.scanner.reobserve(e.request(), approved))
+        e.mode("reset")
+        e.mode("targetCollision")
+        assertNull(e.scanner.reobserve(e.request(), approved))
+        e.mode("reset")
+        assertNull(e.scanner.reobserve(e.request(),
+            approved.copy(digest = "0".repeat(64))))
+        // Expiration refuses even a matching tree; no renewal-on-retry.
+        e.observedAtMillis += 51_000L
+        assertNull(e.scanner.reobserve(e.request(), approved))
+        // A clock moved backwards must not make a not-yet-issued grant valid.
+        e.observedAtMillis = 999_999L
+        assertNull(e.scanner.reobserve(e.request(), approved))
+    }
+
     @Test fun changedSourceMetadataAndAmbiguousNamesInvalidateWholeProposal() {
         val e = Environment()
         e.mode("changedName")
