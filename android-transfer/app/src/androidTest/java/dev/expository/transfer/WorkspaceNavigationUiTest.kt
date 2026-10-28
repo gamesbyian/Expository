@@ -18,6 +18,13 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import dev.expository.transfer.planner.Operation
+import dev.expository.transfer.planner.TransferPlan
+import dev.expository.transfer.planner.TransferRoute
+import dev.expository.transfer.sftp.SftpBrowsePage
+import dev.expository.transfer.sftp.SftpRemoteEntry
+import dev.expository.transfer.sftp.SftpTreeCopyPreflight
+import dev.expository.transfer.sftp.SftpTreeCopyRequest
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -621,4 +628,96 @@ class WorkspaceNavigationUiTest {
             IncomingShareParser.parseMultiple(multiple))
     }
 
+
+    /** Scoped batch reviews: no credentials, grants or remote mutations. */
+    private fun sftpBatchFile(name: String, size: Long = 1024L, time: Long = 120L) =
+        SftpRemoteEntry(name, false, size, time)
+
+    private fun sftpBatchDirectory(name: String) = SftpRemoteEntry(name, true, 0L, 120L)
+
+    private fun sftpBatchPage(vararg rows: SftpRemoteEntry, truncated: Boolean = false) =
+        SftpBrowsePage(rows.toList(), truncated)
+
+    @Test fun batchTogglesFilesAndRejectsDirectoriesAndUntrustedPages() {
+        val a = sftpBatchFile("one.bin")
+        val b = sftpBatchFile("two.bin")
+        val selection = SftpBatchSelection()
+            .toggle("/media", a).toggle("/media", sftpBatchDirectory("child"))
+            .toggle("/media", b)
+        assertEquals(2, selection.files.size)
+        assertEquals(listOf("/media/one.bin", "/media/two.bin"),
+            selection.files.map { it.absolutePath })
+        assertTrue(selection.matchesPage("/media", sftpBatchPage(a, b)))
+        assertFalse(selection.matchesPage("/media", sftpBatchPage(a, b, truncated = true)))
+        assertFalse(selection.matchesPage("/", sftpBatchPage(a, b)))
+        assertFalse(selection.matchesPage("/media", sftpBatchPage(a)))
+        assertFalse(selection.matchesPage("/media", sftpBatchPage(sftpBatchFile("one.bin", 1025), b)))
+        assertFalse(selection.matchesPage("/media", sftpBatchPage(sftpBatchFile("one.bin",
+            time = 121L), b)))
+        assertFalse(selection.matchesPage("/media", sftpBatchPage(a, b, a)))
+        assertFalse("Duplicate same-path rows are ambiguous even with differing metadata",
+            selection.matchesPage("/media",
+                sftpBatchPage(a, b, sftpBatchFile("one.bin", 9999L))))
+        assertFalse("A file and directory sharing a path cannot authorize Copy",
+            selection.matchesPage("/media",
+                sftpBatchPage(a, b, sftpBatchDirectory("one.bin"))))
+        assertEquals(listOf("/media/two.bin"),
+            selection.toggle("/media", a).files.map { it.absolutePath })
+    }
+
+    @Test fun batchHasTwelveFileCeilingAndNoCasefoldDuplicateNames() {
+        val rows = (1..13).map { sftpBatchFile("item-${it.toString().padStart(2, '0')}.bin") }
+        var selection = SftpBatchSelection()
+        rows.forEach { selection = selection.toggle("/inbox", it) }
+        assertEquals(12, selection.files.size)
+        assertEquals("/inbox/item-12.bin", selection.files.last().absolutePath)
+        selection = selection.toggle("/inbox", rows.first())
+        assertEquals(11, selection.files.size)
+        selection = selection.toggle("/inbox", rows.last())
+        assertEquals(12, selection.files.size)
+
+        val ambiguous = SftpBatchSelection()
+            .toggle("/", sftpBatchFile("Alpha.txt"))
+            .toggle("/", sftpBatchFile("alpha.txt"))
+            .toggle("/", sftpBatchFile("é.txt"))
+            .toggle("/", sftpBatchFile("e\u0301.txt"))
+        assertEquals(2, ambiguous.files.size)
+    }
+
+    @Test fun reviewBindsAuthenticatedSessionGrantAndExactVersions() {
+        val one = sftpBatchFile("one.bin", 2048L)
+        val two = sftpBatchFile("two.bin", 3072L)
+        val selection = SftpBatchSelection()
+            .toggle("/", one).toggle("/", two)
+        val destination = LocalPaneDownloadTarget(
+            Uri.parse("content://test.provider/tree/granted-root"), "granted-root", 9L)
+        val plan = TransferPlan("a".repeat(64),
+            TransferRoute.DEVICE_RELAY, Operation.COPY, emptyList())
+        val preflight = selection.files.map { src ->
+            SftpTreeCopyPreflight(
+                SftpTreeCopyRequest("pinned-session", src.absolutePath,
+                    src.revision, destination),
+                plan, 500L, src.name, src.size, emptySet())
+        }
+        val pending = PendingPeerSftpBatchDownload(
+            "pinned-session", "/", destination, selection, preflight)
+        val page = sftpBatchPage(one, two)
+        assertTrue(pending.stillMatches(
+            "pinned-session", "/", destination, selection, page))
+        assertFalse(pending.stillMatches(
+            "different-session", "/", destination, selection, page))
+        assertFalse(pending.stillMatches(
+            "pinned-session", "/other", destination, selection, page))
+        assertFalse(pending.stillMatches(
+            "pinned-session", "/",
+            destination.copy(browseGeneration = 10L), selection, page))
+        assertFalse(pending.stillMatches(
+            "pinned-session", "/", destination,
+            selection.toggle("/", one), page))
+        assertFalse(pending.stillMatches(
+            "pinned-session", "/", destination, selection,
+            sftpBatchPage(one, sftpBatchFile("two.bin", 3073L))))
+        assertFalse(pending.copy(initialPreflights = preflight.drop(1))
+            .stillMatches("pinned-session", "/", destination, selection, page))
+    }
 }
