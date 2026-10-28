@@ -123,13 +123,14 @@ internal fun PlainFtpBrowseCard() {
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                     enabled = !busy && explicitlyApproved &&
                         host.isNotBlank() && username.isNotBlank() &&
-                        password.isNotBlank() && port.toIntOrNull() in 1..65535,
+                        password.isNotBlank() && (port.toIntOrNull()?.let { it in 1..65535 } == true),
                     onClick = {
                         val chosenHost = host.trim()
                         val chosenPort = port.toIntOrNull() ?: -1
                         val chosenRoot = startFolder.trim()
                         val chosenUser = username
                         val secret = password.toCharArray()
+                        val approved = explicitlyApproved
                         password = ""
                         explicitlyApproved = false
                         busy = true
@@ -141,7 +142,7 @@ internal fun PlainFtpBrowseCard() {
                                         val checkedRoot = FtpsPath.checked(chosenRoot)
                                         val live = PlainFtp.connect(
                                             PlainFtpTarget(chosenHost, chosenPort),
-                                            chosenUser, secret, explicitlyApproved = true)
+                                            chosenUser, secret, explicitlyApproved = approved)
                                         try { live to live.browseReadOnly(checkedRoot) }
                                         catch (failure: Exception) {
                                             live.close()
