@@ -13,9 +13,20 @@ object RecursiveFolderCopyEngineSuite {
         LocationKey(LocationKind.LOCAL_SAF, "fake", "root", "src", "scope"),
         listOf("from"), "revision", mapOf(
             Capability.READ to CapabilityProof(Support.SUPPORTED, "observed", 10_000L)))
-    private fun entry(id: String, name: String, kind: ItemKind, path: List<String>) =
-        RecursiveCopyEntry(ItemRef(ItemKey("fake", id, "ver-1"),
-            source, source.folder, name, kind), path)
+    private fun entry(id: String, name: String, kind: ItemKind, path: List<String>): RecursiveCopyEntry {
+        val parentPath = path.dropLast(1)
+        val parentId = when (parentPath) {
+            emptyList<String>() -> "src"
+            listOf("Shows") -> "dir"
+            listOf("Shows", "Empty") -> "empty"
+            else -> error("Unexpected synthetic ancestor")
+        }
+        val location = source.copy(
+            key = source.key.copy(containerId = parentId),
+            folder = source.folder + parentPath)
+        return RecursiveCopyEntry(ItemRef(ItemKey("fake", id, "ver-1"),
+            location, location.folder, name, kind), path)
+    }
     private fun manifest() = RecursiveFolderManifest("a".repeat(64), listOf(
         entry("dir", "Shows", ItemKind.DIRECTORY, listOf("Shows")),
         entry("empty", "Empty", ItemKind.DIRECTORY, listOf("Shows", "Empty")),
@@ -162,6 +173,29 @@ object RecursiveFolderCopyEngineSuite {
             check(result.result == RecursiveCopyResult.BLOCKED &&
                 result.reason == "FRESH_SOURCE_TREE_APPROVAL_MISMATCH")
             check(f.created.isEmpty() && f.journals.isEmpty())
+        }
+        case("nested file must belong to the actual opaque parent directory") {
+            val m = manifest()
+            val original = m.entries.last()
+            for (wrong in listOf(
+                original.copy(source = original.source.copy(location =
+                    original.source.location.copy(
+                        key = original.source.location.key.copy(containerId = "other-directory")))),
+                original.copy(source = original.source.copy(location =
+                    original.source.location.copy(folder = listOf("not", "the", "selected", "folder"))))
+            )) {
+                val bad = m.copy(entries = m.entries.dropLast(1) + wrong)
+                val f = Fake().apply {
+                    // Independent reconstruction with the same invalid input:
+                    // reach the coordinator's own membership validation.
+                    refresh = { bad.copy(entries = bad.entries.toList()) }
+                }
+                val result = f.run(bad)
+                check(result.result == RecursiveCopyResult.BLOCKED &&
+                    result.reason == "INVALID_RECURSIVE_ENTRY")
+                check(f.created.isEmpty() && f.journals.isEmpty() &&
+                    "open-dest" !in f.trace)
+            }
         }
         case("source revoked before first step blocks entirely") {
             val f = Fake().apply { sourceChanged = "Shows" }
