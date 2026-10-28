@@ -3,6 +3,9 @@ package dev.expository.transfer
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.expository.transfer.security.KeystoreProfileVault
+import dev.expository.transfer.security.SavedSftpBookmark
+import dev.expository.transfer.security.SavedSftpBookmarks
+import org.junit.Assert.assertEquals
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.UUID
@@ -131,5 +134,85 @@ class KeystoreProfileVaultTest {
         } finally {
             vault.delete(id)
         }
+    }
+
+    @Test fun bookmarkRoundtripRequiresManualPasswordAfterLoading() {
+        val store = SavedSftpBookmarks(context)
+        val bookmark = SavedSftpBookmark("example.org", 2222,
+            "/uploads", "synthetic-user",
+            "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+        val slot = store.save(bookmark)
+        try {
+            assertTrue(vault.listSlots().contains(slot))
+            assertEquals(bookmark, store.load(slot))
+            val record = file(slot).readBytes()
+            val ciphertext = String(record, StandardCharsets.ISO_8859_1)
+            assertFalse(ciphertext.contains("example.org"))
+            assertFalse(ciphertext.contains("synthetic-user"))
+            val plaintext = vault.open(slot) ?: error("bookmark ciphertext missing")
+            try {
+                val encoded = String(plaintext, StandardCharsets.UTF_8)
+                assertFalse(encoded.contains("password", ignoreCase = true))
+                assertFalse(encoded.contains("synthetic-password"))
+                assertEquals(bookmark, SavedSftpBookmark.decode(plaintext))
+            } finally { plaintext.fill(0) }
+            assertTrue(store.list().any { it.slot == slot && it.bookmark == bookmark })
+        } finally {
+            store.delete(slot)
+        }
+        assertFalse(vault.listSlots().contains(slot))
+    }
+
+    @Test fun unreadableBookmarkRemainsVisibleUntilUserExplicitlyDeletesIt() {
+        val store = SavedSftpBookmarks(context)
+        val bookmark = SavedSftpBookmark("host.example", 22, "/",
+            "test", "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+        val id = store.save(bookmark)
+        try {
+            val bytes = file(id).readBytes()
+            bytes[bytes.lastIndex] = (bytes.last().toInt() xor 1).toByte()
+            file(id).writeBytes(bytes)
+            assertTrue(store.list().any { it.slot == id && it.bookmark == null })
+            assertTrue(runCatching { store.load(id) }.isFailure)
+            assertTrue(file(id).exists())
+        } finally {
+            store.delete(id)
+        }
+    }
+
+    @Test fun incompleteAtomicWriteRemainsDiscoverableForExplicitRemoval() {
+        val id = slot()
+        val pending = File(file(id).path + ".new")
+        val store = SavedSftpBookmarks(context)
+        try {
+            pending.writeBytes(byteArrayOf(1, 2, 3, 4))
+            assertTrue(vault.listSlots().contains(id))
+            assertTrue(store.list().any { it.slot == id && it.bookmark == null })
+            assertTrue(runCatching {
+                vault.createNew(id, byteArrayOf(4, 3, 2, 1))
+            }.isFailure)
+        } finally {
+            store.delete(id)
+        }
+        assertFalse(pending.exists())
+        assertFalse(vault.listSlots().contains(id))
+    }
+
+    @Test fun invalidSftpBookmarkNeverCreatesEncryptedRecord() {
+        val count = vault.listSlots().size
+        for (block in listOf<() -> Unit>(
+            { SavedSftpBookmark("not/a/host", 22, "/", "user",
+                "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") },
+            { SavedSftpBookmark("host.example", 0, "/", "user",
+                "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") },
+            { SavedSftpBookmark("host.example", 22, "../escape", "user",
+                "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") },
+            { SavedSftpBookmark("host.example", 22, "/", "user" + 10.toChar() + "next",
+                "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") },
+            { SavedSftpBookmark("host.example", 22, "/", "user", "invalid") }
+        )) {
+            assertTrue(runCatching { block() }.isFailure)
+        }
+        assertEquals(count, vault.listSlots().size)
     }
 }
