@@ -1081,6 +1081,12 @@ internal fun SftpBrowseCard(
                 style = MaterialTheme.typography.bodySmall)
 
             if (session == null) {
+                if (enableSingleBatchDownload) {
+                    Text("Connect to an authenticated SFTP server before choosing a scoped Android batch destination. Nothing is saved or copied merely by connecting.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Button(enabled = false, modifier = Modifier.heightIn(min = 48.dp),
+                        onClick = {}) { Text("Choose batch destination folder") }
+                }
                 if (incomingShare?.payload != null || incomingShare?.batch?.isNotEmpty() == true) {
                     Text((if (incomingShare?.batch?.isNotEmpty() == true)
                         "Shared documents ready." else "Shared document ready.") +
