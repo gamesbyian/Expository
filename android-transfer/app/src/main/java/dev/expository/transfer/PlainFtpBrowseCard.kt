@@ -199,6 +199,8 @@ internal fun PlainFtpBrowseCard() {
                             FtpsFolderSort.NAME -> FtpsFolderSort.SIZE
                             FtpsFolderSort.SIZE -> FtpsFolderSort.TYPE
                             FtpsFolderSort.TYPE -> FtpsFolderSort.NAME
+                            // Plain FTP stays on its three established read-only modes.
+                            FtpsFolderSort.NEWEST -> FtpsFolderSort.NAME
                         }
                     }) { Text("Sort: " + sortMode.name.lowercase()
                         .replaceFirstChar { it.uppercase() }) }
