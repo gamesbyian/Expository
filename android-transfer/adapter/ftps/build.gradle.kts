@@ -30,3 +30,12 @@ tasks.register<JavaExec>("externalSmoke") {
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("dev.expository.transfer.ftps.FtpsExternalSmokeSuite")
 }
+
+tasks.register<JavaExec>("plainFtpLoopback") {
+    group = "verification"
+    description = "Disposable local-only FTP control/data browse with explicit insecure consent"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.ftps.PlainFtpLocalhostSuite")
+    args(providers.gradleProperty("plainFtpLabPort").orNull ?: "21211")
+}

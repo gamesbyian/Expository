@@ -1,0 +1,53 @@
+name: Expository Transfer disposable plaintext FTP loopback
+
+on:
+  pull_request:
+    paths:
+      - "android-transfer/adapter/ftps/**"
+      - ".github/workflows/transfer-plain-ftp-loopback.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-ftp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Install ephemeral local-only FTP server
+        run: python3 -m pip install --user pyftpdlib==2.1.0
+      - name: Exercise real localhost control and data channels
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/plain-ftp-fixture/folder"
+          printf 'synthetic\n' > "$RUNNER_TEMP/plain-ftp-fixture/synthetic.txt"
+          printf 'nested synthetic\n' > "$RUNNER_TEMP/plain-ftp-fixture/folder/nested.txt"
+          python3 - <<'PY' &
+          import os
+          from pyftpdlib.authorizers import DummyAuthorizer
+          from pyftpdlib.handlers import FTPHandler
+          from pyftpdlib.servers import FTPServer
+          root = os.path.join(os.environ["RUNNER_TEMP"], "plain-ftp-fixture")
+          users = DummyAuthorizer()
+          users.add_user("synthetic-user", "synthetic-only-secret", root, perm="elr")
+          handler = FTPHandler
+          handler.authorizer = users
+          handler.banner = "Synthetic test-only FTP"
+          server = FTPServer(("127.0.0.1", 21211), handler)
+          server.serve_forever()
+          PY
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          sleep 2
+          cd android-transfer
+          gradle :adapter:ftps:plainFtpLoopback -PplainFtpLabPort=21211 --no-daemon
