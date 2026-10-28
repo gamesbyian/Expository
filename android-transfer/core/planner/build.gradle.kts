@@ -49,3 +49,11 @@ tasks.register<JavaExec>("sessionAccessScenarios") {
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("dev.expository.transfer.planner.SessionAccessGateSuite")
 }
+
+tasks.register<JavaExec>("recursiveFolderScenarios") {
+    group = "verification"
+    description = "Pure E1 bounded nested/empty-folder copy manifest and authority guards"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.planner.RecursiveFolderCopySuite")
+}
