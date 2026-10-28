@@ -248,7 +248,7 @@ internal fun PublicGithubBrowseCard() {
                                                 status = "Choose a new Android document for this pinned GitHub original."
                                                 saveAs.launch(Intent(Intent.ACTION_CREATE_DOCUMENT)
                                                     .addCategory(Intent.CATEGORY_OPENABLE)
-                                                    .setType("application/octet-stream")
+                                                    .setType(GithubOriginalMime.forFile(entry.name))
                                                     .putExtra(Intent.EXTRA_TITLE, entry.name))
                                             }
                                         }) { Text("Save As") }

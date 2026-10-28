@@ -242,4 +242,14 @@ class GithubPublicDirectoryAndroidTest {
             GithubPublicBlob.decode(json, sha, pointer.length.toLong())
         }.isFailure)
     }
+
+    @Test fun publicGithubSaveAsUsesOriginalMimeWithoutGuessingFormats() {
+        assertEquals("text/markdown", GithubOriginalMime.forFile("README.md"))
+        assertEquals("application/json", GithubOriginalMime.forFile("package.JSON"))
+        assertEquals("image/svg+xml", GithubOriginalMime.forFile("icon.svg"))
+        assertEquals("text/csv", GithubOriginalMime.forFile("data.csv"))
+        assertEquals("application/pdf", GithubOriginalMime.forFile("manual.pdf"))
+        assertEquals("application/octet-stream", GithubOriginalMime.forFile("opaque.unknown-extension-xyz"))
+        assertEquals("application/octet-stream", GithubOriginalMime.forFile("README"))
+    }
 }
