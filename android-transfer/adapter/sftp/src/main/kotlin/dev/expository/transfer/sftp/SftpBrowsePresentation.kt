@@ -18,8 +18,9 @@ object SftpBrowsePresentation {
         val comparator = when (sort) {
             SftpFolderSort.NAME -> byName
             SftpFolderSort.SIZE -> compareBy<SftpRemoteEntry> { it.size }.then(byName)
-            SftpFolderSort.MODIFIED -> compareBy<SftpRemoteEntry>(
-                { it.modifiedMillis == null }, { -(it.modifiedMillis ?: 0L) })
+            SftpFolderSort.MODIFIED -> compareBy<SftpRemoteEntry> {
+                it.modifiedMillis == null
+            }.thenByDescending { it.modifiedMillis ?: Long.MIN_VALUE }
                 .then(byName)
             SftpFolderSort.TYPE -> compareBy<SftpRemoteEntry> {
                 it.name.substringAfterLast('.', "").lowercase(Locale.ROOT)
