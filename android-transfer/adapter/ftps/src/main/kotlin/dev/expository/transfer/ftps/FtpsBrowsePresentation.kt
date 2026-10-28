@@ -3,7 +3,7 @@ package dev.expository.transfer.ftps
 import java.util.Locale
 
 /** Display-only sorting. A filtered FTP LIST/MLSD preview is never complete proof. */
-enum class FtpsFolderSort { NAME, SIZE, TYPE }
+enum class FtpsFolderSort { NAME, SIZE, TYPE, NEWEST }
 
 object FtpsBrowsePresentation {
     fun rows(entries: List<FtpsEntry>, filter: String,
@@ -20,6 +20,9 @@ object FtpsBrowsePresentation {
             FtpsFolderSort.TYPE -> compareBy<FtpsEntry> {
                 it.name.substringAfterLast('.', "").lowercase(Locale.ROOT)
             }.then(byName)
+            FtpsFolderSort.NEWEST ->
+                compareByDescending<FtpsEntry> { it.modifiedMillis ?: Long.MIN_VALUE }
+                    .then(byName)
         }
         return visible.sortedWith(compareByDescending<FtpsEntry> {
             it.isDirectory
