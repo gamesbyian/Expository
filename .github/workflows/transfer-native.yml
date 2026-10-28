@@ -49,7 +49,7 @@ jobs:
           gradle-version: "8.13"
       - name: Offline deterministic G1 synthetic scenarios
         working-directory: android-transfer
-        run: gradle :core:planner:scenarios :core:planner:locationScenarios :core:planner:directoryScenarios :core:planner:moveScenarios :core:planner:workspaceScenarios :core:planner:sessionAccessScenarios :core:engine:scenarios :core:engine:journalScenarios :core:engine:journaledCopyScenarios :core:engine:renameScenarios :adapter:ftps:scenarios :adapter:sftp:scenarios :testing:fake-endpoints:scenarios --no-daemon
+        run: gradle :core:planner:scenarios :core:planner:locationScenarios :core:planner:recursiveFolderScenarios :core:planner:directoryScenarios :core:planner:moveScenarios :core:planner:workspaceScenarios :core:planner:sessionAccessScenarios :core:engine:scenarios :core:engine:journalScenarios :core:engine:journaledCopyScenarios :core:engine:renameScenarios :adapter:ftps:scenarios :adapter:sftp:scenarios :testing:fake-endpoints:scenarios --no-daemon
   android-debug:
     # Android builds remain opt-in and non-blocking; PRs use cheap JVM evidence.
     if: >-
