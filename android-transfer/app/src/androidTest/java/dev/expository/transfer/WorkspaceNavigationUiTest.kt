@@ -6,11 +6,18 @@ import android.database.MatrixCursor
 import android.net.Uri
 import android.content.Intent
 import android.provider.MediaStore
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performSemanticsAction
@@ -84,6 +91,48 @@ class WorkspaceNavigationUiTest {
      * the actual DocumentsProvider query. This is not an OS-picked grant,
      * external-provider interoperability or a successful payload Copy.
      */
+    /** Provider-backed folders are a real scoped SAF location, not Drive OAuth. */
+    @Test fun documentProviderIsSelectableInSingleAndDualWithoutImplicitWrites() {
+        compose.onNodeWithText("Documents").performClick()
+        compose.onNodeWithText("Location Single · Android provider").assertExists()
+        compose.onNodeWithText("Select a folder offered by Android Files",
+            substring = true).assertExists()
+        compose.onNodeWithText("Selected: 0").assertExists()
+        compose.onNodeWithText("Local").performClick()
+        compose.onNodeWithText("Location Single · Device").assertExists()
+        compose.onNodeWithText("Dual view").performClick()
+        // This is a phone-width A/B UI: explicitly activate Pane A before
+        // changing its endpoint. Inactive panes remain composed, not placed.
+        compose.onNodeWithText("Pane A · LOCAL", substring = true).performClick()
+        // The endpoint picker can sit below the initial viewport inside
+        // a scroll owner. Test a *placed* touch target, not an offscreen
+        // semantics action whose host may never receive the pointer.
+        compose.onNodeWithTag("endpoint-A-DOCUMENTS").performScrollTo()
+        compose.onNodeWithTag("endpoint-A-DOCUMENTS").performTouchInput { click() }
+        // Assert the actual button state and visible summary before querying
+        // a separately merged accessibility state-description.
+        compose.onNodeWithTag("endpoint-A-DOCUMENTS").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Selected"))
+        compose.onNodeWithText("Locations: A · DOCUMENTS / B · SFTP").assertExists()
+        compose.onNodeWithText("Dual-location workspace").performScrollTo()
+        val pair = compose.onNodeWithTag("workspace-location-summary")
+            .fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+        assertEquals("A:DOCUMENTS;B:SFTP", pair)
+        compose.onNodeWithText("Location A · Android provider").assertExists()
+        compose.onNodeWithText("Choose Pane A folder…").assertExists()
+        compose.onNodeWithText("Copy A → B…").assertIsNotEnabled()
+        compose.onNodeWithText("Copy B → A…").assertIsNotEnabled()
+        compose.onNodeWithText("Pane B · SFTP").performClick()
+        compose.onNodeWithText("Location B · SFTP", substring = true).assertExists()
+        compose.onNodeWithText("Pane A · DOCUMENTS").performClick()
+        compose.onNodeWithText("Dual-location workspace").performScrollTo()
+        val restoredPair = compose.onNodeWithTag("workspace-location-summary")
+            .fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+        assertEquals("A:DOCUMENTS;B:SFTP", restoredPair)
+        compose.onNodeWithText("Location A · Android provider").assertExists()
+        compose.onNodeWithText("Choose Pane A folder…").assertExists()
+    }
+
     @Test fun boundedSafListingShowsMoreWithoutTreatingTruncationAsComplete() {
         var rows = 205
         var corruptFirst = false

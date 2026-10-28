@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.expository.transfer.planner.BrowseEndpoint
@@ -137,6 +138,13 @@ internal fun DualWorkspaceCard(
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Dual-location workspace", style = MaterialTheme.typography.titleLarge)
+        Text("Locations: A · " + workspace.a.endpoint.name +
+            " / B · " + workspace.b.endpoint.name,
+            modifier = Modifier.testTag("workspace-location-summary").semantics {
+                stateDescription = "A:" + workspace.a.endpoint.name +
+                    ";B:" + workspace.b.endpoint.name
+            },
+            style = MaterialTheme.typography.bodySmall)
         Text(
             "A and B browse independent device folders, authenticated SFTP/FTPS sessions or opt-in read-only FTP / public GitHub. Device-to-Device and Local-to-SFTP copies require reviewed, journaled preflights. SFTP-to-Device and 1–12-file SFTP-to-SFTP Copy are also available after explicit review. Other remote routes and cross-pane Move remain unavailable.",
             style = MaterialTheme.typography.bodySmall
@@ -174,7 +182,7 @@ internal fun DualWorkspaceCard(
         // Keep a direct scoped folder-picker action visible near the top of
         // dual mode. On a phone the chosen local pane's own Browse card can
         // sit far below the outer scrolling toolbar and controls.
-        if (workspace.pane(workspace.activeDual).endpoint == BrowseEndpoint.LOCAL) {
+        if (workspace.pane(workspace.activeDual).endpoint.isSaf) {
             Button(
                 modifier = Modifier.heightIn(min = 48.dp),
                 enabled = !workspaceBusy,
@@ -194,7 +202,9 @@ internal fun DualWorkspaceCard(
                     for (endpoint in BrowseEndpoint.entries) {
                         Button(
                             enabled = !workspaceBusy,
-                            modifier = Modifier.heightIn(min = 48.dp).semantics {
+                            modifier = Modifier.heightIn(min = 48.dp)
+                                .testTag("endpoint-" + which.name + "-" + endpoint.name)
+                                .semantics {
                                 stateDescription = if (pane.endpoint == endpoint)
                                     "Selected" else "Not selected"
                             },
@@ -214,9 +224,11 @@ internal fun DualWorkspaceCard(
                             else endpoint.name) }
                     }
                 }
-                if (pane.endpoint == BrowseEndpoint.LOCAL) {
+                if (pane.endpoint.isSaf) {
                     LocalTreePane(
                         label = "Location " + which.name,
+                        sourceLabel = if (pane.endpoint == BrowseEndpoint.DOCUMENTS)
+                            "Android provider" else "Device",
                         state = tree,
                         scroll = scroll,
                         enabled = !workspaceBusy,
@@ -241,20 +253,20 @@ internal fun DualWorkspaceCard(
                     // to its owner even when the user swaps A and B.
                     val first = (which == WorkspacePane.A) != remoteSwapped
                     val peerLocal = if (which == WorkspacePane.A) {
-                        if (workspace.b.endpoint == BrowseEndpoint.LOCAL) b else null
+                        if (workspace.b.endpoint.isSaf) b else null
                     } else {
-                        if (workspace.a.endpoint == BrowseEndpoint.LOCAL) a else null
+                        if (workspace.a.endpoint.isSaf) a else null
                     }
                     if (peerLocal != null && peerLocal.selected.size >
                         ScopedUploadPicker.MAX_DOCUMENTS) {
-                        Text("Select at most 12 device files for SFTP Copy.",
+                        Text("Select at most 12 provider files for SFTP Copy.",
                             style = MaterialTheme.typography.bodySmall)
                     }
                     val peerSources = if (which == WorkspacePane.A) {
-                        if (workspace.b.endpoint == BrowseEndpoint.LOCAL)
+                        if (workspace.b.endpoint.isSaf)
                             LocalPaneUploadSource.fromSelection(b) else emptyList()
                     } else {
-                        if (workspace.a.endpoint == BrowseEndpoint.LOCAL)
+                        if (workspace.a.endpoint.isSaf)
                             LocalPaneUploadSource.fromSelection(a) else emptyList()
                     }
                     val peerTarget = peerLocal?.let { LocalPaneDownloadTarget.from(it) }
@@ -330,8 +342,8 @@ internal fun DualWorkspaceCard(
                 }
             }
         }
-        val bothLocal = workspace.a.endpoint == BrowseEndpoint.LOCAL &&
-            workspace.b.endpoint == BrowseEndpoint.LOCAL
+        val bothLocal = workspace.a.endpoint.isSaf &&
+            workspace.b.endpoint.isSaf
         val readyA = bothLocal && a.selected.size in 1..12 && a.treeUri != null &&
             b.treeUri != null && b.canWrite && a.complete && b.complete
         val readyB = bothLocal && b.selected.size in 1..12 && b.treeUri != null &&
@@ -349,10 +361,10 @@ internal fun DualWorkspaceCard(
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Review Device Copy", style = MaterialTheme.typography.titleMedium)
+                    Text("Review Android provider Copy", style = MaterialTheme.typography.titleMedium)
                     Text("Files (" + proposedCopy.size + "): " +
                         proposedCopy.joinToString(", ") { it.sourceName })
-                    Text("Route: Device → Device · Copy originals; never delete sources")
+                    Text("Route: Android provider → Android provider · Copy originals; never delete sources")
                     Text("Initial reviewed source plans: " +
                         proposedCopy.joinToString(", ") { it.plan.digest.take(8) } + "…")
                     Text("Each file has a fresh provider preflight, a pinned original source version, a separate durable journal and independent byte verification. Later destination snapshots are refreshed after verified earlier files. The batch stops at the first uncertain result; prior verified files remain. No overwrite or automatic retry.",

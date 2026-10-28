@@ -42,6 +42,28 @@ object WorkspaceStateSuite {
             state.single.visit(local).select(candidate).scroll(9, 13))
         check(state.copyProposal(WorkspacePane.A, null, NOW) == null)
 
+        // SAF-backed document providers can occupy either pane without being
+        // misrepresented as an SFTP or Google Drive API session. Grant
+        // switching clears authority/selection and preserves planner guards.
+        val documents = BrowsePaneState(BrowseEndpoint.DOCUMENTS)
+            .visit(local).select(candidate)
+        check(documents.endpoint.isSaf && !documents.endpoint.remote)
+        check(BrowseEndpoint.DOCUMENTS.accepts(LocationKind.LOCAL_SAF))
+        check(!BrowseEndpoint.DOCUMENTS.accepts(LocationKind.DRIVE_API))
+        check(!BrowseEndpoint.DOCUMENTS.accepts(LocationKind.REMOTE_SFTP))
+        check(documents.endpoint(BrowseEndpoint.LOCAL).current == null)
+        val documentToDevice = TransferWorkspaceState(view = WorkspaceView.DUAL,
+            a = documents, b = BrowsePaneState(BrowseEndpoint.LOCAL).visit(localOther))
+        check(documentToDevice.copyProposal(WorkspacePane.A,
+            DestinationListing("scoped-provider-full-list", true, emptyList()),
+            NOW)?.route == TransferRoute.DEVICE_RELAY)
+        val documentSwap = documentToDevice.swap()
+        check(documentSwap.b.endpoint == BrowseEndpoint.DOCUMENTS &&
+            documentSwap.b.current?.selected?.single()?.key == candidate.key)
+        check(documentToDevice.preset(DualPairing.REMOTE_REMOTE).a.endpoint ==
+            BrowseEndpoint.SFTP)
+        check(documents.visit(localOther).current?.selected?.isEmpty() == true)
+
         // Both dual panes are separately navigable, independently selected and
         // scrolled. Switching layouts cannot erase either workspace.
         state = state.view(WorkspaceView.DUAL)

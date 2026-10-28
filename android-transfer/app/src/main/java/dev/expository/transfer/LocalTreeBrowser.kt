@@ -202,6 +202,7 @@ internal object LocalTreeReader {
 @Composable
 internal fun LocalTreePane(
     label: String,
+    sourceLabel: String = "Device",
     state: LocalTreeBrowseState,
     scroll: LazyListState,
     enabled: Boolean = true,
@@ -215,7 +216,7 @@ internal fun LocalTreePane(
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("$label · Device", style = MaterialTheme.typography.titleMedium)
+            Text("$label · $sourceLabel", style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     enabled = enabled && !state.loading,
