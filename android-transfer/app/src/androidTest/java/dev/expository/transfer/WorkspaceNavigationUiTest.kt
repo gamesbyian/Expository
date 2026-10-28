@@ -655,6 +655,12 @@ class WorkspaceNavigationUiTest {
         assertFalse(selection.matchesPage("/media", sftpBatchPage(sftpBatchFile("one.bin",
             time = 121L), b)))
         assertFalse(selection.matchesPage("/media", sftpBatchPage(a, b, a)))
+        assertFalse("Duplicate same-path rows are ambiguous even with differing metadata",
+            selection.matchesPage("/media",
+                sftpBatchPage(a, b, sftpBatchFile("one.bin", 9999L))))
+        assertFalse("A file and directory sharing a path cannot authorize Copy",
+            selection.matchesPage("/media",
+                sftpBatchPage(a, b, sftpBatchDirectory("one.bin"))))
         assertEquals(listOf("/media/two.bin"),
             selection.toggle("/media", a).files.map { it.absolutePath })
     }
