@@ -110,7 +110,7 @@ class TransferActivity : ComponentActivity() {
 
 /** A single visible connection surface also disposes inactive secure sessions. */
 private enum class TransferWorkspace(val title: String) {
-    LOCAL("Local"), SFTP("SFTP"), FTPS("FTPS"), DEMO("Demo")
+    LOCAL("Local"), SFTP("SFTP"), FTPS("FTPS"), FTP("FTP (insecure)"), DEMO("Demo")
 }
 
 private data class DemoFile(val name: String, val size: String)
@@ -509,7 +509,7 @@ private fun DeveloperPreview(
         ) {
             item { Text("Expository Transfer", style = MaterialTheme.typography.headlineMedium) }
             item {
-                Text("Choose where to work. Remote transfers require verified encrypted connections.",
+                Text("Choose where to work. Secure transfers require encrypted SFTP or FTPS. Plain FTP browsing is separately warned and opt-in.",
                     style = MaterialTheme.typography.bodySmall)
             }
             item {
@@ -613,6 +613,7 @@ private fun DeveloperPreview(
                 }
                 TransferWorkspace.SFTP -> item { SftpBrowseCard(incomingShare) }
                 TransferWorkspace.FTPS -> item { FtpsBrowseCard() }
+                TransferWorkspace.FTP -> item { PlainFtpBrowseCard() }
                 TransferWorkspace.DEMO -> {
                     item {
                         Text("Synthetic planner demo only", style = MaterialTheme.typography.titleMedium)

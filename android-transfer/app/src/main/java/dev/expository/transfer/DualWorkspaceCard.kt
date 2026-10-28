@@ -36,7 +36,7 @@ import dev.expository.transfer.saf.TreeCopyPreflight
  * UI for two independently configured locations.
  *
  * Local trees are backed by real read-scoped Android DocumentsProviders.
- * Both panes may open independent pinned SFTP or TLS-validated FTPS sessions.
+ * Both panes may open independent pinned SFTP, trusted FTPS or explicitly insecure read-only FTP sessions.
  * The inactive phone tab stays composed: the other session is not silently
  * disconnected by changing tabs. A/B Swap moves the same remembered session
  * with its endpoint using Compose movable content, not a new connection.
@@ -101,6 +101,7 @@ internal fun DualWorkspaceCard(
                     onRelaySourceActive = peer.onRelaySourceActive
                 )
                 BrowseEndpoint.FTPS -> FtpsBrowseCard()
+                BrowseEndpoint.FTP -> PlainFtpBrowseCard()
                 else -> Unit
             }
         }
@@ -118,6 +119,7 @@ internal fun DualWorkspaceCard(
                     onRelaySourceActive = peer.onRelaySourceActive
                 )
                 BrowseEndpoint.FTPS -> FtpsBrowseCard()
+                BrowseEndpoint.FTP -> PlainFtpBrowseCard()
                 else -> Unit
             }
         }
@@ -126,7 +128,7 @@ internal fun DualWorkspaceCard(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Dual-location workspace", style = MaterialTheme.typography.titleLarge)
         Text(
-            "A and B browse independent device folders or authenticated SFTP/FTPS sessions. Device-to-Device and Local-to-SFTP copies require reviewed, journaled preflights. SFTP-to-Device and one-file SFTP-to-SFTP Copy are also available after explicit review. Other remote routes and cross-pane Move remain unavailable.",
+            "A and B browse independent device folders, authenticated SFTP/FTPS sessions or opt-in read-only FTP. Device-to-Device and Local-to-SFTP copies require reviewed, journaled preflights. SFTP-to-Device and one-file SFTP-to-SFTP Copy are also available after explicit review. Other remote routes and cross-pane Move remain unavailable.",
             style = MaterialTheme.typography.bodySmall
         )
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -211,15 +213,6 @@ internal fun DualWorkspaceCard(
                         onLoadMore = { onLoadMore(which) },
                         onSelect = { entry -> onSelect(which, entry) }
                     )
-                } else if (pane.endpoint == BrowseEndpoint.FTP) {
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Location " + which.name + " · FTP")
-                            Text("Plain FTP is not enabled. A future connection must require explicit insecure opt-in. No downgrade or anonymous connection is attempted.",
-                                style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
                 } else {
                     Text("Location " + which.name + " · " + pane.endpoint.name +
                         " · authenticated remote browser",
