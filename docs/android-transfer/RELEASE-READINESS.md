@@ -234,3 +234,45 @@ the failed precursor or the successful scoped test from the evidence record.
 ## Scope addition awaiting evidence (2026-10-27)
 
 [Universal locations](UNIVERSAL-LOCATIONS.md) adds future Android DocumentsProvider/Google Drive and GitHub repository *source-and-destination pane* support, with cross-provider reviewed Copy/Move. **No E2/E4 acceptance currently exists for a real Google Drive pane, full Drive account browsing, GitHub repository pane, GitHub writes, or Drive ↔ SFTP drag transfers.** SAF emulator tests already recorded above cannot be relabeled cloud compatibility. Track new provider fixtures, OAuth/branch security and real-device tests before making release claims; P0 Drive destination gates are not relaxed.
+
+## 28 October: recursive source manifest and SFTP collision-witness hardening
+
+[Merged PR #254](https://github.com/gamesbyian/Expository/pull/254) adds the pure Kotlin
+`RecursiveFolderCopyPlanner`: a read-only immutable source manifest for nested and
+empty folders, rooted in exact complete parent membership and independently
+complete per-subfolder snapshots. It refuses missing, stale, duplicate, orphaned,
+over-limit and cross-grant witnesses; requires existing Copy authority and a
+complete destination parent collision check, plus destination Create Child;
+blocks insecure FTP transfer and self-descendant routing. The manifest is
+bounded at 16 relative path components, 128 directories and 2,048 total
+entries. The immutable exact source `6f1bf2efc81f1930c88ce82214a7b77cea1f5ea0`
+passed the full [native JVM run #40741224917](https://github.com/gamesbyian/Expository/actions/runs/40741224917)
+with **14/14 new recursive E1 scenarios** and existing suite checks.
+This **does not** execute recursively, authenticate a live provider, create a
+destination folder, verify any copied file bytes, or constitute E2/E4 acceptance.
+
+[Merged PR #255](https://github.com/gamesbyian/Expository/pull/255)
+makes Android DocumentsProvider cursor decoding reject a *write-authorizing*
+complete-listing claim when two distinct opaque document IDs have
+NFC/casefold-equivalent display names, while keeping both observable for
+read-only UI. Exact merged feature head `9e0763d95064af640ddd6308189b5eca2a67b2eb`
+passed [native E1 #40741971766](https://github.com/gamesbyian/Expository/actions/runs/40741971766),
+[app + instrumented test APK compilation #40742455740](https://github.com/gamesbyian/Expository/actions/runs/40742455740),
+and [targeted API35 E2 #40742457361](https://github.com/gamesbyian/Expository/actions/runs/40742457361)
+(**3/3** `LocalTreePresentationAndroidTest` cases, synthetic provider
+cursor/Compose UI). The initial superseded head's native check
+[#40741653697](https://github.com/gamesbyian/Expository/actions/runs/40741653697)
+failed only because its branch did not yet include the newly added
+`recursiveFolderScenarios` task from #254; it was safely reconciled with
+main before the successful exact-head run. No real Drive provider, authorized
+third-party grant, file mutation, physical E4 or signed E5 is implied.
+
+[Merged PR #256](https://github.com/gamesbyian/Expository/pull/256)
+requires unique NFC/case-folded SFTP sibling display names in a complete
+write-authorizing remote listing. A case-sensitive server's browse preview
+remains visible, but ambiguous sibling names cannot supply the absence or
+identity proof used by Copy/Move/New Folder preflights. Its immutable exact
+source `fc76aa6d8c9b6879ab63918cc526379179a94af0` passed
+[native E1 #40742386079](https://github.com/gamesbyian/Expository/actions/runs/40742386079),
+including the new normalization and invalid-name fixture. No live server or
+remote mutation was tested in this slice; G3/G4/G6 remain incomplete.
