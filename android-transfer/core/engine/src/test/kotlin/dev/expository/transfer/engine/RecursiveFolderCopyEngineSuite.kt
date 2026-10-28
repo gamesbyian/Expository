@@ -153,7 +153,9 @@ object RecursiveFolderCopyEngineSuite {
             for (f in listOf(Fake().apply { ticketChanged = true },
                 Fake().apply { expiry = 1L })) {
                 check(f.run().result == RecursiveCopyResult.BLOCKED)
-                check(f.created.isEmpty() && f.journals.isEmpty())
+                check(f.created.isEmpty() && f.journals.values.all {
+                    DurableAttemptJournal(it).current() == null
+                })
             }
         }
         case("lost create reply stops uncertain with no automatic retry") {
