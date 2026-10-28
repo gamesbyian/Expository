@@ -180,6 +180,24 @@ class KeystoreProfileVaultTest {
         }
     }
 
+    @Test fun incompleteAtomicWriteRemainsDiscoverableForExplicitRemoval() {
+        val id = slot()
+        val pending = File(file(id).path + ".new")
+        val store = SavedSftpBookmarks(context)
+        try {
+            pending.writeBytes(byteArrayOf(1, 2, 3, 4))
+            assertTrue(vault.listSlots().contains(id))
+            assertTrue(store.list().any { it.slot == id && it.bookmark == null })
+            assertTrue(runCatching {
+                vault.createNew(id, byteArrayOf(4, 3, 2, 1))
+            }.isFailure)
+        } finally {
+            store.delete(id)
+        }
+        assertFalse(pending.exists())
+        assertFalse(vault.listSlots().contains(id))
+    }
+
     @Test fun invalidSftpBookmarkNeverCreatesEncryptedRecord() {
         val count = vault.listSlots().size
         for (block in listOf<() -> Unit>(
