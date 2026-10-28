@@ -54,9 +54,9 @@ jobs:
               # Exact DocumentsProvider workspace selection UI, independently
               # from the known-intermittent OS folder picker E2 (#222).
               WorkspaceNavigationUiTest#documentProviderIsSelectableInSingleAndDualWithoutImplicitWrites) ;;
-              # Bounded synthetic provider display-only regression; no
+              # Bounded synthetic provider display-only/recursive scan regression; no
               # external server, picker authorization or file mutation.
-              LocalTreePresentationAndroidTest|WorkspaceNavigationUiTest#localTreeDisplayFilterDoesNotChangeSourceOrSelection) ;;
+              LocalTreePresentationAndroidTest|SafRecursiveScannerAndroidTest|WorkspaceNavigationUiTest#localTreeDisplayFilterDoesNotChangeSourceOrSelection) ;;
               *) echo "Unsupported test selection"; exit 2 ;;
             esac
             printf 'TARGET_TEST_CLASS=dev.expository.transfer.%s\n' "$name" >> "$GITHUB_ENV"
