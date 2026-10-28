@@ -1098,6 +1098,73 @@ internal fun SftpBrowseCard(
                 if (showRenamePreview) page?.let { current ->
                     RemoteRenamePreviewCard(sessionId, folder, current, !busy)
                 }
+                if (localPaneTarget != null) {
+                    val count = peerBatchSelection.files.size
+                    Text("SFTP → Device batch: " + count + "/12 files selected " +
+                        "(the opposite Android folder is the destination).",
+                        style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            enabled = !busy && !peerRelayLocked &&
+                                count > 0 && pendingPeerBatch == null &&
+                                peerBatchSelection.matchesPage(folder, page),
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = { preparePeerBatch() }
+                        ) { Text("Review " + count + "-file Device Copy…") }
+                        Button(
+                            enabled = !busy && !peerRelayLocked && count > 0,
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = {
+                                peerBatchSelection = SftpBatchSelection()
+                                pendingPeerBatch = null
+                                status = "SFTP device batch selection cleared. Nothing copied."
+                            }
+                        ) { Text("Clear batch selection") }
+                    }
+                    pendingPeerBatch?.let { pending ->
+                        val valid = !busy && !peerRelayLocked &&
+                            pending.stillMatches(sessionId, folder, localPaneTarget,
+                                peerBatchSelection, page)
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Review SFTP → Device Batch",
+                                    style = MaterialTheme.typography.titleMedium)
+                                Text("Files (" + pending.selection.files.size + "): " +
+                                    pending.selection.files.joinToString(", ") { it.name })
+                                Text("Destination: opposite pane's picked Android folder")
+                                Text("Initial reviewed plans: " +
+                                    pending.initialPreflights.joinToString(", ") {
+                                        it.plan.digest.take(8)
+                                    } + "…")
+                                Text("Each source will be revalidated and copied with an " +
+                                    "independent write-ahead journal, exclusive new SAF " +
+                                    "document and matching SHA-256 readback. The target " +
+                                    "is freshly replanned after earlier verified files. " +
+                                    "Stop at first uncertainty; no overwrite, no source " +
+                                    "deletion, no automatic retry. A partial document may remain.",
+                                    style = MaterialTheme.typography.bodySmall)
+                                if (!valid) Text(
+                                    "Server, selected sources or Android folder changed. " +
+                                        "Cancel and review again.",
+                                    style = MaterialTheme.typography.bodySmall)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(enabled = valid,
+                                        modifier = Modifier.heightIn(min = 48.dp),
+                                        onClick = { executePeerBatch(pending) }) {
+                                        Text("Confirm " + pending.selection.files.size +
+                                            "-file Device Copy")
+                                    }
+                                    Button(enabled = !busy && !peerRelayLocked,
+                                        modifier = Modifier.heightIn(min = 48.dp),
+                                        onClick = { pendingPeerBatch = null }) {
+                                        Text("Cancel batch review")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 pendingPeerDownload?.let { pending ->
                     val witness = pending.witness
                     val visibleRevision = page?.entries?.singleOrNull { row ->
@@ -1247,6 +1314,24 @@ internal fun SftpBrowseCard(
                                             }) { Text("Select for other SFTP pane") }
                                     }
                                     if (localPaneTarget != null) {
+                                        val selectedForBatch =
+                                            peerBatchSelection.files.any { it.absolutePath == path }
+                                        Button(
+                                            enabled = !busy && !peerRelayLocked &&
+                                                page?.truncated == false &&
+                                                (selectedForBatch ||
+                                                    peerBatchSelection.files.size <
+                                                        SftpBatchSelection.MAX_FILES),
+                                            modifier = Modifier.heightIn(min = 48.dp),
+                                            onClick = {
+                                                peerBatchSelection =
+                                                    peerBatchSelection.toggle(folder, entry)
+                                                pendingPeerBatch = null
+                                            }
+                                        ) {
+                                            Text(if (selectedForBatch)
+                                                "✓ In Device batch" else "Add to Device batch")
+                                        }
                                         Button(
                                             enabled = !busy && !peerRelayLocked && pendingPeerDownload == null,
                                             modifier = Modifier.heightIn(min = 48.dp),
