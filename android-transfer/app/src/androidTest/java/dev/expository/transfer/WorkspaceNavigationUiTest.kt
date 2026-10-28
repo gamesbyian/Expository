@@ -11,6 +11,25 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
+import dev.expository.transfer.journal.AttemptRecoveryIndex
+import dev.expository.transfer.sftp.SftpAndroidCompat
+import dev.expository.transfer.sftp.SftpHostKeyPin
+import org.apache.sshd.common.keyprovider.KeyPairProvider
+import org.apache.sshd.common.file.virtualfs.VirtualFileSystemFactory
+import org.apache.sshd.server.SshServer
+import org.apache.sshd.server.auth.password.PasswordAuthenticator
+import org.apache.sshd.sftp.server.SftpSubsystemFactory
+import java.nio.file.Files
+import java.security.KeyPairGenerator
+import java.util.Comparator
+
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
@@ -720,4 +739,191 @@ class WorkspaceNavigationUiTest {
         assertFalse(pending.copy(initialPreflights = preflight.drop(1))
             .stillMatches("pinned-session", "/", destination, selection, page))
     }
+
+    /**
+     * Real E2: two SFTP source files → one genuinely OS-picked Android
+     * DocumentsProvider folder, through the actual dual-pane Compose UI.
+     * The SSH server and marker content are generated only for this test.
+     */
+    @Test fun pinnedSftpTwoFileBatchCopiesIntoSystemPickedAndroidFolder() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val nonce = UUID.randomUUID().toString().take(10)
+        val destinationFolder = "Expository-sftp-batch-" + nonce
+        val firstName = "expository-sftp-a-" + nonce + ".bin"
+        val secondName = "expository-sftp-b-" + nonce + ".bin"
+        val markerName = "expository-sftp-marker-" + nonce + ".txt"
+        val first = ByteArray(131_117) { ((it * 11 + 5) and 255).toByte() }
+        val second = ByteArray(44_013) { ((it * 29 + 17) and 255).toByte() }
+        val root = Files.createTempDirectory(context.cacheDir.toPath(), "sftp-batch-e2-")
+        val marker = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, markerName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                put(MediaStore.MediaColumns.RELATIVE_PATH,
+                    "Download/" + destinationFolder + "/")
+                put(MediaStore.MediaColumns.IS_PENDING, 0)
+            }) ?: error("SFTP_BATCH_TEST_MARKER_FAILED")
+        val key = KeyPairGenerator.getInstance("RSA").apply {
+            initialize(2048)
+        }.generateKeyPair()
+        val server = SshServer.setUpDefaultServer().apply {
+            host = "127.0.0.1"
+            port = 0
+            keyPairProvider = KeyPairProvider.wrap(key)
+            passwordAuthenticator = PasswordAuthenticator { user, password, _ ->
+                user == "batch-test" && password == "disposable-batch-password"
+            }
+            subsystemFactories = listOf(SftpSubsystemFactory.Builder().build())
+            fileSystemFactory = VirtualFileSystemFactory(root)
+        }
+
+        fun tapText(label: String): Boolean {
+            repeat(5) {
+                val item = device.wait(Until.findObject(By.text(label)), 3_000L)
+                if (item != null && runCatching { item.click() }.isSuccess) return true
+                device.waitForIdle(250L)
+            }
+            return false
+        }
+        fun browseToSyntheticTarget() {
+            compose.onNodeWithText("Choose Pane A folder…")
+                .performSemanticsAction(SemanticsActions.OnClick)
+            val picker = device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")),
+                10_000L) ||
+                device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 3_000L) ||
+                device.wait(Until.hasObject(By.text("Recent")), 3_000L) ||
+                device.wait(Until.hasObject(By.text("Downloads")), 3_000L)
+            assertTrue("Android system folder picker required", picker)
+            var visible = false
+            repeat(3) {
+                if (!visible) {
+                    val drawer = device.findObject(By.desc("Show roots"))
+                        ?: device.findObject(By.descContains("navigation"))
+                    drawer?.click()
+                    val rootName = listOf("Internal storage", "Internal shared storage",
+                        "sdk_gphone64_x86_64", "sdk_gphone_x86_64", "Pixel 6",
+                        "emulator").firstOrNull {
+                            device.wait(Until.hasObject(By.text(it)), 500L)
+                        }
+                    if (rootName != null) {
+                        assertTrue(tapText(rootName))
+                        val downloadRoot = if (device.wait(
+                                Until.hasObject(By.text("Download")), 3_000L))
+                            "Download" else "Downloads"
+                        assertTrue(tapText(downloadRoot))
+                    } else if (device.wait(Until.hasObject(By.text("Downloads")), 2_000L)) {
+                        assertTrue(tapText("Downloads"))
+                    }
+                    visible = device.wait(Until.hasObject(By.text(destinationFolder)), 6_000L)
+                    if (!visible) device.waitForIdle(500L)
+                }
+            }
+            assertTrue("Test-owned folder must be visible through genuine OS picker",
+                visible)
+            assertTrue(tapText(destinationFolder))
+            assertTrue(tapText("Use this folder") || tapText("USE THIS FOLDER"))
+            tapText("Allow") || tapText("ALLOW")
+            compose.waitUntil(25_000L) {
+                compose.onAllNodesWithText("Folder opened. Scoped Android browser",
+                    substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+        }
+        fun lookup(name: String): Uri? {
+            resolver.query(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.MediaColumns._ID),
+                "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND " +
+                    "${MediaStore.MediaColumns.RELATIVE_PATH}=?",
+                arrayOf(name, "Download/" + destinationFolder + "/"), null)?.use { cursor ->
+                if (cursor.moveToFirst())
+                    return Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        cursor.getLong(0).toString())
+            }
+            return null
+        }
+        try {
+            SftpAndroidCompat.configurePrivateHome(
+                context.applicationContext.filesDir.toPath())
+            resolver.openOutputStream(marker, "wt")!!.use {
+                it.write(byteArrayOf(7, 13, 19))
+            }
+            Files.write(root.resolve(firstName), first)
+            Files.write(root.resolve(secondName), second)
+            server.start()
+            val pin = SftpHostKeyPin.observed(key.public)
+            compose.onNodeWithText("Dual view").performClick()
+            compose.onNodeWithText("Device ↔ Server").performClick()
+            browseToSyntheticTarget()
+            compose.onNodeWithText("Pane B · SFTP")
+                .performSemanticsAction(SemanticsActions.OnClick)
+            val credentials = listOf("127.0.0.1", server.port.toString(),
+                "/", "batch-test", "disposable-batch-password", pin)
+            compose.waitUntil(10_000L) {
+                compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().size == 6
+            }
+            credentials.forEachIndexed { index, value ->
+                compose.onAllNodes(hasSetTextAction())[index]
+                    .performTextReplacement(value)
+            }
+            compose.onNodeWithText("Connect securely")
+                .performSemanticsAction(SemanticsActions.OnClick)
+            compose.waitUntil(35_000L) {
+                compose.onAllNodesWithText("Pinned SFTP session authenticated",
+                    substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText(firstName).assertExists()
+            compose.onNodeWithText(secondName).assertExists()
+            val receiptsBefore = AttemptRecoveryIndex.recover(context).verifiedReceipts
+            compose.onAllNodesWithText("Add to Device batch")[0]
+                .performSemanticsAction(SemanticsActions.OnClick)
+            compose.onNodeWithText("Add to Device batch")
+                .performSemanticsAction(SemanticsActions.OnClick)
+            compose.onNodeWithText("SFTP → Device batch: 2/12 files selected",
+                substring = true).assertExists()
+            compose.onNodeWithText("Review 2-file Device Copy…")
+                .performSemanticsAction(SemanticsActions.OnClick)
+            compose.waitUntil(35_000L) {
+                compose.onAllNodesWithText("Review SFTP → Device Batch")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("Confirm 2-file Device Copy")
+                .performSemanticsAction(SemanticsActions.OnClick)
+            compose.waitUntil(65_000L) {
+                compose.onAllNodesWithText("All 2 SFTP files independently byte-verified",
+                    substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            assertTrue("Separate Android journal for each verified remote file",
+                AttemptRecoveryIndex.recover(context).verifiedReceipts >=
+                    receiptsBefore + 2)
+            assertTrue("Real scoped Android provider must retain original marker",
+                resolver.openInputStream(marker)!!.use { it.readBytes() }
+                    .contentEquals(byteArrayOf(7, 13, 19)))
+            assertTrue(Files.readAllBytes(root.resolve(firstName)).contentEquals(first))
+            assertTrue(Files.readAllBytes(root.resolve(secondName)).contentEquals(second))
+            lookup(firstName)?.let { uri ->
+                assertTrue("If provider indexes it in MediaStore, readback is exact",
+                    resolver.openInputStream(uri)!!.use { it.readBytes() }
+                        .contentEquals(first))
+            }
+            lookup(secondName)?.let { uri ->
+                assertTrue(resolver.openInputStream(uri)!!.use { it.readBytes() }
+                    .contentEquals(second))
+            }
+        } finally {
+            if (device.currentPackageName != context.packageName)
+                device.pressBack()
+            runCatching { server.stop(true) }
+            for (name in listOf(firstName, secondName)) {
+                lookup(name)?.let { runCatching { resolver.delete(it, null, null) } }
+            }
+            runCatching { resolver.delete(marker, null, null) }
+            Files.walk(root).use { paths ->
+                paths.sorted(Comparator.reverseOrder()).forEach {
+                    runCatching { Files.deleteIfExists(it) }
+                }
+            }
+        }
+    }
+
 }
