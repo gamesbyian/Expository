@@ -182,6 +182,20 @@ class KeystoreProfileVault(context: Context) {
         }
     }
 
+    /**
+     * Enumerate only opaque slots in app-private no-backup storage. Names,
+     * hosts, usernames and passwords never enter filenames or a plaintext
+     * index. Corrupt encrypted records remain visible for explicit deletion.
+     */
+    fun listSlots(): List<String> = synchronized(LOCK) {
+        val names = dir.list() ?: throw IOException("PROFILE_SLOT_INDEX_UNAVAILABLE")
+        names.asSequence().filter { it.startsWith(FILE_PREFIX) }
+            .map { it.removePrefix(FILE_PREFIX) }
+            .filter { UUID_PATTERN.matches(it) }
+            .filter { slotFile(it).isFile }
+            .sorted().take(256).toList()
+    }
+
     /** Explicit profile removal only. Never delete on failed unlock or read. */
     fun delete(slot: String) = synchronized(LOCK) {
         val file = slotFile(slot)
