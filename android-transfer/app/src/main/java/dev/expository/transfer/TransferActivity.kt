@@ -375,7 +375,7 @@ private fun DeveloperPreview(
             chosen.map { java.text.Normalizer.normalize(it.title,
                 java.text.Normalizer.Form.NFC).lowercase(java.util.Locale.ROOT) }
                 .toSet().size != chosen.size) {
-            copyStatus = "Copy blocked: select 1–12 distinct files and two fully listed, granted device folders."
+            copyStatus = "Copy blocked: select 1–12 distinct files and two fully listed, authorized Android provider folders."
             return
         }
         val sourceTree = from.treeUri ?: return
@@ -519,8 +519,12 @@ private fun DeveloperPreview(
         // An incoming Share must never silently dispose an active SFTP or
         // FTPS session, potentially interrupting a transfer in progress.
         // First launch starts in Local anyway; a synthetic Demo can reset.
-        if (incomingShare != null && workspace == TransferWorkspace.DEMO)
+        if (incomingShare != null && workspace == TransferWorkspace.DEMO) {
             workspace = TransferWorkspace.LOCAL
+            model = model.update(WorkspacePane.SINGLE,
+                model.single.endpoint(BrowseEndpoint.LOCAL))
+            treeSingle = LocalTreeBrowseState()
+        }
     }
     Scaffold { padding ->
         // One outer scroll owner. Only the active connection form is composed;
