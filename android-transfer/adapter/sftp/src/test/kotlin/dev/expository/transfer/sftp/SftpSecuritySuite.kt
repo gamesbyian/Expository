@@ -127,6 +127,35 @@ object SftpSecuritySuite {
                 SftpMutationListing.requireComplete(incomplete)
             }.isFailure)
         }
+        checkCase("SFTP upload batch rejects colliding source names before any writes") {
+            val occupied = SftpBrowsePage(listOf(
+                SftpRemoteEntry("Episode01.MKV", false, 12L, null),
+                SftpRemoteEntry("Café.txt", false, 17L, null),
+                SftpRemoteEntry("My Folder", true, 0L, null)
+            ), truncated = false)
+            check(SftpUploadBatchNames.collisionFree(
+                listOf("Episode02.mkv", "Episode03.mkv"), occupied))
+            for (incoming in listOf(
+                listOf("episode01.mkv"),
+                listOf("Cafe\u0301.txt"),
+                listOf("my folder"),
+                listOf("Other.MKV", "other.mkv"),
+                listOf("Résumé.txt", "Re\u0301sume\u0301.txt"),
+                listOf("Original", "original"),
+                listOf("valid.txt", "../path.txt"),
+                emptyList(),
+                (1..13).map { "extra$it" }
+            )) check(!SftpUploadBatchNames.collisionFree(incoming, occupied))
+            check(SftpUploadBatchNames.collisionFree(
+                (1..12).map { "new-$it.bin" }, occupied))
+            // Browsing a partial page cannot supply a negative collision witness.
+            check(!SftpUploadBatchNames.collisionFree(
+                listOf("unseen.bin"), occupied.copy(truncated = true)))
+            check(!SftpUploadBatchNames.collisionFree(listOf("new.bin"),
+                occupied.copy(entries = listOf(
+                    SftpRemoteEntry("Alias", false, 1L, null),
+                    SftpRemoteEntry("alias", false, 2L, null)))))
+        }
         checkCase("invalid target blocked before network") {
             check(runCatching { SftpTarget("user@example.invalid", trustedHostKey = pin) }.isFailure)
             for (host in listOf("host\u0000x", "host\u001bx", "host\u007fx", "host\tname")) {
