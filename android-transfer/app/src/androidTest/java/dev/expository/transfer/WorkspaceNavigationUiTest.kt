@@ -44,6 +44,7 @@ import dev.expository.transfer.sftp.SftpBrowsePage
 import dev.expository.transfer.sftp.SftpRemoteEntry
 import dev.expository.transfer.sftp.SftpTreeCopyPreflight
 import dev.expository.transfer.sftp.SftpTreeCopyRequest
+import dev.expository.transfer.sftp.SftpToSafSourceWitness
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -924,6 +925,40 @@ class WorkspaceNavigationUiTest {
                 }
             }
         }
+    }
+
+
+    /** A remote stat alone cannot authorize a SAF destination create. */
+    @Test fun sftpToSafSourceRequiresUniqueCompleteDirectParentMembership() {
+        val observed = SftpRemoteEntry("original.bin", false, 16384L, 123456L)
+        val revision = observed.revision
+        fun valid(page: SftpBrowsePage, folder: String = "/records",
+            path: String = "/records/original.bin",
+            expected: String = revision,
+            stat: SftpRemoteEntry = observed) =
+            SftpToSafSourceWitness.matches(folder, path, expected, stat, page)
+        assertTrue(valid(SftpBrowsePage(listOf(observed), false)))
+        assertFalse(valid(SftpBrowsePage(listOf(observed), true)))
+        assertFalse(valid(SftpBrowsePage(emptyList(), false)))
+        assertFalse(valid(SftpBrowsePage(listOf(observed, observed), false)))
+        assertFalse(valid(SftpBrowsePage(listOf(observed,
+            observed.copy(size = 2048L)), false)))
+        assertFalse(valid(SftpBrowsePage(listOf(observed.copy(directory = true)),
+            false)))
+        assertFalse(valid(SftpBrowsePage(listOf(observed.copy(size = 16385L)),
+            false)))
+        assertFalse(valid(SftpBrowsePage(listOf(observed.copy(modifiedMillis = 123457L)),
+            false)))
+        assertFalse(valid(SftpBrowsePage(listOf(observed), false),
+            path = "/different/original.bin"))
+        assertFalse(valid(SftpBrowsePage(listOf(observed), false),
+            path = "/records/nested/original.bin"))
+        assertFalse(valid(SftpBrowsePage(listOf(observed), false),
+            expected = "stale"))
+        assertFalse(valid(SftpBrowsePage(listOf(observed), false),
+            stat = observed.copy(size = 42L)))
+        assertFalse(valid(SftpBrowsePage(listOf(observed), false),
+            stat = observed.copy(directory = true)))
     }
 
 }
