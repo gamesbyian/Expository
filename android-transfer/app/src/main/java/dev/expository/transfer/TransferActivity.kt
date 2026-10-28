@@ -518,6 +518,9 @@ private fun DeveloperPreview(
     var workspace by remember { mutableStateOf(TransferWorkspace.LOCAL) }
     LaunchedEffect(incomingShare?.sequence) {
         proposedCopy = null
+        // A new external Share invalidates outstanding picker launch
+        // contexts, without disconnecting authenticated remote sessions.
+        pickerWitnesses = ScopedTreePickerWitnesses()
         // An incoming Share must never silently dispose an active SFTP or
         // FTPS session, potentially interrupting a transfer in progress.
         // First launch starts in Local anyway; a synthetic Demo can reset.
