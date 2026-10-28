@@ -128,6 +128,34 @@ object SftpMutationListing {
     }
 }
 
+/**
+ * Review the entire proposed Android -> SFTP filename batch BEFORE the first
+ * destination is created. The remote server may be case-sensitive while the
+ * source provider or a subsequent transfer target is not; a successful
+ * exact-case lookup is NOT enough to assert collision-free membership.
+ *
+ * This is a read-only name preflight, not approval to upload: each file must
+ * still receive its own fresh immutable plan, journal, exclusive-create output
+ * and independent content readback.
+ */
+object SftpUploadBatchNames {
+    const val MAX_FILES = 12
+
+    fun collisionFree(incoming: List<String>, destination: SftpBrowsePage): Boolean {
+        if (incoming.size !in 1..MAX_FILES) return false
+        if (runCatching { SftpMutationListing.requireComplete(destination) }.isFailure)
+            return false
+        if (incoming.any { runCatching { SftpPath.validateChild(it) }.isFailure })
+            return false
+        fun normalized(s: String) =
+            Normalizer.normalize(s, Normalizer.Form.NFC).lowercase(Locale.ROOT)
+        val names = incoming.map(::normalized)
+        if (names.size != names.toSet().size) return false
+        val occupied = destination.entries.map { normalized(it.name) }.toSet()
+        return names.none { it in occupied }
+    }
+}
+
 /** Explicit, bounded rescans. No server paging cursor or complete-write proof is inferred. */
 object SftpBrowseBounds {
     const val INITIAL = 200
