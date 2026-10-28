@@ -114,6 +114,16 @@ private enum class TransferWorkspace(val title: String) {
     GITHUB("GitHub (public)"), DEMO("Demo")
 }
 
+/** Switch a Single route with a new identity, never a stale provider grant. */
+private val TransferWorkspace.browseEndpoint: BrowseEndpoint get() = when (this) {
+    TransferWorkspace.LOCAL, TransferWorkspace.DEMO -> BrowseEndpoint.LOCAL
+    TransferWorkspace.DOCUMENTS -> BrowseEndpoint.DOCUMENTS
+    TransferWorkspace.SFTP -> BrowseEndpoint.SFTP
+    TransferWorkspace.FTPS -> BrowseEndpoint.FTPS
+    TransferWorkspace.FTP -> BrowseEndpoint.FTP
+    TransferWorkspace.GITHUB -> BrowseEndpoint.GITHUB
+}
+
 private data class DemoFile(val name: String, val size: String)
 private val demoFiles = listOf(
     DemoFile("Example photo.jpg", "Synthetic • 2 MB"),
@@ -566,22 +576,23 @@ private fun DeveloperPreview(
                             },
                             onClick = {
                                 if (workspace != choice) {
-                                    val nextSaf = when (choice) {
-                                        TransferWorkspace.LOCAL -> BrowseEndpoint.LOCAL
-                                        TransferWorkspace.DOCUMENTS -> BrowseEndpoint.DOCUMENTS
-                                        else -> null
-                                    }
-                                    if (nextSaf != null &&
-                                        model.single.endpoint != nextSaf) {
-                                        model = model.update(WorkspacePane.SINGLE,
-                                            model.single.endpoint(nextSaf))
-                                        treeSingle = LocalTreeBrowseState(
-                                            status = if (nextSaf == BrowseEndpoint.DOCUMENTS)
-                                                "Choose a folder from an Android document provider. Cloud provider availability and writable scope depend on Android's picker."
-                                            else "Choose a device folder with Android Files.")
-                                    }
+                                    // Every changed Single route revokes the
+                                    // prior in-memory source and picker witness.
+                                    // Re-select even if returning to a previous
+                                    // provider: never carry a grant across
+                                    // unrelated SFTP/FTPS/GitHub browsing.
+                                    proposedCopy = null
+                                    pendingPickerSingle = null
+                                    treeReadGeneration.incrementAndGet()
+                                    model = model.update(WorkspacePane.SINGLE,
+                                        BrowsePaneState(choice.browseEndpoint))
+                                    treeSingle = LocalTreeBrowseState(
+                                        status = if (choice == TransferWorkspace.DOCUMENTS)
+                                            "Choose a folder from an Android document provider. Cloud provider availability and writable scope depend on Android's picker."
+                                        else "Choose a device folder with Android Files.")
+                                    scrollSingle = LazyListState()
+                                    workspace = choice
                                 }
-                                workspace = choice
                             }
                         ) {
                             Text(if (workspace == choice) "✓ " + choice.title else choice.title)
