@@ -207,7 +207,7 @@ class KeystoreProfileVaultTest {
                 "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") },
             { SavedSftpBookmark("host.example", 22, "../escape", "user",
                 "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") },
-            { SavedSftpBookmark("host.example", 22, "/", "user\\nnext",
+            { SavedSftpBookmark("host.example", 22, "/", "user" + 10.toChar() + "next",
                 "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") },
             { SavedSftpBookmark("host.example", 22, "/", "user", "invalid") }
         )) {
