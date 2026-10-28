@@ -76,7 +76,11 @@ internal fun DualWorkspaceCard(
     onRelayBusy: (Boolean) -> Unit,
     copyStatus: String,
     proposedCopy: List<TreeCopyPreflight>?,
+    recursiveProposal: RecursiveCopyReview?,
     onCopy: (WorkspacePane) -> Unit,
+    onCopyFolder: (WorkspacePane, TreeEntry) -> Unit,
+    onConfirmRecursive: () -> Unit,
+    onCancelRecursive: () -> Unit,
     onConfirmCopy: () -> Unit,
     onCancelCopy: () -> Unit,
     onStopCopy: () -> Unit
@@ -225,6 +229,14 @@ internal fun DualWorkspaceCard(
                     }
                 }
                 if (pane.endpoint.isSaf) {
+                    val other = if (which == WorkspacePane.A) b else a
+                    val otherPane = if (which == WorkspacePane.A)
+                        workspace.b else workspace.a
+                    val canCopyFolder = otherPane.endpoint.isSaf &&
+                        tree.treeUri != null && other.treeUri != null &&
+                        tree.complete && other.complete && other.canWrite &&
+                        tree.crumbs.size == 1 && other.crumbs.size == 1 &&
+                        tree.treeUri.authority != other.treeUri.authority
                     LocalTreePane(
                         label = "Location " + which.name,
                         sourceLabel = if (pane.endpoint == BrowseEndpoint.DOCUMENTS)
@@ -243,7 +255,10 @@ internal fun DualWorkspaceCard(
                         },
                         onRefresh = { onNavigate(which, tree.crumbs) },
                         onLoadMore = { onLoadMore(which) },
-                        onSelect = { entry -> onSelect(which, entry) }
+                        onSelect = { entry -> onSelect(which, entry) },
+                        onCopyFolder = if (canCopyFolder)
+                            ({ entry: TreeEntry -> onCopyFolder(which, entry) })
+                            else null
                     )
                 } else {
                     Text("Location " + which.name + " · " + pane.endpoint.name +
@@ -378,11 +393,45 @@ internal fun DualWorkspaceCard(
                 }
             }
         }
+        if (recursiveProposal != null) {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Review whole-folder Copy",
+                        style = MaterialTheme.typography.titleMedium)
+                    Text("Source: pane " + recursiveProposal.sourcePane.name +
+                        " · " + recursiveProposal.request.expectedName)
+                    Text("Destination: pane " + recursiveProposal.destinationPane.name +
+                        " · user-picked Android folder")
+                    Text("Contents: " + recursiveProposal.manifest.directories +
+                        " folder(s) including empty folders, " +
+                        recursiveProposal.manifest.files + " file(s)")
+                    Text("Review digest: " +
+                        recursiveProposal.manifest.digest.take(12) +
+                        "… · expires after one minute")
+                    Text("Copy only. Recheck every source and destination; create new items with durable per-step journals and independent file readback. A failed or interrupted step stops with remaining items unattempted. Originals are never deleted. Requires independently picked different Android provider authorities.",
+                        style = MaterialTheme.typography.bodySmall)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Button(enabled = !workspaceBusy,
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = onConfirmRecursive) {
+                            Text("Confirm folder Copy")
+                        }
+                        Button(enabled = !workspaceBusy,
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = onCancelRecursive) {
+                            Text("Cancel folder proposal")
+                        }
+                    }
+                }
+            }
+        }
         if (busy) Button(onClick = onStopCopy, modifier = Modifier.heightIn(min = 48.dp)) {
             Text("Cancel transfer")
         }
         Text(copyStatus, style = MaterialTheme.typography.bodySmall)
-        Text("Device-to-Device and Local-to-SFTP Copy support 1–12 selected files. SFTP-to-SFTP Copy relays 1–12 selected files between independently authenticated servers with exclusive create, durable journaling and independent destination readback. Recursive folders, remaining remote routes and cross-pane Move are still unavailable.",
+        Text("Device-to-Device and Local-to-SFTP Copy support 1–12 selected files. SFTP-to-SFTP Copy relays 1–12 selected files between independently authenticated servers with exclusive create, durable journaling and independent destination readback. Whole-folder Android provider Copy requires two distinctly scoped providers, a fresh review and a foreground transfer; same-provider recursive Copy, remaining remote routes and cross-pane Move are still unavailable.",
             style = MaterialTheme.typography.bodySmall)
     }
 }
