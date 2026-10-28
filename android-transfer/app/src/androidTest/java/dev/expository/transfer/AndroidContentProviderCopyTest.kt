@@ -64,6 +64,31 @@ class AndroidContentProviderCopyTest {
                     false, 12L)), true)))
     }
 
+
+    @Test fun lostPostWriteSafDestinationMembershipMustThrowForReconciliation() {
+        val existing = TreeEntry("id-original", "Existing.txt", false, 9L)
+        val created = TreeEntry("id-created", "Copied.txt", false, 12L)
+        val correct = TreeListing(listOf(existing, created), complete = true)
+        SafNewDocumentIdentity.requireDirectChildForReadback(
+            "Copied.txt", "id-created", correct)
+        val lost = listOf(
+            TreeListing(listOf(existing), complete = true),
+            correct.copy(complete = false),
+            TreeListing(listOf(existing, created.copy(title = "Renamed.txt")), true),
+            TreeListing(listOf(existing, created,
+                TreeEntry("id-collision", "COPIED.TXT", false, 3L)), true)
+        )
+        for (parent in lost) {
+            val failure = runCatching {
+                SafNewDocumentIdentity.requireDirectChildForReadback(
+                    "Copied.txt", "id-created", parent)
+            }.exceptionOrNull()
+            assertTrue("Post-write missing/ambiguous child must be uncertain",
+                failure is java.io.IOException &&
+                    failure.message == "SAF_DESTINATION_PARENT_UNVERIFIED")
+        }
+    }
+
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private val resolver: ContentResolver get() = context.contentResolver
 

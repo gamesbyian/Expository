@@ -251,15 +251,16 @@ class SafTreeToTreeCopy(
                 return resolver.openOutputStream(uri, "w") ?: throw FileNotFoundException()
             }
             override fun openDestinationReadBack(): InputStream? {
-                val uri = created ?: return null
+                val uri = created ?: throw java.io.IOException(
+                    "SAF_CREATED_DESTINATION_IDENTITY_MISSING")
                 val newId = DocumentsContract.getDocumentId(uri)
                 val parentEntries = LocalTreeReader.list(resolver,
                     request.targetTree, request.targetFolderId,
                     LocalTreeReader.MAX_BROWSE)
                 // Byte identity is insufficient if the provider has moved the
                 // new document away from the reviewed destination folder.
-                if (!SafNewDocumentIdentity.isDirectChild(
-                    confirmed.sourceName, newId, parentEntries)) return null
+                SafNewDocumentIdentity.requireDirectChildForReadback(
+                    confirmed.sourceName, newId, parentEntries)
                 return resolver.openInputStream(uri)
             }
         }
