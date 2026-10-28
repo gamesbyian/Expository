@@ -282,13 +282,14 @@ internal class SftpToSafTreeCopy(
                     ?: throw FileNotFoundException()
             }
             override fun openDestinationReadBack(): InputStream? {
-                val uri = created ?: return null
+                val uri = created ?: throw java.io.IOException(
+                    "SAF_CREATED_DESTINATION_IDENTITY_MISSING")
                 val target = request.target
                 val newId = DocumentsContract.getDocumentId(uri)
                 val parentEntries = LocalTreeReader.list(resolver,
                     target.treeUri, target.folderId, LocalTreeReader.MAX_BROWSE)
-                if (!SafNewDocumentIdentity.isDirectChild(
-                    confirmed.sourceName, newId, parentEntries)) return null
+                SafNewDocumentIdentity.requireDirectChildForReadback(
+                    confirmed.sourceName, newId, parentEntries)
                 return resolver.openInputStream(uri)
             }
         }
