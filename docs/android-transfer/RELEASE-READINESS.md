@@ -356,3 +356,56 @@ recursively created destination, copied file, Android E2 transfer, external
 server E3 write, Drive/cloud E4, physical device, or signed E5 receipt
 has been claimed. W03 needs independent end-to-end scoped adapters and
 human-observable confirmation before advancing.
+
+## 28 October: scoped SAF recursive scanner and full-tree reapproval
+
+[Merged PR #265](https://github.com/gamesbyian/Expository/pull/265),
+exact source head `15c68e185898843439a1f4c135f9436c7cf3195d`,
+adds an Android `ContentResolver`-backed **read-only**
+`SafRecursiveSourceScanner` to bridge actually queried scoped
+DocumentsProvider directory metadata and children into the previously
+E1-only `RecursiveFolderCopyPlanner`. It requires independently
+complete 2,000-child-bounded parent and nested folder listings, selected
+root membership, exact opaque parent IDs, separate source and destination
+provider authorities, destination create capability, collision checks,
+nested/empty-folder enumeration and existing size/depth limits. These
+are synthetic test-owned provider observations, not an actual user-picked
+cloud account or a writeable recursive endpoint.
+
+[Native JVM regression #40777686923](https://github.com/gamesbyian/Expository/actions/runs/40777686923),
+[Android app and androidTest APK compilation #40777700759](https://github.com/gamesbyian/Expository/actions/runs/40777700759),
+and [targeted API35 provider tests #40777696764](https://github.com/gamesbyian/Expository/actions/runs/40777696764)
+passed for that exact feature head. Its earlier
+[API35 run #40760232402](https://github.com/gamesbyian/Expository/actions/runs/40760232402)
+failed one repeatability assertion because a newly issued capability
+expires at a different time and *correctly changes the immutable digest*.
+The accepted code injects a fixed clock in test fixtures while preserving
+the live wall-clock capability expiry; tests now separately assert that
+renewing an approval changes its digest. Do not relabel the initial
+failed test as an actual user-file change.
+
+[Merged PR #266](https://github.com/gamesbyian/Expository/pull/266),
+exact head `4442772314deae55a674055507c0d4ec5c1fbf62`,
+requires a **new, independently observed whole-tree manifest** with the
+same approved digest, entries and counts before the recursive engine
+can record *any* attempted mutation. A missing, stale, changed, throwing
+or aliased observation must leave all journals untouched. Its
+[exact-head E1 #40778037655](https://github.com/gamesbyian/Expository/actions/runs/40778037655)
+passed the complete native regression matrix. It is an E1 engine
+contract, not Android recursive execution.
+
+[Merged PR #267](https://github.com/gamesbyian/Expository/pull/267),
+exact head `21f6313f97fe693cda6720ce7c45b4f20083932b`,
+also requires each nested entry's claimed source container ID to equal
+its authenticated parent directory item ID, and its actual parent folder
+components to match the reviewed relative path before mutation.
+The [exact-head E1 #40778446275](https://github.com/gamesbyian/Expository/actions/runs/40778446275)
+passed wrong-parent-identity and misbound-display-path faults.
+
+**Gate remains open:** These changes do not provide a production
+`RecursiveCopyEndpoint`, create destination directories, transport
+recursive source bytes, prove a Google Drive or third-party provider
+grant, or establish E4 physical/E5 release acceptance. A true Android
+SAF executor must combine the scanner, short-lived grant and per-step
+source rechecks with independent journaling, no-replace directory creates
+and readback-verified file streams before W03 can advance.
