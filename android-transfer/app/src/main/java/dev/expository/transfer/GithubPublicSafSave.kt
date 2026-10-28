@@ -73,6 +73,13 @@ internal object GithubPublicBlob {
         // Prevent a decoder from allocating beyond the bounded source size.
         require(content.length <= MAX_JSON_BYTES) { "GITHUB_BLOB_TOO_LARGE" }
         val bytes = Base64.decode(content, Base64.DEFAULT)
+        // Git LFS exposes a tiny pointer blob, not the original large file.
+        // Never label a copied LFS pointer as an original-file Save As.
+        val firstLine = bytes.take(50).toByteArray().toString(StandardCharsets.US_ASCII)
+            .substringBefore('\n').trimEnd('\r')
+        require(firstLine != "version https://git-lfs.github.com/spec/v1") {
+            "GITHUB_LFS_POINTER_ORIGINAL_UNAVAILABLE"
+        }
         require(bytes.size.toLong() == record.getLong("size") &&
             (expectedSize == null || bytes.size.toLong() == expectedSize) &&
             gitSha(bytes).equals(expectedSha, ignoreCase = true)) {
