@@ -42,6 +42,26 @@ object PlainFtpSecuritySuite {
         PlainFtpSession(dup).use {
             check(runCatching { it.browseReadOnly("/") }.isFailure)
         }
+        val displayRows = listOf(
+            FtpsEntry("Archive", true, 0L),
+            FtpsEntry("README.TXT", false, 90L),
+            FtpsEntry("photo.png", false, 11L),
+            FtpsEntry("Notes", true, 0L),
+            FtpsEntry("manual.txt", false, 15L))
+        val originalRows = displayRows.toList()
+        check(FtpsBrowsePresentation.rows(displayRows, "", FtpsFolderSort.NAME)
+            .take(2).map { it.name } == listOf("Archive", "Notes"))
+        check(FtpsBrowsePresentation.rows(displayRows, "", FtpsFolderSort.SIZE)
+            .drop(2).map { it.name } ==
+            listOf("photo.png", "manual.txt", "README.TXT"))
+        check(FtpsBrowsePresentation.rows(displayRows, "", FtpsFolderSort.TYPE)
+            .drop(2).map { it.name } ==
+            listOf("photo.png", "manual.txt", "README.TXT"))
+        check(FtpsBrowsePresentation.rows(displayRows, "read", FtpsFolderSort.NAME)
+            .map { it.name } == listOf("README.TXT"))
+        check(FtpsBrowsePresentation.rows(displayRows, "missing", FtpsFolderSort.NAME)
+            .isEmpty())
+        check(displayRows == originalRows)
         println("PASS plaintext FTP: explicit consent, host/path validation, bounded non-authoritative preview, ambiguous-name refusal")
     }
 }
