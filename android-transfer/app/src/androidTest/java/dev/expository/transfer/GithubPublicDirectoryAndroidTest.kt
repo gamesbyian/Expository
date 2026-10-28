@@ -311,13 +311,6 @@ class GithubPublicDirectoryAndroidTest {
         val original = rows.toList()
         val name = GithubFolderPresentation.rows(rows, "", GithubFolderSort.NAME)
         assertEquals(listOf("alpha", "beta"), name.take(2).map { it.name })
-        assertEquals("plain.txt", GithubFolderPresentation.rows(
-            rows, "", GithubFolderSort.SIZE)[2].name.let {
-                // SIZE sorts known sizes first; this fixture's known smallest
-                // file comes before the unknown-size plain.txt.
-                assertEquals("preview.png", it)
-                "plain.txt"
-            })
         val sizes = GithubFolderPresentation.rows(rows, "", GithubFolderSort.SIZE)
         assertEquals(listOf("preview.png", "READ_ME.md", "readme.TXT", "plain.txt"),
             sizes.drop(2).map { it.name })
