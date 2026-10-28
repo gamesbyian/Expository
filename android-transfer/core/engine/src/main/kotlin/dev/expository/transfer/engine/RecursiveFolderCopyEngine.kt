@@ -65,7 +65,9 @@ data class RecursiveCopyRunReceipt(
 /**
  * Bounded foreground orchestration of an ALREADY confirmed recursive source
  * manifest. Every directory/file gets a separate durable write-ahead slot.
- * A folder is metadata-verified; files require real readback SHA-256.
+ * A fresh, complete recursive source listing must match the exact reviewed
+ * digest before ANY step can start. A folder is metadata-verified; files
+ * require real readback SHA-256.
  *
  * Caller must supply one atomic, independent storage slot per manifest+index,
  * not an in-memory mock in production. A previously-used slot is NEVER reset,
@@ -78,6 +80,10 @@ object RecursiveFolderCopyEngine {
     fun execute(
         approved: RecursiveFolderManifest,
         endpoint: RecursiveCopyEndpoint,
+        // A SECOND, independent full-tree scan using the original approval's
+        // capability issue/expiry; generating a new approval timestamp would
+        // change the digest even with identical source files.
+        reobserveApprovedTree: () -> RecursiveFolderManifest?,
         storageForStep: (manifestDigest: String, index: Int) -> AtomicAttemptStorage,
         continueRequested: () -> Boolean = { true },
         clockMillis: () -> Long = { System.currentTimeMillis() }
@@ -99,6 +105,19 @@ object RecursiveFolderCopyEngine {
             } || approved.directories !in 1..128 ||
             approved.entries.first().source.kind != ItemKind.DIRECTORY)
             return outcome(RecursiveCopyResult.BLOCKED, "INVALID_RECURSIVE_APPROVAL")
+        // Never start a journal or create a destination from an unvalidated
+        // cached manifest. A fresh complete provider scan must reproduce both
+        // the immutable approval digest AND its exact indexed entries.
+        // Subtree drift, revocation, missing grants or reissued approvals stop
+        // before ANY mutation. Later steps still recheck their own source.
+        val observed = try { reobserveApprovedTree() } catch (_: Exception) { null }
+        if (observed == null || observed === approved ||
+            !observed.reviewable || observed.digest != approved.digest ||
+            observed.entries != approved.entries ||
+            observed.files != approved.files ||
+            observed.directories != approved.directories)
+            return outcome(RecursiveCopyResult.BLOCKED,
+                "FRESH_SOURCE_TREE_APPROVAL_MISMATCH")
         val seen = HashSet<Pair<String, String>>()
         val allPaths = HashSet<List<String>>()
         val directoryPaths = HashSet<List<String>>()

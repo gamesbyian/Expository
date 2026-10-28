@@ -40,6 +40,8 @@ object RecursiveFolderCopyEngineSuite {
         var fileChanged = false
         var badReadback = false
         var missingReadback = false
+        // Test-only independent fresh full-tree observation.
+        var refresh: () -> RecursiveFolderManifest? = { manifest() }
 
         fun storage(digest: String, i: Int): AtomicAttemptStorage =
             journals.getOrPut(i) { Store() }
@@ -107,7 +109,8 @@ object RecursiveFolderCopyEngineSuite {
         fun run(m: RecursiveFolderManifest = manifest(),
             permission: () -> Boolean = { true }) =
             RecursiveFolderCopyEngine.execute(m, this,
-                { key, index -> storage(key, index) }, permission, { 100L })
+                { refresh() }, { key, index -> storage(key, index) },
+                permission, { 100L })
     }
 
     @JvmStatic fun main(args: Array<String>) {
@@ -136,6 +139,29 @@ object RecursiveFolderCopyEngineSuite {
             val replay = f.run()
             check(replay.result == RecursiveCopyResult.BLOCKED)
             check(f.trace.count { it == "mkdir" } == count)
+        }
+        case("fresh whole-tree source observation is mandatory before any mutation") {
+            for (refresher in listOf<() -> RecursiveFolderManifest?>(
+                { null },
+                { throw IllegalStateException("REVOKED_PROVIDER") },
+                { manifest().copy(digest = "d".repeat(64)) },
+                { manifest().copy(entries = manifest().entries.reversed()) }
+            )) {
+                val f = Fake().apply { refresh = refresher }
+                val result = f.run()
+                check(result.result == RecursiveCopyResult.BLOCKED)
+                check(result.reason == "FRESH_SOURCE_TREE_APPROVAL_MISMATCH")
+                check(f.created.isEmpty() && f.journals.isEmpty() &&
+                    "open-dest" !in f.trace)
+            }
+        }
+        case("reusing the approved manifest object is not an independent scan") {
+            val m = manifest()
+            val f = Fake().apply { refresh = { m } }
+            val result = f.run(m)
+            check(result.result == RecursiveCopyResult.BLOCKED &&
+                result.reason == "FRESH_SOURCE_TREE_APPROVAL_MISMATCH")
+            check(f.created.isEmpty() && f.journals.isEmpty())
         }
         case("source revoked before first step blocks entirely") {
             val f = Fake().apply { sourceChanged = "Shows" }
