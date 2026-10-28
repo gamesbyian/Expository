@@ -3,6 +3,8 @@ package dev.expository.transfer
 import dev.expository.transfer.sftp.SftpBrowsePage
 import dev.expository.transfer.sftp.SftpPath
 import dev.expository.transfer.sftp.SftpRemoteEntry
+import dev.expository.transfer.sftp.SftpSession
+import dev.expository.transfer.sftp.SftpRelayPreflight
 import dev.expository.transfer.sftp.SftpTreeCopyPreflight
 import java.text.Normalizer
 import java.util.Locale
@@ -93,5 +95,63 @@ internal data class PendingPeerSftpBatchDownload(
                 p.request.expectedRevision == source.revision &&
                 p.request.target == target && p.sourceSize == source.size &&
                 p.plan.executable
+            }
+}
+
+
+/** An explicit export of a frozen remote selection to the other SFTP pane. */
+internal data class PeerSftpBatchSource(
+    val session: SftpSession,
+    val sessionId: String,
+    val folder: String,
+    val selection: SftpBatchSelection
+) {
+    fun valid(): Boolean = sessionId.isNotBlank() &&
+        selection.files.size in 1..SftpBatchSelection.MAX_FILES &&
+        selection.files.all { file ->
+            runCatching {
+                SftpPath.childPath(folder, file.name) == file.absolutePath &&
+                    file.revision.isNotBlank() && file.size >= 0L
+            }.getOrDefault(false)
+        } && selection.files.map { it.absolutePath }.distinct().size ==
+            selection.files.size
+}
+
+/** Read-only review of 1–12 individually journaled device-relayed SFTP Copies. */
+internal data class PendingSftpRelayBatch(
+    val source: PeerSftpBatchSource,
+    val destination: SftpSession,
+    val destinationSessionId: String,
+    val destinationFolder: String,
+    val initialPreflights: List<SftpRelayPreflight>
+) {
+    fun stillMatches(
+        liveSource: PeerSftpBatchSource?,
+        liveDestination: SftpSession?,
+        liveDestinationId: String,
+        liveDestinationFolder: String
+    ): Boolean =
+        source.valid() && source == liveSource &&
+            source.session !== destination &&
+            destination === liveDestination &&
+            destinationSessionId.isNotBlank() &&
+            destinationSessionId != source.sessionId &&
+            destinationSessionId == liveDestinationId &&
+            destinationFolder == liveDestinationFolder &&
+            initialPreflights.size == source.selection.files.size &&
+            initialPreflights.indices.all { i ->
+                val item = source.selection.files[i]
+                val preflight = initialPreflights[i]
+                val req = preflight.request
+                preflight.plan.executable &&
+                    req.source === source.session &&
+                    req.sourceSessionId == source.sessionId &&
+                    req.sourceFolder == source.folder &&
+                    req.sourceFile == item.absolutePath &&
+                    req.sourceRevision == item.revision &&
+                    preflight.bytes == item.size &&
+                    req.destination === destination &&
+                    req.destinationSessionId == destinationSessionId &&
+                    req.destinationFolder == destinationFolder
             }
 }
