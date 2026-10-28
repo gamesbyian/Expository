@@ -1254,6 +1254,8 @@ internal fun SftpBrowseCard(
                             result.onSuccess { (live, directory) ->
                                 session = live
                                 sessionId = UUID.randomUUID().toString()
+                                singleDestinationPickerWitness = null
+                                singleDeviceTarget = null
                                 folder = chosenFolder
                                 browseLimit = SftpBrowseBounds.INITIAL
                                 pendingPeerUpload = null
@@ -1278,6 +1280,8 @@ internal fun SftpBrowseCard(
                     Button(enabled = !busy && !peerRelayLocked, onClick = {
                         session = null
                         sessionId = ""
+                        singleDestinationPickerWitness = null
+                        singleDeviceTarget = null
                         page = null
                         browseLimit = SftpBrowseBounds.INITIAL
                         pendingFile = null
