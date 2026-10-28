@@ -121,6 +121,10 @@ object RecursiveFolderCopyEngine {
         val seen = HashSet<Pair<String, String>>()
         val allPaths = HashSet<List<String>>()
         val directoryPaths = HashSet<List<String>>()
+        // The parent location is an opaque, authenticated document/container,
+        // not merely a display path. Every nested item must bind to the
+        // exact parent directory's provider ID observed in the source tree.
+        val directoryEntries = HashMap<List<String>, RecursiveCopyEntry>()
         val rootItem = approved.entries.first().source
         val rootLocation = rootItem.location
         fun safeComponent(s: String): Boolean = s.isNotBlank() &&
@@ -145,10 +149,17 @@ object RecursiveFolderCopyEngine {
                 key.rootId != rootKey.rootId || key.grantId != rootKey.grantId ||
                 item.source.location.verifiedNamespace != rootLocation.verifiedNamespace ||
                 item.source.location.verifiedStorageDomain != rootLocation.verifiedStorageDomain ||
-                (position > 0 && item.relativePath.dropLast(1) !in directoryPaths))
+                (position > 0 && item.relativePath.dropLast(1) !in directoryPaths) ||
+                (position > 0 && (
+                    directoryEntries[item.relativePath.dropLast(1)]
+                        ?.source?.key?.opaqueItemId != key.containerId ||
+                    item.source.location.folder !=
+                        rootLocation.folder + item.relativePath.dropLast(1))))
                 return outcome(RecursiveCopyResult.BLOCKED, "INVALID_RECURSIVE_ENTRY")
-            if (item.source.kind == ItemKind.DIRECTORY)
+            if (item.source.kind == ItemKind.DIRECTORY) {
                 directoryPaths.add(item.relativePath)
+                directoryEntries[item.relativePath] = item
+            }
         }
 
         for ((index, entry) in approved.entries.withIndex()) {
