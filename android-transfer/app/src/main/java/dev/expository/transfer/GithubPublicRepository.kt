@@ -101,7 +101,15 @@ internal object GithubPublicDirectory {
             val item = records.getJSONObject(index)
             val name = item.getString("name")
             val path = item.getString("path")
-            val type = item.getString("type")
+            // GitHub reports some submodules as "file" for compatibility.
+            // Never misrepresent these Git pointers as downloadable bytes.
+            val reportedType = item.getString("type")
+            val type = when {
+                item.has("submodule_git_url") &&
+                    !item.isNull("submodule_git_url") -> "submodule"
+                item.has("target") && !item.isNull("target") -> "symlink"
+                else -> reportedType
+            }
             val sha = item.getString("sha")
             require(validChild(name) &&
                 Normalizer.normalize(name, Normalizer.Form.NFC) == name &&
