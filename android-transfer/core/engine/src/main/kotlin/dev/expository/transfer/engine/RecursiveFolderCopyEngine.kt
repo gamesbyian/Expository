@@ -7,6 +7,7 @@ import dev.expository.transfer.planner.RecursiveFolderManifest
 import dev.expository.transfer.planner.TransferPlan
 import dev.expository.transfer.planner.TransferRoute
 import java.util.UUID
+import java.nio.charset.StandardCharsets
 
 /**
  * One provider-checked directory creation, not a pathname or a credential.
@@ -101,13 +102,30 @@ object RecursiveFolderCopyEngine {
         val seen = HashSet<Pair<String, String>>()
         val allPaths = HashSet<List<String>>()
         val directoryPaths = HashSet<List<String>>()
+        val rootItem = approved.entries.first().source
+        val rootLocation = rootItem.location
+        fun safeComponent(s: String): Boolean = s.isNotBlank() &&
+            s != "." && s != ".." && s.toByteArray(StandardCharsets.UTF_8).size <= 255 &&
+            s.none { it == '/' || it == '\\' || it.code < 32 || it.code == 127 }
         for ((position, item) in approved.entries.withIndex()) {
+            val key = item.source.location.key
+            val rootKey = rootLocation.key
             if (item.relativePath.isEmpty() || item.relativePath.size > 16 ||
+                item.relativePath.any { !safeComponent(it) } ||
+                item.relativePath.joinToString("/", prefix = "/")
+                    .toByteArray(StandardCharsets.UTF_8).size > 4_096 ||
+                item.relativePath.first() != rootItem.name ||
                 item.relativePath.last() != item.source.name ||
                 !allPaths.add(item.relativePath) ||
                 !seen.add(item.source.key.authorityId to item.source.key.opaqueItemId) ||
                 item.source.key.authorityId.isBlank() ||
                 item.source.key.opaqueItemId.isBlank() || item.source.key.version.isBlank() ||
+                item.source.key.authorityId != key.authorityId ||
+                item.source.parent != item.source.location.folder ||
+                key.kind != rootKey.kind || key.authorityId != rootKey.authorityId ||
+                key.rootId != rootKey.rootId || key.grantId != rootKey.grantId ||
+                item.source.location.verifiedNamespace != rootLocation.verifiedNamespace ||
+                item.source.location.verifiedStorageDomain != rootLocation.verifiedStorageDomain ||
                 (position > 0 && item.relativePath.dropLast(1) !in directoryPaths))
                 return outcome(RecursiveCopyResult.BLOCKED, "INVALID_RECURSIVE_ENTRY")
             if (item.source.kind == ItemKind.DIRECTORY)
