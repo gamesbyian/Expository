@@ -123,7 +123,9 @@ internal object GithubPublicBlob {
  */
 internal class GithubPublicSafSave(
     private val resolver: ContentResolver,
-    private val storageForPlan: (String) -> AtomicAttemptStorage
+    private val storageForPlan: (String) -> AtomicAttemptStorage,
+    private val listSource: (PublicGithubRepository, String) -> PublicGithubListing = GithubPublicDirectory::list,
+    private val readBlob: (PublicGithubSaveSource) -> ByteArray = GithubPublicBlob::fetch
 ) {
     private val observer = SafSingleDocumentCopy(resolver)
 
@@ -138,7 +140,7 @@ internal class GithubPublicSafSave(
 
         val issued = System.currentTimeMillis()
         fun plan(now: Long): TransferPlan {
-            val listing = GithubPublicDirectory.list(source.repository, source.folder)
+            val listing = listSource(source.repository, source.folder)
             require(!listing.maybeIncomplete &&
                 listing.entries.singleOrNull { it.path == source.entry.path } == source.entry) {
                 "GITHUB_SOURCE_CHANGED_OR_INCOMPLETE"
@@ -178,7 +180,7 @@ internal class GithubPublicSafSave(
         return JournaledCopyEngine.copy(initial, { plan(System.currentTimeMillis()) },
             object : CopyStreams {
                 override fun openSource(): InputStream =
-                    ByteArrayInputStream(GithubPublicBlob.fetch(source))
+                    ByteArrayInputStream(readBlob(source))
 
                 override fun openNewDestination(): OutputStream =
                     resolver.openOutputStream(destination, "w") ?: throw FileNotFoundException()
