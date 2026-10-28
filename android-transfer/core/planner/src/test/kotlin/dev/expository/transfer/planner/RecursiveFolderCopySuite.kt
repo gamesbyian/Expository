@@ -129,6 +129,25 @@ object RecursiveFolderCopySuite {
                 RecursiveFolderObservation(f.empty, index(wrongPath, emptyList())))),
                 "DIRECTORY_LISTING_NOT_AUTHORIZED")
         }
+        case("matching display paths cannot launder a different provider container") {
+            val impersonated = f.emptyIndex.location.copy(
+                key = f.emptyIndex.location.key.copy(containerId = "different-provider-object"))
+            deny(f.request.copy(descendants = listOf(
+                f.request.descendants.first(),
+                RecursiveFolderObservation(f.empty, index(impersonated, emptyList())))),
+                "DIRECTORY_LISTING_NOT_AUTHORIZED")
+            // The exact provider item ID is required even if all other authority
+            // and folder attributes happen to compare equal.
+        }
+        case("the same opaque file ID across nested folders cannot hide behind a new version") {
+            val shadowed = child("file", "Shadow.mkv", ItemKind.FILE).copy(
+                key = ItemKey("source", "file", "other-version"))
+            val changedEmpty = index(f.emptyIndex.location, listOf(shadowed))
+            deny(f.request.copy(descendants = listOf(
+                f.request.descendants.first(),
+                RecursiveFolderObservation(f.empty, changedEmpty))),
+                "REUSED_SOURCE_ITEM_ID")
+        }
         case("incomplete subfolder listing blocks even if visible rows look fine") {
             val loc = f.rootIndex.location
             val partial = PagedLocationIndex.begin(loc).append(LocationPage(
