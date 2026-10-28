@@ -171,8 +171,14 @@ internal class SafRecursiveSourceScanner(
      * pass. A source-tree ContentsProvider query may block or fail; callers
      * should run this on Dispatchers.IO and treat null as no Copy authority.
      */
-    fun prepare(request: ScopedRecursiveSourceRequest): RecursiveFolderManifest? =
-        runCatching {
+    // Preserve the ORIGINAL issue/expiry while reobserving a user-approved
+    // tree. Renewing the capability would create a different digest and must
+    // never silently extend an old approval.
+    private fun scan(
+        request: ScopedRecursiveSourceRequest,
+        issuedMillis: Long,
+        checkedAtMillis: Long
+    ): RecursiveFolderManifest? = runCatching {
             require(LocalTreeReader.validTree(request.sourceTree) &&
                 LocalTreeReader.validTree(request.destinationTree) &&
                 request.sourceParentId == LocalTreeReader.rootId(request.sourceTree) &&
@@ -188,9 +194,11 @@ internal class SafRecursiveSourceScanner(
             require(sourceAuthority != targetAuthority) {
                 "SAME_PROVIDER_ANCESTRY_NOT_VERIFIED"
             }
-            val issued = clockMillis()
+            require(issuedMillis > 0L && checkedAtMillis >= issuedMillis &&
+                checkedAtMillis - issuedMillis <= APPROVAL_LIFETIME_MILLIS)
             val proof = CapabilityProof(Support.SUPPORTED,
-                "real-scoped-saf-tree-observation", issued + 60_000)
+                "real-scoped-saf-tree-observation",
+                Math.addExact(issuedMillis, APPROVAL_LIFETIME_MILLIS))
             val source = index(request.sourceTree, request.sourceParentId,
                 request.sourceParentId, emptyList(), proof)
             val root = source.itemRefs()?.singleOrNull {
@@ -248,9 +256,46 @@ internal class SafRecursiveSourceScanner(
                     root, source, observations, target,
                     DestinationListing(targetRevision, complete = true,
                         siblings = targetRows.map { it.title })),
-                issued
+                checkedAtMillis
             )
             require(manifest.reviewable) { "RECURSIVE_PLAN_BLOCKED" }
             manifest
         }.getOrNull()
+
+    /** Issue a NEW one-minute review with its own immutable expiration. */
+    fun prepare(request: ScopedRecursiveSourceRequest): RecursiveFolderManifest? {
+        val issued = clockMillis()
+        return scan(request, issued, issued)
+    }
+
+    /**
+     * Used immediately before executing the previously approved manifest.
+     * Every folder and target is independently queried again, but the review
+     * capability remains tied to its ORIGINAL expiry. This is read-only:
+     * false, missing or changed evidence simply returns null.
+     *
+     * The eventual recursive coordinator still rechecks per-file freshness
+     * during the actual stream. It must not use this to infer permanent grants.
+     */
+    fun reobserve(
+        request: ScopedRecursiveSourceRequest,
+        approved: RecursiveFolderManifest
+    ): RecursiveFolderManifest? {
+        if (!approved.reviewable || approved.entries.isEmpty()) return null
+        val approvedRead = approved.entries.first().source.location
+            .capabilities[Capability.READ] ?: return null
+        if (approvedRead.support != Support.SUPPORTED ||
+            approvedRead.observationId != "real-scoped-saf-tree-observation")
+            return null
+        val expires = approvedRead.expiresAtMillis
+        val issued = expires - APPROVAL_LIFETIME_MILLIS
+        val now = clockMillis()
+        if (issued <= 0L || now < issued || now > expires) return null
+        val current = scan(request, issued, now) ?: return null
+        return current.takeIf { it.reviewable && it == approved }
+    }
+
+    private companion object {
+        const val APPROVAL_LIFETIME_MILLIS = 60_000L
+    }
 }
