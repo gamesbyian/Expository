@@ -16,8 +16,10 @@ import org.junit.runner.RunWith
 
 /**
  * E2: real Android ContentResolver/ParcelFileDescriptor source and destination
- * through an isolated writable test DocumentsProvider. No real picker grant,
- * cloud account, production server or E4 physical phone acceptance.
+ * through an isolated, test-only DocumentsContract-shaped ContentProvider.
+ * The generic synthetic provider deliberately bypasses system-grant semantics:
+ * no real DocumentsUI picker, MANAGE_DOCUMENTS permission, cloud account,
+ * production server or E4 physical phone acceptance is exercised.
  */
 @RunWith(AndroidJUnit4::class)
 class SafRecursiveTreeCopyAndroidTest {

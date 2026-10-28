@@ -90,6 +90,45 @@ class LocalTreePresentationAndroidTest {
         assertEquals(setOf("z"), selected.selected)
     }
 
+    @Test fun providerModifiedTimesArePresentationOnlyAndUnknownLast() {
+        val rows = listOf(
+            TreeEntry("folder", "Folder", true, null),
+            TreeEntry("early", "Early.txt", false, 4, 100L),
+            TreeEntry("late", "Late.txt", false, 5, 300L),
+            TreeEntry("same", "Same.txt", false, 8, 300L),
+            TreeEntry("missing", "Unknown.txt", false, null),
+            TreeEntry("invalid", "Unreported.txt", false, 7)
+        )
+        assertEquals(listOf("folder", "late", "same", "early", "missing", "invalid"),
+            LocalTreePresentation.rows(rows, "", LocalTreeSort.NEWEST)
+                .map { it.documentId })
+
+        val columns = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+        val cursor = MatrixCursor(columns).apply {
+            addRow(arrayOf("a", "Old.txt", "text/plain", 2L, 1_000L))
+            addRow(arrayOf("b", "Unknown.txt", "text/plain", 3L, 0L))
+            addRow(arrayOf("c", "New.txt", "text/plain", 4L, 3_000L))
+            addRow(arrayOf("d", "Null.txt", "text/plain", 5L, null))
+        }
+        val scanned = cursor.use { LocalTreeReader.decodeRows(it) }
+        assertTrue(scanned.complete)
+        assertEquals(listOf("c", "a", "d", "b"),
+            LocalTreePresentation.rows(scanned.children, "", LocalTreeSort.NEWEST)
+                .map { it.documentId })
+        assertEquals(null, scanned.children.first { it.documentId == "b" }.modifiedMillis)
+        assertEquals(null, scanned.children.first { it.documentId == "d" }.modifiedMillis)
+        // Optional timestamp is not a source identity or listing-completeness proof.
+        val legacy = MatrixCursor(columns.dropLast(1).toTypedArray()).apply {
+            addRow(arrayOf("legacy", "Legacy.txt", "text/plain", 1L))
+        }.use { LocalTreeReader.decodeRows(it) }
+        assertTrue(legacy.complete)
+        assertEquals(null, legacy.children.single().modifiedMillis)
+    }
+
     @Test fun filterAndSortControlsKeepHiddenSelections() {
         val state = LocalTreeBrowseState(
             entries = fixture, selected = setOf("z"), complete = false, hasMore = true)
@@ -111,6 +150,9 @@ class LocalTreePresentationAndroidTest {
         compose.onNodeWithText("zeta.PNG").assertDoesNotExist()
         compose.onNodeWithText("Selected: 1").assertExists()
         compose.onNodeWithText("Size").performClick()
+        compose.onNodeWithText("Showing 2 of 5 observed item(s)", substring = true)
+            .assertExists()
+        compose.onNodeWithText("Newest").performClick()
         compose.onNodeWithText("Showing 2 of 5 observed item(s)", substring = true)
             .assertExists()
     }

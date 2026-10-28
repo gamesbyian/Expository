@@ -5,11 +5,11 @@
             android:name="dev.expository.transfer.SafRecursiveSyntheticProvider"
             android:authorities="test.source.scoped;test.target.scoped"
             android:exported="true" />
-        <!-- Writable, entirely disposable E2 folder Copy endpoint. -->
+        <!-- Test-only synthetic provider-shaped byte endpoint, not a real
+             privileged DocumentsProvider or system-picker grant. -->
         <provider
             android:name="dev.expository.transfer.SafRecursiveWriteProvider"
             android:authorities="test.copy.source.scoped;test.copy.target.scoped"
-            android:grantUriPermissions="true"
             android:exported="true" />
     </application>
 </manifest>
