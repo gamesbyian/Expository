@@ -84,6 +84,27 @@ class WorkspaceNavigationUiTest {
      * the actual DocumentsProvider query. This is not an OS-picked grant,
      * external-provider interoperability or a successful payload Copy.
      */
+    /** Provider-backed folders are a real scoped SAF location, not Drive OAuth. */
+    @Test fun documentProviderIsSelectableInSingleAndDualWithoutImplicitWrites() {
+        compose.onNodeWithText("Documents").performClick()
+        compose.onNodeWithText("Location Single · Android provider").assertExists()
+        compose.onNodeWithText("Select a folder offered by Android Files",
+            substring = true).assertExists()
+        compose.onNodeWithText("Selected: 0").assertExists()
+        compose.onNodeWithText("Local").performClick()
+        compose.onNodeWithText("Location Single · Device").assertExists()
+        compose.onNodeWithText("Dual view").performClick()
+        compose.onNodeWithText("DOCUMENTS").performClick()
+        compose.onNodeWithText("Location A · Android provider").assertExists()
+        compose.onNodeWithText("Choose Pane A folder…").assertExists()
+        compose.onNodeWithText("Copy A → B…").assertIsNotEnabled()
+        compose.onNodeWithText("Copy B → A…").assertIsNotEnabled()
+        compose.onNodeWithText("Pane B · SFTP").performClick()
+        compose.onNodeWithText("Location B · SFTP", substring = true).assertExists()
+        compose.onNodeWithText("Pane A · DOCUMENTS").performClick()
+        compose.onNodeWithText("Location A · Android provider").assertExists()
+    }
+
     @Test fun boundedSafListingShowsMoreWithoutTreatingTruncationAsComplete() {
         var rows = 205
         var corruptFirst = false
