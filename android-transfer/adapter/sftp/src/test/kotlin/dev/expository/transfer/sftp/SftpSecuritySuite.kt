@@ -73,6 +73,37 @@ object SftpSecuritySuite {
                     SftpRemoteEntry("extra", false, 0, null))
             ) }.isFailure)
         }
+        checkCase("display-only SFTP filter and stable name/size/type/newest sort") {
+            val original = listOf(
+                SftpRemoteEntry("Zeta.mkv", false, 400, 100L),
+                SftpRemoteEntry("alpha.TXT", false, 100, null),
+                SftpRemoteEntry("beta.mkv", false, 200, 300L),
+                SftpRemoteEntry("Folder", true, 0, 200L),
+                SftpRemoteEntry("Archive", true, 0, null)
+            )
+            fun ordered(filter: String, sort: SftpFolderSort) =
+                SftpBrowsePresentation.rows(original, filter, sort).map { it.name }
+            check(ordered("", SftpFolderSort.NAME) ==
+                listOf("Archive", "Folder", "alpha.TXT", "beta.mkv", "Zeta.mkv"))
+            check(ordered("", SftpFolderSort.SIZE) ==
+                listOf("Archive", "Folder", "alpha.TXT", "beta.mkv", "Zeta.mkv"))
+            check(ordered("", SftpFolderSort.TYPE) ==
+                listOf("Archive", "Folder", "beta.mkv", "Zeta.mkv", "alpha.TXT"))
+            check(ordered("", SftpFolderSort.NEWEST) ==
+                listOf("Folder", "Archive", "beta.mkv", "Zeta.mkv", "alpha.TXT"))
+            check(ordered(" MKV ", SftpFolderSort.NEWEST) ==
+                listOf("beta.mkv", "Zeta.mkv"))
+            check(original.map { it.name } ==
+                listOf("Zeta.mkv", "alpha.TXT", "beta.mkv", "Folder", "Archive"))
+            // A filtered/truncated browse page remains truncated and unusable
+            // for mutation, even if the on-screen rows would be empty.
+            val incomplete = SftpBrowsePage(original, truncated = true)
+            check(SftpBrowsePresentation.rows(incomplete.entries, "unseen",
+                SftpFolderSort.NAME).isEmpty())
+            check(runCatching {
+                SftpMutationListing.requireComplete(incomplete)
+            }.isFailure)
+        }
         checkCase("invalid target blocked before network") {
             check(runCatching { SftpTarget("user@example.invalid", trustedHostKey = pin) }.isFailure)
             for (host in listOf("host\u0000x", "host\u001bx", "host\u007fx", "host\tname")) {
