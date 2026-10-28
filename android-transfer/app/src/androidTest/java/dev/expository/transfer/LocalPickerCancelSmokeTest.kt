@@ -145,10 +145,7 @@ class LocalPickerCancelSmokeTest {
         assertNull(PendingPickedSftpUpload.freeze(
             listOf(a, b), listOf(
                 obs[0], obs[1].copy(displayName = "ONE.TXT")),
-            "pinned-sftp-session", "/destination").takeIf {
-                it?.items?.map { source -> source.name.lowercase() }?.distinct()
-                    ?.size != 2
-            })
+            "pinned-sftp-session", "/destination"))
         assertNull(PendingPickedSftpUpload.freeze(
             listOf(a, b), listOf(obs[0],
                 obs[1].copy(displayName = "folder/unsafe.txt")),
