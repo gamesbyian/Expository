@@ -712,6 +712,8 @@ private fun DeveloperPreview(
                             if (model.pane(which).endpoint != endpoint) {
                                 model = model.update(which, BrowsePaneState(endpoint))
                                 replaceTree(which, LocalTreeBrowseState())
+                                copyStatus = "Endpoint confirmed: " +
+                                    which.name + ":" + model.pane(which).endpoint.name
                             }
                         },
                         onSwap = {
