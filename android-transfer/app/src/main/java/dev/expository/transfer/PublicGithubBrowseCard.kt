@@ -81,9 +81,9 @@ internal fun PublicGithubBrowseCard() {
             scope.launch {
                 try {
                     val receipt = withContext(Dispatchers.IO) {
-                        GithubPublicSafSave(context.contentResolver) { digest ->
+                        GithubPublicSafSave(context.contentResolver, storageForPlan = { digest ->
                             AndroidAtomicAttemptStorage(context.applicationContext, digest)
-                        }.copy(witness, destination, continueRequested = { permit.get() })
+                        }).copy(witness, destination, continueRequested = { permit.get() })
                     }
                     status = when (receipt.proof) {
                         CopyProof.BYTES_VERIFIED ->
