@@ -99,9 +99,14 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("Local").performClick()
         compose.onNodeWithText("Location Single · Device").assertExists()
         compose.onNodeWithText("Dual view").performClick()
+        // This is a phone-width A/B UI: explicitly activate Pane A before
+        // changing its endpoint. Inactive panes remain composed, not placed.
+        compose.onNodeWithText("Pane A · LOCAL", substring = true).performClick()
         compose.onNodeWithText("DOCUMENTS").performClick()
         compose.onNodeWithText("Dual-location workspace").performScrollTo()
-        compose.onNodeWithText("✓ Pane A · DOCUMENTS").assertExists()
+        val pair = compose.onNodeWithTag("workspace-location-summary")
+            .fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
+        assertEquals("A:DOCUMENTS;B:SFTP", pair)
         compose.onNodeWithText("Location A · Android provider").assertExists()
         compose.onNodeWithText("Choose Pane A folder…").assertExists()
         compose.onNodeWithText("Copy A → B…").assertIsNotEnabled()
@@ -110,7 +115,9 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("Location B · SFTP", substring = true).assertExists()
         compose.onNodeWithText("Pane A · DOCUMENTS").performClick()
         compose.onNodeWithText("Dual-location workspace").performScrollTo()
-        compose.onNodeWithText("✓ Pane A · DOCUMENTS").assertExists()
+        val restoredPair = compose.onNodeWithTag("workspace-location-summary")
+            .fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
+        assertEquals("A:DOCUMENTS;B:SFTP", restoredPair)
         compose.onNodeWithText("Location A · Android provider").assertExists()
         compose.onNodeWithText("Choose Pane A folder…").assertExists()
     }
