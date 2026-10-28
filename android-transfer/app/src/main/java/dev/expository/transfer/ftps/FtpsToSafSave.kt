@@ -31,10 +31,12 @@ class FtpsToSafSave(private val resolver: ContentResolver,
         sessionOpaqueId: String,
         absoluteFile: String,
         destination: Uri,
+        expectedSourceRevision: String,
         continueRequested: () -> Boolean,
         onProgress: (Long) -> Unit = {}
     ): CopyReceipt {
-        if (sessionOpaqueId.isBlank() || destination.scheme != ContentResolver.SCHEME_CONTENT)
+        if (sessionOpaqueId.isBlank() || expectedSourceRevision.isBlank() ||
+            destination.scheme != ContentResolver.SCHEME_CONTENT)
             return CopyReceipt("", CopyProof.BLOCKED, 0L, "INVALID_SESSION_OR_URI")
 
         val firstTime = System.currentTimeMillis()
@@ -42,8 +44,11 @@ class FtpsToSafSave(private val resolver: ContentResolver,
             catch (_: Exception) {
                 return CopyReceipt("", CopyProof.BLOCKED, 0L, "SOURCE_STAT_UNAVAILABLE")
             }
+        if (firstStat.revision != expectedSourceRevision)
+            return CopyReceipt("", CopyProof.BLOCKED, 0L, "REVIEWED_FTPS_SOURCE_CHANGED")
         fun plan(now: Long): TransferPlan {
             val current = session.statFile(absoluteFile)
+            require(current.revision == expectedSourceRevision) { "REVIEWED_FTPS_SOURCE_CHANGED" }
             val saved = observer.observe(destination)
             val read = CapabilityProof(Support.SUPPORTED, "authenticated-pinned-ftps", firstTime + 60_000)
             val write = CapabilityProof(Support.SUPPORTED, "create-document-picker", firstTime + 60_000)
