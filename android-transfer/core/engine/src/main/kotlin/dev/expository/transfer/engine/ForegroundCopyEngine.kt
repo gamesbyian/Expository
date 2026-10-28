@@ -58,17 +58,20 @@ object ForegroundCopyEngine {
         if (!fresh.executable || fresh.operation != Operation.COPY ||
             fresh.route != TransferRoute.DEVICE_RELAY || fresh.digest != plan.digest)
             return result(CopyProof.BLOCKED, 0L, "PLAN_CHANGED")
-        if (!continueRequested()) return result(CopyProof.BLOCKED, 0L, "NOT_STARTED")
+        if (!runCatching { continueRequested() }.getOrDefault(false))
+            return result(CopyProof.BLOCKED, 0L, "NOT_STARTED")
 
-        var touchedDestination = false
+        // Opening a provider destination is itself a potentially mutating call:
+        // createDocument/STOR may succeed before an OutputStream is returned.
+        // Once invoked, even a thrown exception is an UNCERTAIN write attempt.
+        var destinationAttempted = false
         var transferred = 0L
         val sourceDigest = MessageDigest.getInstance("SHA-256")
         try {
             streams.openSource().use { input ->
                 if (!continueRequested()) throw InterruptedException()
+                destinationAttempted = true
                 streams.openNewDestination().use { output ->
-                    // A provider can produce a partially created document on error.
-                    touchedDestination = true
                     val buffer = ByteArray(64 * 1024)
                     var emptyReadStreak = 0
                     while (true) {
@@ -90,13 +93,16 @@ object ForegroundCopyEngine {
                 }
             }
         } catch (_: Exception) {
-            return result(if (touchedDestination) CopyProof.UNCERTAIN else CopyProof.BLOCKED,
-                transferred, if (touchedDestination) "PARTIAL_OR_UNCERTAIN_WRITE" else "STREAM_OPEN_FAILED")
+            return result(if (destinationAttempted) CopyProof.UNCERTAIN else CopyProof.BLOCKED,
+                transferred, if (destinationAttempted) "PARTIAL_OR_UNCERTAIN_WRITE" else "STREAM_OPEN_FAILED")
         }
         // Output close ACK alone is not destination proof. Source digest stays
         // local to this invocation; no file names or raw bytes enter receipts.
         val verifyStream = try { streams.openDestinationReadBack() }
-            catch (_: Exception) { null }
+            catch (_: Exception) {
+                return result(CopyProof.UNCERTAIN, transferred,
+                    "DESTINATION_READBACK_OPEN_FAILED")
+            }
         if (verifyStream == null)
             return result(CopyProof.WRITE_ACKNOWLEDGED, transferred, "READBACK_UNAVAILABLE")
         var verifiedBytes = 0L
