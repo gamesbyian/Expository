@@ -317,8 +317,10 @@ internal fun LocalTreePane(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(visibleEntries, key = { it.documentId }) { entry ->
-                    Row(Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Column(Modifier.weight(1f)) {
                             Text(entry.title)
                             Text(
@@ -340,6 +342,9 @@ internal fun LocalTreePane(
                             Text(if (entry.directory) "Open" else if (entry.documentId in state.selected)
                                 "✓ Select" else "Select")
                         }
+                        }
+                        // Keep this on a second line so 320dp / 200% text
+                        // cannot squeeze two 48dp actions beside a long name.
                         if (entry.directory && state.crumbs.size == 1 &&
                             onCopyFolder != null) {
                             Button(
