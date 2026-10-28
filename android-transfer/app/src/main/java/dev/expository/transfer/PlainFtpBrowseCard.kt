@@ -28,6 +28,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.expository.transfer.ftps.FtpsBrowseBounds
 import dev.expository.transfer.ftps.FtpsBrowsePreview
+import dev.expository.transfer.ftps.FtpsBrowsePresentation
+import dev.expository.transfer.ftps.FtpsFolderSort
 import dev.expository.transfer.ftps.FtpsPath
 import dev.expository.transfer.ftps.PlainFtp
 import dev.expository.transfer.ftps.PlainFtpSession
@@ -54,6 +56,8 @@ internal fun PlainFtpBrowseCard() {
     var folder by remember { mutableStateOf("/") }
     var page by remember { mutableStateOf<FtpsBrowsePreview?>(null) }
     var limit by remember { mutableStateOf(FtpsBrowseBounds.INITIAL) }
+    var fileFilter by remember { mutableStateOf("") }
+    var sortMode by remember { mutableStateOf(FtpsFolderSort.NAME) }
     var busy by remember { mutableStateOf(false) }
     var status by remember {
         mutableStateOf("Plain FTP is insecure. Prefer pinned SFTP or certificate-validated FTPS.")
@@ -72,6 +76,7 @@ internal fun PlainFtpBrowseCard() {
             }
             if (session === current) {
                 observed.onSuccess {
+                    if (folder != next) fileFilter = ""
                     folder = next
                     page = it
                     limit = window
@@ -184,9 +189,28 @@ internal fun PlainFtpBrowseCard() {
                     onClick = { browse(folder.substringBeforeLast('/', "").ifBlank { "/" }) }) {
                     Text("Parent folder")
                 }
+                OutlinedTextField(fileFilter, { fileFilter = it.take(256) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Filter names in this FTP folder") },
+                    singleLine = true, enabled = !busy)
+                Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
+                    onClick = {
+                        sortMode = when (sortMode) {
+                            FtpsFolderSort.NAME -> FtpsFolderSort.SIZE
+                            FtpsFolderSort.SIZE -> FtpsFolderSort.TYPE
+                            FtpsFolderSort.TYPE -> FtpsFolderSort.NAME
+                        }
+                    }) { Text("Sort: " + sortMode.name.lowercase()
+                        .replaceFirstChar { it.uppercase() }) }
+                val shown = FtpsBrowsePresentation.rows(
+                    page?.entries.orEmpty(), fileFilter, sortMode)
+                Text("Showing " + shown.size + " of " +
+                    (page?.entries?.size ?: 0) + " received FTP entries" +
+                    if (page?.truncated == true) " (incomplete preview)" else "",
+                    style = MaterialTheme.typography.bodySmall)
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 300.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(page?.entries.orEmpty(), key = { it.name }) { entry ->
+                    items(shown, key = { it.name }) { entry ->
                         Row(Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween) {
                             Column(Modifier.weight(1f)) {
