@@ -37,7 +37,11 @@ data class FtpsTarget(
         require(port in 1..65535) { "INVALID_PORT" }
     }
 }
-data class FtpsEntry(val name: String, val isDirectory: Boolean, val size: Long)
+data class FtpsEntry(
+    val name: String, val isDirectory: Boolean, val size: Long,
+    /** Optional server-reported timestamp, for display only, never mutation proof. */
+    val modifiedMillis: Long? = null
+)
 
 /** An explicitly queried MLST identity, never inferred from a LIST preview. */
 data class FtpsFileObservation(
@@ -192,7 +196,8 @@ internal object FtpsMlsdEntries {
         val entries = files.asSequence()
             .filter { it.name != "." && it.name != ".." }
             .map {
-                FtpsEntry(FtpsPath.checkedChild(it.name ?: ""), it.isDirectory, it.size)
+                FtpsEntry(FtpsPath.checkedChild(it.name ?: ""), it.isDirectory, it.size,
+                    it.timestamp?.timeInMillis?.takeIf { millis -> millis > 0L })
             }.toList()
         // A hostile or faulty server can return two identically named rows.
         // They are not unique file identities, and keyed Compose previews

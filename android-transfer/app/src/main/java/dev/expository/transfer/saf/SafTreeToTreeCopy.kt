@@ -261,7 +261,14 @@ class SafTreeToTreeCopy(
                 // new document away from the reviewed destination folder.
                 SafNewDocumentIdentity.requireDirectChildForReadback(
                     confirmed.sourceName, newId, parentEntries)
-                return resolver.openInputStream(uri)
+                return SafNewDocumentIdentity.guardReadback(
+                    resolver.openInputStream(uri)) {
+                    val latest = LocalTreeReader.list(resolver,
+                        request.targetTree, request.targetFolderId,
+                        LocalTreeReader.MAX_BROWSE)
+                    SafNewDocumentIdentity.isDirectChild(
+                        confirmed.sourceName, newId, latest)
+                }
             }
         }
         return JournaledCopyEngine.copy(

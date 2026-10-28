@@ -89,6 +89,27 @@ class AndroidContentProviderCopyTest {
         }
     }
 
+
+    @Test fun changedDestinationAfterByteReadbackFailsOnClose() {
+        val bytes = ByteArray(129_113) { ((it * 31 + 13) and 255).toByte() }
+        var stillDirectChild = true
+        val stream = SafNewDocumentIdentity.guardReadback(
+            java.io.ByteArrayInputStream(bytes)) { stillDirectChild }!!
+        assertArrayEquals(bytes, stream.readBytes())
+        stillDirectChild = false // provider moved the item after initial listing
+        val thrown = runCatching { stream.close() }.exceptionOrNull()
+        assertTrue("post-readback provider drift must fail closed",
+            thrown is java.io.IOException &&
+                thrown.message == "SOURCE_REVISION_UNVERIFIED_AFTER_READ")
+        // No hash-verified success can be reported by ForegroundCopyEngine when
+        // its verification stream close throws this IOException.
+        val intact = SafNewDocumentIdentity.guardReadback(
+            java.io.ByteArrayInputStream(bytes)) { true }!!
+        assertArrayEquals(bytes, intact.readBytes())
+        intact.close()
+        assertTrue(SafNewDocumentIdentity.guardReadback(null) { true } == null)
+    }
+
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private val resolver: ContentResolver get() = context.contentResolver
 
