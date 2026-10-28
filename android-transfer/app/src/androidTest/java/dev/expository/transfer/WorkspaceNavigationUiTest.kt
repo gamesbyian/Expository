@@ -6,6 +6,7 @@ import android.database.MatrixCursor
 import android.net.Uri
 import android.content.Intent
 import android.provider.MediaStore
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
