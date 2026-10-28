@@ -114,6 +114,16 @@ private enum class TransferWorkspace(val title: String) {
     GITHUB("GitHub (public)"), DEMO("Demo")
 }
 
+/** Routes must not retain an earlier scoped folder or authenticated authority. */
+private val TransferWorkspace.browseEndpoint: BrowseEndpoint get() = when (this) {
+    TransferWorkspace.LOCAL, TransferWorkspace.DEMO -> BrowseEndpoint.LOCAL
+    TransferWorkspace.DOCUMENTS -> BrowseEndpoint.DOCUMENTS
+    TransferWorkspace.SFTP -> BrowseEndpoint.SFTP
+    TransferWorkspace.FTPS -> BrowseEndpoint.FTPS
+    TransferWorkspace.FTP -> BrowseEndpoint.FTP
+    TransferWorkspace.GITHUB -> BrowseEndpoint.GITHUB
+}
+
 private data class DemoFile(val name: String, val size: String)
 private val demoFiles = listOf(
     DemoFile("Example photo.jpg", "Synthetic • 2 MB"),
@@ -574,22 +584,22 @@ private fun DeveloperPreview(
                             },
                             onClick = {
                                 if (workspace != choice) {
-                                    val nextSaf = when (choice) {
-                                        TransferWorkspace.LOCAL -> BrowseEndpoint.LOCAL
-                                        TransferWorkspace.DOCUMENTS -> BrowseEndpoint.DOCUMENTS
-                                        else -> null
-                                    }
-                                    if (nextSaf != null &&
-                                        model.single.endpoint != nextSaf) {
-                                        model = model.update(WorkspacePane.SINGLE,
-                                            model.single.endpoint(nextSaf))
-                                        treeSingle = LocalTreeBrowseState(
-                                            status = if (nextSaf == BrowseEndpoint.DOCUMENTS)
-                                                "Choose a folder from an Android document provider. Cloud provider availability and writable scope depend on Android's picker."
-                                            else "Choose a device folder with Android Files.")
-                                    }
+                                    // Each chosen Single route is a different
+                                    // authority. Returning to the same Android
+                                    // provider must require a new scoped tree,
+                                    // not resurrect a prior selection/grant.
+                                    proposedCopy = null
+                                    pendingPickerSingle = null
+                                    treeReadGeneration.incrementAndGet()
+                                    model = model.update(WorkspacePane.SINGLE,
+                                        BrowsePaneState(choice.browseEndpoint))
+                                    treeSingle = LocalTreeBrowseState(
+                                        status = if (choice == TransferWorkspace.DOCUMENTS)
+                                            "Choose a folder from an Android document provider. Cloud provider availability and writable scope depend on Android's picker."
+                                        else "Choose a device folder with Android Files.")
+                                    scrollSingle = LazyListState()
+                                    workspace = choice
                                 }
-                                workspace = choice
                             }
                         ) {
                             Text(if (workspace == choice) "✓ " + choice.title else choice.title)
