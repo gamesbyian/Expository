@@ -252,4 +252,50 @@ class GithubPublicDirectoryAndroidTest {
         assertEquals("application/octet-stream", GithubOriginalMime.forFile("opaque.unknown-extension-xyz"))
         assertEquals("application/octet-stream", GithubOriginalMime.forFile("README"))
     }
+
+    @Test fun canonicalGithubLinkOpensOnlyPublicRepoOrPinnedCommitFolder() {
+        val root = GithubPublicUrl.parse("https://github.com/octocat/Hello-World")
+        assertEquals(PublicGithubRepository("octocat", "Hello-World"), root.repository)
+        assertEquals("", root.folder)
+        assertEquals(root, GithubPublicUrl.parse("https://github.com/octocat/Hello-World/"))
+
+        val commit = "0123456789abcdef0123456789abcdef01234567"
+        val nested = GithubPublicUrl.parse(
+            "https://github.com/octocat/Hello-World/tree/" + commit + "/docs/api")
+        assertEquals(PublicGithubRepository("octocat", "Hello-World", commit),
+            nested.repository)
+        assertEquals("docs/api", nested.folder)
+        assertEquals("", GithubPublicUrl.parse(
+            "https://github.com/octocat/Hello-World/tree/" + commit).folder)
+        assertEquals("https", nested.repository.apiDirectory(nested.folder).protocol)
+        assertEquals("api.github.com", nested.repository.apiDirectory(nested.folder).host)
+    }
+
+    @Test fun githubLinkRejectsAmbiguousBranchesRedirectsCredentialsAndTraversal() {
+        val bad = listOf(
+            "", "https://github.com", "https://github.com/octocat",
+            "http://github.com/octocat/repo",
+            "https://github.com.evil.test/octocat/repo",
+            "https://user:token@github.com/octocat/repo",
+            "https://github.com:443/octocat/repo",
+            "https://github.com/octocat/repo?token=secret",
+            "https://github.com/octocat/repo#private",
+            "https://github.com/octocat/repo/issues",
+            "https://github.com/octocat/repo/tree/main/dir",
+            "https://github.com/octocat/repo/blob/" +
+                "0123456789abcdef0123456789abcdef01234567/secret",
+            "https://github.com/octocat/repo/tree/" +
+                "0123456789abcdef0123456789abcdef01234567/../secret",
+            "https://github.com/octocat/repo/tree/" +
+                "0123456789abcdef0123456789abcdef01234567/%2e%2e/secret",
+            "https://github.com/octocat/re%2fpo",
+            "https://github.com/octocat/repo//",
+            "https://github.com/octocat/repo\nAuthorization: x"
+        )
+        bad.forEach { link ->
+            assertTrue("Untrusted or ambiguous GitHub link must fail", runCatching {
+                GithubPublicUrl.parse(link)
+            }.isFailure)
+        }
+    }
 }
