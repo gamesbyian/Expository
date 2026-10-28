@@ -56,7 +56,7 @@ jobs:
               WorkspaceNavigationUiTest#documentProviderIsSelectableInSingleAndDualWithoutImplicitWrites) ;;
               # Bounded synthetic provider display-only/recursive scan regression; no
               # external server, picker authorization or file mutation.
-              LocalTreePresentationAndroidTest|SafRecursiveScannerAndroidTest|WorkspaceNavigationUiTest#localTreeDisplayFilterDoesNotChangeSourceOrSelection) ;;
+              LocalTreePresentationAndroidTest|SafRecursiveScannerAndroidTest|SafRecursiveTreeCopyAndroidTest|WorkspaceNavigationUiTest#localTreeDisplayFilterDoesNotChangeSourceOrSelection) ;;
               *) echo "Unsupported test selection"; exit 2 ;;
             esac
             printf 'TARGET_TEST_CLASS=dev.expository.transfer.%s\n' "$name" >> "$GITHUB_ENV"
