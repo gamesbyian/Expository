@@ -14,12 +14,15 @@ enum class WorkspaceView { SINGLE, DUAL }
 enum class WorkspacePane { SINGLE, A, B }
 enum class DualPairing { LOCAL_LOCAL, LOCAL_REMOTE, REMOTE_REMOTE }
 enum class BrowseEndpoint {
-    LOCAL, FTP, FTPS, SFTP, GITHUB;
+    LOCAL, DOCUMENTS, FTP, FTPS, SFTP, GITHUB;
 
-    val remote: Boolean get() = this != LOCAL
+    /** Android picker-scoped document trees, including cloud-backed providers. */
+    val isSaf: Boolean get() = this == LOCAL || this == DOCUMENTS
+
+    val remote: Boolean get() = !isSaf
 
     fun accepts(kind: LocationKind): Boolean = when (this) {
-        LOCAL -> kind == LocationKind.LOCAL_SAF
+        LOCAL, DOCUMENTS -> kind == LocationKind.LOCAL_SAF
         FTP -> kind == LocationKind.REMOTE_FTP
         FTPS -> kind == LocationKind.REMOTE_FTPS
         SFTP -> kind == LocationKind.REMOTE_SFTP
