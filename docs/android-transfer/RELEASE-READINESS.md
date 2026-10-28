@@ -402,6 +402,22 @@ components to match the reviewed relative path before mutation.
 The [exact-head E1 #40778446275](https://github.com/gamesbyian/Expository/actions/runs/40778446275)
 passed wrong-parent-identity and misbound-display-path faults.
 
+[Merged PR #268](https://github.com/gamesbyian/Expository/pull/268),
+exact head `aeebc52962dc0afee5fc3d64ece98cc5d738c492`, adds a
+real Android `SafRecursiveSourceScanner.reobserve(request, approved)`
+that independently queries the entire source/destination witness a
+second time while retaining the **original one-minute capability
+issue/expiry**, rather than silently minting a fresh approval or using
+cached UI rows. It refuses changed source and target, duplicate names,
+expired/reissued approvals, missing/changed metadata and backward
+wall-clock drift. The [native E1 #40778725431](https://github.com/gamesbyian/Expository/actions/runs/40778725431),
+[Android APK/test compile #40778745696](https://github.com/gamesbyian/Expository/actions/runs/40778745696)
+and [targeted API35 E2 #40778741431](https://github.com/gamesbyian/Expository/actions/runs/40778741431)
+all passed on that exact source; the focused test class finished
+**8/8** synthetic `ContentResolver`/DocumentsProvider tests.
+This is a read-only fresh-manifest adapter contract, not proof of
+actual file creation, recursive byte copying or cloud-provider access.
+
 **Gate remains open:** These changes do not provide a production
 `RecursiveCopyEndpoint`, create destination directories, transport
 recursive source bytes, prove a Google Drive or third-party provider
