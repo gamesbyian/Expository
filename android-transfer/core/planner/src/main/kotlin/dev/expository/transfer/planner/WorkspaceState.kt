@@ -14,7 +14,7 @@ enum class WorkspaceView { SINGLE, DUAL }
 enum class WorkspacePane { SINGLE, A, B }
 enum class DualPairing { LOCAL_LOCAL, LOCAL_REMOTE, REMOTE_REMOTE }
 enum class BrowseEndpoint {
-    LOCAL, FTP, FTPS, SFTP;
+    LOCAL, FTP, FTPS, SFTP, GITHUB;
 
     val remote: Boolean get() = this != LOCAL
 
@@ -23,6 +23,7 @@ enum class BrowseEndpoint {
         FTP -> kind == LocationKind.REMOTE_FTP
         FTPS -> kind == LocationKind.REMOTE_FTPS
         SFTP -> kind == LocationKind.REMOTE_SFTP
+        GITHUB -> kind == LocationKind.GITHUB_REPOSITORY
     }
 }
 
@@ -165,7 +166,7 @@ data class TransferWorkspaceState(
 
     fun preset(pairing: DualPairing): TransferWorkspaceState {
         // Presets are shortcuts, never protocol restrictions. Preserve an
-        // already chosen FTP/FTPS/SFTP endpoint when it remains remote.
+        // already chosen FTP/FTPS/SFTP/GitHub endpoint when it remains remote.
         fun BrowsePaneState.remoteOrDefault() =
             if (endpoint.remote) this else endpoint(BrowseEndpoint.SFTP)
         return when (pairing) {
