@@ -64,6 +64,21 @@ object WorkspaceStateSuite {
             BrowseEndpoint.SFTP)
         check(documents.visit(localOther).current?.selected?.isEmpty() == true)
 
+        // Switching away and back to the same selected provider must not
+        // resurrect a grant, browsing history or any selected item.
+        val selectedProvider = TransferWorkspaceState(single = documents)
+        val switchedSingle = selectedProvider.update(WorkspacePane.SINGLE,
+            BrowsePaneState(BrowseEndpoint.SFTP))
+        check(switchedSingle.single.endpoint == BrowseEndpoint.SFTP &&
+            switchedSingle.single.current == null &&
+            switchedSingle.single.back.isEmpty())
+        val returnedProvider = switchedSingle.update(WorkspacePane.SINGLE,
+            BrowsePaneState(BrowseEndpoint.DOCUMENTS))
+        check(returnedProvider.single.endpoint == BrowseEndpoint.DOCUMENTS &&
+            returnedProvider.single.current == null &&
+            returnedProvider.single.back.isEmpty())
+        check(selectedProvider.single.current?.selected?.size == 1)
+
         // Both dual panes are separately navigable, independently selected and
         // scrolled. Switching layouts cannot erase either workspace.
         state = state.view(WorkspaceView.DUAL)
