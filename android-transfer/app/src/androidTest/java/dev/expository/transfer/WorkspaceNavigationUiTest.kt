@@ -456,6 +456,18 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("Copy into other device pane…").assertDoesNotExist()
         compose.onNodeWithText("Copy selected device file here…").assertDoesNotExist()
     }
+    @Test fun singleSftpOffersScopedBatchDestinationWithoutAnUnreviewedWrite() {
+        compose.onNodeWithText("SFTP").performClick()
+        compose.onNodeWithText("SFTP file transfer").assertExists()
+        // The destination chooser belongs to conventional Single, not Dual A/B.
+        compose.onNodeWithText("Choose batch destination folder").assertExists()
+            .assertIsNotEnabled()
+        compose.onNodeWithText("Confirm 1-file Device Copy").assertDoesNotExist()
+        compose.onNodeWithText("Dual view").performClick()
+        compose.onNodeWithText("Pane B · SFTP").performClick()
+        compose.onNodeWithText("Choose batch destination folder").assertDoesNotExist()
+        compose.onNodeWithText("Confirm 1-file Device Copy").assertDoesNotExist()
+    }
     @Test fun secureWorkspacesStayDistinctAndSyntheticFilesRequireDemoTab() {
         compose.onNodeWithText("✓ Local").assertExists()
         compose.onNodeWithText("Copy a file on this device").assertExists()
