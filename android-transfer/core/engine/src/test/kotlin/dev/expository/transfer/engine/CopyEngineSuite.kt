@@ -92,6 +92,63 @@ object CopyEngineSuite {
             })
             check(!touched && receipt.proof == CopyProof.BLOCKED)
         }
+
+        scenario("destination opening may create a document before throwing") {
+            var created = false
+            val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
+                override fun openSource(): InputStream = ByteArrayInputStream(bytes)
+                override fun openNewDestination(): OutputStream {
+                    // Android DocumentsProvider.createDocument may commit the
+                    // new document, then fail before an output stream exists.
+                    created = true
+                    throw IOException("synthetic provider lost create response")
+                }
+                override fun openDestinationReadBack(): InputStream? = null
+            })
+            check(created && receipt.proof == CopyProof.UNCERTAIN &&
+                receipt.bytesWritten == 0L &&
+                receipt.reason == "PARTIAL_OR_UNCERTAIN_WRITE")
+        }
+        scenario("unobservable destination-open denial is uncertain too") {
+            var opened = false
+            val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
+                override fun openSource(): InputStream = ByteArrayInputStream(bytes)
+                override fun openNewDestination(): OutputStream {
+                    opened = true
+                    throw IOException("provider call outcome unknowable")
+                }
+                override fun openDestinationReadBack(): InputStream? = null
+            })
+            check(opened && receipt.proof == CopyProof.UNCERTAIN)
+        }
+        scenario("readback opening exception cannot imply clean acknowledgement") {
+            val output = ByteArrayOutputStream()
+            val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
+                override fun openSource(): InputStream = ByteArrayInputStream(bytes)
+                override fun openNewDestination(): OutputStream = output
+                override fun openDestinationReadBack(): InputStream? =
+                    throw IOException("destination readback provider offline")
+            })
+            check(receipt.proof == CopyProof.UNCERTAIN &&
+                receipt.reason == "DESTINATION_READBACK_OPEN_FAILED" &&
+                output.toByteArray().contentEquals(bytes))
+        }
+        scenario("preflight cancellation exception is blocked without side effects") {
+            var touched = false
+            val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
+                override fun openSource(): InputStream {
+                    touched = true
+                    return ByteArrayInputStream(bytes)
+                }
+                override fun openNewDestination(): OutputStream {
+                    touched = true
+                    return ByteArrayOutputStream()
+                }
+                override fun openDestinationReadBack(): InputStream? = null
+            }, continueRequested = { throw IllegalStateException("lifecycle ended") })
+            check(!touched && receipt.proof == CopyProof.BLOCKED &&
+                receipt.reason == "NOT_STARTED")
+        }
         scenario("plan drift blocks without opening streams") {
             var touched = false
             val changed = p.copy(digest = "stale")
