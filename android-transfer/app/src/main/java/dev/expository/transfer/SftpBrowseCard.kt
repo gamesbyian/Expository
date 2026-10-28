@@ -643,6 +643,170 @@ internal fun SftpBrowseCard(
         }
     }
 
+    /** All selected sources and the selected Android folder are checked BEFORE review. */
+    fun preparePeerBatch() {
+        val live = session ?: return
+        val target = localPaneTarget ?: return
+        val selection = peerBatchSelection
+        val opaque = sessionId
+        val chosenFolder = folder
+        if (busy || peerRelayLocked || opaque.isBlank() ||
+            pendingPeerBatch != null || !selection.matchesPage(folder, page)) return
+        busy = true
+        status = "Reviewing every remote source and Android destination collision…"
+        scope.launch {
+            try {
+                val preflights = withContext(Dispatchers.IO) {
+                    val sourceListing = live.completeMutationListing(chosenFolder)
+                    require(selection.matchesPage(chosenFolder, sourceListing)) {
+                        "REMOTE_SOURCE_LIST_CHANGED"
+                    }
+                    val adapter = SftpToSafTreeCopy(context.contentResolver) { digest ->
+                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                    }
+                    selection.files.map { chosen ->
+                        requireNotNull(adapter.prepare(live, SftpTreeCopyRequest(
+                            opaque, chosen.absolutePath, chosen.revision, target))) {
+                            "SOURCE_OR_DESTINATION_PREFLIGHT_BLOCKED"
+                        }
+                    }
+                }
+                if (session !== live || sessionId != opaque || folder != chosenFolder ||
+                    localPaneTarget != target ||
+                    peerBatchSelection != selection ||
+                    !selection.matchesPage(folder, page)) {
+                    pendingPeerBatch = null
+                    status = "Source selection, server or Android folder changed during review."
+                } else {
+                    pendingPeerBatch = PendingPeerSftpBatchDownload(
+                        opaque, chosenFolder, target, selection, preflights)
+                    status = "Review the " + preflights.size +
+                        "-file SFTP → Device Copy. Nothing created yet."
+                }
+            } catch (_: CancellationException) {
+                status = "Multi-file review canceled. Nothing written."
+            } catch (_: Exception) {
+                pendingPeerBatch = null
+                status = "Multi-file review blocked: source changed, collision, scoped permission " +
+                    "or incomplete provider listing. Nothing written."
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    /**
+     * Each source gets its own fresh plan and durable attempt. Once one file
+     * lands, the destination listing revision necessarily changes. Never
+     * blindly execute the later preflight digests from the initial review.
+     * Earlier verified files remain if a later item blocks or is uncertain.
+     */
+    fun executePeerBatch(pending: PendingPeerSftpBatchDownload) {
+        val live = session ?: return
+        if (busy || peerRelayLocked || !pending.stillMatches(
+            sessionId, folder, localPaneTarget, peerBatchSelection, page)) {
+            pendingPeerBatch = null
+            status = "Multi-file Copy approval expired. No destination created."
+            return
+        }
+        pendingPeerBatch = null
+        val permit = AtomicBoolean(true)
+        continueCopy = permit
+        transferKind = "SFTP → Device batch"
+        transferred = 0L
+        busy = true
+        // Freeze the peer's Android folder controls and both workspace modes
+        // until the last journaled operation settles or cancellation returns.
+        onRelaySourceActive(sessionId)
+        status = "Copying selected remote files to the picked Android folder…"
+        scope.launch {
+            var verified = 0
+            var verifiedBytes = 0L
+            try {
+                val selection = pending.selection
+                for ((index, chosen) in selection.files.withIndex()) {
+                    if (!permit.get() || !coroutineContext.isActive) {
+                        status = "Canceled after " + verified + " verified file(s). " +
+                            "Review any partial Android document before retrying."
+                        break
+                    }
+                    status = "Copying remote file " + (index + 1) + " of " +
+                        selection.files.size + " after fresh scoped preflight…"
+                    val receipt = withContext(Dispatchers.IO) {
+                        val active = coroutineContext[Job]
+                        val remote = live.completeMutationListing(pending.folder)
+                        if (!SftpBatchSelection(listOf(chosen))
+                                .matchesPage(pending.folder, remote)) {
+                            null
+                        } else {
+                            val adapter = SftpToSafTreeCopy(context.contentResolver) { digest ->
+                                AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                            }
+                            // A fresh destination witness is necessary because
+                            // each verified earlier file changed its siblings.
+                            val next = adapter.prepare(live, SftpTreeCopyRequest(
+                                pending.sessionId, chosen.absolutePath,
+                                chosen.revision, pending.target))
+                            next?.let { reviewed ->
+                                var lastDisplayed = 0L
+                                adapter.copy(live, reviewed,
+                                    continueRequested = {
+                                        permit.get() && active?.isActive == true
+                                    },
+                                    onProgress = { bytes ->
+                                        if (bytes - lastDisplayed >= 256L * 1024L) {
+                                            lastDisplayed = bytes
+                                            transferred = verifiedBytes + bytes
+                                        }
+                                    })
+                            }
+                        }
+                    }
+                    if (receipt == null) {
+                        status = "Stopped after " + verified + " verified file(s): " +
+                            "the next source or destination no longer passes preflight. " +
+                            "No overwrite or automatic retry."
+                        break
+                    }
+                    transferred = verifiedBytes + receipt.bytesWritten
+                    if (receipt.proof != CopyProof.BYTES_VERIFIED) {
+                        status = when (receipt.proof) {
+                            CopyProof.BLOCKED ->
+                                "Stopped after " + verified + " verified file(s): " +
+                                    "a changed source, collision or scoped permission blocked the next Copy."
+                            CopyProof.WRITE_ACKNOWLEDGED ->
+                                "Stopped after " + verified + " verified file(s): " +
+                                    "the next Android document is acknowledged but not byte-verified."
+                            CopyProof.UNCERTAIN ->
+                                "Stopped after " + verified + " verified file(s): " +
+                                    "an uncertain or partial Android document may remain. Inspect before retry."
+                            CopyProof.BYTES_VERIFIED -> error("unreachable")
+                        }
+                        break
+                    }
+                    verified++
+                    verifiedBytes += receipt.bytesWritten
+                    if (verified == selection.files.size) {
+                        status = "All " + verified + " SFTP files independently byte-verified " +
+                            "in the selected Android folder (" + verifiedBytes + " bytes). " +
+                            "Original remote files remain unchanged. Cloud sync is not confirmed."
+                    }
+                }
+            } catch (_: CancellationException) {
+                status = "Multi-file Copy interrupted after " + verified +
+                    " verified file(s). Inspect possible partial destination."
+            } catch (_: Exception) {
+                status = "Multi-file Copy uncertain after " + verified +
+                    " verified file(s). Inspect the destination before retry."
+            } finally {
+                onRelaySourceActive(null)
+                continueCopy = null
+                transferKind = ""
+                busy = false
+            }
+        }
+    }
+
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("SFTP file transfer", style = MaterialTheme.typography.titleMedium)
