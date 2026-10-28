@@ -509,7 +509,7 @@ private fun DeveloperPreview(
         ) {
             item { Text("Expository Transfer", style = MaterialTheme.typography.headlineMedium) }
             item {
-                Text("Choose where to work. Remote transfers require verified encrypted connections.",
+                Text("Choose where to work. Secure transfers require encrypted SFTP or FTPS. Plain FTP browsing is separately warned and opt-in.",
                     style = MaterialTheme.typography.bodySmall)
             }
             item {
