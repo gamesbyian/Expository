@@ -223,7 +223,9 @@ internal fun LocalTreePane(
     onParent: () -> Unit,
     onRefresh: () -> Unit,
     onLoadMore: () -> Unit,
-    onSelect: (TreeEntry) -> Unit
+    onSelect: (TreeEntry) -> Unit,
+    /** Explicit directory action only when a separate authorized target is selected. */
+    onCopyFolder: ((TreeEntry) -> Unit)? = null
 ) {
     var fileFilter by remember(state.treeUri, state.folderId) { mutableStateOf("") }
     var sortMode by remember { mutableStateOf(LocalTreeSort.NAME) }
@@ -337,6 +339,15 @@ internal fun LocalTreePane(
                         ) {
                             Text(if (entry.directory) "Open" else if (entry.documentId in state.selected)
                                 "✓ Select" else "Select")
+                        }
+                        if (entry.directory && state.crumbs.size == 1 &&
+                            onCopyFolder != null) {
+                            Button(
+                                enabled = enabled && !state.loading && state.complete,
+                                modifier = Modifier.heightIn(min = 48.dp)
+                                    .testTag("saf-recursive-copy-" + entry.documentId),
+                                onClick = { onCopyFolder(entry) }
+                            ) { Text("Copy folder…") }
                         }
                     }
                 }
