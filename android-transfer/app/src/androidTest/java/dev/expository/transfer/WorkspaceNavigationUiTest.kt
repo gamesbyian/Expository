@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -102,7 +103,11 @@ class WorkspaceNavigationUiTest {
         // This is a phone-width A/B UI: explicitly activate Pane A before
         // changing its endpoint. Inactive panes remain composed, not placed.
         compose.onNodeWithText("Pane A · LOCAL", substring = true).performClick()
-        compose.onNodeWithTag("endpoint-A-DOCUMENTS").performClick()
+        // The endpoint picker can sit below the initial viewport inside
+        // a scroll owner. Test a *placed* touch target, not an offscreen
+        // semantics action whose host may never receive the pointer.
+        compose.onNodeWithTag("endpoint-A-DOCUMENTS").performScrollTo()
+        compose.onNodeWithTag("endpoint-A-DOCUMENTS").performTouchInput { click() }
         compose.onNodeWithText("Endpoint request: A:DOCUMENTS").assertExists()
         compose.onNodeWithText("Endpoint confirmed: A:DOCUMENTS").assertExists()
         // Assert the actual button state and visible summary before querying
