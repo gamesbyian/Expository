@@ -33,3 +33,11 @@ tasks.register<JavaExec>("renameScenarios") {
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("dev.expository.transfer.engine.JournaledRenameSuite")
 }
+
+tasks.register<JavaExec>("recursiveCopyScenarios") {
+    group = "verification"
+    description = "Per-step journaled recursive Copy, no-replay, partial and fault-injection E1"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.engine.RecursiveFolderCopyEngineSuite")
+}
