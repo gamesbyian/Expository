@@ -118,6 +118,108 @@ class SftpRelayAndroidLoopbackTest {
         }
     }
 
+
+    /**
+     * E2: two-file source selection, explicit destination-bound batch approval,
+     * then independent fresh plans/journals after the target listing changes.
+     * Exercises actual Android TCP bytes, not a mocked remote transport.
+     */
+    @Test fun twoSelectedSftpFilesRelaySequentiallyWithDistinctVerifiedJournals() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        SftpAndroidCompat.configurePrivateHome(context.applicationContext.filesDir.toPath())
+        val root = Files.createTempDirectory(context.cacheDir.toPath(), "relay-batch-e2-")
+        val files = listOf(
+            "a-first.bin" to ByteArray(73_009) { ((it * 13 + 37) and 255).toByte() },
+            "b-second.bin" to ByteArray(41_033) { ((it * 29 + 11) and 255).toByte() })
+        files.forEach { (name, bytes) -> Files.write(root.resolve(name), bytes) }
+        Files.createDirectory(root.resolve("destination"))
+        val hostKey = KeyPairGenerator.getInstance("RSA").apply {
+            initialize(2048)
+        }.generateKeyPair()
+        val sshd = SshServer.setUpDefaultServer().apply {
+            host = "127.0.0.1"
+            port = 0
+            keyPairProvider = KeyPairProvider.wrap(hostKey)
+            passwordAuthenticator = PasswordAuthenticator { user, password, _ ->
+                user == "test-account" && password == "disposable-test-secret"
+            }
+            subsystemFactories = listOf(SftpSubsystemFactory.Builder().build())
+            fileSystemFactory = VirtualFileSystemFactory(root)
+        }
+        try {
+            sshd.start()
+            val target = SftpTarget("127.0.0.1", sshd.port,
+                SftpHostKeyPin(SftpHostKeyPin.observed(hostKey.public)))
+            SecureSftp.connect(target, "test-account",
+                "disposable-test-secret".toCharArray()).use { source ->
+                SecureSftp.connect(target, "test-account",
+                    "disposable-test-secret".toCharArray()).use { destination ->
+                    val sourcePage = source.completeMutationListing("/")
+                    var selection = SftpBatchSelection()
+                    for ((name, _) in files) {
+                        selection = selection.toggle("/",
+                            sourcePage.entries.single { it.name == name })
+                    }
+                    assertEquals(2, selection.files.size)
+                    assertTrue(selection.matchesPage("/", sourcePage))
+                    val sourceRef = PeerSftpBatchSource(
+                        source, "selected-source", "/", selection)
+                    assertTrue(sourceRef.valid())
+                    val relay = SftpRelayCopy { digest ->
+                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                    }
+                    fun request(file: SelectedSftpBatchFile) = SftpRelayRequest(
+                        source, "selected-source", "/", file.absolutePath,
+                        file.revision, destination, "approved-destination", "/destination")
+                    val initial = selection.files.map {
+                        requireNotNull(relay.prepare(request(it)))
+                    }
+                    val approved = PendingSftpRelayBatch(
+                        sourceRef, destination, "approved-destination",
+                        "/destination", initial)
+                    assertTrue(approved.stillMatches(sourceRef, destination,
+                        "approved-destination", "/destination"))
+                    assertFalse(approved.stillMatches(sourceRef, destination,
+                        "different-session", "/destination"))
+                    assertFalse(approved.stillMatches(sourceRef, destination,
+                        "approved-destination", "/"))
+                    files.forEach { (name, _) ->
+                        assertFalse(Files.exists(root.resolve("destination").resolve(name)))
+                    }
+                    var verified = 0
+                    for (file in selection.files) {
+                        // The first creation changes the destination folder,
+                        // so every later item must be replanned from scratch.
+                        val fresh = requireNotNull(relay.prepare(request(file)))
+                        val receipt = relay.copy(fresh)
+                        assertEquals("item " + file.name + ": " + receipt.reason,
+                            CopyProof.BYTES_VERIFIED, receipt.proof)
+                        assertEquals(file.size, receipt.bytesWritten)
+                        val expected = files.single { it.first == file.name }.second
+                        assertArrayEquals(expected, Files.readAllBytes(
+                            root.resolve("destination").resolve(file.name)))
+                        assertArrayEquals(expected, Files.readAllBytes(root.resolve(file.name)))
+                        assertEquals(JournalState.VERIFIED, DurableAttemptJournal(
+                            AndroidAtomicAttemptStorage(context.applicationContext,
+                                fresh.plan.digest)
+                        ).recoverAfterRestart()?.state)
+                        verified++
+                    }
+                    assertEquals(2, verified)
+                    assertTrue("No overwrite or blind retry after complete batch",
+                        relay.prepare(request(selection.files[0])) == null)
+                }
+            }
+        } finally {
+            runCatching { sshd.stop(true) }
+            Files.walk(root).use { paths ->
+                paths.sorted(Comparator.reverseOrder()).forEach {
+                    runCatching { Files.deleteIfExists(it) }
+                }
+            }
+        }
+    }
+
     /** E2 positive Android ContentResolver → trusted ephemeral SFTP byte stream. */
     @Test fun androidOwnedContentDocumentUploadsToPinnedSftpWithReadback() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
