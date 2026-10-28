@@ -1082,7 +1082,9 @@ internal fun SftpBrowseCard(
                                 peerBatchSelection = SftpBatchSelection()
                                 pendingPeerBatch = null
                                 pendingRelay = null
+                                pendingRelayBatch = null
                                 onRemoteSource(null)
+                                onRemoteBatchSource(null)
                                 page = directory
                                 status = "Pinned SFTP session authenticated. Select a remote file."
                             }.onFailure {
@@ -1105,7 +1107,9 @@ internal fun SftpBrowseCard(
                         peerBatchSelection = SftpBatchSelection()
                         pendingPeerBatch = null
                         pendingRelay = null
+                        pendingRelayBatch = null
                         onRemoteSource(null)
+                        onRemoteBatchSource(null)
                         pendingMove = null
                         showRenamePreview = false
                         status = "Disconnected. Remote session cleared."
@@ -1458,6 +1462,91 @@ internal fun SftpBrowseCard(
                         }
                     }
                 }
+                if (allowRemoteSelection && session != null && localPaneTarget == null) {
+                    val selected = peerBatchSelection
+                    Text("SFTP → SFTP selection: " + selected.files.size +
+                        "/12 file(s) in this source folder.",
+                        style = MaterialTheme.typography.bodySmall)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(
+                            enabled = !busy && !peerRelayLocked &&
+                                selected.matchesPage(folder, page),
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = {
+                                val live = session
+                                if (live != null && sessionId.isNotBlank()) {
+                                    onRemoteBatchSource(PeerSftpBatchSource(
+                                        live, sessionId, folder, selected))
+                                    status = "Selected " + selected.files.size +
+                                        " SFTP source file(s). Switch panes to review Copy."
+                                }
+                            }) { Text("Send selection to other server pane…") }
+                        Button(enabled = !busy && !peerRelayLocked &&
+                                selected.files.isNotEmpty(),
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = {
+                                peerBatchSelection = SftpBatchSelection()
+                                onRemoteBatchSource(null)
+                                pendingRelayBatch = null
+                                status = "Remote batch selection cleared."
+                            }) { Text("Clear server selection") }
+                    }
+                }
+                if (remotePaneBatchSource != null && session != null) {
+                    val source = remotePaneBatchSource
+                    Text("Other SFTP pane offers " +
+                        source.selection.files.size + " selected source files.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Button(enabled = !busy && !peerRelayLocked &&
+                        pendingRelayBatch == null && source.valid() &&
+                        source.session !== session,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        onClick = { prepareRelayBatch() }) {
+                        Text("Review " + source.selection.files.size +
+                            "-file Copy from other server…")
+                    }
+                }
+                pendingRelayBatch?.let { pending ->
+                    val valid = !busy && !peerRelayLocked &&
+                        pending.stillMatches(remotePaneBatchSource, session,
+                            sessionId, folder)
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Review SFTP → SFTP Batch",
+                                style = MaterialTheme.typography.titleMedium)
+                            Text("Sources (" + pending.source.selection.files.size +
+                                "): " + pending.source.selection.files.joinToString(", ") {
+                                    it.name
+                                })
+                            Text("Destination: this separately authenticated SFTP folder " +
+                                pending.destinationFolder)
+                            Text("All source versions and collisions are reviewed. " +
+                                "Each file gets a FRESH authenticated plan, separate " +
+                                "write-ahead journal, exclusive no-overwrite create and " +
+                                "independent SHA-256 readback. The batch stops at the first " +
+                                "unverified result; earlier verified files remain. " +
+                                "Android relays the bytes; no source deletions or blind retry.",
+                                style = MaterialTheme.typography.bodySmall)
+                            if (!valid) Text("One SFTP source, session or folder " +
+                                "changed. Discard this proposal.")
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Button(enabled = valid, modifier = Modifier.heightIn(min = 48.dp),
+                                    onClick = { executeRelayBatch(pending) }) {
+                                    Text("Confirm " + pending.source.selection.files.size +
+                                        "-file Server Copy")
+                                }
+                                Button(enabled = !busy && !peerRelayLocked,
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    onClick = { pendingRelayBatch = null }) {
+                                    Text("Cancel batch review")
+                                }
+                            }
+                        }
+                    }
+                }
                 if (remotePaneSource != null && session != null) {
                     val source = remotePaneSource
                     Text("Other server selection: " +
@@ -1516,7 +1605,7 @@ internal fun SftpBrowseCard(
                 }
                 if (peerRelayLocked) {
                     Text("This authenticated SFTP source session is locked while " +
-                        "the other pane relays a file. Cancel the transfer there to stop.",
+                        "the other pane relays files. Cancel the transfer there to stop.",
                         style = MaterialTheme.typography.bodySmall)
                 }
                 val entries = page?.entries.orEmpty()
@@ -1565,7 +1654,7 @@ internal fun SftpBrowseCard(
                                                 }
                                             }) { Text("Select for other SFTP pane") }
                                     }
-                                    if (localPaneTarget != null) {
+                                    if (localPaneTarget != null || allowRemoteSelection) {
                                         val selectedForBatch =
                                             peerBatchSelection.files.any { it.absolutePath == path }
                                         Button(
@@ -1579,11 +1668,18 @@ internal fun SftpBrowseCard(
                                                 peerBatchSelection =
                                                     peerBatchSelection.toggle(folder, entry)
                                                 pendingPeerBatch = null
+                                                pendingRelayBatch = null
+                                                onRemoteBatchSource(null)
                                             }
                                         ) {
-                                            Text(if (selectedForBatch)
-                                                "✓ In Device batch" else "Add to Device batch")
+                                            Text(if (localPaneTarget != null)
+                                                (if (selectedForBatch) "✓ In Device batch"
+                                                    else "Add to Device batch")
+                                            else (if (selectedForBatch) "✓ In Server batch"
+                                                    else "Add to Server batch"))
                                         }
+                                    }
+                                    if (localPaneTarget != null) {
                                         Button(
                                             enabled = !busy && !peerRelayLocked && pendingPeerDownload == null,
                                             modifier = Modifier.heightIn(min = 48.dp),
