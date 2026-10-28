@@ -262,6 +262,32 @@ object FtpsSecuritySuite {
                 SecureFtps.connect(FtpsTarget("example.invalid"), "tester", charArrayOf())
             }.isFailure)
         }
+        checkCase("optional MLSD times sort newest with unknown last, without changing identity") {
+            fun file(name: String, seconds: Long?): org.apache.commons.net.ftp.FTPFile =
+                org.apache.commons.net.ftp.FTPFile().apply {
+                    this.name = name
+                    type = org.apache.commons.net.ftp.FTPFile.FILE_TYPE
+                    size = 7
+                    if (seconds != null) timestamp =
+                        java.util.GregorianCalendar(java.util.TimeZone.getTimeZone("UTC")).apply {
+                            timeInMillis = seconds * 1000L
+                        }
+                }
+            val rows = FtpsMlsdEntries.decode(arrayOf(
+                file("early.bin", 100L), file("unknown.bin", null),
+                file("late.bin", 500L), file("zero.bin", 0L)
+            ))
+            check(rows.first { it.name == "early.bin" }.modifiedMillis == 100_000L)
+            check(rows.first { it.name == "unknown.bin" }.modifiedMillis == null)
+            check(rows.first { it.name == "zero.bin" }.modifiedMillis == null)
+            val newest = FtpsBrowsePresentation.rows(rows, "", FtpsFolderSort.NEWEST)
+            check(newest.map { it.name } ==
+                listOf("late.bin", "early.bin", "unknown.bin", "zero.bin"))
+            check(FtpsBrowsePresentation.rows(rows, "bin", FtpsFolderSort.NAME)
+                .map { it.name }.toSet() == rows.map { it.name }.toSet())
+            // Neither visible order nor optional timestamps make LIST authoritative
+            // or authorize a remote write.
+        }
         println("PASS FTPS total=" + passed + " evidence=offline-policy-only")
     }
 }
