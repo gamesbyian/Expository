@@ -1,5 +1,12 @@
 package dev.expository.transfer
 
+import android.content.ContentValues
+import android.provider.MediaStore
+import androidx.test.platform.app.InstrumentationRegistry
+import dev.expository.transfer.engine.CopyProof
+import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
+import java.util.UUID
+
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.json.JSONArray
 import org.json.JSONObject
@@ -150,6 +157,70 @@ class GithubPublicDirectoryAndroidTest {
             assertTrue(runCatching {
                 PublicGithubSaveSource(repository, "src", invalid)
             }.isFailure)
+        }
+    }
+
+    @Test fun syntheticGitHubOriginalCopiesToActualAndroidProviderWithReadback() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        val bytes = "hello\n".toByteArray(Charsets.UTF_8)
+        val original = PublicGithubEntry("hello.txt", "src/hello.txt",
+            "ce013625030ba8dba906f756967f9e9ca394464a", "file", bytes.size.toLong())
+        val source = PublicGithubSaveSource(
+            PublicGithubRepository("octocat", "Hello-World", "main"), "src", original)
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME,
+                    "expository-public-github-fixture-" + UUID.randomUUID() + ".txt")
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }) ?: error("SYNTHETIC_PROVIDER_FIXTURE_UNAVAILABLE")
+        try {
+            val receipt = GithubPublicSafSave(resolver, { digest ->
+                AndroidAtomicAttemptStorage(context.applicationContext, digest)
+            }, listSource = { repository, folder ->
+                assertEquals(source.repository, repository)
+                assertEquals("src", folder)
+                PublicGithubListing(listOf(original), false, folder)
+            }, readBlob = {
+                assertEquals(source, it)
+                bytes
+            }).copy(source, uri, continueRequested = { true })
+            assertEquals(CopyProof.BYTES_VERIFIED, receipt.proof)
+            assertEquals(bytes.size.toLong(), receipt.bytesWritten)
+            assertArrayEquals(bytes, resolver.openInputStream(uri)!!.use { it.readBytes() })
+        } finally {
+            resolver.delete(uri, null, null)
+        }
+    }
+
+    @Test fun syntheticGitHubSourceRevisionDriftBlocksBeforeAndroidWrite() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        val original = PublicGithubEntry("hello.txt", "src/hello.txt",
+            "ce013625030ba8dba906f756967f9e9ca394464a", "file", 6L)
+        val source = PublicGithubSaveSource(
+            PublicGithubRepository("octocat", "Hello-World", "main"), "src", original)
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME,
+                    "expository-public-github-blocked-" + UUID.randomUUID() + ".txt")
+                put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }) ?: error("SYNTHETIC_PROVIDER_FIXTURE_UNAVAILABLE")
+        try {
+            val receipt = GithubPublicSafSave(resolver, { digest ->
+                AndroidAtomicAttemptStorage(context.applicationContext, digest)
+            }, listSource = { _, folder ->
+                PublicGithubListing(listOf(original.copy(
+                    sha = "0000000000000000000000000000000000000000")), false, folder)
+            }, readBlob = { error("UNAPPROVED_SOURCE_MUST_NOT_BE_READ") })
+                .copy(source, uri, continueRequested = { true })
+            assertEquals(CopyProof.BLOCKED, receipt.proof)
+            assertEquals(0L, receipt.bytesWritten)
+            assertEquals(0, resolver.openInputStream(uri)!!.use { it.readBytes() }.size)
+        } finally {
+            resolver.delete(uri, null, null)
         }
     }
 }
