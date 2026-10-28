@@ -49,7 +49,7 @@ class SafRecursiveScannerAndroidTest {
             require(p >= 0 && p + 1 < parts.size) { "UNEXPECTED_DOCUMENT_URI" }
             val id = parts[p + 1]
             val children = parts.lastOrNull() == "children"
-            val columns = projection?.toTypedArray() ?: arrayOf(
+            val columns = projection?.map { it }?.toTypedArray() ?: arrayOf(
                 DocumentsContract.Document.COLUMN_DOCUMENT_ID,
                 DocumentsContract.Document.COLUMN_DISPLAY_NAME,
                 DocumentsContract.Document.COLUMN_MIME_TYPE,
