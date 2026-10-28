@@ -95,14 +95,17 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("Location Single · Device").assertExists()
         compose.onNodeWithText("Dual view").performClick()
         compose.onNodeWithText("DOCUMENTS").performClick()
-        compose.onNodeWithText("Location A · Android provider").assertExists()
+        // Confirm the exact selected location kind. The nested card may be
+        // below the outer LazyColumn viewport after the extra endpoint row.
+        compose.onNodeWithText("✓ DOCUMENTS").assertExists()
         compose.onNodeWithText("Choose Pane A folder…").assertExists()
         compose.onNodeWithText("Copy A → B…").assertIsNotEnabled()
         compose.onNodeWithText("Copy B → A…").assertIsNotEnabled()
         compose.onNodeWithText("Pane B · SFTP").performClick()
         compose.onNodeWithText("Location B · SFTP", substring = true).assertExists()
         compose.onNodeWithText("Pane A · DOCUMENTS").performClick()
-        compose.onNodeWithText("Location A · Android provider").assertExists()
+        compose.onNodeWithText("✓ DOCUMENTS").assertExists()
+        compose.onNodeWithText("Choose Pane A folder…").assertExists()
     }
 
     @Test fun boundedSafListingShowsMoreWithoutTreatingTruncationAsComplete() {
