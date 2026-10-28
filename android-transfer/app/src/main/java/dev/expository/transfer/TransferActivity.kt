@@ -49,6 +49,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import dev.expository.transfer.saf.TreeCopyRequest
 import dev.expository.transfer.saf.TreeCopyPreflight
 import dev.expository.transfer.saf.SafTreeToTreeCopy
+import dev.expository.transfer.saf.SafRecursiveTreeCopy
+import dev.expository.transfer.saf.ScopedRecursiveSourceRequest
+import dev.expository.transfer.engine.RecursiveCopyResult
 import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.sftp.SftpAndroidCompat
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
@@ -124,6 +127,16 @@ private val TransferWorkspace.browseEndpoint: BrowseEndpoint get() = when (this)
     TransferWorkspace.GITHUB -> BrowseEndpoint.GITHUB
 }
 
+/** An in-memory, immutable user review bound to both live pane generations. */
+internal data class RecursiveCopyReview(
+    val sourcePane: WorkspacePane,
+    val destinationPane: WorkspacePane,
+    val request: ScopedRecursiveSourceRequest,
+    val manifest: RecursiveFolderManifest,
+    val sourceGeneration: Long,
+    val destinationGeneration: Long
+)
+
 private data class DemoFile(val name: String, val size: String)
 private val demoFiles = listOf(
     DemoFile("Example photo.jpg", "Synthetic • 2 MB"),
@@ -170,6 +183,7 @@ private fun DeveloperPreview(
     var scrollA by remember { mutableStateOf(LazyListState()) }
     var scrollB by remember { mutableStateOf(LazyListState()) }
     var proposedCopy by remember { mutableStateOf<List<TreeCopyPreflight>?>(null) }
+    var recursiveProposal by remember { mutableStateOf<RecursiveCopyReview?>(null) }
     var copyBusy by remember { mutableStateOf(false) }
     var remoteRelayBusy by remember { mutableStateOf(false) }
     var copyStatus by remember { mutableStateOf(
@@ -200,6 +214,7 @@ private fun DeveloperPreview(
         // Refresh and every incremental load revoke both UI selection and
         // immutable planner selection before any asynchronous provider read.
         proposedCopy = null
+        recursiveProposal = null
         model = model.update(which, model.pane(which).clearSelection())
         val nextGeneration = treeReadGeneration.incrementAndGet()
         replaceTree(which, LocalTreeBrowseState(
@@ -279,6 +294,7 @@ private fun DeveloperPreview(
         }
         // A new OS-picked tree invalidates any previous Copy approval.
         proposedCopy = null
+        recursiveProposal = null
         // No takePersistableUriPermission; no serialized grants or implicit
         // access after process recreation. User can explicitly choose again.
         readTree(which, uri, listOf(TreeCrumb(rootId, "Chosen folder")),
@@ -327,6 +343,7 @@ private fun DeveloperPreview(
 
     fun choosePair(pair: DualPairing) {
         proposedCopy = null
+        recursiveProposal = null
         val next = model.preset(pair)
         if (model.a.endpoint != next.a.endpoint) {
             pickerWitnesses = pickerWitnesses.invalidate(WorkspacePane.A)
@@ -341,6 +358,7 @@ private fun DeveloperPreview(
 
     fun toggleTreeSelection(which: WorkspacePane, entry: TreeEntry) {
         proposedCopy = null
+        recursiveProposal = null
         val current = tree(which)
         if (current.loading || current.treeUri == null || entry.directory ||
             current.entries.none { it.documentId == entry.documentId }) return
@@ -362,7 +380,8 @@ private fun DeveloperPreview(
 
 
     fun requestDeviceCopy(sourcePane: WorkspacePane) {
-        if (copyBusy || proposedCopy != null || model.view != WorkspaceView.DUAL) return
+        if (copyBusy || proposedCopy != null || recursiveProposal != null ||
+            model.view != WorkspaceView.DUAL) return
         val from = tree(sourcePane)
         val destinationPane = if (sourcePane == WorkspacePane.A)
             WorkspacePane.B else WorkspacePane.A
@@ -415,9 +434,11 @@ private fun DeveloperPreview(
                 !model.pane(sourcePane).endpoint.isSaf ||
                 !model.pane(destinationPane).endpoint.isSaf) {
                 proposedCopy = null
+        recursiveProposal = null
                 copyStatus = "Folder or source selection changed during preflight. No file was created."
             } else if (candidates == null || candidates.size != chosen.size) {
                 proposedCopy = null
+        recursiveProposal = null
                 copyStatus = "Batch Copy preflight refused: permissions, incomplete listing, ambiguous name or collision. No file was created."
             } else {
                 proposedCopy = candidates
@@ -428,10 +449,143 @@ private fun DeveloperPreview(
         }
     }
 
+    fun requestFolderCopy(sourcePane: WorkspacePane, folder: TreeEntry) {
+        if (copyBusy || remoteRelayBusy || proposedCopy != null ||
+            recursiveProposal != null || model.view != WorkspaceView.DUAL ||
+            sourcePane !in listOf(WorkspacePane.A, WorkspacePane.B)) return
+        val targetPane = if (sourcePane == WorkspacePane.A)
+            WorkspacePane.B else WorkspacePane.A
+        val source = tree(sourcePane)
+        val target = tree(targetPane)
+        val sourceTree = source.treeUri ?: return
+        val targetTree = target.treeUri ?: return
+        if (!model.pane(sourcePane).endpoint.isSaf ||
+            !model.pane(targetPane).endpoint.isSaf ||
+            !source.complete || !target.complete || !target.canWrite ||
+            source.loading || target.loading ||
+            source.crumbs.size != 1 || target.crumbs.size != 1 ||
+            sourceTree.authority == targetTree.authority ||
+            !folder.directory || source.entries.count {
+                it.documentId == folder.documentId &&
+                    it.title == folder.title && it.directory
+            } != 1) {
+            copyStatus = "Folder Copy blocked: choose two distinct, fully listed Android provider roots."
+            return
+        }
+        val frozen = ScopedRecursiveSourceRequest(
+            sourceTree, source.folderId ?: return, folder.documentId,
+            folder.title, targetTree, target.folderId ?: return, target.canWrite
+        )
+        val sourceGen = source.generation
+        val targetGen = target.generation
+        copyBusy = true
+        copyStatus = "Checking the complete nested source and target folder before review…"
+        scope.launch {
+            val manifest = withContext(Dispatchers.IO) {
+                runCatching {
+                    SafRecursiveTreeCopy(context.applicationContext,
+                        context.contentResolver).prepare(frozen)
+                }.getOrNull()
+            }
+            if (model.view != WorkspaceView.DUAL ||
+                !model.pane(sourcePane).endpoint.isSaf ||
+                !model.pane(targetPane).endpoint.isSaf ||
+                tree(sourcePane).generation != sourceGen ||
+                tree(targetPane).generation != targetGen ||
+                tree(sourcePane).treeUri != sourceTree ||
+                tree(targetPane).treeUri != targetTree ||
+                tree(sourcePane).folderId != frozen.sourceParentId ||
+                tree(targetPane).folderId != frozen.destinationParentId) {
+                recursiveProposal = null
+                copyStatus = "Folder or provider changed during review; no file was created."
+            } else if (manifest == null || !manifest.reviewable) {
+                recursiveProposal = null
+                copyStatus = "Folder Copy refused: incomplete tree, changed provider, expired grant, directory limit or name collision. No write occurred."
+            } else {
+                recursiveProposal = RecursiveCopyReview(
+                    sourcePane, targetPane, frozen, manifest, sourceGen, targetGen)
+                copyStatus = "Review " + manifest.directories +
+                    " folders and " + manifest.files +
+                    " files, including empty directories; no write has started."
+            }
+            copyBusy = false
+        }
+    }
+
+    fun confirmFolderCopy() {
+        val pending = recursiveProposal ?: return
+        if (copyBusy || remoteRelayBusy || model.view != WorkspaceView.DUAL) return
+        val source = tree(pending.sourcePane)
+        val target = tree(pending.destinationPane)
+        val request = pending.request
+        if (!model.pane(pending.sourcePane).endpoint.isSaf ||
+            !model.pane(pending.destinationPane).endpoint.isSaf ||
+            source.generation != pending.sourceGeneration ||
+            target.generation != pending.destinationGeneration ||
+            source.treeUri != request.sourceTree ||
+            target.treeUri != request.destinationTree ||
+            source.folderId != request.sourceParentId ||
+            target.folderId != request.destinationParentId ||
+            !source.complete || !target.complete || !target.canWrite) {
+            recursiveProposal = null
+            copyStatus = "Folder Copy confirmation expired or pane changed; no write attempted."
+            return
+        }
+        recursiveProposal = null
+        val permit = AtomicBoolean(true)
+        copyPermit = permit
+        copyBusy = true
+        copyStatus = "Running reviewed folder Copy with durable per-item receipts. Keep Expository open."
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    SafRecursiveTreeCopy(context.applicationContext,
+                        context.contentResolver).execute(request, pending.manifest) {
+                        permit.get()
+                    }
+                }.getOrNull()
+            }
+            copyStatus = if (result == null)
+                "Folder Copy outcome unavailable. Inspect the destination and recovery records before any retry. Sources were not deleted."
+            else when (result.result) {
+                RecursiveCopyResult.COMPLETE_VERIFIED ->
+                    "Folder Copy verified: " + result.verifiedDirectories +
+                        " directories, " + result.verifiedFiles + " files, " +
+                        result.verifiedBytes +
+                        " bytes independently read back. Sources unchanged; cloud sync unverified."
+                RecursiveCopyResult.BLOCKED ->
+                    "Folder Copy blocked before destination mutation: " +
+                        result.reason + ". Review a new proposal."
+                RecursiveCopyResult.STOPPED_PARTIAL ->
+                    "Folder Copy stopped after " + result.verifiedDirectories +
+                        " directories and " + result.verifiedFiles +
+                        " verified files. " + result.reason +
+                        ". Inspect destination before new approval."
+                RecursiveCopyResult.UNCERTAIN ->
+                    "Folder Copy uncertain after " + result.verifiedDirectories +
+                        " directories and " + result.verifiedFiles +
+                        " verified files. " + result.reason +
+                        ". Do not retry without inspection."
+            }
+            copyPermit = null
+            copyBusy = false
+            // Refresh the currently selected destination without inventing a
+            // new grant. A changed pane is never silently repopulated.
+            val current = tree(pending.destinationPane)
+            if (current.treeUri == request.destinationTree &&
+                current.folderId == request.destinationParentId &&
+                model.pane(pending.destinationPane).endpoint.isSaf) {
+                readTree(pending.destinationPane, request.destinationTree,
+                    current.crumbs, maxVisible = current.visibleLimit)
+            }
+        }
+    }
+
     fun confirmDeviceCopy() {
         val pending = proposedCopy ?: return
         if (copyBusy || model.view != WorkspaceView.DUAL || pending.isEmpty()) return
         proposedCopy = null
+        recursiveProposal = null
         val permit = AtomicBoolean(true)
         val lastReportNs = AtomicLong(0L)
         copyPermit = permit
@@ -518,6 +672,7 @@ private fun DeveloperPreview(
     var workspace by remember { mutableStateOf(TransferWorkspace.LOCAL) }
     LaunchedEffect(incomingShare?.sequence) {
         proposedCopy = null
+        recursiveProposal = null
         // A new external Share invalidates outstanding picker launch
         // contexts, without disconnecting authenticated remote sessions.
         pickerWitnesses = ScopedTreePickerWitnesses()
@@ -549,6 +704,7 @@ private fun DeveloperPreview(
                     Button(enabled = !copyBusy && !remoteRelayBusy,
                         onClick = {
                             proposedCopy = null
+        recursiveProposal = null
                             if (model.view != WorkspaceView.SINGLE)
                                 pickerWitnesses = pickerWitnesses.invalidateDual()
                                     .invalidate(WorkspacePane.SINGLE)
@@ -594,6 +750,7 @@ private fun DeveloperPreview(
                                     // provider: never carry a grant across
                                     // unrelated SFTP/FTPS/GitHub browsing.
                                     proposedCopy = null
+        recursiveProposal = null
                                     pickerWitnesses = pickerWitnesses.invalidate(WorkspacePane.SINGLE)
                                     treeReadGeneration.incrementAndGet()
                                     model = model.update(WorkspacePane.SINGLE,
@@ -738,6 +895,7 @@ private fun DeveloperPreview(
                             // Read the *current* model when the button acts,
                             // and never retain the old pane authority/selection.
                             proposedCopy = null
+        recursiveProposal = null
                             if (model.pane(which).endpoint != endpoint) {
                                 pickerWitnesses = pickerWitnesses.invalidate(which)
                                 model = model.update(which, BrowsePaneState(endpoint))
@@ -746,6 +904,7 @@ private fun DeveloperPreview(
                         },
                         onSwap = {
                             proposedCopy = null
+        recursiveProposal = null
                             // A pending picker belongs to its launcher's
                             // original pane. Never attach its later result to
                             // the opposite pane after a swap.
@@ -761,10 +920,12 @@ private fun DeveloperPreview(
                         onFocus = { model = model.showDual(it) },
                         onPick = {
                             proposedCopy = null
+        recursiveProposal = null
                             launchTreePicker(it)
                         },
                         onNavigate = { which, crumbs ->
                             proposedCopy = null
+        recursiveProposal = null
                             val current = tree(which)
                             current.treeUri?.let {
                                 // Refresh keeps the requested browse depth;
@@ -782,6 +943,7 @@ private fun DeveloperPreview(
                                 uri != null &&
                                 current.visibleLimit < LocalTreeReader.MAX_BROWSE) {
                                 proposedCopy = null
+        recursiveProposal = null
                                 readTree(which, uri, current.crumbs,
                                     maxVisible = (current.visibleLimit +
                                         LocalTreeReader.MAX_VISIBLE)
@@ -793,9 +955,14 @@ private fun DeveloperPreview(
                         onRelayBusy = { remoteRelayBusy = it },
                         copyStatus = copyStatus,
                         proposedCopy = proposedCopy,
+                        recursiveProposal = recursiveProposal,
                         onCopy = ::requestDeviceCopy,
+                        onCopyFolder = ::requestFolderCopy,
+                        onConfirmRecursive = ::confirmFolderCopy,
+                        onCancelRecursive = { recursiveProposal = null },
                         onConfirmCopy = ::confirmDeviceCopy,
-                        onCancelCopy = { proposedCopy = null },
+                        onCancelCopy = { proposedCopy = null
+        recursiveProposal = null },
                         onStopCopy = { copyPermit?.set(false) }
                     )
                 }
