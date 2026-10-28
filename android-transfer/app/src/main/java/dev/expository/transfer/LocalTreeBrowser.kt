@@ -357,7 +357,7 @@ internal fun LocalTreePane(
                     }
                 }
             }
-            Text("Browsing never changes files. Copy requires complete preflight, explicit review and a journal. Dual-pane Local → SFTP Copy supports up to 12 selected files, and SFTP → Local Copy can save one remote file to a folder chosen in the other pane. Other cross-pane routes and Move are not yet available.",
+            Text("Browsing never changes files. Copy requires complete preflight, explicit review and a journal. Dual-pane Local → SFTP Copy supports up to 12 selected files, and SFTP → Local Copy can save one remote file to a folder chosen in the other pane. Dual whole-folder Copy is offered only for independently selected, distinct Android provider roots after a complete review. Other remote routes and Move are still unavailable.",
                 style = MaterialTheme.typography.bodySmall)
         }
     }
