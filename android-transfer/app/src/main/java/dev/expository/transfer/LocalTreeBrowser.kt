@@ -4,6 +4,8 @@ import android.content.ContentResolver
 import android.database.Cursor
 import android.net.Uri
 import android.provider.DocumentsContract
+import java.text.Normalizer
+import java.util.Locale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
@@ -137,6 +139,7 @@ internal object LocalTreeReader {
             maxVisible % MAX_VISIBLE == 0) { "INVALID_BROWSE_LIMIT" }
         val entries = ArrayList<TreeEntry>()
         val seen = HashSet<String>()
+        val seenNames = HashSet<String>()
         var complete = true
         var hasMore = false
         var scanned = 0
@@ -183,6 +186,13 @@ internal object LocalTreeReader {
                 complete = false
                 continue
             }
+            // Multiple opaque provider IDs can expose case/Unicode-equivalent
+            // display names. Keep both visible, but never mark this complete
+            // folder as an unambiguous source of a collision/write witness.
+            // This matches the planner's conservative NFC + case-fold policy.
+            val collisionKey = Normalizer.normalize(name, Normalizer.Form.NFC)
+                .lowercase(Locale.ROOT)
+            if (!seenNames.add(collisionKey)) complete = false
             entries += TreeEntry(
                 documentId = id,
                 title = name,
