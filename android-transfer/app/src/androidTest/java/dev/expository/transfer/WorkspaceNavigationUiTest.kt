@@ -105,7 +105,7 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("DOCUMENTS").performClick()
         compose.onNodeWithText("Dual-location workspace").performScrollTo()
         val pair = compose.onNodeWithTag("workspace-location-summary")
-            .fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
+            .fetchSemanticsNode().config[SemanticsProperties.StateDescription]
         assertEquals("A:DOCUMENTS;B:SFTP", pair)
         compose.onNodeWithText("Location A · Android provider").assertExists()
         compose.onNodeWithText("Choose Pane A folder…").assertExists()
@@ -116,7 +116,7 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("Pane A · DOCUMENTS").performClick()
         compose.onNodeWithText("Dual-location workspace").performScrollTo()
         val restoredPair = compose.onNodeWithTag("workspace-location-summary")
-            .fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
+            .fetchSemanticsNode().config[SemanticsProperties.StateDescription]
         assertEquals("A:DOCUMENTS;B:SFTP", restoredPair)
         compose.onNodeWithText("Location A · Android provider").assertExists()
         compose.onNodeWithText("Choose Pane A folder…").assertExists()
