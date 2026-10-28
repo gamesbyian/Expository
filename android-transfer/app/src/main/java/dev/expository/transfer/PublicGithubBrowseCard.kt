@@ -47,6 +47,7 @@ import kotlinx.coroutines.withContext
 internal fun PublicGithubBrowseCard() {
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    var githubLink by remember { mutableStateOf("") }
     var owner by remember { mutableStateOf("") }
     var repository by remember { mutableStateOf("") }
     var ref by remember { mutableStateOf("") }
@@ -148,6 +149,30 @@ internal fun PublicGithubBrowseCard() {
                 ) { Text("Stop Save As") }
             }
             if (selected == null) {
+                OutlinedTextField(githubLink, { githubLink = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Public GitHub repository URL") },
+                    singleLine = true, enabled = !busy)
+                Button(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    enabled = !busy && githubLink.isNotBlank(),
+                    onClick = {
+                        val target = runCatching {
+                            GithubPublicUrl.parse(githubLink)
+                        }.getOrNull()
+                        if (target == null) {
+                            status = "Use a github.com repository HTTPS link, or a full-commit directory permalink. Branch URLs with ambiguous paths are not accepted."
+                        } else {
+                            selected = target.repository
+                            listing = null
+                            path = ""
+                            status = "Opening public GitHub link…"
+                            navigate(target.repository, target.folder)
+                        }
+                    }
+                ) { Text("Open GitHub URL") }
+                Text("Or enter a repository owner, name and optional branch below.",
+                    style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(owner, { owner = it },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Owner or organization") }, singleLine = true,
