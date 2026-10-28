@@ -130,6 +130,7 @@ internal fun SftpBrowseCard(
     remotePaneSource: PeerSftpSource? = null,
     remotePaneBatchSource: PeerSftpBatchSource? = null,
     allowRemoteSelection: Boolean = false,
+    enableSingleBatchDownload: Boolean = false,
     onRemoteSource: (PeerSftpSource?) -> Unit = {},
     onRemoteBatchSource: (PeerSftpBatchSource?) -> Unit = {},
     peerRelaySourceId: String? = null,
@@ -172,10 +173,57 @@ internal fun SftpBrowseCard(
     var transferred by remember { mutableLongStateOf(0L) }
     var continueCopy by remember { mutableStateOf<AtomicBoolean?>(null) }
     var transferKind by remember { mutableStateOf("") }
+    var singleDeviceTarget by remember { mutableStateOf<LocalPaneDownloadTarget?>(null) }
+    var singleDestinationPickerWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
+    var singleDestinationGeneration by remember { mutableLongStateOf(0L) }
+    val activeDeviceTarget = localPaneTarget ?: if (enableSingleBatchDownload)
+        singleDeviceTarget else null
+
 
     val ownedSession = session
     DisposableEffect(ownedSession) {
         onDispose { ownedSession?.close() }
+    }
+
+    // This is separate from the opposite pane's Android grant. Single-view
+    // navigation stays on SFTP while Android chooses only a destination tree.
+    val pickSingleDeviceFolder = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val witness = singleDestinationPickerWitness
+        singleDestinationPickerWitness = null
+        val uri = result.data?.data
+        if (result.resultCode != Activity.RESULT_OK || uri == null) {
+            status = "Android destination picker canceled. No transfer started."
+        } else if (!enableSingleBatchDownload || busy || session == null ||
+            witness?.matches(sessionId, folder) != true) {
+            status = "SFTP session or folder changed during destination selection. No transfer started."
+        } else {
+            val observedSession = session
+            val observedId = sessionId
+            val observedFolder = folder
+            val grantFlags = result.data?.flags ?: 0
+            val nextGeneration = singleDestinationGeneration + 1L
+            scope.launch {
+                val selected = withContext(Dispatchers.IO) {
+                    PickedSftpDownloadFolder.inspect(context.contentResolver,
+                        uri, grantFlags, nextGeneration)
+                }
+                if (session !== observedSession || sessionId != observedId ||
+                    folder != observedFolder || busy || !enableSingleBatchDownload) {
+                    status = "SFTP session or folder changed while Android inspected the picked folder."
+                } else if (selected == null) {
+                    status = "The selected Android folder is not currently writable, fully enumerable or within the safe 2,000-child cap. No copy approved."
+                } else {
+                    singleDestinationGeneration = nextGeneration
+                    singleDeviceTarget = selected
+                    peerBatchSelection = SftpBatchSelection()
+                    pendingPeerBatch = null
+                    pendingPeerDownload = null
+                    status = "Destination folder selected. Choose up to 12 SFTP files, review Copy and confirm. No document created yet."
+                }
+            }
+        }
     }
 
     val saveAs = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -769,7 +817,7 @@ internal fun SftpBrowseCard(
     /** Read-only preflight: neither the remote nor the local provider changes. */
     fun preparePeerDownload(sourcePath: String, expectedRevision: String) {
         val live = session ?: return
-        val target = localPaneTarget ?: return
+        val target = activeDeviceTarget ?: return
         val opaque = sessionId
         val chosenFolder = folder
         if (busy || opaque.isBlank() || pendingPeerDownload != null) return
@@ -786,7 +834,7 @@ internal fun SftpBrowseCard(
                         opaque, sourcePath, expectedRevision, target))
                 }
                 if (session !== live || sessionId != opaque || folder != chosenFolder ||
-                    localPaneTarget != target) {
+                    activeDeviceTarget != target) {
                     pendingPeerDownload = null
                     status = "Connection, folder or opposite pane changed. No Copy approved."
                 } else if (proposal == null) {
@@ -813,7 +861,7 @@ internal fun SftpBrowseCard(
             val path = if (folder == "/") "/" + row.name else folder + "/" + row.name
             !row.directory && path == witness.remotePath
         }?.revision.orEmpty()
-        if (busy || !witness.stillMatches(localPaneTarget,
+        if (busy || !witness.stillMatches(activeDeviceTarget,
             sessionId, folder, witness.remotePath, revision)) {
             pendingPeerDownload = null
             status = "Copy approval expired. No destination document created."
@@ -864,7 +912,7 @@ internal fun SftpBrowseCard(
     /** All selected sources and the selected Android folder are checked BEFORE review. */
     fun preparePeerBatch() {
         val live = session ?: return
-        val target = localPaneTarget ?: return
+        val target = activeDeviceTarget ?: return
         val selection = peerBatchSelection
         val opaque = sessionId
         val chosenFolder = folder
@@ -890,7 +938,7 @@ internal fun SftpBrowseCard(
                     }
                 }
                 if (session !== live || sessionId != opaque || folder != chosenFolder ||
-                    localPaneTarget != target ||
+                    activeDeviceTarget != target ||
                     peerBatchSelection != selection ||
                     !selection.matchesPage(folder, page)) {
                     pendingPeerBatch = null
@@ -922,7 +970,7 @@ internal fun SftpBrowseCard(
     fun executePeerBatch(pending: PendingPeerSftpBatchDownload) {
         val live = session ?: return
         if (busy || peerRelayLocked || !pending.stillMatches(
-            sessionId, folder, localPaneTarget, peerBatchSelection, page)) {
+            sessionId, folder, activeDeviceTarget, peerBatchSelection, page)) {
             pendingPeerBatch = null
             status = "Multi-file Copy approval expired. No destination created."
             return
@@ -1032,6 +1080,12 @@ internal fun SftpBrowseCard(
                 style = MaterialTheme.typography.bodySmall)
 
             if (session == null) {
+                if (enableSingleBatchDownload) {
+                    Text("Connect to an authenticated SFTP server before choosing a scoped Android batch destination. Nothing is saved or copied merely by connecting.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Button(enabled = false, modifier = Modifier.heightIn(min = 48.dp),
+                        onClick = {}) { Text("Choose batch destination folder") }
+                }
                 if (incomingShare?.payload != null || incomingShare?.batch?.isNotEmpty() == true) {
                     Text((if (incomingShare?.batch?.isNotEmpty() == true)
                         "Shared documents ready." else "Shared document ready.") +
@@ -1205,6 +1259,8 @@ internal fun SftpBrowseCard(
                             result.onSuccess { (live, directory) ->
                                 session = live
                                 sessionId = UUID.randomUUID().toString()
+                                singleDestinationPickerWitness = null
+                                singleDeviceTarget = null
                                 folder = chosenFolder
                                 browseLimit = SftpBrowseBounds.INITIAL
                                 pendingPeerUpload = null
@@ -1229,6 +1285,8 @@ internal fun SftpBrowseCard(
                     Button(enabled = !busy && !peerRelayLocked, onClick = {
                         session = null
                         sessionId = ""
+                        singleDestinationPickerWitness = null
+                        singleDeviceTarget = null
                         page = null
                         browseLimit = SftpBrowseBounds.INITIAL
                         pendingFile = null
@@ -1471,6 +1529,45 @@ internal fun SftpBrowseCard(
                              else "Upload " + sharedFiles.size + " shared files here")
                     }
                 }
+
+                if (enableSingleBatchDownload) {
+                    Text("Single-view batch download: pick an Android folder. Expository does not retain its grant or copy anything until a separate review and confirmation.",
+                        style = MaterialTheme.typography.bodySmall)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(
+                            enabled = !busy && !peerRelayLocked && session != null &&
+                                sessionId.isNotBlank(),
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = {
+                                singleDestinationPickerWitness =
+                                    RemotePickerWitness(sessionId, folder)
+                                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                                }
+                                runCatching { pickSingleDeviceFolder.launch(intent) }
+                                    .onFailure {
+                                        singleDestinationPickerWitness = null
+                                        status = "Android folder picker unavailable. No transfer started."
+                                    }
+                            }
+                        ) { Text(if (singleDeviceTarget == null)
+                            "Choose batch destination folder" else "Change batch destination folder") }
+                        if (singleDeviceTarget != null) Button(
+                            enabled = !busy && !peerRelayLocked,
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = {
+                                singleDeviceTarget = null
+                                singleDestinationGeneration++
+                                peerBatchSelection = SftpBatchSelection()
+                                pendingPeerBatch = null
+                                pendingPeerDownload = null
+                                status = "Batch destination cleared. No transfer started."
+                            }
+                        ) { Text("Clear destination folder") }
+                    }
+                }
                 if (folder != "/") Button(enabled = !busy && !peerRelayLocked, onClick = {
                     val parent = folder.substringBeforeLast('/', "").ifBlank { "/" }
                     browseTo(parent)
@@ -1483,10 +1580,10 @@ internal fun SftpBrowseCard(
                 if (showRenamePreview) page?.let { current ->
                     RemoteRenamePreviewCard(sessionId, folder, current, !busy)
                 }
-                if (localPaneTarget != null) {
+                if (activeDeviceTarget != null) {
                     val count = peerBatchSelection.files.size
                     Text("SFTP → Device batch: " + count + "/12 files selected " +
-                        "(the opposite Android folder is the destination).",
+                        (if (enableSingleBatchDownload) "(the separately picked Android folder is the destination)." else "(the opposite Android folder is the destination)."),
                         style = MaterialTheme.typography.bodySmall)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1509,7 +1606,7 @@ internal fun SftpBrowseCard(
                     }
                     pendingPeerBatch?.let { pending ->
                         val valid = !busy && !peerRelayLocked &&
-                            pending.stillMatches(sessionId, folder, localPaneTarget,
+                            pending.stillMatches(sessionId, folder, activeDeviceTarget,
                                 peerBatchSelection, page)
                         Card(Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(12.dp),
@@ -1560,7 +1657,7 @@ internal fun SftpBrowseCard(
                         !row.directory && path == witness.remotePath
                     }?.revision.orEmpty()
                     val valid = !busy && session != null &&
-                        witness.stillMatches(localPaneTarget, sessionId, folder,
+                        witness.stillMatches(activeDeviceTarget, sessionId, folder,
                             witness.remotePath, visibleRevision)
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp),
@@ -1593,7 +1690,7 @@ internal fun SftpBrowseCard(
                         }
                     }
                 }
-                if (allowRemoteSelection && session != null && localPaneTarget == null) {
+                if (allowRemoteSelection && session != null && activeDeviceTarget == null) {
                     val selected = peerBatchSelection
                     Text("SFTP → SFTP selection: " + selected.files.size +
                         "/12 file(s) in this source folder.",
@@ -1813,7 +1910,7 @@ internal fun SftpBrowseCard(
                                                 }
                                             }) { Text("Select for other SFTP pane") }
                                     }
-                                    if (localPaneTarget != null || allowRemoteSelection) {
+                                    if (activeDeviceTarget != null || allowRemoteSelection) {
                                         val selectedForBatch =
                                             peerBatchSelection.files.any { it.absolutePath == path }
                                         Button(
@@ -1831,14 +1928,14 @@ internal fun SftpBrowseCard(
                                                 onRemoteBatchSource(null)
                                             }
                                         ) {
-                                            Text(if (localPaneTarget != null)
+                                            Text(if (activeDeviceTarget != null)
                                                 (if (selectedForBatch) "✓ In Device batch"
                                                     else "Add to Device batch")
                                             else (if (selectedForBatch) "✓ In Server batch"
                                                     else "Add to Server batch"))
                                         }
                                     }
-                                    if (localPaneTarget != null) {
+                                    if (activeDeviceTarget != null) {
                                         Button(
                                             enabled = !busy && !peerRelayLocked && pendingPeerDownload == null,
                                             modifier = Modifier.heightIn(min = 48.dp),
