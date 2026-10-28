@@ -22,6 +22,20 @@ internal object SafNewDocumentIdentity {
             newDocumentId !in existingDocumentIds &&
             newDocumentId !in forbiddenDocumentIds
 
+
+    /**
+     * A missing/moved/renamed child after streaming is a positive integrity
+     * failure, not ordinary lack of readback support. Throwing causes the
+     * foreground engine to report UNCERTAIN and the durable journal to require
+     * operator reconciliation. Never delete or silently retry the source.
+     */
+    fun requireDirectChildForReadback(
+        expectedName: String, newDocumentId: String, parent: TreeListing
+    ) {
+        if (!isDirectChild(expectedName, newDocumentId, parent))
+            throw java.io.IOException("SAF_DESTINATION_PARENT_UNVERIFIED")
+    }
+
     /** A returned content URI must actually be the new file in the chosen parent. */
     fun isDirectChild(expectedName: String, newDocumentId: String,
         parent: TreeListing): Boolean =
