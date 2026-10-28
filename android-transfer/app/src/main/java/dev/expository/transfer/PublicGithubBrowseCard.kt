@@ -120,7 +120,7 @@ internal fun PublicGithubBrowseCard() {
                     }
                 ) { Text("Browse public repository") }
             } else {
-                val source = selected
+                val source = requireNotNull(selected)
                 Text(source.owner + " / " + source.repository +
                     (if (source.ref.isBlank()) " · default branch"
                     else " · " + source.ref),
