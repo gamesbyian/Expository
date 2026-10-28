@@ -8,8 +8,9 @@ import java.util.Locale
 
 /**
  * A directory in the source tree and its complete, independently observed direct children.
- * The listing adapter must bind [listing.location] to this directory's actual provider identity.
- * An apparent path/name match never grants permission to enumerate a different directory.
+ * The listing adapter must bind [listing.location.key.containerId] to the EXACT
+ * [directory.key.opaqueItemId] that the parent listing authenticated. A similar
+ * display path or different provider object with the same name is insufficient.
  */
 data class RecursiveFolderObservation(
     val directory: ItemRef,
@@ -116,11 +117,12 @@ object RecursiveFolderCopyPlanner {
                 errors += "DUPLICATE_DIRECTORY_WITNESS"
         }
 
-        val digestParts = mutableListOf("RECURSIVE_COPY_V1", transfer.digest,
+        val digestParts = mutableListOf("RECURSIVE_COPY_V2", transfer.digest,
             parent.snapshotId.orEmpty(), parent.location.revision,
             root.key.opaqueItemId, root.key.version, root.name)
         val entries = mutableListOf<RecursiveCopyEntry>()
-        val visitedItems = mutableSetOf<ItemKey>()
+        // Versions may change; identity aliasing must still be rejected across the tree.
+        val visitedItems = mutableSetOf<Pair<String, String>>()
         val usedWitnesses = mutableSetOf<ItemKey>()
         val pending = ArrayDeque<Pair<ItemRef, List<String>>>()
         pending.add(root to listOf(root.name))
@@ -137,7 +139,7 @@ object RecursiveFolderCopyPlanner {
                 errors += "RECURSIVE_DEPTH_OR_PATH_LIMIT"
                 continue
             }
-            if (!visitedItems.add(item.key)) {
+            if (!visitedItems.add(item.key.authorityId to item.key.opaqueItemId)) {
                 errors += "REUSED_SOURCE_ITEM_ID"
                 continue
             }
@@ -172,6 +174,7 @@ object RecursiveFolderCopyPlanner {
             if (index.state != LocationIndexState.COMPLETE ||
                 index.snapshotId.isNullOrBlank() ||
                 index.location.folder != item.parent + item.name ||
+                index.location.key.containerId != item.key.opaqueItemId ||
                 !sameScope(source, index.location) ||
                 index.location.capabilities[Capability.READ]?.valid(nowMillis) != true) {
                 errors += "DIRECTORY_LISTING_NOT_AUTHORIZED"
