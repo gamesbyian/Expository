@@ -142,6 +142,8 @@ internal fun SftpBrowseCard(
     var pendingFile by remember { mutableStateOf<String?>(null) }
     var pendingPeerUpload by remember { mutableStateOf<PeerUploadReview?>(null) }
     var pendingPeerDownload by remember { mutableStateOf<PendingPeerSftpDownload?>(null) }
+    var peerBatchSelection by remember { mutableStateOf(SftpBatchSelection()) }
+    var pendingPeerBatch by remember { mutableStateOf<PendingPeerSftpBatchDownload?>(null) }
     var pendingRelay by remember { mutableStateOf<SftpRelayPreflight?>(null) }
     var pendingSaveWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
     var pendingUploadWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
@@ -527,6 +529,8 @@ internal fun SftpBrowseCard(
                     pendingFile = null
                     pendingPeerUpload = null
                     pendingPeerDownload = null
+                    peerBatchSelection = SftpBatchSelection()
+                    pendingPeerBatch = null
                     pendingRelay = null
                     onRemoteSource(null)
                     showRenamePreview = false
@@ -701,6 +705,8 @@ internal fun SftpBrowseCard(
                                 browseLimit = SftpBrowseBounds.INITIAL
                                 pendingPeerUpload = null
                                 pendingPeerDownload = null
+                                peerBatchSelection = SftpBatchSelection()
+                                pendingPeerBatch = null
                                 pendingRelay = null
                                 onRemoteSource(null)
                                 page = directory
@@ -721,6 +727,8 @@ internal fun SftpBrowseCard(
                         pendingFile = null
                         pendingPeerUpload = null
                         pendingPeerDownload = null
+                        peerBatchSelection = SftpBatchSelection()
+                        pendingPeerBatch = null
                         pendingRelay = null
                         onRemoteSource(null)
                         pendingMove = null
