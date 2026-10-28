@@ -218,10 +218,9 @@ internal class SafRecursiveSourceScanner(private val resolver: ContentResolver) 
             val observations = ArrayList<RecursiveFolderObservation>()
             val pending = ArrayDeque<ItemRef>()
             pending.add(root)
-            var total = 0
+            var total = 1 // The selected root is already one item.
             while (pending.isNotEmpty()) {
                 val directory = pending.removeFirst()
-                total++
                 require(directory.kind == ItemKind.DIRECTORY &&
                     observations.size < RecursiveFolderCopyPlanner.MAX_DIRECTORIES &&
                     directory.parent.size <
