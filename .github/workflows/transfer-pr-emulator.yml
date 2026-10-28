@@ -44,7 +44,7 @@ jobs:
           else
             name="${REQUEST#'/transfer-native emulator-pr '}"
             case "$name" in
-              AndroidContentProviderCopyTest|FtpsUiSmokeTest|LocalPickerCancelSmokeTest|LocalPickerPositiveCopyTest|LocalPickerSourceSelectionTest|LocalSharesheetSmokeTest|RenamePreviewUiSmokeTest|KeystoreProfileVaultTest|WorkspaceNavigationUiTest|RecoveryRefreshUiTest|RecoveryIndexFailurePolicyTest) ;;
+              AndroidContentProviderCopyTest|FtpsUiSmokeTest|LocalPickerCancelSmokeTest|LocalPickerPositiveCopyTest|LocalPickerSourceSelectionTest|LocalSharesheetSmokeTest|RenamePreviewUiSmokeTest|KeystoreProfileVaultTest|WorkspaceNavigationUiTest|SftpRelayAndroidLoopbackTest|RecoveryRefreshUiTest|RecoveryIndexFailurePolicyTest) ;;
               # One fixed Android DocumentsUI acceptance method. No arbitrary
               # method, package, sh fragment or wildcard is allowed.
               LocalPickerPositiveCopyTest#twoRealSystemPickedTreesCopyExactBytesAndPreserveSource) ;;
