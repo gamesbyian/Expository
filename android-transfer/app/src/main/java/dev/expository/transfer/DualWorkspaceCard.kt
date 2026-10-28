@@ -101,6 +101,7 @@ internal fun DualWorkspaceCard(
                     onRelaySourceActive = peer.onRelaySourceActive
                 )
                 BrowseEndpoint.FTPS -> FtpsBrowseCard()
+                BrowseEndpoint.FTP -> PlainFtpBrowseCard()
                 else -> Unit
             }
         }
@@ -118,6 +119,7 @@ internal fun DualWorkspaceCard(
                     onRelaySourceActive = peer.onRelaySourceActive
                 )
                 BrowseEndpoint.FTPS -> FtpsBrowseCard()
+                BrowseEndpoint.FTP -> PlainFtpBrowseCard()
                 else -> Unit
             }
         }
@@ -211,15 +213,6 @@ internal fun DualWorkspaceCard(
                         onLoadMore = { onLoadMore(which) },
                         onSelect = { entry -> onSelect(which, entry) }
                     )
-                } else if (pane.endpoint == BrowseEndpoint.FTP) {
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Location " + which.name + " · FTP")
-                            Text("Plain FTP is not enabled. A future connection must require explicit insecure opt-in. No downgrade or anonymous connection is attempted.",
-                                style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
                 } else {
                     Text("Location " + which.name + " · " + pane.endpoint.name +
                         " · authenticated remote browser",
