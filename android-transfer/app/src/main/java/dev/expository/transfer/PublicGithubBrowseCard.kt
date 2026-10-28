@@ -1,5 +1,13 @@
 package dev.expository.transfer
 
+import android.app.Activity
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import dev.expository.transfer.engine.CopyProof
+import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
+import java.util.concurrent.atomic.AtomicBoolean
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -38,6 +46,7 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun PublicGithubBrowseCard() {
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var owner by remember { mutableStateOf("") }
     var repository by remember { mutableStateOf("") }
     var ref by remember { mutableStateOf("") }
@@ -46,8 +55,56 @@ internal fun PublicGithubBrowseCard() {
     var listing by remember { mutableStateOf<PublicGithubListing?>(null) }
     var visibleLimit by remember { mutableIntStateOf(GithubPublicDirectory.FIRST_PAGE) }
     var busy by remember { mutableStateOf(false) }
+    var pendingSave by remember { mutableStateOf<PublicGithubSaveSource?>(null) }
+    var savePermit by remember { mutableStateOf<AtomicBoolean?>(null) }
     var status by remember {
         mutableStateOf("Select a public GitHub repository to browse over HTTPS.")
+    }
+
+    val saveAs = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val witness = pendingSave
+        pendingSave = null
+        val destination = result.data?.data
+        if (result.resultCode != Activity.RESULT_OK || destination == null) {
+            busy = false
+            status = "Save As canceled. Expository wrote no bytes."
+        } else if (witness == null || selected != witness.repository ||
+            path != witness.folder || listing?.entries?.contains(witness.entry) != true) {
+            busy = false
+            status = "GitHub selection changed during the Android picker. No copy started; the picker may have created an empty document."
+        } else {
+            val permit = AtomicBoolean(true)
+            savePermit = permit
+            status = "Rechecking the pinned GitHub blob and writing the chosen Android document."
+            scope.launch {
+                try {
+                    val receipt = withContext(Dispatchers.IO) {
+                        GithubPublicSafSave(context.contentResolver, storageForPlan = { digest ->
+                            AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                        }).copy(witness, destination, continueRequested = { permit.get() })
+                    }
+                    status = when (receipt.proof) {
+                        CopyProof.BYTES_VERIFIED ->
+                            "GitHub original saved. Independent Android read-back SHA-256 matched (" +
+                                receipt.bytesWritten + " bytes). Cloud synchronization is not proven."
+                        CopyProof.WRITE_ACKNOWLEDGED ->
+                            "Android provider acknowledged " + receipt.bytesWritten +
+                                " bytes, but independent readback was unavailable."
+                        CopyProof.UNCERTAIN ->
+                            "Copy uncertain or interrupted. Inspect the possibly partial destination; do not retry blindly."
+                        CopyProof.BLOCKED ->
+                            "Save blocked by a changed GitHub revision, unsupported blob, permission or preflight. The picker may have created an empty file."
+                    }
+                } catch (_: Exception) {
+                    status = "Save outcome uncertain. Inspect the destination document."
+                } finally {
+                    savePermit = null
+                    busy = false
+                }
+            }
+        }
     }
 
     fun navigate(source: PublicGithubRepository, nextPath: String) {
@@ -81,9 +138,15 @@ internal fun PublicGithubBrowseCard() {
             Text("GitHub · public repository browser",
                 style = MaterialTheme.typography.titleMedium)
             Text("Anonymous public repos only. Files and folders are browsable, " +
-                "but private access, downloads, cross-pane Copy and Git commits " +
-                "are not enabled in this first read-only location.",
+                "but private access, large downloads, cross-pane Copy and Git commits " +
+                "are not enabled. Original files up to 4 MB may be saved into a new Android document.",
                 style = MaterialTheme.typography.bodySmall)
+            if (savePermit != null) {
+                Button(
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    onClick = { savePermit?.set(false) }
+                ) { Text("Stop Save As") }
+            }
             if (selected == null) {
                 OutlinedTextField(owner, { owner = it },
                     modifier = Modifier.fillMaxWidth(),
@@ -168,6 +231,27 @@ internal fun PublicGithubBrowseCard() {
                                         },
                                         style = MaterialTheme.typography.bodySmall
                                     )
+                                }
+                                if (entry.file && entry.sha.matches(Regex("[0-9a-fA-F]{40}")) &&
+                                    (entry.bytes == null || entry.bytes <= GithubPublicBlob.MAX_FILE_BYTES)) {
+                                    Button(enabled = !busy,
+                                        modifier = Modifier.heightIn(min = 48.dp),
+                                        onClick = {
+                                            val witness = runCatching {
+                                                PublicGithubSaveSource(source, path, entry)
+                                            }.getOrNull()
+                                            if (witness == null) {
+                                                status = "This GitHub blob cannot be saved safely."
+                                            } else {
+                                                pendingSave = witness
+                                                busy = true
+                                                status = "Choose a new Android document for this pinned GitHub original."
+                                                saveAs.launch(Intent(Intent.ACTION_CREATE_DOCUMENT)
+                                                    .addCategory(Intent.CATEGORY_OPENABLE)
+                                                    .setType("application/octet-stream")
+                                                    .putExtra(Intent.EXTRA_TITLE, entry.name))
+                                            }
+                                        }) { Text("Save As") }
                                 }
                                 if (entry.directory) {
                                     Button(enabled = !busy,
