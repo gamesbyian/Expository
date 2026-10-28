@@ -102,7 +102,7 @@ class WorkspaceNavigationUiTest {
         // This is a phone-width A/B UI: explicitly activate Pane A before
         // changing its endpoint. Inactive panes remain composed, not placed.
         compose.onNodeWithText("Pane A · LOCAL", substring = true).performClick()
-        compose.onNodeWithText("DOCUMENTS").performClick()
+        compose.onNodeWithTag("endpoint-A-DOCUMENTS").performClick()
         compose.onNodeWithText("Dual-location workspace").performScrollTo()
         val pair = compose.onNodeWithTag("workspace-location-summary")
             .fetchSemanticsNode().config[SemanticsProperties.StateDescription]
