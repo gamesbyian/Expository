@@ -51,6 +51,9 @@ jobs:
               # Exact bounded two-file Android Files picker + two receipts.
               LocalPickerPositiveCopyTest#twoRealSystemPickedTreesCopyTwoSelectedFiles) ;;
               NewFolderPositiveProviderTest#oneRealSystemPickedFolderCreatesExactChildAndVerifiedJournal) ;;
+              # Exact DocumentsProvider workspace selection UI, independently
+              # from the known-intermittent OS folder picker E2 (#222).
+              WorkspaceNavigationUiTest#documentProviderIsSelectableInSingleAndDualWithoutImplicitWrites) ;;
               *) echo "Unsupported test selection"; exit 2 ;;
             esac
             printf 'TARGET_TEST_CLASS=dev.expository.transfer.%s\n' "$name" >> "$GITHUB_ENV"
