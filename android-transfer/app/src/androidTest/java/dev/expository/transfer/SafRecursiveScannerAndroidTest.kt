@@ -30,7 +30,8 @@ class SafRecursiveScannerAndroidTest {
         val resolver = InstrumentationRegistry.getInstrumentation().context.contentResolver
         val sourceTree: Uri = Uri.parse("content://test.source.scoped/tree/source-root")
         val targetTree: Uri = Uri.parse("content://test.target.scoped/tree/target-root")
-        val scanner = SafRecursiveSourceScanner(resolver)
+        var observedAtMillis = 1_000_000L
+        val scanner = SafRecursiveSourceScanner(resolver) { observedAtMillis }
         init { mode("reset") }
         fun mode(which: String) {
             check(resolver.call(sourceTree, which, null, null) != null)
@@ -53,7 +54,14 @@ class SafRecursiveScannerAndroidTest {
             listOf("Shows", "Episode.bin")),
             approved.entries.map { it.relativePath })
         assertEquals(64, approved.digest.length)
+        // Identical listing and capability lifetime => identical review digest.
         assertEquals(approved.digest, e.scanner.prepare(e.request())?.digest)
+        // A newly issued approval has a different expiry: its digest must
+        // change, even if the remote directory still looks identical.
+        e.observedAtMillis += 1_000L
+        val renewed = requireNotNull(e.scanner.prepare(e.request()))
+        assertTrue(renewed.reviewable)
+        assertFalse(approved.digest == renewed.digest)
     }
 
     @Test fun changedSourceMetadataAndAmbiguousNamesInvalidateWholeProposal() {
