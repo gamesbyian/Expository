@@ -1,13 +1,13 @@
 package dev.expository.transfer;
 
+import android.content.ContentProvider;
+import android.content.ContentValues;
 import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.CancellationSignal;
 import android.os.ParcelFileDescriptor;
 import android.provider.DocumentsContract;
-import android.provider.DocumentsProvider;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -16,11 +16,14 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Instrumentation-APK-only disposable DocumentsProvider for a real Android
- * ContentResolver -> provider -> ParcelFileDescriptor recursive byte journey.
- * No network, external account, personal files or OS picker grant is involved.
+ * Instrumentation-APK-only synthetic DocumentsContract-shaped ContentProvider.
+ * Uses REAL Android ContentResolver/provider IPC and ParcelFileDescriptor bytes,
+ * while intentionally avoiding Android's MANAGE_DOCUMENTS system picker grant.
+ * A true DocumentsProvider MUST get its grant from the OS picker separately.
+ * This fixture cannot prove DocumentsUI or third-party cloud interoperability.
+ * No network, external account or personal files.
  */
-public final class SafRecursiveWriteProvider extends DocumentsProvider {
+public final class SafRecursiveWriteProvider extends ContentProvider {
     private static final String DIR = DocumentsContract.Document.MIME_TYPE_DIR;
     private static final int CREATE = DocumentsContract.Document.FLAG_DIR_SUPPORTS_CREATE;
     private static final int CHUNK = 137119;
@@ -85,6 +88,25 @@ public final class SafRecursiveWriteProvider extends DocumentsProvider {
             b.putInt("creates", creates);
             return b;
         }
+        if ("android:createDocument".equals(method)) {
+            if (extras == null) throw new IllegalArgumentException("CREATE_EXTRAS_REQUIRED");
+            Uri parentUri = extras.getParcelable("uri", Uri.class);
+            if (parentUri == null) throw new IllegalArgumentException("PARENT_URI_REQUIRED");
+            String mime = extras.getString(DocumentsContract.Document.COLUMN_MIME_TYPE);
+            String name = extras.getString(DocumentsContract.Document.COLUMN_DISPLAY_NAME);
+            try {
+                String id = createFixtureDocument(
+                    DocumentsContract.getDocumentId(parentUri), mime, name);
+                Bundle response = new Bundle();
+                response.putParcelable("uri",
+                    DocumentsContract.buildDocumentUriUsingTree(parentUri, id));
+                return response;
+            } catch (FileNotFoundException error) {
+                // Models an ambiguous provider result after a document may
+                // already have been created. DocumentsContract returns null.
+                throw new IllegalStateException("SYNTHETIC_CREATE_REPLY_UNKNOWN");
+            }
+        }
         return super.call(method, arg, extras);
     }
 
@@ -127,7 +149,7 @@ public final class SafRecursiveWriteProvider extends DocumentsProvider {
         return cursor;
     }
 
-    @Override public Cursor queryRoots(String[] projection) {
+    private Cursor queryRoots(String[] projection) {
         String[] columns = projection != null ? projection : new String[]{
             DocumentsContract.Root.COLUMN_ROOT_ID,
             DocumentsContract.Root.COLUMN_DOCUMENT_ID,
@@ -150,18 +172,18 @@ public final class SafRecursiveWriteProvider extends DocumentsProvider {
         }
         return cursor;
     }
-    @Override public Cursor queryDocument(String id, String[] columns)
+    private Cursor queryDocument(String id, String[] columns)
         throws FileNotFoundException {
         if (!docs.containsKey(id)) throw new FileNotFoundException();
         return rows(columns, null, id);
     }
-    @Override public Cursor queryChildDocuments(String parent, String[] columns,
+    private Cursor queryChildDocuments(String parent, String[] columns,
         String sortOrder) throws FileNotFoundException {
         Doc doc = docs.get(parent);
         if (doc == null || !doc.directory()) throw new FileNotFoundException();
         return rows(columns, parent, null);
     }
-    @Override public boolean isChildDocument(String parentDocumentId, String documentId) {
+    private boolean isChildDocument(String parentDocumentId, String documentId) {
         Doc child = docs.get(documentId);
         while (child != null && child.parent != null) {
             if (parentDocumentId.equals(child.parent)) return true;
@@ -169,7 +191,7 @@ public final class SafRecursiveWriteProvider extends DocumentsProvider {
         }
         return false;
     }
-    @Override public String createDocument(String parentDocumentId, String mime,
+    private String createFixtureDocument(String parentDocumentId, String mime,
         String displayName) throws FileNotFoundException {
         Doc parent = docs.get(parentDocumentId);
         if (parent == null || !parent.directory() || displayName == null ||
@@ -193,8 +215,8 @@ public final class SafRecursiveWriteProvider extends DocumentsProvider {
         }
         return id;
     }
-    @Override public ParcelFileDescriptor openDocument(String documentId,
-        String mode, CancellationSignal signal) throws FileNotFoundException {
+    private ParcelFileDescriptor openFixtureDocument(String documentId,
+        String mode) throws FileNotFoundException {
         Doc doc = docs.get(documentId);
         if (doc == null || doc.directory() || "occupied".equals(documentId))
             throw new FileNotFoundException();
@@ -203,4 +225,37 @@ public final class SafRecursiveWriteProvider extends DocumentsProvider {
         return ParcelFileDescriptor.open(dataFile(documentId),
             ParcelFileDescriptor.parseMode(mode));
     }
+
+    @Override public Cursor query(Uri uri, String[] projection,
+        String selection, String[] args, String sortOrder) {
+        java.util.List<String> segments = uri.getPathSegments();
+        if (!segments.isEmpty() && "root".equals(segments.get(0)))
+            return queryRoots(projection);
+        int pos = segments.indexOf("document");
+        if (pos < 0 || pos + 1 >= segments.size())
+            throw new IllegalArgumentException("UNRECOGNIZED_TEST_DOCUMENT_URI");
+        String id = segments.get(pos + 1);
+        try {
+            return "children".equals(segments.get(segments.size() - 1))
+                ? queryChildDocuments(id, projection, sortOrder)
+                : queryDocument(id, projection);
+        } catch (FileNotFoundException e) {
+            throw new IllegalStateException("FIXTURE_DOCUMENT_MISSING");
+        }
+    }
+
+    @Override public ParcelFileDescriptor openFile(Uri uri, String mode)
+        throws FileNotFoundException {
+        return openFixtureDocument(DocumentsContract.getDocumentId(uri), mode);
+    }
+
+    @Override public String getType(Uri uri) {
+        Doc doc = docs.get(DocumentsContract.getDocumentId(uri));
+        return doc != null ? doc.mime : null;
+    }
+
+    @Override public Uri insert(Uri uri, ContentValues values) { return null; }
+    @Override public int delete(Uri uri, String selection, String[] args) { return 0; }
+    @Override public int update(Uri uri, ContentValues values,
+        String selection, String[] args) { return 0; }
 }
