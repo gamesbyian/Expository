@@ -37,6 +37,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
+import dev.expository.transfer.security.SavedSftpBookmarks
+import dev.expository.transfer.security.SavedSftpBookmark
+import dev.expository.transfer.security.SavedSftpBookmarkSlot
 import dev.expository.transfer.sftp.SecureSftp
 import dev.expository.transfer.sftp.SftpBrowsePage
 import dev.expository.transfer.sftp.SftpBrowseBounds
@@ -137,6 +140,8 @@ internal fun SftpBrowseCard(
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var fingerprint by remember { mutableStateOf("") }
+    var savedBookmarks by remember { mutableStateOf<List<SavedSftpBookmarkSlot>?>(null) }
+    var pendingBookmarkDelete by remember { mutableStateOf<String?>(null) }
     var session by remember { mutableStateOf<SftpSession?>(null) }
     var sessionId by remember { mutableStateOf("") }
     var folder by remember { mutableStateOf("/") }
@@ -1019,7 +1024,7 @@ internal fun SftpBrowseCard(
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("SFTP file transfer", style = MaterialTheme.typography.titleMedium)
-            Text("Foreground-only journaled Copy. Password and session are not saved; host-key fingerprint must be independently verified.",
+            Text("Foreground-only journaled Copy. Passwords and sessions are never saved. Connection-only bookmarks are optional, encrypted by Android Keystore and do not require biometrics. Verify host-key fingerprints independently.",
                 style = MaterialTheme.typography.bodySmall)
 
             if (session == null) {
@@ -1045,6 +1050,129 @@ internal fun SftpBrowseCard(
                 OutlinedTextField(fingerprint, { fingerprint = it },
                     label = { Text("Trusted SSH key: SHA256:…") },
                     enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Button(modifier = Modifier.heightIn(min = 48.dp),
+                        enabled = !busy && !peerRelayLocked,
+                        onClick = {
+                            if (savedBookmarks != null) {
+                                savedBookmarks = null
+                                pendingBookmarkDelete = null
+                            } else {
+                                busy = true
+                                status = "Opening explicitly saved connection details…"
+                                scope.launch {
+                                    val result = withContext(Dispatchers.IO) {
+                                        runCatching { SavedSftpBookmarks(context).list() }
+                                    }
+                                    result.onSuccess {
+                                        savedBookmarks = it
+                                        status = if (it.isEmpty()) "No saved connection bookmarks."
+                                            else "Select a bookmark to fill the form. Enter a password separately."
+                                    }.onFailure {
+                                        status = "Encrypted bookmarks unavailable. No details loaded."
+                                    }
+                                    busy = false
+                                }
+                            }
+                        }) { Text(if (savedBookmarks == null)
+                            "Saved connections" else "Hide saved connections") }
+                    Button(modifier = Modifier.heightIn(min = 48.dp),
+                        enabled = !busy && !peerRelayLocked &&
+                            host.isNotBlank() && username.isNotBlank() &&
+                            fingerprint.isNotBlank() && startFolder.isNotBlank(),
+                        onClick = {
+                            val snapshot = runCatching {
+                                SavedSftpBookmark(host.trim(), port.toInt(),
+                                    startFolder.trim(), username, fingerprint.trim())
+                            }.getOrNull()
+                            if (snapshot == null) {
+                                status = "Bookmark refused: check host, port, path, username and SSH pin."
+                            } else {
+                                busy = true
+                                status = "Encrypting a new connection-only bookmark. Password excluded."
+                                scope.launch {
+                                    val result = withContext(Dispatchers.IO) {
+                                        runCatching {
+                                            val store = SavedSftpBookmarks(context)
+                                            store.save(snapshot)
+                                            store.list()
+                                        }
+                                    }
+                                    result.onSuccess {
+                                        savedBookmarks = it
+                                        pendingBookmarkDelete = null
+                                        status = "Connection details encrypted locally. Password was not stored."
+                                    }.onFailure {
+                                        status = "Bookmark could not be stored. Existing records remain unchanged."
+                                    }
+                                    busy = false
+                                }
+                            }
+                        }) { Text("Save connection (no password)") }
+                }
+                savedBookmarks?.forEach { slot ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(slot.bookmark?.let {
+                            it.username + "@" + it.host + ":" + it.port
+                        } ?: "Unreadable saved connection",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall)
+                        Button(enabled = !busy && !peerRelayLocked &&
+                            slot.bookmark != null,
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = {
+                                slot.bookmark?.let {
+                                    host = it.host
+                                    port = it.port.toString()
+                                    startFolder = it.folder
+                                    username = it.username
+                                    fingerprint = it.hostKeyPin
+                                    password = ""
+                                    pendingBookmarkDelete = null
+                                    status = "Bookmark loaded without a password. Verify SSH pin and enter your password to connect."
+                                }
+                            }) { Text("Load") }
+                        Button(enabled = !busy && !peerRelayLocked,
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = { pendingBookmarkDelete = slot.slot }) {
+                            Text("Remove")
+                        }
+                    }
+                    if (pendingBookmarkDelete == slot.slot) {
+                        Text("Remove this encrypted bookmark from this device? No remote server files are affected.",
+                            style = MaterialTheme.typography.bodySmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(enabled = !busy && !peerRelayLocked,
+                                modifier = Modifier.heightIn(min = 48.dp),
+                                onClick = {
+                                    busy = true
+                                    scope.launch {
+                                        val result = withContext(Dispatchers.IO) {
+                                            runCatching {
+                                                val store = SavedSftpBookmarks(context)
+                                                store.delete(slot.slot)
+                                                store.list()
+                                            }
+                                        }
+                                        result.onSuccess {
+                                            savedBookmarks = it
+                                            pendingBookmarkDelete = null
+                                            status = "Encrypted bookmark removed from this device."
+                                        }.onFailure {
+                                            status = "Bookmark removal unverified. Nothing was reset automatically."
+                                        }
+                                        busy = false
+                                    }
+                                }) { Text("Confirm remove") }
+                            Button(enabled = !busy && !peerRelayLocked,
+                                modifier = Modifier.heightIn(min = 48.dp),
+                                onClick = { pendingBookmarkDelete = null }) {
+                                Text("Keep bookmark")
+                            }
+                        }
+                    }
+                }
                 Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !busy && !peerRelayLocked &&
                     host.isNotBlank() && username.isNotBlank() &&
                     password.isNotBlank() && fingerprint.isNotBlank(),
