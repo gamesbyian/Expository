@@ -11,6 +11,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performSemanticsAction
@@ -95,16 +96,16 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("Location Single · Device").assertExists()
         compose.onNodeWithText("Dual view").performClick()
         compose.onNodeWithText("DOCUMENTS").performClick()
-        // Confirm the exact selected location kind. The nested card may be
-        // below the outer LazyColumn viewport after the extra endpoint row.
-        compose.onNodeWithText("✓ DOCUMENTS").assertExists()
+        compose.onNodeWithText("Dual-location workspace").performScrollTo()
+        compose.onNodeWithText("Locations: A · DOCUMENTS / B · SFTP").assertExists()
         compose.onNodeWithText("Choose Pane A folder…").assertExists()
         compose.onNodeWithText("Copy A → B…").assertIsNotEnabled()
         compose.onNodeWithText("Copy B → A…").assertIsNotEnabled()
         compose.onNodeWithText("Pane B · SFTP").performClick()
         compose.onNodeWithText("Location B · SFTP", substring = true).assertExists()
         compose.onNodeWithText("Pane A · DOCUMENTS").performClick()
-        compose.onNodeWithText("✓ DOCUMENTS").assertExists()
+        compose.onNodeWithText("Dual-location workspace").performScrollTo()
+        compose.onNodeWithText("Locations: A · DOCUMENTS / B · SFTP").assertExists()
         compose.onNodeWithText("Choose Pane A folder…").assertExists()
     }
 
