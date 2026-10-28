@@ -1,5 +1,7 @@
 package dev.expository.transfer
 
+import android.database.MatrixCursor
+import android.provider.DocumentsContract
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -9,6 +11,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -26,6 +29,42 @@ class LocalTreePresentationAndroidTest {
         TreeEntry("b", "beta.TXT", false, 8),
         TreeEntry("h", ".hidden", false, 0)
     )
+
+    @Test fun unicodeAndCaseEquivalentProviderNamesCannotAuthorizeWrites() {
+        val d = DocumentsContract.Document
+        fun list(vararg names: String): TreeListing {
+            val cursor = MatrixCursor(arrayOf(d.COLUMN_DOCUMENT_ID,
+                d.COLUMN_DISPLAY_NAME, d.COLUMN_MIME_TYPE, d.COLUMN_SIZE))
+            names.forEachIndexed { i, name ->
+                cursor.addRow(arrayOf("different-provider-id-$i", name,
+                    "application/octet-stream", 4L))
+            }
+            return cursor.use { LocalTreeReader.decodeRows(it) }
+        }
+
+        val ordinary = list("Café.txt", "Other.txt")
+        assertTrue(ordinary.complete)
+        assertEquals(2, ordinary.children.size)
+
+        val unicode = list("Café.txt", "Cafe\u0301.txt")
+        assertFalse(unicode.complete)
+        assertFalse(unicode.hasMore)
+        assertEquals(2, unicode.children.size) // both IDs remain visible
+        assertEquals(2, unicode.children.map { it.documentId }.distinct().size)
+
+        val case = list("Episode01.mkv", "episode01.MKV")
+        assertFalse(case.complete)
+        assertEquals(2, case.children.size)
+
+        // Repeated provider identity remains an independently invalid listing.
+        val duplicateId = MatrixCursor(arrayOf(d.COLUMN_DOCUMENT_ID,
+            d.COLUMN_DISPLAY_NAME, d.COLUMN_MIME_TYPE, d.COLUMN_SIZE))
+        duplicateId.addRow(arrayOf("same-id", "Alpha", "text/plain", 0L))
+        duplicateId.addRow(arrayOf("same-id", "Beta", "text/plain", 0L))
+        val repeated = duplicateId.use { LocalTreeReader.decodeRows(it) }
+        assertFalse(repeated.complete)
+        assertEquals(1, repeated.children.size)
+    }
 
     @Test fun orderAndFilterDoNotMutateProviderListingOrSelections() {
         fun names(filter: String, sort: LocalTreeSort): List<String> =
