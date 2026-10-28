@@ -228,4 +228,18 @@ class GithubPublicDirectoryAndroidTest {
             resolver.delete(uri, null, null)
         }
     }
+
+    @Test fun gitLfsPointerCannotBeLabeledOriginalSaveAs() {
+        val pointer = "version https://git-lfs.github.com/spec/v1\n" +
+            "oid sha256:" + "0".repeat(64) + "\nsize 123456789\n"
+        val encoded = android.util.Base64.encodeToString(
+            pointer.toByteArray(Charsets.US_ASCII), android.util.Base64.NO_WRAP)
+        val sha = "e5dc7be26cec9cf29e3967a40beae0700133a2a2"
+        val json = JSONObject().put("sha", sha).put("encoding", "base64")
+            .put("size", pointer.toByteArray(Charsets.US_ASCII).size)
+            .put("content", encoded).toString()
+        assertTrue("Git LFS pointer bytes are not the requested original", runCatching {
+            GithubPublicBlob.decode(json, sha, pointer.length.toLong())
+        }.isFailure)
+    }
 }
