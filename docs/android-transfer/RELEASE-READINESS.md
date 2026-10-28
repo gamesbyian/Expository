@@ -425,3 +425,41 @@ grant, or establish E4 physical/E5 release acceptance. A true Android
 SAF executor must combine the scanner, short-lived grant and per-step
 source rechecks with independent journaling, no-replace directory creates
 and readback-verified file streams before W03 can advance.
+
+## 28 October: scoped SAF per-step source ancestry
+
+[Merged PR #269](https://github.com/gamesbyian/Expository/pull/269),
+reconciled exact source `e457067e2ea19f8c142992d984153d95c4b8b8dd`,
+adds a **read-only** `SafRecursiveSourceScanner.sourceEntryStillCurrent`
+for the forthcoming Android recursive transfer adapter. After its
+independent full-tree preflight, each source file or directory can be
+reobserved using actual bounded `ContentResolver` child/metadata queries,
+the *original* short-lived capability and the exact selected source-root
+identity. Every nested ancestor must resolve through returned opaque
+provider IDs; changed grant, child ID, name, kind, weak metadata version,
+incomplete listing or expired approval refuses that step. Crucially, the
+source-only recheck does not require the unchanged original destination
+listing after separately journaled folder creation.
+
+The reconciled source passed
+[native JVM #40780207550](https://github.com/gamesbyian/Expository/actions/runs/40780207550),
+[Android app + instrumentation APK compilation #40780225201](https://github.com/gamesbyian/Expository/actions/runs/40780225201)
+and [targeted API35 E2 #40780219019](https://github.com/gamesbyian/Expository/actions/runs/40780219019)
+(**9/9 synthetic DocumentsProvider tests**); exact workflow logs show
+`SOURCE_SHA: e457067e2ea19f8c142992d984153d95c4b8b8dd`.
+An initial superseded [#40779366813](https://github.com/gamesbyian/Expository/actions/runs/40779366813)
+attempt failed before tests due unavailable emulator TCP; the subsequent
+run failed an outdated test assertion which treated a fixture's changed
+*file* metadata as changed *root directory* metadata. That test was
+corrected. [Older-head E2 #40780066258](https://github.com/gamesbyian/Expository/actions/runs/40780066258)
+also passed 9/9, before the exact two-file source/test commit was
+safely rebased onto merged #268. **Neither run performs destination writes.**
+
+**Still unimplemented:** an authenticated, writable Android SAF
+`RecursiveCopyEndpoint` that connects per-step source checks to actual
+journaled, no-replace destination folder/document creation and byte-stream
+readback. The original source metadata revision remains weak and cannot
+prove immutable contents; streamed-byte SHA-256 and fresh post-read
+source observations are separate future execution requirements.
+Real Drive/cloud provider grants, physical E4 and signed E5 acceptance
+remain open.
