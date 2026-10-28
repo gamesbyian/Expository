@@ -167,3 +167,52 @@ internal object GithubPublicDirectory {
         }
     }
 }
+
+
+/**
+ * Import only a canonical HTTPS GitHub repository URL or an immutable
+ * 40-character commit's directory permalink. Branch URLs are ambiguous when
+ * branch names contain '/', so they must be entered using the separate ref
+ * field instead of guessing where the folder path starts.
+ *
+ * No redirects, query/fragment tokens, userinfo, alternate hosts or encoded
+ * path components may become an authority or path in this native browser.
+ */
+internal data class PublicGithubUrlTarget(
+    val repository: PublicGithubRepository,
+    val folder: String = ""
+)
+
+internal object GithubPublicUrl {
+    fun parse(input: String): PublicGithubUrlTarget {
+        require(input.isNotBlank() && input.length <= 4_096 &&
+            input == input.trim() && input.none { it.code < 32 || it.code == 127 }) {
+            "INVALID_GITHUB_LINK"
+        }
+        val uri = java.net.URI(input)
+        require(uri.scheme == "https" && uri.host == "github.com" &&
+            uri.rawUserInfo == null && uri.port == -1 && uri.rawQuery == null &&
+            uri.rawFragment == null && uri.rawPath != null &&
+            !uri.rawPath.contains('%') && !uri.rawPath.contains('\\')) {
+            "UNSAFE_GITHUB_LINK"
+        }
+        val path = uri.rawPath.removePrefix("/").removeSuffix("/")
+        val parts = path.split('/')
+        require(parts.size >= 2 && parts[0].isNotEmpty() && parts[1].isNotEmpty()) {
+            "GITHUB_REPOSITORY_LINK_REQUIRED"
+        }
+        val owner = parts[0]
+        val repository = parts[1]
+        if (parts.size == 2) {
+            return PublicGithubUrlTarget(PublicGithubRepository(owner, repository))
+        }
+        require(parts.size >= 4 && parts[2] == "tree" &&
+            parts[3].matches(Regex("[0-9a-fA-F]{40}"))) {
+            "GITHUB_LINK_REQUIRES_FULL_COMMIT_SHA"
+        }
+        val folder = parts.drop(4).joinToString("/")
+        GithubPublicDirectory.checkedPath(folder)
+        return PublicGithubUrlTarget(
+            PublicGithubRepository(owner, repository, parts[3]), folder)
+    }
+}
