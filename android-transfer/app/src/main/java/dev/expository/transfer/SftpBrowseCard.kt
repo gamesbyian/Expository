@@ -1099,13 +1099,13 @@ internal fun SftpBrowseCard(
                                     scope.launch {
                                         val result = withContext(Dispatchers.IO) {
                                             runCatching {
-                                                val store = SavedSftpBookmarks(context)
-                                                store.delete(slot.slot)
-                                                store.list()
+                                                SavedSftpBookmarks(context).delete(slot.slot)
                                             }
                                         }
                                         result.onSuccess {
-                                            savedBookmarks = it
+                                            savedBookmarks = savedBookmarks?.filterNot {
+                                                it.slot == slot.slot
+                                            }
                                             pendingBookmarkDelete = null
                                             status = "Encrypted bookmark removed from this device."
                                         }.onFailure {
@@ -1157,15 +1157,13 @@ internal fun SftpBrowseCard(
                                 scope.launch {
                                     val result = withContext(Dispatchers.IO) {
                                         runCatching {
-                                            val store = SavedSftpBookmarks(context)
-                                            store.save(snapshot)
-                                            store.list()
+                                            SavedSftpBookmarks(context).save(snapshot)
                                         }
                                     }
                                     result.onSuccess {
-                                        savedBookmarks = it
+                                        savedBookmarks = null
                                         pendingBookmarkDelete = null
-                                        status = "Connection details encrypted locally. Password was not stored."
+                                        status = "Connection details encrypted locally. Password was not stored; open Saved connections to load them."
                                     }.onFailure {
                                         status = "Bookmark could not be stored. Existing records remain unchanged."
                                     }
