@@ -434,11 +434,11 @@ private fun DeveloperPreview(
                 !model.pane(sourcePane).endpoint.isSaf ||
                 !model.pane(destinationPane).endpoint.isSaf) {
                 proposedCopy = null
-        recursiveProposal = null
+                recursiveProposal = null
                 copyStatus = "Folder or source selection changed during preflight. No file was created."
             } else if (candidates == null || candidates.size != chosen.size) {
                 proposedCopy = null
-        recursiveProposal = null
+                recursiveProposal = null
                 copyStatus = "Batch Copy preflight refused: permissions, incomplete listing, ambiguous name or collision. No file was created."
             } else {
                 proposedCopy = candidates
@@ -704,7 +704,7 @@ private fun DeveloperPreview(
                     Button(enabled = !copyBusy && !remoteRelayBusy,
                         onClick = {
                             proposedCopy = null
-        recursiveProposal = null
+                            recursiveProposal = null
                             if (model.view != WorkspaceView.SINGLE)
                                 pickerWitnesses = pickerWitnesses.invalidateDual()
                                     .invalidate(WorkspacePane.SINGLE)
@@ -750,7 +750,7 @@ private fun DeveloperPreview(
                                     // provider: never carry a grant across
                                     // unrelated SFTP/FTPS/GitHub browsing.
                                     proposedCopy = null
-        recursiveProposal = null
+                                    recursiveProposal = null
                                     pickerWitnesses = pickerWitnesses.invalidate(WorkspacePane.SINGLE)
                                     treeReadGeneration.incrementAndGet()
                                     model = model.update(WorkspacePane.SINGLE,
@@ -895,7 +895,7 @@ private fun DeveloperPreview(
                             // Read the *current* model when the button acts,
                             // and never retain the old pane authority/selection.
                             proposedCopy = null
-        recursiveProposal = null
+                            recursiveProposal = null
                             if (model.pane(which).endpoint != endpoint) {
                                 pickerWitnesses = pickerWitnesses.invalidate(which)
                                 model = model.update(which, BrowsePaneState(endpoint))
@@ -904,7 +904,7 @@ private fun DeveloperPreview(
                         },
                         onSwap = {
                             proposedCopy = null
-        recursiveProposal = null
+                            recursiveProposal = null
                             // A pending picker belongs to its launcher's
                             // original pane. Never attach its later result to
                             // the opposite pane after a swap.
@@ -920,12 +920,12 @@ private fun DeveloperPreview(
                         onFocus = { model = model.showDual(it) },
                         onPick = {
                             proposedCopy = null
-        recursiveProposal = null
+                            recursiveProposal = null
                             launchTreePicker(it)
                         },
                         onNavigate = { which, crumbs ->
                             proposedCopy = null
-        recursiveProposal = null
+                            recursiveProposal = null
                             val current = tree(which)
                             current.treeUri?.let {
                                 // Refresh keeps the requested browse depth;
@@ -943,7 +943,7 @@ private fun DeveloperPreview(
                                 uri != null &&
                                 current.visibleLimit < LocalTreeReader.MAX_BROWSE) {
                                 proposedCopy = null
-        recursiveProposal = null
+                                recursiveProposal = null
                                 readTree(which, uri, current.crumbs,
                                     maxVisible = (current.visibleLimit +
                                         LocalTreeReader.MAX_VISIBLE)
@@ -961,8 +961,10 @@ private fun DeveloperPreview(
                         onConfirmRecursive = ::confirmFolderCopy,
                         onCancelRecursive = { recursiveProposal = null },
                         onConfirmCopy = ::confirmDeviceCopy,
-                        onCancelCopy = { proposedCopy = null
-        recursiveProposal = null },
+                        onCancelCopy = {
+                            proposedCopy = null
+                            recursiveProposal = null
+                        },
                         onStopCopy = { copyPermit?.set(false) }
                     )
                 }
