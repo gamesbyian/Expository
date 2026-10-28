@@ -285,14 +285,12 @@ private fun DeveloperPreview(
             writeGranted = grant and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0)
     }
 
-    var pendingPickerSingle by remember { mutableStateOf<BrowseEndpoint?>(null) }
-    var pendingPickerA by remember { mutableStateOf<BrowseEndpoint?>(null) }
-    var pendingPickerB by remember { mutableStateOf<BrowseEndpoint?>(null) }
+    var pickerWitnesses by remember { mutableStateOf(ScopedTreePickerWitnesses()) }
 
-    fun takePickerWitness(which: WorkspacePane): BrowseEndpoint? = when (which) {
-        WorkspacePane.SINGLE -> pendingPickerSingle.also { pendingPickerSingle = null }
-        WorkspacePane.A -> pendingPickerA.also { pendingPickerA = null }
-        WorkspacePane.B -> pendingPickerB.also { pendingPickerB = null }
+    fun takePickerWitness(which: WorkspacePane): BrowseEndpoint? {
+        val launchEndpoint = pickerWitnesses.pending(which)
+        pickerWitnesses = pickerWitnesses.invalidate(which)
+        return launchEndpoint
     }
 
     val treePickerSingle = rememberLauncherForActivityResult(
@@ -308,11 +306,7 @@ private fun DeveloperPreview(
     fun launchTreePicker(which: WorkspacePane) {
         val endpoint = model.pane(which).endpoint
         if (!endpoint.isSaf) return
-        when (which) {
-            WorkspacePane.SINGLE -> pendingPickerSingle = endpoint
-            WorkspacePane.A -> pendingPickerA = endpoint
-            WorkspacePane.B -> pendingPickerB = endpoint
-        }
+        pickerWitnesses = pickerWitnesses.arm(which, endpoint)
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
@@ -334,8 +328,14 @@ private fun DeveloperPreview(
     fun choosePair(pair: DualPairing) {
         proposedCopy = null
         val next = model.preset(pair)
-        if (model.a.endpoint != next.a.endpoint) treeA = LocalTreeBrowseState()
-        if (model.b.endpoint != next.b.endpoint) treeB = LocalTreeBrowseState()
+        if (model.a.endpoint != next.a.endpoint) {
+            pickerWitnesses = pickerWitnesses.invalidate(WorkspacePane.A)
+            treeA = LocalTreeBrowseState()
+        }
+        if (model.b.endpoint != next.b.endpoint) {
+            pickerWitnesses = pickerWitnesses.invalidate(WorkspacePane.B)
+            treeB = LocalTreeBrowseState()
+        }
         model = next
     }
 
@@ -518,6 +518,9 @@ private fun DeveloperPreview(
     var workspace by remember { mutableStateOf(TransferWorkspace.LOCAL) }
     LaunchedEffect(incomingShare?.sequence) {
         proposedCopy = null
+        // A new external Share invalidates outstanding picker launch
+        // contexts, without disconnecting authenticated remote sessions.
+        pickerWitnesses = ScopedTreePickerWitnesses()
         // An incoming Share must never silently dispose an active SFTP or
         // FTPS session, potentially interrupting a transfer in progress.
         // First launch starts in Local anyway; a synthetic Demo can reset.
@@ -546,6 +549,9 @@ private fun DeveloperPreview(
                     Button(enabled = !copyBusy && !remoteRelayBusy,
                         onClick = {
                             proposedCopy = null
+                            if (model.view != WorkspaceView.SINGLE)
+                                pickerWitnesses = pickerWitnesses.invalidateDual()
+                                    .invalidate(WorkspacePane.SINGLE)
                             model = model.view(WorkspaceView.SINGLE)
                         },
                         modifier = Modifier.heightIn(min = 48.dp).semantics {
@@ -554,7 +560,12 @@ private fun DeveloperPreview(
                         }) { Text(if (model.view == WorkspaceView.SINGLE)
                             "✓ Single view" else "Single view") }
                     Button(enabled = !copyBusy && !remoteRelayBusy,
-                        onClick = { model = model.view(WorkspaceView.DUAL) },
+                        onClick = {
+                            if (model.view != WorkspaceView.DUAL)
+                                pickerWitnesses = pickerWitnesses.invalidateDual()
+                                    .invalidate(WorkspacePane.SINGLE)
+                            model = model.view(WorkspaceView.DUAL)
+                        },
                         modifier = Modifier.heightIn(min = 48.dp).semantics {
                             stateDescription = if (model.view == WorkspaceView.DUAL)
                                 "Selected" else "Not selected"
@@ -582,7 +593,7 @@ private fun DeveloperPreview(
                                     // provider: never carry a grant across
                                     // unrelated SFTP/FTPS/GitHub browsing.
                                     proposedCopy = null
-                                    pendingPickerSingle = null
+                                    pickerWitnesses = pickerWitnesses.invalidate(WorkspacePane.SINGLE)
                                     treeReadGeneration.incrementAndGet()
                                     model = model.update(WorkspacePane.SINGLE,
                                         BrowsePaneState(choice.browseEndpoint))
@@ -721,12 +732,17 @@ private fun DeveloperPreview(
                             // and never retain the old pane authority/selection.
                             proposedCopy = null
                             if (model.pane(which).endpoint != endpoint) {
+                                pickerWitnesses = pickerWitnesses.invalidate(which)
                                 model = model.update(which, BrowsePaneState(endpoint))
                                 replaceTree(which, LocalTreeBrowseState())
                             }
                         },
                         onSwap = {
                             proposedCopy = null
+                            // A pending picker belongs to its launcher's
+                            // original pane. Never attach its later result to
+                            // the opposite pane after a swap.
+                            pickerWitnesses = pickerWitnesses.invalidateDual()
                             model = model.swap()
                             val oldTree = treeA
                             treeA = treeB

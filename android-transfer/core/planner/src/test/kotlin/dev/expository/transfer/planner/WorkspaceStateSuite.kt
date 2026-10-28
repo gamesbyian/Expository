@@ -79,6 +79,28 @@ object WorkspaceStateSuite {
             returnedProvider.single.back.isEmpty())
         check(selectedProvider.single.current?.selected?.size == 1)
 
+        // Android OS tree-picker results are bound to the exact launch pane.
+        // Returning to an endpoint after a switch cannot revive an old request.
+        var picker = ScopedTreePickerWitnesses()
+            .arm(WorkspacePane.SINGLE, BrowseEndpoint.DOCUMENTS)
+            .arm(WorkspacePane.A, BrowseEndpoint.DOCUMENTS)
+            .arm(WorkspacePane.B, BrowseEndpoint.LOCAL)
+        check(picker.pending(WorkspacePane.SINGLE) == BrowseEndpoint.DOCUMENTS)
+        check(picker.pending(WorkspacePane.A) == BrowseEndpoint.DOCUMENTS)
+        check(picker.pending(WorkspacePane.B) == BrowseEndpoint.LOCAL)
+        picker = picker.invalidate(WorkspacePane.A)
+        check(picker.pending(WorkspacePane.A) == null)
+        // Same endpoint after a hypothetical switch still has no witness.
+        check(picker.pending(WorkspacePane.A) != BrowseEndpoint.DOCUMENTS)
+        check(picker.pending(WorkspacePane.B) == BrowseEndpoint.LOCAL)
+        picker = picker.invalidateDual()
+        check(picker.pending(WorkspacePane.A) == null &&
+            picker.pending(WorkspacePane.B) == null)
+        check(picker.pending(WorkspacePane.SINGLE) == BrowseEndpoint.DOCUMENTS)
+        picker = picker.invalidate(WorkspacePane.SINGLE)
+        check(picker.pending(WorkspacePane.SINGLE) == null)
+        expectRejected { picker.arm(WorkspacePane.A, BrowseEndpoint.SFTP) }
+
         // Both dual panes are separately navigable, independently selected and
         // scrolled. Switching layouts cannot erase either workspace.
         state = state.view(WorkspaceView.DUAL)
