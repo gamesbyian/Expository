@@ -325,3 +325,34 @@ The earlier superseded #260 head's
 [API35 run #40754999452](https://github.com/gamesbyian/Expository/actions/runs/40754999452)
 failed in the broader test suite; the later final head passed. The earlier failure cause was not established by this documentation-only audit. Do not silently
 conflate their code revisions or overgeneralize the new scope.
+
+## 28 October: journaled recursive copy coordinator, E1 only
+
+[Merged PR #261](https://github.com/gamesbyian/Expository/pull/261)
+adds the **pure Kotlin** `RecursiveFolderCopyEngine` over the already verified
+bounded manifest. A pluggable adapter must attest each source entry,
+fresh complete/collision-free destination parent, scoped no-replace
+directory-create capability and a new folder's exact identity. The coordinator
+commits an **independent per-entry write-ahead attempt** before every directory
+mutation, then requires fresh metadata readback; file bytes pass through
+the existing journaled Copy engine and independently compared SHA-256 readback.
+Cancellation, source drift, expired or changed plan, uncertain create,
+missing readback, destination mismatch or prior journal reuse stop the run.
+Entries must be valid scoped, non-traversing paths rooted in actual directory
+parents. No deletion, rollback, automatic replay, or false content-hash claim.
+
+Exact immutable PR head `794de9c110f8975b01079b6cd168ec765b5eb20d`
+passed [native JVM E1 #40757325024](https://github.com/gamesbyian/Expository/actions/runs/40757325024)
+(**12/12** new fake-endpoint failure-injection scenarios; full existing
+planner/engine/FTPS/SFTP checks also passed) and general Expository checks.
+The first test-run at superseded `9eb8867` failed in a **test assertion**
+which equated allocation of an unused journal storage slot with a
+persisted attempt; the corrected final test explicitly inspects
+`DurableAttemptJournal.current() == null` to distinguish the two.
+
+**Delivery gate remains open:** No native Android SAF or authenticated SFTP
+`RecursiveCopyEndpoint` adapter implements these methods yet; no actual
+recursively created destination, copied file, Android E2 transfer, external
+server E3 write, Drive/cloud E4, physical device, or signed E5 receipt
+has been claimed. W03 needs independent end-to-end scoped adapters and
+human-observable confirmation before advancing.
