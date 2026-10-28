@@ -122,8 +122,10 @@ internal fun SftpBrowseCard(
     localPaneSources: List<LocalPaneUploadSource> = emptyList(),
     localPaneTarget: LocalPaneDownloadTarget? = null,
     remotePaneSource: PeerSftpSource? = null,
+    remotePaneBatchSource: PeerSftpBatchSource? = null,
     allowRemoteSelection: Boolean = false,
     onRemoteSource: (PeerSftpSource?) -> Unit = {},
+    onRemoteBatchSource: (PeerSftpBatchSource?) -> Unit = {},
     peerRelaySourceId: String? = null,
     onRelaySourceActive: (String?) -> Unit = {}
 ) {
@@ -147,6 +149,7 @@ internal fun SftpBrowseCard(
     var peerBatchSelection by remember { mutableStateOf(SftpBatchSelection()) }
     var pendingPeerBatch by remember { mutableStateOf<PendingPeerSftpBatchDownload?>(null) }
     var pendingRelay by remember { mutableStateOf<SftpRelayPreflight?>(null) }
+    var pendingRelayBatch by remember { mutableStateOf<PendingSftpRelayBatch?>(null) }
     var pendingSaveWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
     var pendingUploadWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
     var pendingPickedUpload by remember { mutableStateOf<PendingPickedSftpUpload?>(null) }
@@ -581,6 +584,138 @@ internal fun SftpBrowseCard(
         }
     }
 
+
+    /** Read-only preflight of every file selected on the other authenticated server. */
+    fun prepareRelayBatch() {
+        val source = remotePaneBatchSource ?: return
+        val destination = session ?: return
+        val destinationId = sessionId
+        val destinationFolder = folder
+        if (busy || peerRelayLocked || !source.valid() ||
+            source.session === destination || source.sessionId == destinationId ||
+            destinationId.isBlank()) return
+        pendingRelayBatch = null
+        busy = true
+        status = "Checking all selected remote files and the complete destination listing…"
+        scope.launch {
+            try {
+                val proposals = withContext(Dispatchers.IO) {
+                    val relay = SftpRelayCopy { digest ->
+                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                    }
+                    source.selection.files.map { file ->
+                        requireNotNull(relay.prepare(SftpRelayRequest(
+                            source.session, source.sessionId, source.folder,
+                            file.absolutePath, file.revision, destination,
+                            destinationId, destinationFolder))) {
+                            "BATCH_RELAY_PREFLIGHT_BLOCKED"
+                        }.also { require(it.bytes == file.size) {
+                            "BATCH_RELAY_SOURCE_SIZE_CHANGED"
+                        } }
+                    }
+                }
+                if (session !== destination || sessionId != destinationId ||
+                    folder != destinationFolder || remotePaneBatchSource != source) {
+                    status = "One SFTP pane changed during batch review. No bytes copied."
+                } else {
+                    pendingRelayBatch = PendingSftpRelayBatch(
+                        source, destination, destinationId, destinationFolder, proposals)
+                    status = "Review each SFTP file and confirm the " +
+                        proposals.size + "-file device relay. Nothing created yet."
+                }
+            } catch (_: CancellationException) {
+                status = "SFTP batch review canceled. Nothing written."
+            } catch (_: Exception) {
+                status = "SFTP batch blocked: changed sources, server permissions, " +
+                    "destination collision or incomplete listing. No write started."
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    /** Sequential journaled relays; no later item starts after an uncertain result. */
+    fun executeRelayBatch(approved: PendingSftpRelayBatch) {
+        val destination = session
+        if (busy || peerRelayLocked ||
+            !approved.stillMatches(remotePaneBatchSource, destination,
+                sessionId, folder)) {
+            pendingRelayBatch = null
+            status = "SFTP batch approval expired. No remote write started."
+            return
+        }
+        pendingRelayBatch = null
+        val source = approved.source
+        val permit = AtomicBoolean(true)
+        continueCopy = permit
+        transferKind = "SFTP → SFTP batch"
+        transferred = 0L
+        busy = true
+        onRelaySourceActive(source.sessionId)
+        scope.launch {
+            var verified = 0
+            try {
+                val total = source.selection.files.size
+                for (file in source.selection.files) {
+                    if (!permit.get()) {
+                        status = "Stopped after " + verified +
+                            " verified remote file(s). Inspect any partial destination."
+                        break
+                    }
+                    status = "Relaying SFTP file " + (verified + 1) +
+                        " of " + total + " with independent SHA-256 readback…"
+                    val receipt = withContext(Dispatchers.IO) {
+                        val active = coroutineContext[Job]
+                        val relay = SftpRelayCopy { digest ->
+                            AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                        }
+                        // Destination listing changes after each created file.
+                        // A brand-new plan, not one of the initial plans, is
+                        // required for each subsequent independently journaled Copy.
+                        val fresh = relay.prepare(SftpRelayRequest(
+                            source.session, source.sessionId, source.folder,
+                            file.absolutePath, file.revision, approved.destination,
+                            approved.destinationSessionId, approved.destinationFolder))
+                        if (fresh == null || fresh.bytes != file.size) null else
+                            relay.copy(fresh,
+                                continueRequested = {
+                                    permit.get() && active?.isActive == true
+                                },
+                                onProgress = { bytes -> transferred = bytes })
+                    }
+                    if (receipt?.proof != CopyProof.BYTES_VERIFIED) {
+                        status = "Stopped after " + verified + " verified file(s): " +
+                            (if (receipt == null) "source, destination or plan changed."
+                            else "the next Copy was not byte-verified.") +
+                            " Inspect the remote destination before retrying."
+                        break
+                    }
+                    verified++
+                }
+                if (verified == source.selection.files.size) {
+                    status = "SFTP batch complete: " + verified +
+                        " files independently SHA-256 verified. Originals preserved."
+                }
+                if (session === destination && destination != null) {
+                    withContext(Dispatchers.IO) {
+                        runCatching { destination.browse(folder) }
+                    }.onSuccess { page = it; browseLimit = SftpBrowseBounds.INITIAL }
+                }
+            } catch (_: CancellationException) {
+                status = "SFTP relay interrupted after " + verified +
+                    " verified file(s); inspect the destination before retrying."
+            } catch (_: Exception) {
+                status = "SFTP relay stopped after " + verified +
+                    " verified file(s), destination outcome may be uncertain."
+            } finally {
+                onRelaySourceActive(null)
+                continueCopy = null
+                transferKind = ""
+                busy = false
+            }
+        }
+    }
+
     fun browseTo(next: String,
         requestedLimit: Int = if (next == folder) browseLimit else SftpBrowseBounds.INITIAL) {
         val live = session ?: return
@@ -604,7 +739,9 @@ internal fun SftpBrowseCard(
                     peerBatchSelection = SftpBatchSelection()
                     pendingPeerBatch = null
                     pendingRelay = null
+                    pendingRelayBatch = null
                     onRemoteSource(null)
+                    onRemoteBatchSource(null)
                     showRenamePreview = false
                     status = if (it.truncated) {
                         "Showing " + it.entries.size + " entries. " +
