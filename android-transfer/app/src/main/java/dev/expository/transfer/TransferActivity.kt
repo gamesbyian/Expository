@@ -321,14 +321,6 @@ private fun DeveloperPreview(
         }
     }
 
-    fun changeEndpoint(which: WorkspacePane, endpoint: BrowseEndpoint) {
-        proposedCopy = null
-        if (model.pane(which).endpoint != endpoint) {
-            model = model.update(which, model.pane(which).endpoint(endpoint))
-            replaceTree(which, LocalTreeBrowseState())
-        }
-    }
-
     fun choosePair(pair: DualPairing) {
         proposedCopy = null
         val next = model.preset(pair)
@@ -713,7 +705,15 @@ private fun DeveloperPreview(
                         aScroll = scrollA,
                         bScroll = scrollB,
                         onPreset = ::choosePair,
-                        onEndpoint = ::changeEndpoint,
+                        onEndpoint = { which, endpoint ->
+                            // Read the *current* model when the button acts,
+                            // and never retain the old pane authority/selection.
+                            proposedCopy = null
+                            if (model.pane(which).endpoint != endpoint) {
+                                model = model.update(which, BrowsePaneState(endpoint))
+                                replaceTree(which, LocalTreeBrowseState())
+                            }
+                        },
                         onSwap = {
                             proposedCopy = null
                             model = model.swap()
