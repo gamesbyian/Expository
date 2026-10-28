@@ -330,7 +330,8 @@ fun FtpsBrowseCard() {
                         sortMode = when (sortMode) {
                             FtpsFolderSort.NAME -> FtpsFolderSort.SIZE
                             FtpsFolderSort.SIZE -> FtpsFolderSort.TYPE
-                            FtpsFolderSort.TYPE -> FtpsFolderSort.NAME
+                            FtpsFolderSort.TYPE -> FtpsFolderSort.NEWEST
+                            FtpsFolderSort.NEWEST -> FtpsFolderSort.NAME
                         }
                     }) { Text("Sort: " + sortMode.name.lowercase()
                         .replaceFirstChar { it.uppercase() }) }
