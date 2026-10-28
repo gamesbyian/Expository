@@ -2,6 +2,8 @@ package dev.expository.transfer.ftps
 
 object FtpsSecuritySuite {
     @JvmStatic fun main(args: Array<String>) {
+        // Plain FTP is a separate, explicit opt-in read-only adapter.
+        PlainFtpSecuritySuite.main(emptyArray())
         var passed = 0
         fun checkCase(id: String, test: () -> Unit) { test(); println("PASS FTPS " + id); passed++ }
         checkCase("default endpoint verification must be ON") {
