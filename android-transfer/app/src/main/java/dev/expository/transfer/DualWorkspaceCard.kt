@@ -48,8 +48,10 @@ internal data class RemotePeerContext(
     val uploadSources: List<LocalPaneUploadSource>,
     val downloadTarget: LocalPaneDownloadTarget?,
     val selectedOtherSftp: PeerSftpSource?,
+    val selectedOtherSftpBatch: PeerSftpBatchSource?,
     val maySelectRemote: Boolean,
     val onSelectedRemote: (PeerSftpSource?) -> Unit,
+    val onSelectedRemoteBatch: (PeerSftpBatchSource?) -> Unit,
     val peerRelaySourceId: String?,
     val onRelaySourceActive: (String?) -> Unit
 )
@@ -86,6 +88,8 @@ internal fun DualWorkspaceCard(
     // Swap their *owners* together with the movable authenticated panes.
     var selectedRemoteA by remember { mutableStateOf<PeerSftpSource?>(null) }
     var selectedRemoteB by remember { mutableStateOf<PeerSftpSource?>(null) }
+    var selectedRemoteBatchA by remember { mutableStateOf<PeerSftpBatchSource?>(null) }
+    var selectedRemoteBatchB by remember { mutableStateOf<PeerSftpBatchSource?>(null) }
     var relayingFromSession by remember { mutableStateOf<String?>(null) }
     val workspaceBusy = busy || relayingFromSession != null
     val connectionA = remember {
@@ -95,8 +99,10 @@ internal fun DualWorkspaceCard(
                     localPaneSources = peer.uploadSources,
                     localPaneTarget = peer.downloadTarget,
                     remotePaneSource = peer.selectedOtherSftp,
+                    remotePaneBatchSource = peer.selectedOtherSftpBatch,
                     allowRemoteSelection = peer.maySelectRemote,
                     onRemoteSource = peer.onSelectedRemote,
+                    onRemoteBatchSource = peer.onSelectedRemoteBatch,
                     peerRelaySourceId = peer.peerRelaySourceId,
                     onRelaySourceActive = peer.onRelaySourceActive
                 )
@@ -112,8 +118,10 @@ internal fun DualWorkspaceCard(
                     localPaneSources = peer.uploadSources,
                     localPaneTarget = peer.downloadTarget,
                     remotePaneSource = peer.selectedOtherSftp,
+                    remotePaneBatchSource = peer.selectedOtherSftpBatch,
                     allowRemoteSelection = peer.maySelectRemote,
                     onRemoteSource = peer.onSelectedRemote,
+                    onRemoteBatchSource = peer.onSelectedRemoteBatch,
                     peerRelaySourceId = peer.peerRelaySourceId,
                     onRelaySourceActive = peer.onRelaySourceActive
                 )
@@ -126,7 +134,7 @@ internal fun DualWorkspaceCard(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Dual-location workspace", style = MaterialTheme.typography.titleLarge)
         Text(
-            "A and B browse independent device folders or authenticated SFTP/FTPS sessions. Device-to-Device and Local-to-SFTP copies require reviewed, journaled preflights. SFTP-to-Device and one-file SFTP-to-SFTP Copy are also available after explicit review. Other remote routes and cross-pane Move remain unavailable.",
+            "A and B browse independent device folders or authenticated SFTP/FTPS sessions. Device-to-Device and Local-to-SFTP copies require reviewed, journaled preflights. SFTP-to-Device and 1–12-file SFTP-to-SFTP Copy are also available after explicit review. Other remote routes and cross-pane Move remain unavailable.",
             style = MaterialTheme.typography.bodySmall
         )
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -140,6 +148,8 @@ internal fun DualWorkspaceCard(
                     onClick = {
                         selectedRemoteA = null
                         selectedRemoteB = null
+                        selectedRemoteBatchA = null
+                        selectedRemoteBatchB = null
                         onPreset(pairing)
                     }) { Text(title) }
             }
@@ -152,6 +162,9 @@ internal fun DualWorkspaceCard(
                 val previousA = selectedRemoteA
                 selectedRemoteA = selectedRemoteB
                 selectedRemoteB = previousA
+                val priorBatchA = selectedRemoteBatchA
+                selectedRemoteBatchA = selectedRemoteBatchB
+                selectedRemoteBatchB = priorBatchA
                 onSwap()
             }) { Text("Swap A and B") }
         // Keep a direct scoped folder-picker action visible near the top of
@@ -183,8 +196,13 @@ internal fun DualWorkspaceCard(
                             },
                             onClick = {
                                 if (pane.endpoint != endpoint) {
-                                    if (which == WorkspacePane.A) selectedRemoteA = null
-                                    else selectedRemoteB = null
+                                    if (which == WorkspacePane.A) {
+                                        selectedRemoteA = null
+                                        selectedRemoteBatchA = null
+                                    } else {
+                                        selectedRemoteB = null
+                                        selectedRemoteBatchB = null
+                                    }
                                 }
                                 onEndpoint(which, endpoint)
                             }
@@ -251,11 +269,18 @@ internal fun DualWorkspaceCard(
                     val peerSelected = if (!otherIsSftp) null
                         else if (which == WorkspacePane.A) selectedRemoteB
                         else selectedRemoteA
+                    val peerBatch = if (!otherIsSftp) null
+                        else if (which == WorkspacePane.A) selectedRemoteBatchB
+                        else selectedRemoteBatchA
                     val peer = RemotePeerContext(
-                        peerSources, peerTarget, peerSelected, otherIsSftp,
+                        peerSources, peerTarget, peerSelected, peerBatch, otherIsSftp,
                         onSelectedRemote = { chosen ->
                             if (which == WorkspacePane.A) selectedRemoteA = chosen
                             else selectedRemoteB = chosen
+                        },
+                        onSelectedRemoteBatch = { chosen ->
+                            if (which == WorkspacePane.A) selectedRemoteBatchA = chosen
+                            else selectedRemoteBatchB = chosen
                         },
                         peerRelaySourceId = relayingFromSession,
                         onRelaySourceActive = { id ->
@@ -350,7 +375,7 @@ internal fun DualWorkspaceCard(
             Text("Cancel transfer")
         }
         Text(copyStatus, style = MaterialTheme.typography.bodySmall)
-        Text("Device-to-Device and Local-to-SFTP Copy support 1–12 selected files. SFTP-to-SFTP Copy relays one selected file between independently authenticated servers with exclusive create, durable journaling and independent destination readback. Recursive folders, remaining remote routes and cross-pane Move are still unavailable.",
+        Text("Device-to-Device and Local-to-SFTP Copy support 1–12 selected files. SFTP-to-SFTP Copy relays 1–12 selected files between independently authenticated servers with exclusive create, durable journaling and independent destination readback. Recursive folders, remaining remote routes and cross-pane Move are still unavailable.",
             style = MaterialTheme.typography.bodySmall)
     }
 }
