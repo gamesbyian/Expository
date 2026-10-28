@@ -189,10 +189,25 @@ class KeystoreProfileVault(context: Context) {
      */
     fun listSlots(): List<String> = synchronized(LOCK) {
         val names = dir.list() ?: throw IOException("PROFILE_SLOT_INDEX_UNAVAILABLE")
+        // AtomicFile may leave a recoverable .bak or an uncommitted .new
+        // after process death. Keep these opaque slots discoverable for
+        // recovery or explicit deletion; NEVER silently auto-reset them.
         names.asSequence().filter { it.startsWith(FILE_PREFIX) }
             .map { it.removePrefix(FILE_PREFIX) }
+            .map {
+                when {
+                    it.endsWith(".bak") -> it.removeSuffix(".bak")
+                    it.endsWith(".new") -> it.removeSuffix(".new")
+                    else -> it
+                }
+            }
             .filter { UUID_PATTERN.matches(it) }
-            .filter { slotFile(it).isFile }
+            .distinct()
+            .filter {
+                val base = slotFile(it)
+                base.isFile || File(base.path + ".bak").isFile ||
+                    File(base.path + ".new").isFile
+            }
             .sorted().take(256).toList()
     }
 
