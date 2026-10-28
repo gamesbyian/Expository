@@ -110,7 +110,7 @@ class TransferActivity : ComponentActivity() {
 
 /** A single visible connection surface also disposes inactive secure sessions. */
 private enum class TransferWorkspace(val title: String) {
-    LOCAL("Local"), SFTP("SFTP"), FTPS("FTPS"), FTP("FTP (insecure)"),
+    LOCAL("Local"), DOCUMENTS("Documents"), SFTP("SFTP"), FTPS("FTPS"), FTP("FTP (insecure)"),
     GITHUB("GitHub (public)"), DEMO("Demo")
 }
 
@@ -186,7 +186,7 @@ private fun DeveloperPreview(
         if (!LocalTreeReader.validTree(uri) || crumbs.isEmpty() ||
             maxVisible !in LocalTreeReader.MAX_VISIBLE..LocalTreeReader.MAX_BROWSE ||
             maxVisible % LocalTreeReader.MAX_VISIBLE != 0 ||
-            model.pane(which).endpoint != BrowseEndpoint.LOCAL) return
+            !model.pane(which).endpoint.isSaf) return
         // Refresh and every incremental load revoke both UI selection and
         // immutable planner selection before any asynchronous provider read.
         proposedCopy = null
@@ -209,7 +209,7 @@ private fun DeveloperPreview(
             // selected tree, endpoint, pane or newer folder visit.
             if (current.generation != nextGeneration || current.treeUri != uri ||
                 current.crumbs != crumbs ||
-                model.pane(which).endpoint != BrowseEndpoint.LOCAL) return@launch
+                !model.pane(which).endpoint.isSaf) return@launch
             result.onSuccess { listing ->
                 replaceTree(which, current.copy(
                     entries = listing.children, complete = listing.complete,
@@ -275,14 +275,34 @@ private fun DeveloperPreview(
             writeGranted = grant and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0)
     }
 
+    var pendingPickerSingle by remember { mutableStateOf<BrowseEndpoint?>(null) }
+    var pendingPickerA by remember { mutableStateOf<BrowseEndpoint?>(null) }
+    var pendingPickerB by remember { mutableStateOf<BrowseEndpoint?>(null) }
+
+    fun takePickerWitness(which: WorkspacePane): BrowseEndpoint? = when (which) {
+        WorkspacePane.SINGLE -> pendingPickerSingle.also { pendingPickerSingle = null }
+        WorkspacePane.A -> pendingPickerA.also { pendingPickerA = null }
+        WorkspacePane.B -> pendingPickerB.also { pendingPickerB = null }
+    }
+
     val treePickerSingle = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()) { pickerResult(WorkspacePane.SINGLE, it) }
+        ActivityResultContracts.StartActivityForResult()) { if (takePickerWitness(WorkspacePane.SINGLE) == model.single.endpoint)
+            pickerResult(WorkspacePane.SINGLE, it) }
     val treePickerA = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()) { pickerResult(WorkspacePane.A, it) }
+        ActivityResultContracts.StartActivityForResult()) { if (takePickerWitness(WorkspacePane.A) == model.a.endpoint)
+            pickerResult(WorkspacePane.A, it) }
     val treePickerB = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()) { pickerResult(WorkspacePane.B, it) }
+        ActivityResultContracts.StartActivityForResult()) { if (takePickerWitness(WorkspacePane.B) == model.b.endpoint)
+            pickerResult(WorkspacePane.B, it) }
 
     fun launchTreePicker(which: WorkspacePane) {
+        val endpoint = model.pane(which).endpoint
+        if (!endpoint.isSaf) return
+        when (which) {
+            WorkspacePane.SINGLE -> pendingPickerSingle = endpoint
+            WorkspacePane.A -> pendingPickerA = endpoint
+            WorkspacePane.B -> pendingPickerB = endpoint
+        }
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
@@ -294,6 +314,7 @@ private fun DeveloperPreview(
                 WorkspacePane.B -> treePickerB.launch(intent)
             }
         }.onFailure {
+            takePickerWitness(which)
             replaceTree(which, tree(which).copy(
                 status = "Android folder picker unavailable. No data accessed."
             ))
@@ -347,8 +368,8 @@ private fun DeveloperPreview(
         val chosen = from.entries.filter {
             it.documentId in from.selected && !it.directory
         }.sortedWith(compareBy<TreeEntry> { it.title }.thenBy { it.documentId })
-        if (model.pane(sourcePane).endpoint != BrowseEndpoint.LOCAL ||
-            model.pane(destinationPane).endpoint != BrowseEndpoint.LOCAL ||
+        if (!model.pane(sourcePane).endpoint.isSaf ||
+            !model.pane(destinationPane).endpoint.isSaf ||
             !from.complete || !to.complete || !to.canWrite ||
             from.selected.size !in 1..12 || chosen.size != from.selected.size ||
             chosen.map { java.text.Normalizer.normalize(it.title,
@@ -389,8 +410,8 @@ private fun DeveloperPreview(
                 tree(sourcePane).folderId != sourceFolder ||
                 tree(destinationPane).folderId != destinationFolder ||
                 tree(sourcePane).selected != selectedIds ||
-                model.pane(sourcePane).endpoint != BrowseEndpoint.LOCAL ||
-                model.pane(destinationPane).endpoint != BrowseEndpoint.LOCAL) {
+                !model.pane(sourcePane).endpoint.isSaf ||
+                !model.pane(destinationPane).endpoint.isSaf) {
                 proposedCopy = null
                 copyStatus = "Folder or source selection changed during preflight. No file was created."
             } else if (candidates == null || candidates.size != chosen.size) {
@@ -547,7 +568,25 @@ private fun DeveloperPreview(
                             modifier = Modifier.heightIn(min = 48.dp).semantics {
                                 stateDescription = if (workspace == choice) "Selected" else "Not selected"
                             },
-                            onClick = { workspace = choice }
+                            onClick = {
+                                if (workspace != choice) {
+                                    val nextSaf = when (choice) {
+                                        TransferWorkspace.LOCAL -> BrowseEndpoint.LOCAL
+                                        TransferWorkspace.DOCUMENTS -> BrowseEndpoint.DOCUMENTS
+                                        else -> null
+                                    }
+                                    if (nextSaf != null &&
+                                        model.single.endpoint != nextSaf) {
+                                        model = model.update(WorkspacePane.SINGLE,
+                                            model.single.endpoint(nextSaf))
+                                        treeSingle = LocalTreeBrowseState(
+                                            status = if (nextSaf == BrowseEndpoint.DOCUMENTS)
+                                                "Choose a folder from an Android document provider. Cloud provider availability and writable scope depend on Android's picker."
+                                            else "Choose a device folder with Android Files.")
+                                    }
+                                }
+                                workspace = choice
+                            }
                         ) {
                             Text(if (workspace == choice) "✓ " + choice.title else choice.title)
                         }
@@ -556,14 +595,22 @@ private fun DeveloperPreview(
             }
             item { RecoveryStatusCard() }
             when (workspace) {
-                TransferWorkspace.LOCAL -> item {
+                TransferWorkspace.LOCAL, TransferWorkspace.DOCUMENTS -> item {
                     // Keep browser and Copy actions in one lazy item so the
                     // second card is composed and accessible before scrolling.
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (workspace == TransferWorkspace.DOCUMENTS) {
+                            Text(
+                                "Select a folder offered by Android Files, including a cloud-backed document provider if installed and supported. This grants only the chosen tree. It does not authorize Google Drive account-wide access or guarantee provider writes.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                         // Conventional Single is a real, independently scoped
                         // browser, not the narrow-screen Dual A/B tab.
                         LocalTreePane(
                             label = "Location Single",
+                            sourceLabel = if (workspace == TransferWorkspace.DOCUMENTS)
+                                "Android provider" else "Device",
                             state = treeSingle,
                             scroll = scrollSingle,
                             onPick = { launchTreePicker(WorkspacePane.SINGLE) },
