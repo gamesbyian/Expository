@@ -298,4 +298,30 @@ class GithubPublicDirectoryAndroidTest {
             }.isFailure)
         }
     }
+
+    @Test fun folderFilterAndSortNeverAlterSourceListingOrMutationProof() {
+        val rows = listOf(
+            PublicGithubEntry("alpha", "alpha", sha, "dir", null),
+            PublicGithubEntry("beta", "beta", sha, "dir", null),
+            PublicGithubEntry("readme.TXT", "readme.TXT", sha, "file", 90L),
+            PublicGithubEntry("preview.png", "preview.png", sha, "file", 5L),
+            PublicGithubEntry("plain.txt", "plain.txt", sha, "file", null),
+            PublicGithubEntry("READ_ME.md", "READ_ME.md", sha, "file", 11L)
+        )
+        val original = rows.toList()
+        val name = GithubFolderPresentation.rows(rows, "", GithubFolderSort.NAME)
+        assertEquals(listOf("alpha", "beta"), name.take(2).map { it.name })
+        val sizes = GithubFolderPresentation.rows(rows, "", GithubFolderSort.SIZE)
+        assertEquals(listOf("preview.png", "READ_ME.md", "readme.TXT", "plain.txt"),
+            sizes.drop(2).map { it.name })
+        val types = GithubFolderPresentation.rows(rows, "", GithubFolderSort.TYPE)
+        assertEquals(listOf("READ_ME.md", "preview.png", "plain.txt", "readme.TXT"),
+            types.drop(2).map { it.name })
+        assertEquals(listOf("READ_ME.md", "readme.TXT"),
+            GithubFolderPresentation.rows(rows, "reAd", GithubFolderSort.NAME)
+                .map { it.name })
+        assertEquals(emptyList<PublicGithubEntry>(),
+            GithubFolderPresentation.rows(rows, "not-here", GithubFolderSort.NAME))
+        assertEquals(original, rows)
+    }
 }
