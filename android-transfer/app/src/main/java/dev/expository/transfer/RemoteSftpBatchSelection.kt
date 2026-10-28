@@ -45,12 +45,17 @@ internal data class SftpBatchSelection(
         val paths = files.map { it.absolutePath }
         if (paths.distinct().size != paths.size) return false
         return files.all { file ->
-            page.entries.count { entry ->
-                !entry.directory &&
+            // Ambiguous names must block even if just one of the duplicate
+            // rows happens to match the old revision. A directory with the
+            // same path is likewise never a safely identified source file.
+            val samePath = page.entries.filter { entry ->
                 runCatching { SftpPath.childPath(folder, entry.name) }.getOrNull() ==
-                    file.absolutePath &&
-                entry.revision == file.revision && entry.size == file.size
-            } == 1
+                    file.absolutePath
+            }
+            samePath.size == 1 && samePath[0].let { row ->
+                !row.directory && row.revision == file.revision &&
+                    row.size == file.size
+            }
         }
     }
 }
