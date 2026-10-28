@@ -1,6 +1,8 @@
 package dev.expository.transfer.saf
 
 import dev.expository.transfer.TreeListing
+import dev.expository.transfer.engine.SourceConsistencyStream
+import java.io.InputStream
 
 /**
  * A DocumentsProvider may choose a different name or unexpectedly return an
@@ -35,6 +37,17 @@ internal object SafNewDocumentIdentity {
         if (!isDirectChild(expectedName, newDocumentId, parent))
             throw java.io.IOException("SAF_DESTINATION_PARENT_UNVERIFIED")
     }
+
+
+    /**
+     * The provider may move, rename or revoke a created child AFTER an initial
+     * membership check while its bytes are being independently read back.
+     * Rechecking on stream close prevents a destination that drifted during
+     * hash verification from receiving a final BYTES_VERIFIED receipt.
+     * A provider unable to open readback still returns null (acknowledged only).
+     */
+    fun guardReadback(stream: InputStream?, stillDirectChild: () -> Boolean): InputStream? =
+        stream?.let { SourceConsistencyStream(it, stillDirectChild) }
 
     /** A returned content URI must actually be the new file in the chosen parent. */
     fun isDirectChild(expectedName: String, newDocumentId: String,
