@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Disposable, inert fixture. This manifest belongs only to androidTest. -->
+        <provider
+            android:name="dev.expository.transfer.SafRecursiveSyntheticProvider"
+            android:authorities="test.source.scoped;test.target.scoped"
+            android:exported="true" />
+    </application>
+</manifest>
