@@ -103,6 +103,8 @@ class WorkspaceNavigationUiTest {
         // changing its endpoint. Inactive panes remain composed, not placed.
         compose.onNodeWithText("Pane A · LOCAL", substring = true).performClick()
         compose.onNodeWithTag("endpoint-A-DOCUMENTS").performClick()
+        compose.onNodeWithText("Endpoint request: A:DOCUMENTS").assertExists()
+        compose.onNodeWithText("Endpoint confirmed: A:DOCUMENTS").assertExists()
         // Assert the actual button state and visible summary before querying
         // a separately merged accessibility state-description.
         compose.onNodeWithTag("endpoint-A-DOCUMENTS").assert(
