@@ -65,7 +65,9 @@ internal data class TreeEntry(
     val documentId: String,
     val title: String,
     val directory: Boolean,
-    val bytes: Long?
+    val bytes: Long?,
+    /** Optional provider-reported modification time, presentation only. */
+    val modifiedMillis: Long? = null
 )
 internal data class TreeListing(
     val children: List<TreeEntry>,
@@ -122,7 +124,8 @@ internal object LocalTreeReader {
             DocumentsContract.Document.COLUMN_DOCUMENT_ID,
             DocumentsContract.Document.COLUMN_DISPLAY_NAME,
             DocumentsContract.Document.COLUMN_MIME_TYPE,
-            DocumentsContract.Document.COLUMN_SIZE
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED
         )
         return resolver.query(childrenUri, projection, null, null, null)?.use {
             decodeRows(it, maxVisible)
@@ -151,6 +154,8 @@ internal object LocalTreeReader {
             DocumentsContract.Document.COLUMN_MIME_TYPE)
         val sizeColumn = cursor.getColumnIndex(
             DocumentsContract.Document.COLUMN_SIZE)
+        val modifiedColumn = cursor.getColumnIndex(
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED)
         while (cursor.moveToNext()) {
             // Count *every* cursor row, including malformed/duplicate
             // rows, so a hostile provider cannot defeat this scan cap.
@@ -198,7 +203,10 @@ internal object LocalTreeReader {
                 title = name,
                 directory = mime == DocumentsContract.Document.MIME_TYPE_DIR,
                 bytes = if (sizeColumn >= 0 && !cursor.isNull(sizeColumn))
-                    cursor.getLong(sizeColumn).takeIf { it >= 0L } else null
+                    cursor.getLong(sizeColumn).takeIf { it >= 0L } else null,
+                modifiedMillis = if (modifiedColumn >= 0 &&
+                    !cursor.isNull(modifiedColumn))
+                    cursor.getLong(modifiedColumn).takeIf { it > 0L } else null
             )
         }
         return TreeListing(
@@ -300,6 +308,7 @@ internal fun LocalTreePane(
                                 LocalTreeSort.NAME -> "Name"
                                 LocalTreeSort.SIZE -> "Size"
                                 LocalTreeSort.TYPE -> "Type"
+                                LocalTreeSort.NEWEST -> "Newest"
                             })
                     }
                 }
