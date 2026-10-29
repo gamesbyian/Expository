@@ -6,6 +6,7 @@ import android.webkit.MimeTypeMap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -111,6 +112,7 @@ fun FtpsBrowseCard() {
     var browseLimit by remember { mutableStateOf(FtpsBrowseBounds.INITIAL) }
     var fileFilter by remember { mutableStateOf("") }
     var sortMode by remember { mutableStateOf(FtpsFolderSort.NAME) }
+    var descending by remember { mutableStateOf(false) }
     var pendingFile by remember { mutableStateOf<String?>(null) }
     var pendingSaveWitness by remember { mutableStateOf<FtpsPickerWitness?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -358,6 +360,8 @@ fun FtpsBrowseCard() {
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Filter names in this FTPS folder") },
                     singleLine = true, enabled = !busy)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
                     onClick = {
                         sortMode = when (sortMode) {
@@ -366,10 +370,16 @@ fun FtpsBrowseCard() {
                             FtpsFolderSort.TYPE -> FtpsFolderSort.NEWEST
                             FtpsFolderSort.NEWEST -> FtpsFolderSort.NAME
                         }
+                        descending = sortMode == FtpsFolderSort.NEWEST
                     }) { Text("Sort: " + sortMode.name.lowercase()
                         .replaceFirstChar { it.uppercase() }) }
+                Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
+                    onClick = { descending = !descending }) {
+                    Text(if (descending) "Descending ↓" else "Ascending ↑")
+                }
+                }
                 val shown = FtpsBrowsePresentation.rows(
-                    page?.entries.orEmpty(), fileFilter, sortMode)
+                    page?.entries.orEmpty(), fileFilter, sortMode, descending)
                 Text("Showing " + shown.size + " of " +
                     (page?.entries?.size ?: 0) + " received FTPS entries" +
                     if (page?.truncated == true) " (incomplete preview)" else "",
