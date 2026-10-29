@@ -51,6 +51,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal fun shareEpochUnchanged(launched: Long, current: Long): Boolean =
     launched >= 0L && launched == current
 
+/** Exact foreground copy ownership, including operator cancellation. */
+internal fun activeLocalCopyProgress(
+    current: AtomicBoolean?, expected: AtomicBoolean, busy: Boolean
+): Boolean = busy && current === expected && expected.get()
+
 @Composable
 fun LocalCopyCard(
     incomingShare: IncomingShareRequest? = null,
@@ -200,15 +205,23 @@ fun LocalCopyCard(
                         onProgress = { bytes ->
                             if (bytes - lastProgress >= 1024L * 1024L) {
                                 lastProgress = bytes
-                                // MutableState supports cross-thread snapshot writes;
-                                // cap dispatch frequency on streaming hot path.
-                                transferred = bytes
+                                // Return to Compose's main scope instead of
+                                // updating a mutable UI snapshot on IO. A late
+                                // packet after Stop or a newer selection does
+                                // not overwrite a later receipt.
+                                scope.launch {
+                                    if (activeLocalCopyProgress(
+                                            continueCopy, permit, busy
+                                        ) && bytes >= transferred)
+                                        transferred = bytes
+                                }
                             }
                         })
                 }
                 val observedTarget = withContext(Dispatchers.IO) {
                     runCatching { service.observe(targetUri).displayName }.getOrNull()
                 }
+                if (continueCopy !== permit) return@launch
                 destinationName = observedTarget ?: "Selected destination"
                 receipt = copyReceipt
                 status = when (copyReceipt.proof) {
@@ -222,12 +235,16 @@ fun LocalCopyCard(
                 }
                 transferred = copyReceipt.bytesWritten
                 } catch (_: CancellationException) {
-                    status = "Copy interrupted. Review the created document before trying again."
+                    if (continueCopy === permit)
+                        status = "Copy interrupted. Review the created document before trying again."
                 } catch (_: Exception) {
-                    status = "Copy outcome uncertain. Review the created document before trying again."
+                    if (continueCopy === permit)
+                        status = "Copy outcome uncertain. Review the created document before trying again."
                 } finally {
-                    continueCopy = null
-                    busy = false
+                    if (continueCopy === permit) {
+                        continueCopy = null
+                        busy = false
+                    }
                 }
             }
         }
