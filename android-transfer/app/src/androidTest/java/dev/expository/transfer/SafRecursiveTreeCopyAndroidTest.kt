@@ -104,6 +104,29 @@ class SafRecursiveTreeCopyAndroidTest {
             .getInt("creates"))
     }
 
+    @Test fun destinationMovedDuringReadbackCannotClaimVerifiedFolderCopy() {
+        reset()
+        val service = SafRecursiveTreeCopy(targetContext, resolver)
+        val approved = requireNotNull(service.prepare(request()))
+        check(resolver.call(targetTree, "fixture-move-created-file-on-read",
+            null, null) != null)
+        val receipt = service.execute(request(), approved)
+        assertEquals("Moved child must be uncertain: " + receipt.reason,
+            RecursiveCopyResult.UNCERTAIN, receipt.result)
+        assertEquals(2, receipt.verifiedDirectories)
+        assertEquals(0, receipt.verifiedFiles)
+        assertEquals(0L, receipt.verifiedBytes)
+        assertEquals(3, resolver.call(targetTree, "fixture-stats", null, null)!!
+            .getInt("creates"))
+        assertArrayEquals("Original source survives provider drift", fixtureBytes, original())
+        // No automatic replay after an ambiguous destination move or failed
+        // independent readback; the previous target may contain copied bytes.
+        val second = service.execute(request(), approved)
+        assertTrue(second.result != RecursiveCopyResult.COMPLETE_VERIFIED)
+        assertEquals(3, resolver.call(targetTree, "fixture-stats", null, null)!!
+            .getInt("creates"))
+    }
+
     @Test fun changedOrRevokedScopedSourceBeforeCopyCannotWrite() {
         reset()
         val service = SafRecursiveTreeCopy(targetContext, resolver)
