@@ -72,6 +72,21 @@ internal data class FtpsPickerWitness(
             sessionId == liveSessionId && folder == liveFolder && path == livePath
 }
 
+/** Only accept fresh, monotonically increasing foreground byte counters. */
+internal object FtpsCopyProgressGate {
+    const val MIN_DELTA_BYTES = 256L * 1024L
+
+    fun shouldPublish(bytes: Long, lastPublished: Long): Boolean =
+        bytes >= 0L && lastPublished >= 0L &&
+            bytes >= lastPublished && bytes - lastPublished >= MIN_DELTA_BYTES
+
+    /** Never allow a pending IO callback to update an unrelated new session. */
+    fun belongsToActiveCopy(
+        presentedPermit: AtomicBoolean?, expectedPermit: AtomicBoolean,
+        sessionMatches: Boolean, busy: Boolean
+    ): Boolean = busy && sessionMatches && presentedPermit === expectedPermit
+}
+
 /**
  * Minimal live secure FTPS browser. Copy-only, foreground-only and session-only
  * authentication. LIST previews may be incomplete; MLST file stat is mandatory
@@ -141,14 +156,27 @@ fun FtpsBrowseCard() {
                             expectedSourceRevision = witness?.revision.orEmpty(),
                             continueRequested = { permit.get() && active?.isActive == true },
                             onProgress = { bytes ->
-                                // Progress is written bytes, never proof of completion.
-                                if (bytes - lastDisplay >= 256L * 1024L) {
+                                // This callback runs on the IO dispatcher.
+                                // Post only onto Compose's main scope, and
+                                // ignore a stale callback after disconnect,
+                                // cancellation or a replacement session.
+                                // Written bytes are NOT verified copy bytes.
+                                if (FtpsCopyProgressGate.shouldPublish(bytes, lastDisplay)) {
                                     lastDisplay = bytes
-                                    transferred = bytes
+                                    scope.launch {
+                                        if (FtpsCopyProgressGate.belongsToActiveCopy(
+                                                continueCopy, permit, session === live, busy
+                                            ) && transferred <= bytes) {
+                                            transferred = bytes
+                                        }
+                                    }
                                 }
                             }
                         )
                     }
+                    // The receipt belongs only to the original session and
+                    // explicit picker approval. UI is owned by the main scope.
+                    if (session !== live || continueCopy !== permit) return@launch
                     transferred = receipt.bytesWritten
                     status = when (receipt.proof) {
                         CopyProof.BYTES_VERIFIED ->
@@ -165,12 +193,16 @@ fun FtpsBrowseCard() {
                 } catch (_: CancellationException) {
                     // If the screen goes away, the durable attempt is reviewed
                     // at next launch rather than silently restarted.
-                    status = "Copy interrupted. Inspect the document before trying again."
+                    if (continueCopy === permit && session === live)
+                        status = "Copy interrupted. Inspect the document before trying again."
                 } catch (_: Exception) {
-                    status = "Transfer outcome uncertain. Inspect the document before trying again."
+                    if (continueCopy === permit && session === live)
+                        status = "Transfer outcome uncertain. Inspect the document before trying again."
                 } finally {
-                    continueCopy = null
-                    busy = false
+                    if (continueCopy === permit) {
+                        continueCopy = null
+                        busy = false
+                    }
                 }
             }
         }
