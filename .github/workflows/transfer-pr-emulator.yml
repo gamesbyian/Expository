@@ -94,7 +94,18 @@ jobs:
           emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           # The runner invokes one script string via sh -c; do not use a
           # multi-line if block. The optional class was already allowlisted.
-          script: cd android-transfer && gradle -PwithAndroid=true ${TARGET_TEST_CLASS:+-Pandroid.testInstrumentationRunnerArguments.class=$TARGET_TEST_CLASS} :app:connectedDebugAndroidTest --no-daemon
+          # Real OS-picker E2 needs its providers installed as an independent
+          # APK. Providers inside androidTest are not reliably discoverable
+          # as DocumentsUI roots. For other scoped classes, skip the fixture.
+          # Keep this as one shell command with AND-chain failure propagation.
+          script: >-
+            cd android-transfer &&
+            ( ( [ -n "$TARGET_TEST_CLASS" ] &&
+                [ "$TARGET_TEST_CLASS" != "dev.expository.transfer.RecursiveRealPickerCopyUiTest" ] )
+              || ( gradle -PwithAndroid=true -PwithPickerFixture=true
+                    :testing:documents-provider-fixture:assembleDebug --no-daemon
+                  && adb install -r testing/documents-provider-fixture/build/outputs/apk/debug/documents-provider-fixture-debug.apk ) ) &&
+            gradle -PwithAndroid=true ${TARGET_TEST_CLASS:+-Pandroid.testInstrumentationRunnerArguments.class=$TARGET_TEST_CLASS} :app:connectedDebugAndroidTest --no-daemon
       - name: Summarize failed tests without disclosing provider content
         if: failure()
         shell: bash
