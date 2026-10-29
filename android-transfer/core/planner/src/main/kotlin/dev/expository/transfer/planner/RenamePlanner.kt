@@ -68,7 +68,7 @@ private fun splitExtension(name: String, kind: ItemKind, extensionsLocked: Boole
 private val EMPTY_PARENS = Regex("""\s*\(\s*\)\s*""")
 private val EMPTY_SQUARE_BRACKETS = Regex("""\s*\[\s*]\s*""")
 private val EMPTY_CURLY_BRACKETS = Regex("""\s*\{\s*}\s*""")
-private val COPY_SUFFIX = Regex("""(?i)\s*\(\s*copy(?:\s+\d+)?\s*\)\s*""")
+private val COPY_SUFFIX = Regex("""(?i)\s*\(\s*copy(?:\s+\d+)?\s*\)\s*$""")
 private val REPEATED_WHITESPACE = Regex("""\s+""")
 
 private fun cleanUpName(stem: String): String =
