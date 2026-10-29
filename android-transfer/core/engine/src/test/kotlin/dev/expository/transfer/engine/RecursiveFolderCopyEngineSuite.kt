@@ -118,10 +118,11 @@ object RecursiveFolderCopyEngineSuite {
             }
         }
         fun run(m: RecursiveFolderManifest = manifest(),
-            permission: () -> Boolean = { true }) =
+            permission: () -> Boolean = { true },
+            onVerifiedStep: (RecursiveCopyProgress) -> Unit = {}) =
             RecursiveFolderCopyEngine.execute(m, this,
                 { refresh() }, { key, index -> storage(key, index) },
-                permission, { 100L })
+                permission, { 100L }, onVerifiedStep)
     }
 
     @JvmStatic fun main(args: Array<String>) {
@@ -142,6 +143,44 @@ object RecursiveFolderCopyEngineSuite {
             check(f.journals.size == 3 && f.journals.values.all {
                 DurableAttemptJournal(it).current()?.state == JournalState.VERIFIED
             })
+        }
+        case("progress publishes only durable verified steps and byte receipts") {
+            val f = Fake()
+            val observations = mutableListOf<RecursiveCopyProgress>()
+            val result = f.run(onVerifiedStep = { progress ->
+                // At each callback, the matching step journal must already be
+                // durably VERIFIED; never publish prewrite/ACK-only bytes.
+                val index = observations.size
+                check(DurableAttemptJournal(f.journals.getValue(index))
+                    .current()?.state == JournalState.VERIFIED)
+                observations += progress
+            })
+            check(result.result == RecursiveCopyResult.COMPLETE_VERIFIED)
+            check(observations.map { it.completedSteps } == listOf(1, 2, 3))
+            check(observations.map { it.verifiedDirectories } == listOf(1, 2, 2))
+            check(observations.map { it.verifiedFiles } == listOf(0, 0, 1))
+            check(observations.map { it.verifiedBytes } ==
+                listOf(0L, 0L, content.size.toLong()))
+            check(observations.all {
+                it.totalSteps == 3 && it.manifestDigest == manifest().digest
+            })
+        }
+        case("uncertain file never publishes unverified progress") {
+            val f = Fake().apply { badReadback = true }
+            val progress = mutableListOf<RecursiveCopyProgress>()
+            val result = f.run(onVerifiedStep = { progress += it })
+            check(result.result == RecursiveCopyResult.UNCERTAIN)
+            check(progress.map { it.completedSteps } == listOf(1, 2))
+            check(progress.all { it.verifiedFiles == 0 && it.verifiedBytes == 0L })
+        }
+        case("progress observer exceptions never change verified copy") {
+            val f = Fake()
+            var callbacks = 0
+            val result = f.run(onVerifiedStep = {
+                callbacks++
+                error("synthetic UI observer failure")
+            })
+            check(callbacks == 3 && result.result == RecursiveCopyResult.COMPLETE_VERIFIED)
         }
         case("replay same durable step blocked without second write") {
             val f = Fake()
