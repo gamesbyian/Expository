@@ -1,6 +1,7 @@
 package dev.expository.transfer
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -58,6 +59,7 @@ internal fun PlainFtpBrowseCard() {
     var limit by remember { mutableStateOf(FtpsBrowseBounds.INITIAL) }
     var fileFilter by remember { mutableStateOf("") }
     var sortMode by remember { mutableStateOf(FtpsFolderSort.NAME) }
+    var descending by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var status by remember {
         mutableStateOf("Plain FTP is insecure. Prefer pinned SFTP or certificate-validated FTPS.")
@@ -193,6 +195,8 @@ internal fun PlainFtpBrowseCard() {
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Filter names in this FTP folder") },
                     singleLine = true, enabled = !busy)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
                     onClick = {
                         sortMode = when (sortMode) {
@@ -204,8 +208,13 @@ internal fun PlainFtpBrowseCard() {
                         }
                     }) { Text("Sort: " + sortMode.name.lowercase()
                         .replaceFirstChar { it.uppercase() }) }
+                Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
+                    onClick = { descending = !descending }) {
+                    Text(if (descending) "Descending ↓" else "Ascending ↑")
+                }
+                }
                 val shown = FtpsBrowsePresentation.rows(
-                    page?.entries.orEmpty(), fileFilter, sortMode)
+                    page?.entries.orEmpty(), fileFilter, sortMode, descending)
                 Text("Showing " + shown.size + " of " +
                     (page?.entries?.size ?: 0) + " received FTP entries" +
                     if (page?.truncated == true) " (incomplete preview)" else "",
