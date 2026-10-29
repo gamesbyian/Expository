@@ -44,6 +44,32 @@ class GithubPublicDirectoryAndroidTest {
         assertEquals("docs", list.parent)
     }
 
+    @Test fun publicGithubReverseSortingPreservesOpaqueRowsAndUnknownSizes() {
+        val entries = listOf(
+            PublicGithubEntry("z-dir", "z-dir", sha, "dir", null),
+            PublicGithubEntry("alpha.txt", "alpha.txt", sha, "file", 5),
+            PublicGithubEntry("a-dir", "a-dir", sha, "dir", null),
+            PublicGithubEntry("beta.png", "beta.png", sha, "file", 22),
+            PublicGithubEntry("unknown", "unknown", sha, "file", null)
+        )
+        fun names(sort: GithubFolderSort, descending: Boolean) =
+            GithubFolderPresentation.rows(entries, "", sort, descending).map { it.name }
+        assertEquals(listOf("a-dir", "z-dir", "alpha.txt", "beta.png", "unknown"),
+            names(GithubFolderSort.NAME, false))
+        assertEquals(listOf("z-dir", "a-dir", "unknown", "beta.png", "alpha.txt"),
+            names(GithubFolderSort.NAME, true))
+        assertEquals(listOf("a-dir", "z-dir", "beta.png", "alpha.txt", "unknown"),
+            names(GithubFolderSort.SIZE, true))
+        assertEquals(listOf("a-dir", "z-dir", "alpha.txt", "beta.png", "unknown"),
+            names(GithubFolderSort.SIZE, false))
+        assertEquals(listOf("a-dir", "z-dir", "alpha.txt"),
+            GithubFolderPresentation.rows(entries, "a", GithubFolderSort.NAME)
+                .filter { it.name == "a-dir" || it.name == "alpha.txt" }
+                .map { it.name })
+        assertEquals(listOf("z-dir", "alpha.txt", "a-dir", "beta.png", "unknown"),
+            entries.map { it.name }) // no mutation of provider/source identity
+    }
+
     @Test fun ambiguousSourceRowsAndEscapedParentPathsBlock() {
         for (rows in listOf(
             JSONArray().put(row("dup", "dup")).put(row("dup", "dup")),
