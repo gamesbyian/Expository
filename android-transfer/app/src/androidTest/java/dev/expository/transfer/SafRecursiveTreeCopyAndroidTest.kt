@@ -120,7 +120,15 @@ class SafRecursiveTreeCopyAndroidTest {
         val approved = requireNotNull(service.prepare(request()))
         check(resolver.call(targetTree, "fixture-move-created-file-on-read",
             null, null) != null)
-        val receipt = service.execute(request(), approved)
+        val progress = mutableListOf<RecursiveCopyProgress>()
+        val receipt = service.execute(request(), approved,
+            onVerifiedStep = { progress += it })
+        // A file that left the reviewed destination after readback cannot
+        // contribute completedSteps or verifiedBytes to the live UI.
+        assertEquals(listOf(1, 2), progress.map { it.completedSteps })
+        assertEquals(listOf(1, 2), progress.map { it.verifiedDirectories })
+        assertTrue(progress.all { it.verifiedFiles == 0 &&
+            it.verifiedBytes == 0L })
         assertEquals("Moved child must be uncertain: " + receipt.reason,
             RecursiveCopyResult.UNCERTAIN, receipt.result)
         assertEquals(2, receipt.verifiedDirectories)
@@ -143,7 +151,12 @@ class SafRecursiveTreeCopyAndroidTest {
         val approved = requireNotNull(service.prepare(request()))
         check(resolver.call(targetTree,
             "fixture-move-created-root-on-source-read", null, null) != null)
-        val receipt = service.execute(request(), approved)
+        val progress = mutableListOf<RecursiveCopyProgress>()
+        val receipt = service.execute(request(), approved,
+            onVerifiedStep = { progress += it })
+        assertEquals(listOf(1, 2), progress.map { it.completedSteps })
+        assertTrue(progress.all { it.verifiedFiles == 0 &&
+            it.verifiedBytes == 0L })
         assertEquals("Moved destination ancestor must stop: " + receipt.reason,
             RecursiveCopyResult.UNCERTAIN, receipt.result)
         assertEquals(2, receipt.verifiedDirectories)
