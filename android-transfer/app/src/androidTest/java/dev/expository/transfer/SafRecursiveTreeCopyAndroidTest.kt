@@ -5,6 +5,7 @@ import android.provider.DocumentsContract
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.expository.transfer.engine.RecursiveCopyResult
+import dev.expository.transfer.engine.RecursiveCopyProgress
 import dev.expository.transfer.saf.SafRecursiveTreeCopy
 import dev.expository.transfer.saf.ScopedRecursiveSourceRequest
 import org.junit.Assert.assertArrayEquals
@@ -54,7 +55,16 @@ class SafRecursiveTreeCopyAndroidTest {
         assertEquals(2, approved.directories)
         assertEquals(1, approved.files)
         assertArrayEquals(fixtureBytes, original())
-        val result = service.execute(request(), approved)
+        val progress = mutableListOf<RecursiveCopyProgress>()
+        val result = service.execute(request(), approved,
+            onVerifiedStep = { progress += it })
+        assertEquals(listOf(1, 2, 3), progress.map { it.completedSteps })
+        assertEquals(listOf(1, 2, 2), progress.map { it.verifiedDirectories })
+        assertEquals(listOf(0, 0, 1), progress.map { it.verifiedFiles })
+        assertEquals(listOf(0L, 0L, fixtureBytes.size.toLong()),
+            progress.map { it.verifiedBytes })
+        assertTrue(progress.all { it.totalSteps == 3 &&
+            it.manifestDigest == approved.digest })
         assertEquals("Copy reason=" + result.reason, RecursiveCopyResult.COMPLETE_VERIFIED,
             result.result)
         assertEquals(2, result.verifiedDirectories)
