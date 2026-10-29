@@ -12,6 +12,9 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.UiScrollable
+import androidx.test.uiautomator.UiSelector
+import androidx.test.uiautomator.UiObjectNotFoundException
 import androidx.test.uiautomator.Until
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -60,49 +63,55 @@ class RecursiveRealPickerCopyUiTest {
             // accessibility tree has not attached (API35 emulator race).
             device.executeShellCommand("dumpsys activity activities")
                 .contains("com.android.documentsui.picker.PickActivity"))
-        // On current Google DocumentsUI the toolbar's drawer action is
-        // exposed under different accessibility labels across emulator builds.
-        // AOSP explicitly supports opening the roots drawer with a swipe
-        // from the LEFT edge. Do that first, before looking for the test roots.
-        // Do NOT toggle a second time: doing so can close an already open
-        // drawer. Source/target roots were confirmed in ProvidersAccess logs.
-        fun rootNode() =
-            device.findObject(By.text(title))
-                ?: device.findObject(By.textContains(title))
-                ?: device.findObject(By.descContains(title))
-        if (rootNode() == null) {
-            val drawerButton = device.findObject(By.desc("Show roots"))
-                ?: device.findObject(By.desc("Open navigation drawer"))
-                ?: device.findObject(By.desc("Show navigation drawer"))
-            if (drawerButton != null) {
-                drawerButton.click()
-            } else {
-                device.swipe(2, device.displayHeight / 2,
-                    device.displayWidth * 3 / 4, device.displayHeight / 2, 25)
+        // Follow the AOSP CTS DocumentsClientTest root-navigation contract:
+        // container_roots / roots_list, toolbar ImageButton, UiScrollable.
+        // Screen-coordinate swipes against an unopened drawer can accidentally
+        // issue Android Back to the ACTUAL application, hiding the real defect.
+        // See: android.googlesource.com/platform/cts ... DocumentsClientTest
+        val packages = listOf("com.google.android.documentsui", "com.android.documentsui")
+        var selectedRoot = false
+        var rootsListFound = false
+        for (pkg in packages) {
+            if (selectedRoot) break
+            val listIds = listOf("$pkg:id/roots_list", "android:id/list")
+            for (listId in listIds) {
+                if (selectedRoot) break
+                val rootsList = UiSelector().resourceId("$pkg:id/container_roots")
+                    .childSelector(UiSelector().resourceId(listId))
+                var list = device.findObject(rootsList)
+                if (!list.waitForExists(1_000L)) {
+                    val hamburger = device.findObject(
+                        UiSelector().resourceId("$pkg:id/toolbar")
+                            .childSelector(UiSelector()
+                                .className("android.widget.ImageButton").clickable(true)))
+                    if (hamburger.waitForExists(1_000L)) {
+                        try { hamburger.click() }
+                        catch (_: UiObjectNotFoundException) { }
+                    }
+                }
+                list = device.findObject(rootsList)
+                if (!list.waitForExists(3_000L)) continue
+                rootsListFound = true
+                try {
+                    val scroller = UiScrollable(rootsList).setAsVerticalList()
+                    scroller.setMaxSearchSwipes(12)
+                    if (scroller.scrollIntoView(UiSelector().text(title))) {
+                        val root = device.findObject(rootsList.childSelector(
+                            UiSelector().text(title)))
+                        if (root.waitForExists(2_000L)) {
+                            root.click()
+                            selectedRoot = true
+                        }
+                    }
+                } catch (_: UiObjectNotFoundException) {
+                    // Try the alternate roots-list ID before failing closed.
+                }
             }
         }
-        // It is possible to swipe open the drawer and still land below the
-        // synthetic fixture entries. Scroll only the left-hand drawer area.
-        var found = device.wait(Until.hasObject(By.text(title)), 2_000L) ||
-            rootNode() != null
-        for (step in 0 until 6) {
-            if (found) break
-            device.swipe(device.displayWidth / 5, device.displayHeight * 4 / 5,
-                device.displayWidth / 5, device.displayHeight / 4, 18)
-            found = rootNode() != null
-        }
-        assertTrue("Fixture DocumentsProvider root not visible in real picker: " +
-            title, found)
-        var chosen = false
-        repeat(5) {
-            if (chosen) return@repeat
-            val root = rootNode()
-            if (root != null) {
-                try { root.click(); chosen = true }
-                catch (_: StaleObjectException) { device.waitForIdle(250L) }
-            }
-        }
-        assertTrue("Fixture root could not be selected in DocumentsUI", chosen)
+        assertTrue("DocumentsUI roots drawer not discoverable through CTS selectors",
+            rootsListFound)
+        assertTrue("Fixture DocumentsProvider root not selectable in OS picker: " +
+            title, selectedRoot)
         val use = if (visible("Use this folder", 4_000L))
             "Use this folder" else "USE THIS FOLDER"
         click(use, "USE_THIS_FOLDER")
