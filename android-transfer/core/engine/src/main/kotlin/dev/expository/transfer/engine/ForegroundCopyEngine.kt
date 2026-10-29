@@ -87,7 +87,11 @@ object ForegroundCopyEngine {
                         output.write(buffer, 0, count)
                         sourceDigest.update(buffer, 0, count)
                         transferred = Math.addExact(transferred, count.toLong())
-                        onProgress(transferred)
+                        // Progress observers are UI/status sinks, never an
+                        // authority over the bytes or journal. If a display
+                        // callback throws, preserve the stream result and
+                        // let the explicit cancellation predicate stop it.
+                        runCatching { onProgress(transferred) }
                     }
                     output.flush()
                 }
