@@ -69,7 +69,8 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
         "Lowercase" -> RenameRecipe(listOf(RenameEdit.ChangeCase(upper = false)), extensionLocked)
         else -> RenameRecipe(listOf(RenameEdit.Replace(find, value)), extensionLocked)
     }
-    val preview = remember(rows, selectedExisting, recipe, folder, opaqueSessionId, blocked) {
+    val preview = remember(rows, selectedExisting, recipe, folder,
+        opaqueSessionId, blocked, numberingInvalid) {
         if (blocked || numberingInvalid || selectedExisting.isEmpty()) null
         else {
             val identity = opaqueSessionId
