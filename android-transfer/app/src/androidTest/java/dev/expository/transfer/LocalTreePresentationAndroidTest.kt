@@ -205,4 +205,63 @@ class LocalTreePresentationAndroidTest {
         assertNull(state.treeUri?.query)
     }
 
+    @Test fun reversingSortPreservesFolderFirstAndUnknownMetadataLast() {
+        val rows = listOf(
+            TreeEntry("dir-b", "Z Folder", true, null, 200),
+            TreeEntry("a", "alpha.txt", false, 10, 100),
+            TreeEntry("dir-a", "A Folder", true, null, null),
+            TreeEntry("b", "Beta.png", false, 20, 300),
+            TreeEntry("unknown", "Unreported", false, null, null),
+            TreeEntry("same", "aardvark.txt", false, 10, 100)
+        )
+        fun ids(mode: LocalTreeSort, descending: Boolean) =
+            LocalTreePresentation.rows(rows, "", mode, descending).map { it.documentId }
+        assertEquals(listOf("dir-a", "dir-b", "same", "a", "b", "unknown"),
+            ids(LocalTreeSort.NAME, false))
+        assertEquals(listOf("dir-b", "dir-a", "unknown", "b", "a", "same"),
+            ids(LocalTreeSort.NAME, true))
+        assertEquals(listOf("dir-a", "dir-b", "same", "a", "b", "unknown"),
+            ids(LocalTreeSort.SIZE, false))
+        assertEquals(listOf("dir-a", "dir-b", "b", "same", "a", "unknown"),
+            ids(LocalTreeSort.SIZE, true))
+        assertEquals(listOf("dir-a", "dir-b", "b", "a", "same", "unknown"),
+            ids(LocalTreeSort.NEWEST, true))
+        assertEquals(listOf("dir-a", "dir-b", "same", "a", "b", "unknown"),
+            ids(LocalTreeSort.NEWEST, false))
+        assertEquals("alpha.txt", rows[1].title) // source list remains unchanged
+        assertEquals(rows.map { it.documentId }.toSet(),
+            LocalTreePresentation.rows(rows, "", LocalTreeSort.TYPE, true)
+                .map { it.documentId }.toSet())
+        assertEquals(listOf("same", "a"),
+            LocalTreePresentation.rows(rows, "a", LocalTreeSort.NAME, false)
+                .filter { !it.directory && it.documentId in setOf("same", "a") }
+                .map { it.documentId })
+    }
+
+    @Test fun sortDirectionControlFlipsWithoutChangingUnderlyingSelection() {
+        val state = LocalTreeBrowseState(entries = fixture,
+            selected = setOf("z"), complete = false, hasMore = true)
+        compose.setContent {
+            MaterialTheme {
+                LocalTreePane(label = "Synthetic folder", state = state,
+                    scroll = rememberLazyListState(), onPick = {}, onOpen = {},
+                    onParent = {}, onAncestor = {}, onRefresh = {},
+                    onLoadMore = {}, onSelect = {})
+            }
+        }
+        compose.onNodeWithTag("saf-sort-direction").assertExists()
+        compose.onNodeWithText("Ascending ↑").assertExists()
+        compose.onNodeWithTag("saf-sort-direction").performClick()
+        compose.onNodeWithText("Descending ↓").assertExists()
+        compose.onNodeWithText("Selected: 1").assertExists()
+        compose.onNodeWithText("Size").performClick()
+        compose.onNodeWithText("Ascending ↑").assertExists()
+        compose.onNodeWithText("Newest").performClick()
+        compose.onNodeWithText("Descending ↓").assertExists()
+        compose.onNodeWithTag("saf-sort-direction").performClick()
+        compose.onNodeWithText("Ascending ↑").assertExists()
+        assertEquals(setOf("z"), state.selected)
+        assertFalse(state.complete)
+    }
+
 }
