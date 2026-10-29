@@ -1,10 +1,12 @@
 package dev.expository.transfer
 
 import android.net.Uri
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
@@ -66,4 +68,30 @@ class RecursiveFolderCopyOfferUiTest {
         }
         compose.onNodeWithTag("saf-recursive-copy-folder").assertDoesNotExist()
     }
+    @Test fun nestedLazyWorkspaceDoesNotForceMeasureDuringInitialSubcomposition() {
+        val nested = state(true).copy(
+            entries = listOf(TreeEntry("synthetic", "Episode.bin", false, 50)),
+            complete = true
+        )
+        compose.setContent {
+            MaterialTheme {
+                LazyColumn {
+                    item {
+                        LocalTreePane(
+                            label = "Synthetic nested SAF pane",
+                            state = nested, scroll = rememberLazyListState(),
+                            onPick = {}, onOpen = {}, onParent = {},
+                            onAncestor = {}, onRefresh = {},
+                            onLoadMore = {}, onSelect = {}
+                        )
+                    }
+                }
+            }
+        }
+        compose.onNodeWithText("Synthetic nested SAF pane", substring = true)
+            .assertExists()
+        compose.onNodeWithText("Episode.bin").assertExists()
+    }
+
+
 }

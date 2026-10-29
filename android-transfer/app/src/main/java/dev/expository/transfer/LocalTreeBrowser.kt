@@ -255,7 +255,10 @@ internal fun LocalTreePane(
     }
     val visibleEntries = LocalTreePresentation.rows(state.entries, fileFilter, sortMode, descending)
     LaunchedEffect(fileFilter, sortMode, descending, state.treeUri, state.folderId) {
-        scroll.scrollToItem(0)
+        // A nested workspace LazyColumn can first subcompose this pane while
+        // measuring. Synchronous scrollToItem forces illegal recursive layout.
+        // Ask Compose to reset at the next measure without reentrancy.
+        scroll.requestScrollToItem(0)
     }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(12.dp),
