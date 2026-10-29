@@ -224,9 +224,11 @@ class LocalTreePresentationAndroidTest {
             ids(LocalTreeSort.SIZE, false))
         assertEquals(listOf("dir-a", "dir-b", "b", "same", "a", "unknown"),
             ids(LocalTreeSort.SIZE, true))
-        assertEquals(listOf("dir-a", "dir-b", "b", "a", "same", "unknown"),
+        // Directory metadata sorts inside the directory group too. Known
+        // values precede unknowns in BOTH directions, and name breaks ties.
+        assertEquals(listOf("dir-b", "dir-a", "b", "same", "a", "unknown"),
             ids(LocalTreeSort.NEWEST, true))
-        assertEquals(listOf("dir-a", "dir-b", "same", "a", "b", "unknown"),
+        assertEquals(listOf("dir-b", "dir-a", "same", "a", "b", "unknown"),
             ids(LocalTreeSort.NEWEST, false))
         assertEquals("alpha.txt", rows[1].title) // source list remains unchanged
         assertEquals(rows.map { it.documentId }.toSet(),
