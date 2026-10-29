@@ -98,4 +98,41 @@ class RecoveryIndexFailurePolicyTest {
         }.isFailure)
     }
 
+    @Test fun recoveryReviewReferencesAreBoundedPrivateAndNeverAuthorizeReplay() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "recovery-test-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val digest = "d".repeat(52) + "123456789abc"
+        try {
+            val journal = DurableAttemptJournal(
+                dev.expository.transfer.journal.AndroidAtomicAttemptStorage(isolated, digest))
+            journal.confirm(digest)
+            journal.beginAttempt(digest, "isolated_test_attempt_01")
+            journal.markWriteAcknowledged(digest)
+            val record = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, record.requiresReview)
+            assertEquals(0, record.verifiedReceipts)
+            assertEquals(0, record.damagedOrUnrecognized)
+            assertEquals(0, record.additionalReviewCount)
+            assertEquals("123456789abc", record.reviewReferences.single().opaqueSuffix)
+            assertEquals("Requires independent destination review",
+                record.reviewReferences.single().status)
+            assertEquals(JournalState.UNCERTAIN, journal.current()?.state)
+            assertTrue(runCatching {
+                journal.beginAttempt(digest, "should_not_replay_01")
+            }.isFailure)
+            // The indexed summary cannot expose any underlying destination,
+            // user name, plaintext file path, source bytes, or account details.
+            assertTrue(record.reviewReferences.single().opaqueSuffix.matches(
+                Regex("[0-9a-f]{12}")))
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
+
 }
