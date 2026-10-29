@@ -26,6 +26,14 @@ tasks.register<JavaExec>("journaledCopyScenarios") {
     mainClass.set("dev.expository.transfer.engine.JournaledCopySuite")
 }
 
+tasks.register<JavaExec>("batchQueueScenarios") {
+    group = "verification"
+    description = "Verified-only bounded Copy queue, cancel, uncertain and no-replay E1 cases"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.engine.VerifiedCopyBatchSuite")
+}
+
 tasks.register<JavaExec>("renameScenarios") {
     group = "verification"
     description = "Fail-closed per-step bulk rename journals, cycles and interrupted operation scenarios"
