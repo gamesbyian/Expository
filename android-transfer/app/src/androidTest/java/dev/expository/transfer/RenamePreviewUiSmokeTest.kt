@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -61,6 +62,66 @@ class RenamePreviewUiSmokeTest {
         rule.onNodeWithTag("rename-preview-results").performScrollToIndex(0)
         rule.onNodeWithText("→ episode 01.mkv").assertExists()
         rule.onNodeWithText("Apply disabled.", substring = true).assertExists()
+    }
+
+    @Test fun numberedPreviewRespectsStartStepAndDigitsInFrozenOrder() {
+        val observed = SftpBrowsePage(
+            listOf(
+                SftpRemoteEntry("Episode 02.mkv", false, 250, 3L),
+                SftpRemoteEntry("Episode 01.mkv", false, 250, 2L)
+            ), truncated = false
+        )
+        rule.setContent {
+            MaterialTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    RemoteRenamePreviewCard("synthetic-session", "/number", observed, true)
+                }
+            }
+        }
+        rule.onNodeWithText("Select all").performClick()
+        rule.onNodeWithText("Number").performScrollTo().performClick()
+        rule.onNodeWithTag("rename-number-start")
+            .performScrollTo().performTextReplacement("12")
+        rule.onNodeWithTag("rename-number-step")
+            .performScrollTo().performTextReplacement("3")
+        rule.onNodeWithTag("rename-number-width")
+            .performScrollTo().performTextReplacement("4")
+        rule.onNodeWithText("Proposed changes: 2", substring = true)
+            .performScrollTo().assertExists()
+        rule.onNodeWithTag("rename-preview-results").performScrollToIndex(0)
+        rule.onNodeWithText("→ 0012 Episode 01.mkv").assertExists()
+        rule.onNodeWithTag("rename-preview-results").performScrollToIndex(1)
+        rule.onNodeWithText("→ 0015 Episode 02.mkv").assertExists()
+        rule.onNodeWithText("Apply disabled.", substring = true).assertExists()
+    }
+
+    @Test fun malformedNumberingBlocksPreviewRatherThanUsingDefaults() {
+        val observed = SftpBrowsePage(
+            listOf(SftpRemoteEntry("Episode.mkv", false, 99, null)),
+            truncated = false
+        )
+        rule.setContent {
+            MaterialTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    RemoteRenamePreviewCard("synthetic-session", "/invalid", observed, true)
+                }
+            }
+        }
+        rule.onNodeWithText("Select all").performClick()
+        rule.onNodeWithText("Number").performScrollTo().performClick()
+        rule.onNodeWithTag("rename-number-step")
+            .performScrollTo().performTextReplacement("0")
+        rule.onNodeWithText("Invalid numbering:", substring = true)
+            .performScrollTo().assertExists()
+        rule.onNodeWithText("Proposed changes:", substring = true).assertDoesNotExist()
+        rule.onNodeWithTag("rename-number-step")
+            .performTextReplacement("2")
+        rule.onNodeWithText("Proposed changes: 1", substring = true)
+            .performScrollTo().assertExists()
+        rule.onNodeWithTag("rename-number-width")
+            .performScrollTo().performTextReplacement("13")
+        rule.onNodeWithText("Invalid numbering:", substring = true).assertExists()
+        rule.onNodeWithText("Proposed changes:", substring = true).assertDoesNotExist()
     }
 
     @Test fun incompleteDirectoryCannotBecomeRenamePreview() {
