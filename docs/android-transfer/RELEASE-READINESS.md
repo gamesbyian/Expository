@@ -471,3 +471,60 @@ prove immutable contents; streamed-byte SHA-256 and fresh post-read
 source observations are separate future execution requirements.
 Real Drive/cloud provider grants, physical E4 and signed E5 acceptance
 remain open.
+
+
+## 28 October: executable recursive scoped Copy and first Single/Dual UI integration
+
+[Merged #275](https://github.com/gamesbyian/Expository/pull/275)
+connects the immutable recursive scanner, independent full-tree preflight and
+per-entry source membership to a real Android ContentResolver destination adapter.
+Every nested/empty directory and file is independently journaled, reviewed,
+created with no silent overwrite, re-observed, and file bytes compared through
+SHA-256 readback. The [exact PR-head targeted API35 run #40789913063](https://github.com/gamesbyian/Expository/actions/runs/40789913063)
+passed three synthetic provider cases, including 137,119 copied bytes, empty
+directories, source preservation, an ambiguous create reply and no blind replay.
+This used a **test-only generic ContentProvider with real Android byte IPC**,
+not a true DocumentsProvider with system-picker grants or a cloud account.
+
+[Merged #278](https://github.com/gamesbyian/Expository/pull/278) attaches
+explicit source-folder review and confirmation to the optional Dual workspace.
+[Merged #282](https://github.com/gamesbyian/Expository/pull/282), head
+`4acdde509f5ff37a98a2af8c8b7152200051f098`, adds a separate
+`ACTION_OPEN_DOCUMENT_TREE` target picker and explicit reviewed whole-folder
+Copy in the default permanent Single workspace. Its
+[native JVM validation #40791727552](https://github.com/gamesbyian/Expository/actions/runs/40791727552),
+[general checks #40791727666](https://github.com/gamesbyian/Expository/actions/runs/40791727666),
+and [targeted Android debug + androidTest APK compilation #40791746203](https://github.com/gamesbyian/Expository/actions/runs/40791746203)
+passed. **Compilation is not a confirmed system-picked end-to-end recursive
+Copy, nor cloud/same-provider compatibility.** Caller-side selection and
+permission checks cannot substitute for E2 real-picker or E4 physical/Drive
+acceptance. Source and target under the same provider authority remain
+deliberately refused without independently authoritative ancestry proof.
+
+[Merged #277](https://github.com/gamesbyian/Expository/pull/277) establishes
+post-readback destination membership for older single-file SAF routes.
+[Merged #284](https://github.com/gamesbyian/Expository/pull/284), exact
+head `c13e5d124a0be0e5722ff789e5fde998dc2fa1d2`, extends that
+guard to recursive destination readback. Its
+[native JVM #40793552738](https://github.com/gamesbyian/Expository/actions/runs/40793552738),
+[app+androidTest compile #40793563017](https://github.com/gamesbyian/Expository/actions/runs/40793563017)
+and [focused API35 synthetic provider E2 #40793567887](https://github.com/gamesbyian/Expository/actions/runs/40793567887)
+passed. The provider moved an output file after initial membership but before
+readback, and the completed bytes could not be falsely marked verified.
+
+[Merged #286](https://github.com/gamesbyian/Expository/pull/286)
+adds immutable privacy-safe progress callbacks *only after a per-step journal
+has committed VERIFIED*; its exact-head
+[native E1 #40794059685](https://github.com/gamesbyian/Expository/actions/runs/40794059685)
+passed journal-order, uncertain-readback and throwing-observer scenarios.
+**The callback is not yet wired to a visible progress bar or background queue.**
+Pending [#288](https://github.com/gamesbyian/Expository/pull/288) further
+rechecks created destination ancestor membership before nested writes;
+superseded stacked [#285](https://github.com/gamesbyian/Expository/pull/285)
+was closed without unsafe merge. No E4 real cloud/physical proof follows.
+
+**Gate classification:** E1 planner and E2 controlled synthetic-provider
+recursive execution are established; a first UI path is integrated. G2/G4/G6
+remain **in progress**, G8 lacks authorized Drive/Docs operations, G9 lacks
+E4 physical tests and an independently signed E5 beta. The older, dated
+sections above record what was not yet implemented *at those times*.
