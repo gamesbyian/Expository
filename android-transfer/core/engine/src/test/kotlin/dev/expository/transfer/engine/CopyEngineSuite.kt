@@ -41,6 +41,25 @@ object CopyEngineSuite {
                 receipt.bytesWritten == bytes.size.toLong() &&
                 out.toByteArray().contentEquals(bytes))
         }
+        scenario("throwing progress display never corrupts copied bytes or proof") {
+            val out = ByteArrayOutputStream()
+            var notifications = 0
+            val streams = object : CopyStreams {
+                override fun openSource(): InputStream = ByteArrayInputStream(bytes)
+                override fun openNewDestination(): OutputStream = out
+                override fun openDestinationReadBack(): InputStream =
+                    ByteArrayInputStream(out.toByteArray())
+            }
+            val receipt = ForegroundCopyEngine.copy(p, { p }, streams,
+                onProgress = {
+                    notifications++
+                    throw IllegalStateException("synthetic UI callback error")
+                })
+            check(notifications >= 1)
+            check(receipt.proof == CopyProof.BYTES_VERIFIED)
+            check(receipt.bytesWritten == bytes.size.toLong())
+            check(out.toByteArray().contentEquals(bytes))
+        }
         scenario("empty file read-back verified") {
             val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
                 override fun openSource() = ByteArrayInputStream(ByteArray(0))
