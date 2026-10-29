@@ -79,7 +79,12 @@ object VerifiedCopyBatchQueue {
                 streams = job.streams, journal = job.journal,
                 attemptId = job.attemptId,
                 continueRequested = continueRequested,
-                onProgress = { bytes -> onItemProgress(index, bytes) }
+                // UI/status observers are advisory. A broken Compose update
+                // must not turn already-committed destination bytes into an
+                // artificial UNCERTAIN write or abort subsequent verified jobs.
+                onProgress = { bytes ->
+                    runCatching { onItemProgress(index, bytes) }
+                }
             )
             results += receipt
             // Output closed or 100% sent does not prove content equality.
