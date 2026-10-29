@@ -1054,7 +1054,8 @@ internal fun SftpBrowseCard(
                                     onProgress = { bytes ->
                                         if (bytes - lastDisplayed >= 256L * 1024L) {
                                             lastDisplayed = bytes
-                                            transferred = verifiedBytes + bytes
+                                            publishCopyProgress(bytes, permit, live,
+                                                verifiedBytes)
                                         }
                                     })
                             }
@@ -1066,7 +1067,7 @@ internal fun SftpBrowseCard(
                             "No overwrite or automatic retry."
                         break
                     }
-                    transferred = verifiedBytes + receipt.bytesWritten
+                    transferred = Math.addExact(verifiedBytes, receipt.bytesWritten)
                     if (receipt.proof != CopyProof.BYTES_VERIFIED) {
                         status = when (receipt.proof) {
                             CopyProof.BLOCKED ->
@@ -1083,7 +1084,7 @@ internal fun SftpBrowseCard(
                         break
                     }
                     verified++
-                    verifiedBytes += receipt.bytesWritten
+                    verifiedBytes = Math.addExact(verifiedBytes, receipt.bytesWritten)
                     if (verified == selection.files.size) {
                         status = "All " + verified + " SFTP files independently byte-verified " +
                             "in the selected Android folder (" + verifiedBytes + " bytes). " +
