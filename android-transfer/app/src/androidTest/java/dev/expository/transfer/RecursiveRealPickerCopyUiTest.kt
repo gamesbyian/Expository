@@ -143,9 +143,26 @@ class RecursiveRealPickerCopyUiTest {
         // returns this grant. Only NOW is independent source reading legal.
         assertOriginal()
         compose.onNodeWithTag("saf-recursive-copy-shows").performClick()
-        // The destination system picker is now in front of Expository.
-        // Do not query Compose semantics for the hidden app's status; check
-        // the real OS picker and its system-issued grant instead.
+        // A second OS activity MUST actually be foreground before any
+        // swipe or UiAutomator root navigation. Otherwise a left-edge
+        // gesture can back-navigate and destroy Expository itself.
+        val targetPickerVisible =
+            device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")), 12_000L) ||
+                device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 3_000L)
+        if (!targetPickerVisible) {
+            // Only inspect synthetic, fixed application status categories.
+            // Never dump a real user's picker hierarchy, path or account.
+            val reason = when {
+                compose.onAllNodesWithText("Android destination picker unavailable",
+                    substring = true).fetchSemanticsNodes().isNotEmpty() -> "PICKER_LAUNCH_FAILED"
+                compose.onAllNodesWithText(
+                    "Choose a different, writable Android provider destination",
+                    substring = true).fetchSemanticsNodes().isNotEmpty() ->
+                    "LAUNCH_REQUESTED_WITHOUT_PICKER"
+                else -> "COPY_PROPOSAL_REJECTED_OR_ACTIVITY_MISSING"
+            }
+            throw AssertionError("SYSTEM_DESTINATION_PICKER_NOT_FOREGROUND_" + reason)
+        }
         chooseFixtureRoot(device, "Expository Target Lab")
         compose.waitUntil(30_000L) {
             compose.onAllNodesWithText("Review whole-folder Copy",
