@@ -48,6 +48,9 @@ jobs:
               # One fixed Android DocumentsUI acceptance method. No arbitrary
               # method, package, sh fragment or wildcard is allowed.
               LocalPickerPositiveCopyTest#twoRealSystemPickedTreesCopyExactBytesAndPreserveSource) ;;
+              # One isolated foreground Copy state gate, avoiding the known
+              # intermittent DocumentsUI navigation tests on this runner.
+              LocalPickerCancelSmokeTest#localCopyLateProgressDoesNotCrossCancellationOrAttemptBoundaries) ;;
               # Exact bounded two-file Android Files picker + two receipts.
               LocalPickerPositiveCopyTest#twoRealSystemPickedTreesCopyTwoSelectedFiles) ;;
               NewFolderPositiveProviderTest#oneRealSystemPickedFolderCreatesExactChildAndVerifiedJournal) ;;
