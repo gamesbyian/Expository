@@ -41,7 +41,7 @@ class RecursiveFolderCopyOfferUiTest {
                     label = "Scoped source", state = state(false),
                     scroll = rememberLazyListState(),
                     onPick = {}, onOpen = { navigated++ },
-                    onParent = {}, onRefresh = {}, onLoadMore = {},
+                    onParent = {}, onAncestor = {}, onRefresh = {}, onLoadMore = {},
                     onSelect = {}, onCopyFolder = { entry ->
                         assertEquals("folder", entry.documentId)
                         requested++
@@ -60,7 +60,7 @@ class RecursiveFolderCopyOfferUiTest {
                     label = "Scoped nested", state = state(true),
                     scroll = rememberLazyListState(),
                     onPick = {}, onOpen = {}, onParent = {},
-                    onRefresh = {}, onLoadMore = {}, onSelect = {},
+                    onAncestor = {}, onRefresh = {}, onLoadMore = {}, onSelect = {},
                     onCopyFolder = {})
             }
         }
