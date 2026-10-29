@@ -84,7 +84,8 @@ internal object FtpsCopyProgressGate {
     fun belongsToActiveCopy(
         presentedPermit: AtomicBoolean?, expectedPermit: AtomicBoolean,
         sessionMatches: Boolean, busy: Boolean
-    ): Boolean = busy && sessionMatches && presentedPermit === expectedPermit
+    ): Boolean = busy && sessionMatches && expectedPermit.get() &&
+        presentedPermit === expectedPermit
 }
 
 /**
