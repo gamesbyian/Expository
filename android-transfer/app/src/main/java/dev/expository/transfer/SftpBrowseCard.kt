@@ -774,7 +774,8 @@ internal fun SftpBrowseCard(
                         break
                     }
                     verified++
-                    verifiedBytes = Math.addExact(verifiedBytes, receipt.bytesWritten)
+                    verifiedBytes = Math.addExact(verifiedBytes,
+                        requireNotNull(receipt).bytesWritten)
                     transferred = verifiedBytes
                 }
                 if (verified == source.selection.files.size) {
