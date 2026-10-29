@@ -57,6 +57,7 @@ internal fun PublicGithubBrowseCard() {
     var visibleLimit by remember { mutableIntStateOf(GithubPublicDirectory.FIRST_PAGE) }
     var folderFilter by remember { mutableStateOf("") }
     var folderSort by remember { mutableStateOf(GithubFolderSort.NAME) }
+    var descending by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var pendingSave by remember { mutableStateOf<PublicGithubSaveSource?>(null) }
     var savePermit by remember { mutableStateOf<AtomicBoolean?>(null) }
@@ -243,6 +244,8 @@ internal fun PublicGithubBrowseCard() {
                     }, modifier = Modifier.fillMaxWidth(),
                         label = { Text("Filter names in this folder") },
                         singleLine = true, enabled = !busy)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Button(
                         modifier = Modifier.heightIn(min = 48.dp),
                         enabled = !busy,
@@ -255,8 +258,13 @@ internal fun PublicGithubBrowseCard() {
                         }
                     ) { Text("Sort: " + folderSort.name.lowercase()
                         .replaceFirstChar { it.uppercase() }) }
+                    Button(modifier = Modifier.heightIn(min = 48.dp),
+                        enabled = !busy, onClick = { descending = !descending }) {
+                        Text(if (descending) "Descending ↓" else "Ascending ↑")
+                    }
+                    }
                     val matched = GithubFolderPresentation.rows(
-                        current.entries, folderFilter, folderSort)
+                        current.entries, folderFilter, folderSort, descending)
                     val displayRows = matched.take(visibleLimit)
                     Text("Showing " + displayRows.size + " of " +
                         matched.size + " matching entries (folder total " +
