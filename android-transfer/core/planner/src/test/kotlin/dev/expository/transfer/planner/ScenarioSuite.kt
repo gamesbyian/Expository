@@ -255,6 +255,27 @@ object ScenarioSuite {
             check(p.executable && p.preview.map { it.proposed } ==
                 listOf("007 scene10.mkv", "009 scene2.mkv"))
         }
+        test("opt-in conservative cleanup removes only copy tags and empty brackets") {
+            val s = snapshot(listOf("photo ()  (copy).jpg",
+                "Episode (2019)  [1080p].mkv", "notes [ ].txt"))
+            val recipe = RenameRecipe(listOf(RenameEdit.CleanUp))
+            val p = RenamePlanner.preview(s, recipe, NOW)
+            check(p.executable && p.preview.map { it.proposed } ==
+                listOf("photo.jpg", "Episode (2019) [1080p].mkv", "notes.txt"))
+            check(p.changed == 3)
+            assertStepsPreserveAll(s, p)
+            check(RenamePlanner.revalidate(p, s, recipe, NOW))
+            check(!RenamePlanner.revalidate(p, s,
+                RenameRecipe(listOf(RenameEdit.Prefix("x"))), NOW))
+        }
+        test("cleanup never overwrites an occupied unselected sibling") {
+            val s = snapshot(listOf("photo.jpg", "photo (copy).jpg"),
+                listOf("photo (copy).jpg"))
+            val p = RenamePlanner.preview(s,
+                RenameRecipe(listOf(RenameEdit.CleanUp)), NOW)
+            check(!p.executable && "OCCUPIED_DESTINATION" in p.blockers &&
+                p.steps.isEmpty() && p.preview.single().proposed == "photo.jpg")
+        }
         test("rename revalidation fails on sibling drift and recipe changes") {
             val s = snapshot(listOf("a", "b"))
             val recipe = RenameRecipe(listOf(RenameEdit.Prefix("new-")))

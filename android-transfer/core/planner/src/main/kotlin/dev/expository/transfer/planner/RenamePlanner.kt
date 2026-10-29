@@ -19,6 +19,8 @@ sealed class RenameEdit {
     data class Prefix(val value: String) : RenameEdit()
     data class Suffix(val value: String) : RenameEdit()
     data class ChangeCase(val upper: Boolean) : RenameEdit()
+    /** Opt-in, conservative removal of empty brackets and copy suffixes. */
+    data object CleanUp : RenameEdit()
     data class Number(val start: Long = 1, val step: Long = 1, val width: Int = 2,
                       val separator: String = " ", val prefix: Boolean = false) : RenameEdit()
 }
@@ -58,6 +60,26 @@ private fun splitExtension(name: String, kind: ItemKind, extensionsLocked: Boole
     return name.substring(0, dot) to name.substring(dot)
 }
 
+/**
+ * A narrow, deterministic cleanup preset. Never strip numbered years,
+ * resolution tags, meaningful punctuation or extensions by default.
+ * Caller still receives the full collision/name validation in RenamePlanner.
+ */
+private val EMPTY_PARENS = Regex("""\s*\(\s*\)\s*""")
+private val EMPTY_SQUARE_BRACKETS = Regex("""\s*\[\s*]\s*""")
+private val EMPTY_CURLY_BRACKETS = Regex("""\s*\{\s*}\s*""")
+private val COPY_SUFFIX = Regex("""(?i)\s*\(\s*copy(?:\s+\d+)?\s*\)\s*""")
+private val REPEATED_WHITESPACE = Regex("""\s+""")
+
+private fun cleanUpName(stem: String): String =
+    stem
+        .replace(EMPTY_PARENS, " ")
+        .replace(EMPTY_SQUARE_BRACKETS, " ")
+        .replace(EMPTY_CURLY_BRACKETS, " ")
+        .replace(COPY_SUFFIX, " ")
+        .replace(REPEATED_WHITESPACE, " ")
+        .trim()
+
 private fun applyEdits(item: RenameItem, recipe: RenameRecipe, ordinal: Int): String {
     val (stem, extension) = splitExtension(item.name, item.kind, recipe.extensionsLocked)
     var text = stem
@@ -67,6 +89,7 @@ private fun applyEdits(item: RenameItem, recipe: RenameRecipe, ordinal: Int): St
             is RenameEdit.Prefix -> edit.value + text
             is RenameEdit.Suffix -> text + edit.value
             is RenameEdit.ChangeCase -> if (edit.upper) text.uppercase(Locale.ROOT) else text.lowercase(Locale.ROOT)
+            RenameEdit.CleanUp -> cleanUpName(text)
             is RenameEdit.Number -> {
                 require(edit.width in 1..12 && edit.step > 0 && edit.start >= 0)
                 val number = Math.addExact(edit.start, Math.multiplyExact(ordinal.toLong(), edit.step))
