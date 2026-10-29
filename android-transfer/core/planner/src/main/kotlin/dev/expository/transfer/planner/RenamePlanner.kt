@@ -67,11 +67,11 @@ private fun splitExtension(name: String, kind: ItemKind, extensionsLocked: Boole
  */
 private fun cleanUpName(stem: String): String =
     stem
-        .replace(Regex("""\\s*\\(\\s*\\)\\s*"""), " ")
-        .replace(Regex("""\\s*\\[\\s*]\\s*"""), " ")
-        .replace(Regex("""\\s*\\{\\s*}\\s*"""), " ")
-        .replace(Regex("""(?i)\\s*\\(\\s*copy(?:\\s+\\d+)?\\s*\\)\\s*"""), " ")
-        .replace(Regex("""\\s+"""), " ")
+        .replace(Regex("""\s*\(\s*\)\s*"""), " ")
+        .replace(Regex("""\s*\[\s*]\s*"""), " ")
+        .replace(Regex("""\s*\{\s*}\s*"""), " ")
+        .replace(Regex("""(?i)\s*\(\s*copy(?:\s+\d+)?\s*\)\s*"""), " ")
+        .replace(Regex("""\s+"""), " ")
         .trim()
 
 private fun applyEdits(item: RenameItem, recipe: RenameRecipe, ordinal: Int): String {
