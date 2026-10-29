@@ -62,7 +62,7 @@ class GithubPublicDirectoryAndroidTest {
             names(GithubFolderSort.SIZE, true))
         assertEquals(listOf("a-dir", "z-dir", "alpha.txt", "beta.png", "unknown"),
             names(GithubFolderSort.SIZE, false))
-        assertEquals(listOf("a-dir", "z-dir", "alpha.txt"),
+        assertEquals(listOf("a-dir", "alpha.txt"),
             GithubFolderPresentation.rows(entries, "a", GithubFolderSort.NAME)
                 .filter { it.name == "a-dir" || it.name == "alpha.txt" }
                 .map { it.name })
