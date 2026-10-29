@@ -137,6 +137,25 @@ internal data class RecursiveCopyReview(
     val destinationGeneration: Long
 )
 
+/** Exact Single-mode source identity captured BEFORE launching Android's target picker. */
+private data class SingleFolderTargetPickerWitness(
+    val sourceTree: Uri,
+    val sourceParentId: String,
+    val sourceDirectoryId: String,
+    val sourceName: String,
+    val sourceGeneration: Long,
+    val shareEpoch: Long,
+    val sourceEndpoint: BrowseEndpoint
+)
+
+private data class SingleRecursiveFolderReview(
+    val request: ScopedRecursiveSourceRequest,
+    val manifest: RecursiveFolderManifest,
+    val sourceGeneration: Long,
+    val shareEpoch: Long,
+    val sourceEndpoint: BrowseEndpoint
+)
+
 private data class DemoFile(val name: String, val size: String)
 private val demoFiles = listOf(
     DemoFile("Example photo.jpg", "Synthetic • 2 MB"),
@@ -184,6 +203,12 @@ private fun DeveloperPreview(
     var scrollB by remember { mutableStateOf(LazyListState()) }
     var proposedCopy by remember { mutableStateOf<List<TreeCopyPreflight>?>(null) }
     var recursiveProposal by remember { mutableStateOf<RecursiveCopyReview?>(null) }
+    var pendingSingleFolderPicker by remember {
+        mutableStateOf<SingleFolderTargetPickerWitness?>(null)
+    }
+    var singleFolderReview by remember {
+        mutableStateOf<SingleRecursiveFolderReview?>(null)
+    }
     var copyBusy by remember { mutableStateOf(false) }
     var remoteRelayBusy by remember { mutableStateOf(false) }
     var copyStatus by remember { mutableStateOf(
@@ -215,6 +240,10 @@ private fun DeveloperPreview(
         // immutable planner selection before any asynchronous provider read.
         proposedCopy = null
         recursiveProposal = null
+        if (which == WorkspacePane.SINGLE) {
+            pendingSingleFolderPicker = null
+            singleFolderReview = null
+        }
         model = model.update(which, model.pane(which).clearSelection())
         val nextGeneration = treeReadGeneration.incrementAndGet()
         replaceTree(which, LocalTreeBrowseState(
@@ -295,6 +324,10 @@ private fun DeveloperPreview(
         // A new OS-picked tree invalidates any previous Copy approval.
         proposedCopy = null
         recursiveProposal = null
+        if (which == WorkspacePane.SINGLE) {
+            pendingSingleFolderPicker = null
+            singleFolderReview = null
+        }
         // No takePersistableUriPermission; no serialized grants or implicit
         // access after process recreation. User can explicitly choose again.
         readTree(which, uri, listOf(TreeCrumb(rootId, "Chosen folder")),
@@ -338,6 +371,163 @@ private fun DeveloperPreview(
             replaceTree(which, tree(which).copy(
                 status = "Android folder picker unavailable. No data accessed."
             ))
+        }
+    }
+
+    val singleFolderTargetPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val witness = pendingSingleFolderPicker
+        pendingSingleFolderPicker = null
+        val destinationTree = result.data?.data
+        val flags = result.data?.flags ?: 0
+        if (witness == null) {
+            // Old or unsolicited result has no transfer authority.
+        } else if (result.resultCode != Activity.RESULT_OK || destinationTree == null) {
+            copyStatus = "Folder destination picker canceled; no Copy was attempted."
+        } else if (model.view != WorkspaceView.SINGLE ||
+            model.single.endpoint != witness.sourceEndpoint ||
+            !model.single.endpoint.isSaf ||
+            treeSingle.generation != witness.sourceGeneration ||
+            treeSingle.treeUri != witness.sourceTree ||
+            treeSingle.folderId != witness.sourceParentId ||
+            treeSingle.crumbs.size != 1 || !treeSingle.complete ||
+            currentShareEpoch() != witness.shareEpoch ||
+            treeSingle.entries.count {
+                it.documentId == witness.sourceDirectoryId &&
+                    it.title == witness.sourceName && it.directory
+            } != 1) {
+            copyStatus = "Source folder or app context changed during destination selection. No Copy started."
+        } else if (!LocalTreeReader.validTree(destinationTree) ||
+            destinationTree.authority == witness.sourceTree.authority ||
+            flags and Intent.FLAG_GRANT_READ_URI_PERMISSION == 0 ||
+            flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION == 0) {
+            copyStatus = "Folder destination cannot be authorized: choose a different Android provider with readable and writable tree access. No Copy started."
+        } else {
+            val parentId = runCatching { LocalTreeReader.rootId(destinationTree) }
+                .getOrNull()
+            if (parentId == null) {
+                copyStatus = "Android returned an invalid target folder. No Copy started."
+            } else {
+                val request = ScopedRecursiveSourceRequest(
+                    witness.sourceTree, witness.sourceParentId,
+                    witness.sourceDirectoryId, witness.sourceName,
+                    destinationTree, parentId, destinationWriteGranted = true)
+                copyBusy = true
+                copyStatus = "Checking nested source, selected target authority and collision-free folder membership…"
+                scope.launch {
+                    val approval = withContext(Dispatchers.IO) {
+                        runCatching {
+                            SafRecursiveTreeCopy(context.applicationContext,
+                                context.contentResolver).prepare(request)
+                        }.getOrNull()
+                    }
+                    if (model.view != WorkspaceView.SINGLE ||
+                        model.single.endpoint != witness.sourceEndpoint ||
+                        treeSingle.generation != witness.sourceGeneration ||
+                        treeSingle.treeUri != witness.sourceTree ||
+                        treeSingle.folderId != witness.sourceParentId ||
+                        currentShareEpoch() != witness.shareEpoch) {
+                        singleFolderReview = null
+                        copyStatus = "Source selection changed during folder review; no destination write occurred."
+                    } else if (approval == null || !approval.reviewable) {
+                        singleFolderReview = null
+                        copyStatus = "Folder Copy blocked by provider capability, incomplete source, nesting bound or destination collision. No file was created."
+                    } else {
+                        singleFolderReview = SingleRecursiveFolderReview(
+                            request, approval, witness.sourceGeneration,
+                            witness.shareEpoch, witness.sourceEndpoint)
+                        copyStatus = "Review " + approval.directories + " directories and " +
+                            approval.files + " files before confirming Copy to the chosen Android folder."
+                    }
+                    copyBusy = false
+                }
+            }
+        }
+    }
+
+    fun launchSingleFolderCopy(folder: TreeEntry) {
+        val state = treeSingle
+        val uri = state.treeUri ?: return
+        val parent = state.folderId ?: return
+        if (copyBusy || remoteRelayBusy || pendingSingleFolderPicker != null ||
+            singleFolderReview != null || recursiveProposal != null ||
+            model.view != WorkspaceView.SINGLE ||
+            !model.single.endpoint.isSaf ||
+            state.loading || !state.complete || state.crumbs.size != 1 ||
+            !folder.directory || state.entries.count {
+                it.documentId == folder.documentId && it.title == folder.title &&
+                    it.directory
+            } != 1) return
+        val witness = SingleFolderTargetPickerWitness(
+            uri, parent, folder.documentId, folder.title,
+            state.generation, currentShareEpoch(), model.single.endpoint
+        )
+        pendingSingleFolderPicker = witness
+        copyStatus = "Choose a different, writable Android provider destination. The picker is read-only until you confirm Copy."
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        }
+        runCatching { singleFolderTargetPicker.launch(intent) }.onFailure {
+            pendingSingleFolderPicker = null
+            copyStatus = "Android destination picker unavailable. No Copy was attempted."
+        }
+    }
+
+    fun confirmSingleFolderCopy() {
+        val pending = singleFolderReview ?: return
+        if (copyBusy || remoteRelayBusy || model.view != WorkspaceView.SINGLE) return
+        if (!model.single.endpoint.isSaf ||
+            model.single.endpoint != pending.sourceEndpoint ||
+            treeSingle.generation != pending.sourceGeneration ||
+            treeSingle.treeUri != pending.request.sourceTree ||
+            treeSingle.folderId != pending.request.sourceParentId ||
+            treeSingle.crumbs.size != 1 || !treeSingle.complete ||
+            currentShareEpoch() != pending.shareEpoch ||
+            treeSingle.entries.count {
+                it.documentId == pending.request.sourceDirectoryId &&
+                    it.title == pending.request.expectedName && it.directory
+            } != 1) {
+            singleFolderReview = null
+            copyStatus = "Folder approval invalidated by selection, navigation or incoming share. No Copy attempted."
+            return
+        }
+        singleFolderReview = null
+        val permit = AtomicBoolean(true)
+        copyPermit = permit
+        copyBusy = true
+        copyStatus = "Copying the reviewed whole folder to Android's chosen destination…"
+        scope.launch {
+            val outcome = withContext(Dispatchers.IO) {
+                runCatching {
+                    SafRecursiveTreeCopy(context.applicationContext,
+                        context.contentResolver).execute(
+                            pending.request, pending.manifest) { permit.get() }
+                }.getOrNull()
+            }
+            copyStatus = if (outcome == null) {
+                "Copy outcome cannot be observed. Inspect the selected destination and durable recovery records before retrying."
+            } else when (outcome.result) {
+                RecursiveCopyResult.COMPLETE_VERIFIED ->
+                    "Whole-folder Copy verified: " + outcome.verifiedDirectories +
+                        " directories, " + outcome.verifiedFiles + " files and " +
+                        outcome.verifiedBytes +
+                        " bytes independently read back. Originals retained; cloud sync unverified."
+                RecursiveCopyResult.BLOCKED ->
+                    "Whole-folder Copy blocked: " + outcome.reason +
+                        ". No transfer completion is claimed."
+                RecursiveCopyResult.STOPPED_PARTIAL ->
+                    "Whole-folder Copy stopped after " + outcome.verifiedDirectories +
+                        " directories and " + outcome.verifiedFiles +
+                        " files. " + outcome.reason + ". Inspect before a new approval."
+                RecursiveCopyResult.UNCERTAIN ->
+                    "Whole-folder Copy uncertain after " + outcome.verifiedDirectories +
+                        " directories and " + outcome.verifiedFiles +
+                        " files. " + outcome.reason + ". Do not automatically retry."
+            }
+            copyPermit = null
+            copyBusy = false
         }
     }
 
@@ -673,6 +863,8 @@ private fun DeveloperPreview(
     LaunchedEffect(incomingShare?.sequence) {
         proposedCopy = null
         recursiveProposal = null
+        pendingSingleFolderPicker = null
+        singleFolderReview = null
         // A new external Share invalidates outstanding picker launch
         // contexts, without disconnecting authenticated remote sessions.
         pickerWitnesses = ScopedTreePickerWitnesses()
@@ -705,6 +897,8 @@ private fun DeveloperPreview(
                         onClick = {
                             proposedCopy = null
                             recursiveProposal = null
+                            pendingSingleFolderPicker = null
+                            singleFolderReview = null
                             if (model.view != WorkspaceView.SINGLE)
                                 pickerWitnesses = pickerWitnesses.invalidateDual()
                                     .invalidate(WorkspacePane.SINGLE)
@@ -717,6 +911,8 @@ private fun DeveloperPreview(
                             "✓ Single view" else "Single view") }
                     Button(enabled = !copyBusy && !remoteRelayBusy,
                         onClick = {
+                            pendingSingleFolderPicker = null
+                            singleFolderReview = null
                             if (model.view != WorkspaceView.DUAL)
                                 pickerWitnesses = pickerWitnesses.invalidateDual()
                                     .invalidate(WorkspacePane.SINGLE)
@@ -751,6 +947,8 @@ private fun DeveloperPreview(
                                     // unrelated SFTP/FTPS/GitHub browsing.
                                     proposedCopy = null
                                     recursiveProposal = null
+                                    pendingSingleFolderPicker = null
+                                    singleFolderReview = null
                                     pickerWitnesses = pickerWitnesses.invalidate(WorkspacePane.SINGLE)
                                     treeReadGeneration.incrementAndGet()
                                     model = model.update(WorkspacePane.SINGLE,
@@ -789,6 +987,9 @@ private fun DeveloperPreview(
                                 "Android provider" else "Device",
                             state = treeSingle,
                             scroll = scrollSingle,
+                            // Freeze source browser navigation while a verified
+                            // transfer holds this scoped URI and approval.
+                            enabled = !copyBusy && !remoteRelayBusy,
                             onPick = { launchTreePicker(WorkspacePane.SINGLE) },
                             onOpen = { entry ->
                                 treeSingle.treeUri?.let { uri ->
@@ -822,9 +1023,53 @@ private fun DeveloperPreview(
                                 }
                             },
                             onSelect = { entry ->
+                                singleFolderReview = null
                                 toggleTreeSelection(WorkspacePane.SINGLE, entry)
-                            }
+                            },
+                            onCopyFolder = if (treeSingle.complete && !copyBusy &&
+                                !remoteRelayBusy && treeSingle.crumbs.size == 1)
+                                ::launchSingleFolderCopy else null
                         )
+                        if (singleFolderReview != null) {
+                            val reviewed = requireNotNull(singleFolderReview)
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Review whole-folder Copy",
+                                        style = MaterialTheme.typography.titleMedium)
+                                    Text("Source: " + reviewed.request.expectedName +
+                                        " · current Single location")
+                                    Text("Destination: separate folder picked through Android Files")
+                                    Text("Contents: " + reviewed.manifest.directories +
+                                        " folders including empty directories, " +
+                                        reviewed.manifest.files + " files")
+                                    Text("Approval: " + reviewed.manifest.digest.take(12) +
+                                        "… · expires one minute after review")
+                                    Text("Copy only. New files, independent byte verification and durable per-step journals. Never deletes the original or silently retries an ambiguous provider write. The destination provider must still support the exact granted folder.",
+                                        style = MaterialTheme.typography.bodySmall)
+                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Button(enabled = !copyBusy,
+                                            modifier = Modifier.heightIn(min = 48.dp),
+                                            onClick = ::confirmSingleFolderCopy) {
+                                            Text("Confirm folder Copy")
+                                        }
+                                        Button(enabled = !copyBusy,
+                                            modifier = Modifier.heightIn(min = 48.dp),
+                                            onClick = { singleFolderReview = null }) {
+                                            Text("Cancel proposal")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (copyBusy) {
+                            Button(modifier = Modifier.heightIn(min = 48.dp),
+                                onClick = { copyPermit?.set(false) }) {
+                                Text("Stop folder Copy")
+                            }
+                        }
+                        Text(copyStatus, style = MaterialTheme.typography.bodySmall)
                         val pickedId = treeSingle.selected.singleOrNull()
                         val source = if (pickedId != null && treeSingle.treeUri != null)
                             runCatching {
