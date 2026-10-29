@@ -127,6 +127,29 @@ class SafRecursiveTreeCopyAndroidTest {
             .getInt("creates"))
     }
 
+    @Test fun movedCreatedAncestorBlocksNestedWriteWithoutAFalseReceipt() {
+        reset()
+        val service = SafRecursiveTreeCopy(targetContext, resolver)
+        val approved = requireNotNull(service.prepare(request()))
+        check(resolver.call(targetTree,
+            "fixture-move-created-root-on-source-read", null, null) != null)
+        val receipt = service.execute(request(), approved)
+        assertEquals("Moved destination ancestor must stop: " + receipt.reason,
+            RecursiveCopyResult.UNCERTAIN, receipt.result)
+        assertEquals(2, receipt.verifiedDirectories)
+        assertEquals(0, receipt.verifiedFiles)
+        assertEquals(0L, receipt.verifiedBytes)
+        assertEquals(2, resolver.call(targetTree, "fixture-stats", null, null)!!
+            .getInt("creates"))
+        assertArrayEquals(fixtureBytes, original())
+        // The provider may leave the verified but now detached directories.
+        // No automatic file write, source delete or blind replay is permitted.
+        val replay = service.execute(request(), approved)
+        assertTrue(replay.result != RecursiveCopyResult.COMPLETE_VERIFIED)
+        assertEquals(2, resolver.call(targetTree, "fixture-stats", null, null)!!
+            .getInt("creates"))
+    }
+
     @Test fun changedOrRevokedScopedSourceBeforeCopyCannotWrite() {
         reset()
         val service = SafRecursiveTreeCopy(targetContext, resolver)
