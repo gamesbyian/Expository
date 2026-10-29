@@ -231,7 +231,9 @@ internal fun LocalTreePane(
     onParent: () -> Unit,
     onRefresh: () -> Unit,
     onLoadMore: () -> Unit,
-    onSelect: (TreeEntry) -> Unit
+    onSelect: (TreeEntry) -> Unit,
+    /** Only an explicit directory request; no implicit provider write. */
+    onCopyFolder: ((TreeEntry) -> Unit)? = null
 ) {
     var fileFilter by remember(state.treeUri, state.folderId) { mutableStateOf("") }
     var sortMode by remember { mutableStateOf(LocalTreeSort.NAME) }
@@ -324,8 +326,10 @@ internal fun LocalTreePane(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(visibleEntries, key = { it.documentId }) { entry ->
-                    Row(Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Column(Modifier.weight(1f)) {
                             Text(entry.title)
                             Text(
@@ -347,10 +351,22 @@ internal fun LocalTreePane(
                             Text(if (entry.directory) "Open" else if (entry.documentId in state.selected)
                                 "✓ Select" else "Select")
                         }
+                        }
+                        // A second line avoids squeezing 48dp buttons beside
+                        // long file names on 320dp / high-text-scale displays.
+                        if (entry.directory && state.crumbs.size == 1 &&
+                            onCopyFolder != null) {
+                            Button(
+                                enabled = enabled && !state.loading && state.complete,
+                                modifier = Modifier.heightIn(min = 48.dp)
+                                    .testTag("saf-recursive-copy-" + entry.documentId),
+                                onClick = { onCopyFolder(entry) }
+                            ) { Text("Copy folder…") }
+                        }
                     }
                 }
             }
-            Text("Browsing never changes files. Copy requires complete preflight, explicit review and a journal. Dual-pane Local → SFTP Copy supports up to 12 selected files, and SFTP → Local Copy can save one remote file to a folder chosen in the other pane. Other cross-pane routes and Move are not yet available.",
+            Text("Browsing never changes files. Copy requires complete preflight, explicit review and a journal. Dual-pane Local → SFTP Copy supports up to 12 selected files, and SFTP → Local Copy can save one remote file to a folder chosen in the other pane. Dual whole-folder Copy is offered only for independently selected, distinct Android provider roots after a complete review. Other remote routes and Move are still unavailable.",
                 style = MaterialTheme.typography.bodySmall)
         }
     }
