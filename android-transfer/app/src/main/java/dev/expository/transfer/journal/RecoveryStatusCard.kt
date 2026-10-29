@@ -31,6 +31,7 @@ fun RecoveryStatusCard() {
     var status by remember { mutableStateOf<RecoveryCounts?>(null) }
     var unreadable by remember { mutableStateOf(false) }
     var refreshSerial by remember { mutableIntStateOf(0) }
+    var showReviewReferences by remember { mutableStateOf(false) }
     LaunchedEffect(context, refreshSerial) {
         status = null
         unreadable = false
@@ -61,6 +62,31 @@ fun RecoveryStatusCard() {
                 style = MaterialTheme.typography.bodySmall)
             Text("Automatic resume and remote destination reconciliation are not implemented.",
                 style = MaterialTheme.typography.bodySmall)
+            val review = status
+            if (review != null &&
+                (review.requiresReview > 0 || review.damagedOrUnrecognized > 0)) {
+                Button(modifier = Modifier.heightIn(min = 48.dp),
+                    onClick = { showReviewReferences = !showReviewReferences }) {
+                    Text(if (showReviewReferences) "Hide review references"
+                        else "Show review references")
+                }
+                if (showReviewReferences) {
+                    Text("Reference suffixes identify app-private operation journals only. " +
+                        "They contain no filenames, server addresses, grants or credentials. " +
+                        "They cannot identify which remote file needs inspection.",
+                        style = MaterialTheme.typography.bodySmall)
+                    review.reviewReferences.take(12).forEachIndexed { index, entry ->
+                        Text("Record " + (index + 1) + " · …" + entry.opaqueSuffix +
+                            " · " + entry.status,
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    val hidden = review.additionalReviewCount +
+                        (review.reviewReferences.size - 12).coerceAtLeast(0)
+                    if (hidden > 0) Text("$hidden more uncertain/unreadable record(s) " +
+                        "not shown. No automatic cleanup or retry is available.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+            }
             Button(
                 modifier = Modifier.heightIn(min = 48.dp),
                 onClick = { refreshSerial++ }
