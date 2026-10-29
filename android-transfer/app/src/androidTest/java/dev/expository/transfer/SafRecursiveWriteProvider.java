@@ -43,6 +43,7 @@ public final class SafRecursiveWriteProvider extends ContentProvider {
     private final Map<String, Doc> docs = new LinkedHashMap<>();
     private int nextId, creates;
     private boolean throwAfterCreate;
+    private boolean moveCreatedFileOnRead;
 
     private File dataFile(String id) {
         return new File(getContext().getCacheDir(), "expository-recursive-fixture-" + id);
@@ -56,6 +57,7 @@ public final class SafRecursiveWriteProvider extends ContentProvider {
         nextId = 0;
         creates = 0;
         throwAfterCreate = false;
+        moveCreatedFileOnRead = false;
         docs.put("source-root", new Doc("source-root", null, "Source", DIR));
         docs.put("shows", new Doc("shows", "source-root", "Shows", DIR));
         docs.put("empty", new Doc("empty", "shows", "Empty", DIR));
@@ -81,6 +83,10 @@ public final class SafRecursiveWriteProvider extends ContentProvider {
         }
         if ("fixture-fail-after-create".equals(method)) {
             throwAfterCreate = true;
+            return Bundle.EMPTY;
+        }
+        if ("fixture-move-created-file-on-read".equals(method)) {
+            moveCreatedFileOnRead = true;
             return Bundle.EMPTY;
         }
         if ("fixture-stats".equals(method)) {
@@ -222,6 +228,14 @@ public final class SafRecursiveWriteProvider extends ContentProvider {
             throw new FileNotFoundException();
         if (("clip".equals(documentId)) && mode.contains("w"))
             throw new FileNotFoundException("SOURCE_IS_READ_ONLY");
+        if (moveCreatedFileOnRead && documentId.startsWith("copy-created-") &&
+            !mode.contains("w")) {
+            // Simulate a provider moving the newly written child after the
+            // caller's initial membership check but during byte readback.
+            // The returned PFD still exposes the same immutable file bytes.
+            moveCreatedFileOnRead = false;
+            docs.put(documentId, new Doc(doc.id, "target-root", doc.name, doc.mime));
+        }
         return ParcelFileDescriptor.open(dataFile(documentId),
             ParcelFileDescriptor.parseMode(mode));
     }
