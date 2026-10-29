@@ -154,6 +154,7 @@ internal fun SftpBrowseCard(
     var browseLimit by remember { mutableStateOf(SftpBrowseBounds.INITIAL) }
     var fileFilter by remember { mutableStateOf("") }
     var sortMode by remember { mutableStateOf(SftpFolderSort.NAME) }
+    var descending by remember { mutableStateOf(false) }
     var pendingFile by remember { mutableStateOf<String?>(null) }
     var pendingPeerUpload by remember { mutableStateOf<PeerUploadReview?>(null) }
     var pendingPeerDownload by remember { mutableStateOf<PendingPeerSftpDownload?>(null) }
@@ -1880,7 +1881,12 @@ internal fun SftpBrowseCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     SftpFolderSort.entries.forEach { choice ->
                         Button(modifier = Modifier.heightIn(min = 48.dp),
-                            onClick = { sortMode = choice }) {
+                            onClick = {
+                                if (sortMode != choice) {
+                                    sortMode = choice
+                                    descending = choice == SftpFolderSort.NEWEST
+                                }
+                            }) {
                             Text((if (sortMode == choice) "✓ " else "") +
                                 when (choice) {
                                     SftpFolderSort.NAME -> "Name"
@@ -1890,9 +1896,13 @@ internal fun SftpBrowseCard(
                                 })
                         }
                     }
+                    Button(modifier = Modifier.heightIn(min = 48.dp),
+                        onClick = { descending = !descending }) {
+                        Text(if (descending) "Descending ↓" else "Ascending ↑")
+                    }
                 }
                 val observedEntries = page?.entries.orEmpty()
-                val entries = SftpBrowsePresentation.rows(observedEntries, fileFilter, sortMode)
+                val entries = SftpBrowsePresentation.rows(observedEntries, fileFilter, sortMode, descending)
                 Text("Showing " + entries.size + " of " + observedEntries.size +
                     " observed item(s)" +
                     (if (page?.truncated == true) " (listing incomplete)" else "") +

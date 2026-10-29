@@ -288,6 +288,29 @@ object FtpsSecuritySuite {
             // Neither visible order nor optional timestamps make LIST authoritative
             // or authorize a remote write.
         }
+        checkCase("FTPS direction never promotes unknown size or mtime") {
+            val source = listOf(
+                FtpsEntry("z-dir", true, 0, null),
+                FtpsEntry("old.txt", false, 10, 100),
+                FtpsEntry("a-dir", true, 0, null),
+                FtpsEntry("new.png", false, 20, 500),
+                FtpsEntry("unknown.bin", false, -1, null)
+            )
+            fun ids(sort: FtpsFolderSort, descending: Boolean) =
+                FtpsBrowsePresentation.rows(source, "", sort, descending).map { it.name }
+            check(ids(FtpsFolderSort.NAME, false) ==
+                listOf("a-dir", "z-dir", "new.png", "old.txt", "unknown.bin"))
+            check(ids(FtpsFolderSort.NAME, true) ==
+                listOf("z-dir", "a-dir", "unknown.bin", "old.txt", "new.png"))
+            check(ids(FtpsFolderSort.SIZE, true) ==
+                listOf("a-dir", "z-dir", "new.png", "old.txt", "unknown.bin"))
+            check(ids(FtpsFolderSort.NEWEST, false) ==
+                listOf("a-dir", "z-dir", "old.txt", "new.png", "unknown.bin"))
+            check(ids(FtpsFolderSort.NEWEST, true) ==
+                listOf("a-dir", "z-dir", "new.png", "old.txt", "unknown.bin"))
+            check(source.map { it.name } ==
+                listOf("z-dir", "old.txt", "a-dir", "new.png", "unknown.bin"))
+        }
         println("PASS FTPS total=" + passed + " evidence=offline-policy-only")
     }
 }

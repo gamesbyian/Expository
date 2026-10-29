@@ -166,6 +166,30 @@ object SftpSecuritySuite {
             check(SftpTarget("example.invalid", trustedHostKey = pin).host == "example.invalid")
             check(runCatching { SftpTarget("example.invalid", 65536, pin) }.isFailure)
         }
+        checkCase("reversible SFTP previews preserve folder grouping and missing timestamps") {
+            val source = listOf(
+                SftpRemoteEntry("z-folder", true, 0, null),
+                SftpRemoteEntry("alpha.bin", false, 10, 100),
+                SftpRemoteEntry("a-folder", true, 0, null),
+                SftpRemoteEntry("beta.zip", false, 20, 300),
+                SftpRemoteEntry("unknown.txt", false, -1, null)
+            )
+            fun ids(sort: SftpFolderSort, reverse: Boolean) =
+                SftpBrowsePresentation.rows(source, "", sort, reverse).map { it.name }
+            check(ids(SftpFolderSort.NAME, false) ==
+                listOf("a-folder", "z-folder", "alpha.bin", "beta.zip", "unknown.txt"))
+            check(ids(SftpFolderSort.NAME, true) ==
+                listOf("z-folder", "a-folder", "unknown.txt", "beta.zip", "alpha.bin"))
+            check(ids(SftpFolderSort.SIZE, true) ==
+                listOf("a-folder", "z-folder", "beta.zip", "alpha.bin", "unknown.txt"))
+            check(ids(SftpFolderSort.NEWEST, true) ==
+                listOf("a-folder", "z-folder", "beta.zip", "alpha.bin", "unknown.txt"))
+            check(ids(SftpFolderSort.NEWEST, false) ==
+                listOf("a-folder", "z-folder", "alpha.bin", "beta.zip", "unknown.txt"))
+            check(SftpBrowsePresentation.rows(source, "bin", SftpFolderSort.SIZE, true)
+                .map { it.name } == listOf("alpha.bin"))
+            check(source.first().name == "z-folder")
+        }
         println("PASS SFTP total=" + passed + " evidence=synthetic-host-key-only")
     }
 }
