@@ -51,12 +51,14 @@ fun RecoveryStatusCard() {
                         "${status!!.damagedOrUnrecognized} damaged/unrecognized. " +
                         "Inspect the destination manually before retrying. Sources are never deleted."
                     else -> "No uncertain prior journaled attempts found. " +
-                        "${status!!.verifiedReceipts} local byte-verified receipt(s), " +
+                        "${status!!.verifiedReceipts} verified journaled step(s), " +
                         "${status!!.notStarted} blocked/not-started attempt(s)."
                 },
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 style = MaterialTheme.typography.bodyMedium
             )
+            Text("A verified journal may cover file bytes, a directory creation or a rename step. This summary cannot recheck a provider or establish cloud synchronization.",
+                style = MaterialTheme.typography.bodySmall)
             Text("Automatic resume and remote destination reconciliation are not implemented.",
                 style = MaterialTheme.typography.bodySmall)
             Button(

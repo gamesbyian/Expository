@@ -20,6 +20,9 @@ class RecoveryRefreshUiTest {
         rule.onNodeWithText("Interrupted transfer review").assertExists()
         rule.onNodeWithText("Automatic resume and remote destination reconciliation are not implemented.")
             .assertExists()
+        rule.onNodeWithText(
+            "A verified journal may cover file bytes, a directory creation or a rename step. This summary cannot recheck a provider or establish cloud synchronization."
+        ).assertExists()
         rule.onNodeWithText("Refresh transfer status").performClick()
         rule.onNodeWithText("Refresh transfer status").assertExists()
         rule.onNodeWithText("Interrupted transfer review").assertExists()
