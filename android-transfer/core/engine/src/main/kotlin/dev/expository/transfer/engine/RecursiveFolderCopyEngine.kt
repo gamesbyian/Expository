@@ -62,6 +62,21 @@ data class RecursiveCopyRunReceipt(
     val reason: String
 )
 
+
+/**
+ * Progress represents ONLY steps with committed VERIFIED journals. It never
+ * contains filenames, paths, provider IDs or unverified streamed-byte counts.
+ * A destination may retain uncertain partial data despite these counters.
+ */
+data class RecursiveCopyProgress(
+    val manifestDigest: String,
+    val verifiedFiles: Int,
+    val verifiedDirectories: Int,
+    val verifiedBytes: Long,
+    val completedSteps: Int,
+    val totalSteps: Int
+)
+
 /**
  * Bounded foreground orchestration of an ALREADY confirmed recursive source
  * manifest. Every directory/file gets a separate durable write-ahead slot.
@@ -86,7 +101,8 @@ object RecursiveFolderCopyEngine {
         reobserveApprovedTree: () -> RecursiveFolderManifest?,
         storageForStep: (manifestDigest: String, index: Int) -> AtomicAttemptStorage,
         continueRequested: () -> Boolean = { true },
-        clockMillis: () -> Long = { System.currentTimeMillis() }
+        clockMillis: () -> Long = { System.currentTimeMillis() },
+        onVerifiedStep: (RecursiveCopyProgress) -> Unit = {}
     ): RecursiveCopyRunReceipt {
         var files = 0
         var folders = 0
@@ -95,6 +111,14 @@ object RecursiveFolderCopyEngine {
             RecursiveCopyRunReceipt(approved.digest, result, files, folders, bytes, reason)
         fun stopped(reason: String) = outcome(if (files + folders == 0)
             RecursiveCopyResult.BLOCKED else RecursiveCopyResult.STOPPED_PARTIAL, reason)
+        fun announceVerifiedStep() {
+            val snapshot = RecursiveCopyProgress(
+                approved.digest, files, folders, bytes,
+                files + folders, approved.entries.size)
+            // An optional observer cannot alter durable verification, authorize
+            // another write, leak provider identities, or abort a verified step.
+            runCatching { onVerifiedStep(snapshot) }
+        }
 
         if (!approved.reviewable || !digestFormat.matches(approved.digest) ||
             approved.entries.isEmpty() ||
@@ -211,6 +235,7 @@ object RecursiveFolderCopyEngine {
                             "DIRECTORY_CREATE_OR_READBACK_UNCERTAIN_RECONCILE")
                     }
                     folders++
+                    announceVerifiedStep()
                 }
                 ItemKind.FILE -> {
                     val plan = try { endpoint.prepareFile(entry) }
@@ -241,6 +266,7 @@ object RecursiveFolderCopyEngine {
                         catch (_: Exception) {
                             return outcome(RecursiveCopyResult.UNCERTAIN, "BYTE_COUNTER_OVERFLOW")
                         }
+                    announceVerifiedStep()
                 }
             }
         }
