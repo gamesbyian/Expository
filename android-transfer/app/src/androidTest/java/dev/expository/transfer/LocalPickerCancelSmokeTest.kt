@@ -30,6 +30,22 @@ import java.util.UUID
 class LocalPickerCancelSmokeTest {
     @get:Rule val compose = createAndroidComposeRule<TransferActivity>()
 
+    @Test fun localCopyLateProgressDoesNotCrossCancellationOrAttemptBoundaries() {
+        val first = java.util.concurrent.atomic.AtomicBoolean(true)
+        val later = java.util.concurrent.atomic.AtomicBoolean(true)
+        assertTrue(activeLocalCopyProgress(first, first, busy = true))
+        org.junit.Assert.assertFalse(activeLocalCopyProgress(
+            later, first, busy = true))
+        org.junit.Assert.assertFalse(activeLocalCopyProgress(
+            null, first, busy = true))
+        org.junit.Assert.assertFalse(activeLocalCopyProgress(
+            first, first, busy = false))
+        first.set(false)
+        org.junit.Assert.assertFalse(activeLocalCopyProgress(
+            first, first, busy = true))
+        assertTrue(activeLocalCopyProgress(later, later, busy = true))
+    }
+
     @Test fun openSystemPickerAndCancelLeavesCopyDisabled() {
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         compose.onNodeWithText("Choose file").performClick()
