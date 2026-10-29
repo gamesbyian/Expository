@@ -471,3 +471,48 @@ prove immutable contents; streamed-byte SHA-256 and fresh post-read
 source observations are separate future execution requirements.
 Real Drive/cloud provider grants, physical E4 and signed E5 acceptance
 remain open.
+
+
+## 28 October: executable recursive scoped Copy and first Single/Dual UI integration
+
+[Merged #275](https://github.com/gamesbyian/Expository/pull/275)
+connects the immutable recursive scanner, independent full-tree preflight and
+per-entry source membership to a real Android ContentResolver destination adapter.
+Every nested/empty directory and file is independently journaled, reviewed,
+created with no silent overwrite, re-observed, and file bytes compared through
+SHA-256 readback. The [exact PR-head targeted API35 run #40789913063](https://github.com/gamesbyian/Expository/actions/runs/40789913063)
+passed three synthetic provider cases, including 137,119 copied bytes, empty
+directories, source preservation, an ambiguous create reply and no blind replay.
+This used a **test-only generic ContentProvider with real Android byte IPC**,
+not a true DocumentsProvider with system-picker grants or a cloud account.
+
+[Merged #278](https://github.com/gamesbyian/Expository/pull/278) attaches
+explicit source-folder review and confirmation to the optional Dual workspace.
+[Merged #282](https://github.com/gamesbyian/Expository/pull/282), head
+`4acdde509f5ff37a98a2af8c8b7152200051f098`, adds a separate
+`ACTION_OPEN_DOCUMENT_TREE` target picker and explicit reviewed whole-folder
+Copy in the default permanent Single workspace. Its
+[native JVM validation #40791727552](https://github.com/gamesbyian/Expository/actions/runs/40791727552),
+[general checks #40791727666](https://github.com/gamesbyian/Expository/actions/runs/40791727666),
+and [targeted Android debug + androidTest APK compilation #40791746203](https://github.com/gamesbyian/Expository/actions/runs/40791746203)
+passed. **Compilation is not a confirmed system-picked end-to-end recursive
+Copy, nor cloud/same-provider compatibility.** Caller-side selection and
+permission checks cannot substitute for E2 real-picker or E4 physical/Drive
+acceptance. Source and target under the same provider authority remain
+deliberately refused without independently authoritative ancestry proof.
+
+[Merged #277](https://github.com/gamesbyian/Expository/pull/277) establishes
+post-readback destination membership in the older single-file SAF routes.
+Pending [#284](https://github.com/gamesbyian/Expository/pull/284) extends it
+to recursive file readback; pending stacked
+[#285](https://github.com/gamesbyian/Expository/pull/285) rechecks each
+created destination ancestor; and independent
+[#286](https://github.com/gamesbyian/Expository/pull/286) introduces
+verified-step-only progress. Their evidence belongs to their own exact-head
+CI results and must be added here only after safe acceptance/merge.
+
+**Gate classification:** E1 planner and E2 controlled synthetic-provider
+recursive execution are established; a first UI path is integrated. G2/G4/G6
+remain **in progress**, G8 lacks authorized Drive/Docs operations, G9 lacks
+E4 physical tests and an independently signed E5 beta. The older, dated
+sections above record what was not yet implemented *at those times*.
