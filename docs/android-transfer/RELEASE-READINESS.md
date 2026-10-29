@@ -502,14 +502,26 @@ acceptance. Source and target under the same provider authority remain
 deliberately refused without independently authoritative ancestry proof.
 
 [Merged #277](https://github.com/gamesbyian/Expository/pull/277) establishes
-post-readback destination membership in the older single-file SAF routes.
-Pending [#284](https://github.com/gamesbyian/Expository/pull/284) extends it
-to recursive file readback; pending stacked
-[#285](https://github.com/gamesbyian/Expository/pull/285) rechecks each
-created destination ancestor; and independent
-[#286](https://github.com/gamesbyian/Expository/pull/286) introduces
-verified-step-only progress. Their evidence belongs to their own exact-head
-CI results and must be added here only after safe acceptance/merge.
+post-readback destination membership for older single-file SAF routes.
+[Merged #284](https://github.com/gamesbyian/Expository/pull/284), exact
+head `c13e5d124a0be0e5722ff789e5fde998dc2fa1d2`, extends that
+guard to recursive destination readback. Its
+[native JVM #40793552738](https://github.com/gamesbyian/Expository/actions/runs/40793552738),
+[app+androidTest compile #40793563017](https://github.com/gamesbyian/Expository/actions/runs/40793563017)
+and [focused API35 synthetic provider E2 #40793567887](https://github.com/gamesbyian/Expository/actions/runs/40793567887)
+passed. The provider moved an output file after initial membership but before
+readback, and the completed bytes could not be falsely marked verified.
+
+[Merged #286](https://github.com/gamesbyian/Expository/pull/286)
+adds immutable privacy-safe progress callbacks *only after a per-step journal
+has committed VERIFIED*; its exact-head
+[native E1 #40794059685](https://github.com/gamesbyian/Expository/actions/runs/40794059685)
+passed journal-order, uncertain-readback and throwing-observer scenarios.
+**The callback is not yet wired to a visible progress bar or background queue.**
+Pending [#288](https://github.com/gamesbyian/Expository/pull/288) further
+rechecks created destination ancestor membership before nested writes;
+superseded stacked [#285](https://github.com/gamesbyian/Expository/pull/285)
+was closed without unsafe merge. No E4 real cloud/physical proof follows.
 
 **Gate classification:** E1 planner and E2 controlled synthetic-provider
 recursive execution are established; a first UI path is integrated. G2/G4/G6
