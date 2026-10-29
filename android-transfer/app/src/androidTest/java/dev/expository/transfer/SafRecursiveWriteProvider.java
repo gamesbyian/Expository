@@ -44,6 +44,7 @@ public final class SafRecursiveWriteProvider extends ContentProvider {
     private int nextId, creates;
     private boolean throwAfterCreate;
     private boolean moveCreatedFileOnRead;
+    private boolean moveCreatedRootOnSourceRead;
 
     private File dataFile(String id) {
         return new File(getContext().getCacheDir(), "expository-recursive-fixture-" + id);
@@ -58,6 +59,7 @@ public final class SafRecursiveWriteProvider extends ContentProvider {
         creates = 0;
         throwAfterCreate = false;
         moveCreatedFileOnRead = false;
+        moveCreatedRootOnSourceRead = false;
         docs.put("source-root", new Doc("source-root", null, "Source", DIR));
         docs.put("shows", new Doc("shows", "source-root", "Shows", DIR));
         docs.put("empty", new Doc("empty", "shows", "Empty", DIR));
@@ -83,6 +85,10 @@ public final class SafRecursiveWriteProvider extends ContentProvider {
         }
         if ("fixture-fail-after-create".equals(method)) {
             throwAfterCreate = true;
+            return Bundle.EMPTY;
+        }
+        if ("fixture-move-created-root-on-source-read".equals(method)) {
+            moveCreatedRootOnSourceRead = true;
             return Bundle.EMPTY;
         }
         if ("fixture-move-created-file-on-read".equals(method)) {
@@ -228,6 +234,21 @@ public final class SafRecursiveWriteProvider extends ContentProvider {
             throw new FileNotFoundException();
         if (("clip".equals(documentId)) && mode.contains("w"))
             throw new FileNotFoundException("SOURCE_IS_READ_ONLY");
+        if (moveCreatedRootOnSourceRead && "clip".equals(documentId) &&
+            !mode.contains("w")) {
+            // The file source opens only after the root and nested directory
+            // steps were verified. Move the created target root behind the
+            // adapter's back, then serve unchanged source bytes.
+            moveCreatedRootOnSourceRead = false;
+            for (Doc child : docs.values()) {
+                if ("target-root".equals(child.parent) &&
+                    "Shows".equals(child.name) && child.directory()) {
+                    docs.put(child.id, new Doc(child.id, "detached-parent",
+                        child.name, child.mime));
+                    break;
+                }
+            }
+        }
         if (moveCreatedFileOnRead && documentId.startsWith("copy-created-") &&
             !mode.contains("w")) {
             // Simulate a provider moving the newly written child after the
