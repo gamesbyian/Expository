@@ -20,7 +20,8 @@ import java.security.MessageDigest
  * The SOURCE and TARGET must be independently picked, different provider authorities.
  * A real OS tree grant and separate affirmative user review are the CALLER's duty;
  * neither this class nor [prepare] launches a picker or performs a write implicitly.
- * There is currently no UI action wired to [execute]. No cloud-sync claim is made.
+ * Explicit Single and Dual workspace review flows now invoke [execute];
+ * that UI does not establish live-cloud or real-picker E4 acceptance.
  *
  * The source is reobserved as a complete tree under the original approval expiry,
  * then at every step. Each destination parent is freshly observed and each mkdir /
@@ -341,7 +342,21 @@ internal class SafRecursiveTreeCopy(
                         request.destinationTree, current.id, LocalTreeReader.MAX_BROWSE)
                     SafNewDocumentIdentity.requireDirectChildForReadback(
                         entry.source.name, id, membership)
-                    return resolver.openInputStream(uri)
+                    // A provider may move or rename a newly copied child
+                    // AFTER the initial membership check and while the
+                    // verification stream is being read. Check again at
+                    // stream close, before the engine can mark BYTES_VERIFIED.
+                    return SafNewDocumentIdentity.guardReadback(
+                        resolver.openInputStream(uri)) {
+                        val latestParent = parent(entry.relativePath.dropLast(1),
+                            requireSpace = false)
+                        val latest = LocalTreeReader.list(resolver,
+                            request.destinationTree, latestParent.id,
+                            LocalTreeReader.MAX_BROWSE)
+                        latestParent.id == current.id &&
+                            SafNewDocumentIdentity.isDirectChild(
+                                entry.source.name, id, latest)
+                    }
                 }
             }
         }
