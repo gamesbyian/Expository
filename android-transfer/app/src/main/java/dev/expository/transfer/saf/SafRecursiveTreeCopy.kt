@@ -122,8 +122,42 @@ internal class SafRecursiveTreeCopy(
                     ?: error("PARENT_HAS_NOT_BEEN_INDEPENDENTLY_VERIFIED")
         }
 
+        /**
+         * Each previously verified destination directory can be moved by a
+         * DocumentsProvider after its create acknowledgement. Never trust its
+         * cached opaque ID alone: a later write must still be nested under the
+         * exact reviewed destination tree, with every ancestor matching its
+         * creation name, parent and unique visible sibling.
+         */
+        private fun checkCreatedAncestry(path: List<String>) {
+            var expectedParentId = request.destinationParentId
+            for (depth in path.indices) {
+                val segmentPath = path.take(depth + 1)
+                val expectedChildId = createdFolders[segmentPath]
+                    ?: error("DESTINATION_ANCESTOR_ID_MISSING")
+                val observed = LocalTreeReader.list(resolver,
+                    request.destinationTree, expectedParentId,
+                    LocalTreeReader.MAX_BROWSE)
+                require(observed.complete && !observed.hasMore) {
+                    "DESTINATION_ANCESTOR_LISTING_INCOMPLETE"
+                }
+                val name = path[depth]
+                val key = SafFolderPolicy.normalized(name)
+                require(observed.children.count {
+                    SafFolderPolicy.normalized(it.title) == key
+                } == 1 && observed.children.count {
+                    it.documentId == expectedChildId &&
+                        it.title == name && it.directory
+                } == 1) {
+                    "CREATED_DESTINATION_ANCESTRY_CHANGED"
+                }
+                expectedParentId = expectedChildId
+            }
+        }
+
         private fun parent(path: List<String>, requireSpace: Boolean = true): TargetParent {
             val id = parentId(path)
+            checkCreatedAncestry(path)
             val uri = document(request.destinationTree, id)
             val columns = arrayOf(
                 DocumentsContract.Document.COLUMN_DOCUMENT_ID,
