@@ -53,6 +53,10 @@ class FtpsUiSmokeTest {
             permit, permit, sessionMatches = true, busy = false))
         org.junit.Assert.assertFalse(FtpsCopyProgressGate.belongsToActiveCopy(
             null, permit, sessionMatches = true, busy = true))
+        permit.set(false)
+        org.junit.Assert.assertFalse("Operator cancellation must suppress progress",
+            FtpsCopyProgressGate.belongsToActiveCopy(
+                permit, permit, sessionMatches = true, busy = true))
     }
 
     @Test fun pickerWitnessRefusesChangedSessionFolderSourceOrUnobservedRevision() {
