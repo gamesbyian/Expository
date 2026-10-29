@@ -93,6 +93,27 @@ object VerifiedCopyBatchSuite {
             check(disks.all { DurableAttemptJournal(it).current()?.state == JournalState.VERIFIED })
         }
 
+        case("throwing display observer cannot corrupt durable verified outcome") {
+            val first = Streams()
+            val second = Streams()
+            val disks = listOf(Disk(), Disk())
+            var notifications = 0
+            val report = VerifiedCopyBatchQueue.run(
+                listOf(job('a', first, disks[0]), job('b', second, disks[1])),
+                onItemProgress = { _, _ ->
+                    notifications++
+                    throw IllegalStateException("synthetic presentation failure")
+                }
+            )
+            check(notifications == 2)
+            check(report.stop == VerifiedBatchStop.ALL_VERIFIED)
+            check(report.verifiedItems == 2 && report.nextUnstartedIndex == null)
+            check(disks.all {
+                DurableAttemptJournal(it).current()?.state == JournalState.VERIFIED
+            })
+            check(first.openedDestination == 1 && second.openedDestination == 1)
+        }
+
         case("unverified write acknowledgment stops later jobs and restart stays uncertain") {
             val first = Streams(readback = false)
             val later = Streams()
