@@ -52,6 +52,7 @@ import dev.expository.transfer.saf.SafTreeToTreeCopy
 import dev.expository.transfer.saf.SafRecursiveTreeCopy
 import dev.expository.transfer.saf.ScopedRecursiveSourceRequest
 import dev.expository.transfer.engine.RecursiveCopyResult
+import dev.expository.transfer.engine.RecursiveCopyProgress
 import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.sftp.SftpAndroidCompat
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
@@ -475,6 +476,12 @@ private fun DeveloperPreview(
         }
     }
 
+    fun verifiedFolderProgress(progress: RecursiveCopyProgress): String =
+        "Verified " + progress.completedSteps + "/" + progress.totalSteps +
+            " folder Copy steps: " + progress.verifiedDirectories +
+            " directories, " + progress.verifiedFiles + " files, " +
+            progress.verifiedBytes + " verified bytes. Originals retained."
+
     fun confirmSingleFolderCopy() {
         val pending = singleFolderReview ?: return
         if (copyBusy || remoteRelayBusy || model.view != WorkspaceView.SINGLE) return
@@ -503,7 +510,17 @@ private fun DeveloperPreview(
                 runCatching {
                     SafRecursiveTreeCopy(context.applicationContext,
                         context.contentResolver).execute(
-                            pending.request, pending.manifest) { permit.get() }
+                            pending.request, pending.manifest,
+                            onVerifiedStep = { verified ->
+                                // Never mutate Compose state from the IO thread.
+                                // A late callback from an old copy must not
+                                // overwrite the next review or final receipt.
+                                scope.launch {
+                                    if (copyBusy && copyPermit === permit &&
+                                        model.view == WorkspaceView.SINGLE)
+                                        copyStatus = verifiedFolderProgress(verified)
+                                }
+                            }) { permit.get() }
                 }.getOrNull()
             }
             copyStatus = if (outcome == null) {
@@ -730,9 +747,14 @@ private fun DeveloperPreview(
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     SafRecursiveTreeCopy(context.applicationContext,
-                        context.contentResolver).execute(request, pending.manifest) {
-                        permit.get()
-                    }
+                        context.contentResolver).execute(request, pending.manifest,
+                        onVerifiedStep = { verified ->
+                            scope.launch {
+                                if (copyBusy && copyPermit === permit &&
+                                    model.view == WorkspaceView.DUAL)
+                                    copyStatus = verifiedFolderProgress(verified)
+                            }
+                        }) { permit.get() }
                 }.getOrNull()
             }
             copyStatus = if (result == null)

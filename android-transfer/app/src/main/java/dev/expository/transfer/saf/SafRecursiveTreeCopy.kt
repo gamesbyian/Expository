@@ -50,6 +50,7 @@ internal class SafRecursiveTreeCopy(
     fun execute(
         request: ScopedRecursiveSourceRequest,
         confirmed: RecursiveFolderManifest,
+        onVerifiedStep: (RecursiveCopyProgress) -> Unit = {},
         continueRequested: () -> Boolean = { true }
     ): RecursiveCopyRunReceipt {
         val endpoint = ScopedEndpoint(request, confirmed)
@@ -63,7 +64,8 @@ internal class SafRecursiveTreeCopy(
                     hash(listOf("SAF_RECURSIVE_STEP_V1", digest, index.toString())))
             },
             continueRequested,
-            clockMillis
+            clockMillis,
+            onVerifiedStep
         )
     }
 
