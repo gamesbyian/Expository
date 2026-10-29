@@ -24,6 +24,8 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -89,6 +91,15 @@ internal data class LocalTreeBrowseState(
     val status: String = "Choose a device folder with Android Files. No broad storage permission."
 ) {
     val folderId: String? get() = crumbs.lastOrNull()?.documentId
+
+    /**
+     * An ancestor must be an exact prefix of the currently selected provider
+     * document IDs. Never reconstruct an ancestor from a display path, decoded
+     * URI or matching folder title; those are not stable SAF identities.
+     */
+    fun isNavigableAncestor(target: List<TreeCrumb>): Boolean =
+        treeUri != null && !loading && target.isNotEmpty() &&
+            target.size < crumbs.size && crumbs.take(target.size) == target
 
     fun toggle(entry: TreeEntry): LocalTreeBrowseState {
         if (entry.directory || entries.none { it.documentId == entry.documentId }) return this
@@ -229,6 +240,7 @@ internal fun LocalTreePane(
     onPick: () -> Unit,
     onOpen: (TreeEntry) -> Unit,
     onParent: () -> Unit,
+    onAncestor: (List<TreeCrumb>) -> Unit,
     onRefresh: () -> Unit,
     onLoadMore: () -> Unit,
     onSelect: (TreeEntry) -> Unit,
@@ -237,6 +249,9 @@ internal fun LocalTreePane(
 ) {
     var fileFilter by remember(state.treeUri, state.folderId) { mutableStateOf("") }
     var sortMode by remember { mutableStateOf(LocalTreeSort.NAME) }
+    var ancestorMenuExpanded by remember(state.treeUri, state.folderId) {
+        mutableStateOf(false)
+    }
     val visibleEntries = LocalTreePresentation.rows(state.entries, fileFilter, sortMode)
     LaunchedEffect(fileFilter, sortMode, state.treeUri, state.folderId) {
         scroll.scrollToItem(0)
@@ -266,6 +281,43 @@ internal fun LocalTreePane(
                 Button(enabled = enabled && !state.loading,
                     modifier = Modifier.heightIn(min = 48.dp),
                     onClick = onParent) { Text("Parent folder") }
+            }
+            if (state.crumbs.size > 2) {
+                Box {
+                    Button(enabled = enabled && !state.loading,
+                        modifier = Modifier.heightIn(min = 48.dp)
+                            .testTag("saf-ancestor-menu"),
+                        onClick = { ancestorMenuExpanded = true }) {
+                        Text("Jump to ancestor…")
+                    }
+                    DropdownMenu(
+                        expanded = ancestorMenuExpanded,
+                        onDismissRequest = { ancestorMenuExpanded = false }
+                    ) {
+                        // Keep extremely deep paths bounded in composition:
+                        // root plus the 31 nearest parents remain one tap away.
+                        val last = state.crumbs.lastIndex
+                        val ancestors = if (last <= 32) (0 until last).toList()
+                            else listOf(0) + ((last - 31) until last).toList()
+                        ancestors.asReversed().forEach { index ->
+                            val target = state.crumbs.take(index + 1)
+                            DropdownMenuItem(
+                                text = {
+                                    Text(if (index == 0) "Root · " + target.last().title
+                                        else "Level " + (index + 1) + " · " +
+                                            target.last().title)
+                                },
+                                modifier = Modifier.heightIn(min = 48.dp)
+                                    .testTag("saf-ancestor-" + index),
+                                onClick = {
+                                    ancestorMenuExpanded = false
+                                    if (state.isNavigableAncestor(target))
+                                        onAncestor(target)
+                                }
+                            )
+                        }
+                    }
+                }
             }
             Text(
                 state.status,

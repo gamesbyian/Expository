@@ -1026,6 +1026,18 @@ private fun DeveloperPreview(
                                             treeSingle.crumbs.dropLast(1))
                                 }
                             },
+                            onAncestor = { target ->
+                                // Only actual observed opaque ancestor IDs can
+                                // navigate this scoped tree. Stale callbacks
+                                // from earlier accounts/sessions are ignored.
+                                val current = treeSingle
+                                if (!copyBusy && !remoteRelayBusy &&
+                                    current.isNavigableAncestor(target)) {
+                                    current.treeUri?.let { uri ->
+                                        readTree(WorkspacePane.SINGLE, uri, target)
+                                    }
+                                }
+                            },
                             onRefresh = {
                                 treeSingle.treeUri?.let { uri ->
                                     readTree(WorkspacePane.SINGLE, uri, treeSingle.crumbs,

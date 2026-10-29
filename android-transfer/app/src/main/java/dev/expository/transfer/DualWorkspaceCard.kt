@@ -253,6 +253,12 @@ internal fun DualWorkspaceCard(
                             if (tree.crumbs.size > 1)
                                 onNavigate(which, tree.crumbs.dropLast(1))
                         },
+                        onAncestor = { target ->
+                            // Do not interpret names as paths or let a stale
+                            // popup navigate outside this pane's scoped tree.
+                            if (tree.isNavigableAncestor(target))
+                                onNavigate(which, target)
+                        },
                         onRefresh = { onNavigate(which, tree.crumbs) },
                         onLoadMore = { onLoadMore(which) },
                         onSelect = { entry -> onSelect(which, entry) },

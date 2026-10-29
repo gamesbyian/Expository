@@ -1,17 +1,20 @@
 package dev.expository.transfer
 
+import android.net.Uri
 import android.database.MatrixCursor
 import android.provider.DocumentsContract
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -137,7 +140,7 @@ class LocalTreePresentationAndroidTest {
                 LocalTreePane(
                     label = "Synthetic folder", state = state,
                     scroll = rememberLazyListState(),
-                    onPick = {}, onOpen = {}, onParent = {}, onRefresh = {},
+                    onPick = {}, onOpen = {}, onParent = {}, onAncestor = {}, onRefresh = {},
                     onLoadMore = {}, onSelect = {})
             }
         }
@@ -156,4 +159,50 @@ class LocalTreePresentationAndroidTest {
         compose.onNodeWithText("Showing 2 of 5 observed item(s)", substring = true)
             .assertExists()
     }
+    /** Opaque provider identities, not slash-delimited display paths. */
+    @Test fun scopedAncestorMenuJumpsToExactObservedPrefixAndRejectsStaleTargets() {
+        val crumbs = listOf(
+            TreeCrumb("root/opaque%2Fid", "Chosen folder"),
+            TreeCrumb("nested:Season/One", "Season"),
+            TreeCrumb("child-of-season", "Episodes")
+        )
+        val state = LocalTreeBrowseState(
+            treeUri = Uri.parse("content://fixture.documents/tree/root%2Fopaque"),
+            crumbs = crumbs, complete = true
+        )
+        assertTrue(state.isNavigableAncestor(crumbs.take(1)))
+        assertTrue(state.isNavigableAncestor(crumbs.take(2)))
+        assertFalse(state.isNavigableAncestor(crumbs))
+        assertFalse(state.isNavigableAncestor(emptyList()))
+        assertFalse(state.isNavigableAncestor(listOf(TreeCrumb("root", "Chosen folder"))))
+        assertFalse(state.isNavigableAncestor(listOf(
+            TreeCrumb("root/opaque%2Fid", "Changed title"))))
+        assertFalse(state.copy(treeUri = null).isNavigableAncestor(crumbs.take(1)))
+        assertFalse(state.copy(loading = true).isNavigableAncestor(crumbs.take(1)))
+
+        var navigated: List<TreeCrumb>? = null
+        compose.setContent {
+            MaterialTheme {
+                LocalTreePane(
+                    label = "Synthetic nested provider", state = state,
+                    scroll = rememberLazyListState(),
+                    onPick = {}, onOpen = {}, onParent = {},
+                    onAncestor = { navigated = it }, onRefresh = {},
+                    onLoadMore = {}, onSelect = {}
+                )
+            }
+        }
+        compose.onNodeWithTag("saf-ancestor-menu").performClick()
+        compose.onNodeWithTag("saf-ancestor-1").performClick()
+        compose.runOnIdle { assertEquals(crumbs.take(2), navigated) }
+        navigated = null
+        compose.onNodeWithTag("saf-ancestor-menu").performClick()
+        compose.onNodeWithTag("saf-ancestor-0").performClick()
+        compose.runOnIdle { assertEquals(crumbs.take(1), navigated) }
+        // The menu is a read-only navigation proposal. No provider write,
+        // Copy approval, URI transformation or session is manufactured.
+        assertEquals(crumbs, state.crumbs)
+        assertNull(state.treeUri?.query)
+    }
+
 }
