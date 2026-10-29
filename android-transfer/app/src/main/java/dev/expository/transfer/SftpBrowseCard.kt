@@ -179,6 +179,28 @@ internal fun SftpBrowseCard(
     val activeDeviceTarget = localPaneTarget ?: if (enableSingleBatchDownload)
         singleDeviceTarget else null
 
+    /**
+     * SFTP callbacks run on Dispatchers.IO. Never mutate Compose progress
+     * from a worker, nor accept a late callback from a stopped/replaced
+     * session or a different reviewed Copy attempt.
+     */
+    fun publishCopyProgress(
+        currentFileBytes: Long, permit: AtomicBoolean,
+        expectedSession: SftpSession?, verifiedBeforeFile: Long = 0L
+    ) {
+        if (currentFileBytes < 0L || verifiedBeforeFile < 0L) return
+        val total = runCatching {
+            Math.addExact(verifiedBeforeFile, currentFileBytes)
+        }.getOrNull() ?: return
+        scope.launch {
+            if (busy && continueCopy === permit && permit.get() &&
+                session === expectedSession && total >= transferred) {
+                // Streamed bytes are shown as in-progress, never as VERIFIED.
+                transferred = total
+            }
+        }
+    }
+
 
     val ownedSession = session
     DisposableEffect(ownedSession) {
@@ -260,7 +282,7 @@ internal fun SftpBrowseCard(
                         onProgress = { bytes ->
                             if (bytes - lastDisplayed >= 256L * 1024L) {
                                 lastDisplayed = bytes
-                                transferred = bytes
+                                publishCopyProgress(bytes, permit, live)
                             }
                         }
                     )
@@ -414,7 +436,8 @@ internal fun SftpBrowseCard(
                             onProgress = { bytes ->
                                 if (bytes - lastDisplayed >= 256L * 1024L) {
                                     lastDisplayed = bytes
-                                    transferred = verifiedBytes + bytes
+                                    publishCopyProgress(bytes, permit, live,
+                                        verifiedBytes)
                                 }
                             }
                         )
@@ -601,7 +624,7 @@ internal fun SftpBrowseCard(
                         onProgress = { bytes ->
                             if (bytes - lastDisplay >= 256L * 1024L) {
                                 lastDisplay = bytes
-                                transferred = bytes
+                                publishCopyProgress(bytes, permit, destination)
                             }
                         })
                 }
@@ -710,6 +733,7 @@ internal fun SftpBrowseCard(
         onRelaySourceActive(source.sessionId)
         scope.launch {
             var verified = 0
+            var verifiedBytes = 0L
             try {
                 val total = source.selection.files.size
                 for (file in source.selection.files) {
@@ -737,7 +761,10 @@ internal fun SftpBrowseCard(
                                 continueRequested = {
                                     permit.get() && active?.isActive == true
                                 },
-                                onProgress = { bytes -> transferred = bytes })
+                                onProgress = { bytes ->
+                                    publishCopyProgress(bytes, permit, destination,
+                                        verifiedBytes)
+                                })
                     }
                     if (receipt?.proof != CopyProof.BYTES_VERIFIED) {
                         status = "Stopped after " + verified + " verified file(s): " +
@@ -747,6 +774,9 @@ internal fun SftpBrowseCard(
                         break
                     }
                     verified++
+                    verifiedBytes = Math.addExact(verifiedBytes,
+                        requireNotNull(receipt).bytesWritten)
+                    transferred = verifiedBytes
                 }
                 if (verified == source.selection.files.size) {
                     status = "SFTP batch complete: " + verified +
@@ -882,7 +912,9 @@ internal fun SftpBrowseCard(
                         AndroidAtomicAttemptStorage(context.applicationContext, digest)
                     }.copy(live, pending.preflight,
                         continueRequested = { permit.get() && active?.isActive == true },
-                        onProgress = { bytes -> transferred = bytes })
+                        onProgress = { bytes ->
+                            publishCopyProgress(bytes, permit, live)
+                        })
                 }
                 transferred = receipt.bytesWritten
                 status = when (receipt.proof) {
