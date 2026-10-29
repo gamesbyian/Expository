@@ -33,6 +33,32 @@ class FtpsUiSmokeTest {
         rule.onNodeWithText("FTPS requires a trusted TLS certificate", substring = true)
             .assertExists()
     }
+    @Test fun copyProgressGateIsMonotonicAndBoundToTheExactForegroundAttempt() {
+        val permit = java.util.concurrent.atomic.AtomicBoolean(true)
+        val replacement = java.util.concurrent.atomic.AtomicBoolean(true)
+        org.junit.Assert.assertFalse(FtpsCopyProgressGate.shouldPublish(-1L, 0L))
+        org.junit.Assert.assertFalse(FtpsCopyProgressGate.shouldPublish(1_000L, 2_000L))
+        org.junit.Assert.assertFalse(FtpsCopyProgressGate.shouldPublish(262_143L, 0L))
+        org.junit.Assert.assertTrue(FtpsCopyProgressGate.shouldPublish(262_144L, 0L))
+        org.junit.Assert.assertTrue(FtpsCopyProgressGate.shouldPublish(524_288L, 262_144L))
+        org.junit.Assert.assertFalse(FtpsCopyProgressGate.shouldPublish(
+            Long.MAX_VALUE, Long.MAX_VALUE))
+        org.junit.Assert.assertTrue(FtpsCopyProgressGate.belongsToActiveCopy(
+            permit, permit, sessionMatches = true, busy = true))
+        org.junit.Assert.assertFalse(FtpsCopyProgressGate.belongsToActiveCopy(
+            replacement, permit, sessionMatches = true, busy = true))
+        org.junit.Assert.assertFalse(FtpsCopyProgressGate.belongsToActiveCopy(
+            permit, permit, sessionMatches = false, busy = true))
+        org.junit.Assert.assertFalse(FtpsCopyProgressGate.belongsToActiveCopy(
+            permit, permit, sessionMatches = true, busy = false))
+        org.junit.Assert.assertFalse(FtpsCopyProgressGate.belongsToActiveCopy(
+            null, permit, sessionMatches = true, busy = true))
+        permit.set(false)
+        org.junit.Assert.assertFalse("Operator cancellation must suppress progress",
+            FtpsCopyProgressGate.belongsToActiveCopy(
+                permit, permit, sessionMatches = true, busy = true))
+    }
+
     @Test fun pickerWitnessRefusesChangedSessionFolderSourceOrUnobservedRevision() {
         val frozen = FtpsPickerWitness("tls-session", "/files", "/files/a.dat",
             "128:1770000000000")
