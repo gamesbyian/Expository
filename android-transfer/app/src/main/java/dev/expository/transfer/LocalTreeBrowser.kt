@@ -249,18 +249,22 @@ internal fun LocalTreePane(
 ) {
     var fileFilter by remember(state.treeUri, state.folderId) { mutableStateOf("") }
     var sortMode by remember { mutableStateOf(LocalTreeSort.NAME) }
+    var descending by remember { mutableStateOf(false) }
     var ancestorMenuExpanded by remember(state.treeUri, state.folderId) {
         mutableStateOf(false)
     }
-    val visibleEntries = LocalTreePresentation.rows(state.entries, fileFilter, sortMode)
-    LaunchedEffect(fileFilter, sortMode, state.treeUri, state.folderId) {
+    val visibleEntries = LocalTreePresentation.rows(state.entries, fileFilter, sortMode, descending)
+    LaunchedEffect(fileFilter, sortMode, descending, state.treeUri, state.folderId) {
         scroll.scrollToItem(0)
     }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("$label · $sourceLabel", style = MaterialTheme.typography.titleMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // FlowRow wraps at narrow widths and large font sizes rather than
+            // squeezing Refresh outside the available touchable viewport.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Button(
                     enabled = enabled && !state.loading,
                     modifier = Modifier.heightIn(min = 48.dp),
@@ -356,7 +360,14 @@ internal fun LocalTreePane(
                 LocalTreeSort.entries.forEach { choice ->
                     Button(enabled = enabled,
                         modifier = Modifier.heightIn(min = 48.dp),
-                        onClick = { sortMode = choice }) {
+                        onClick = {
+                            if (sortMode != choice) {
+                                sortMode = choice
+                                // Newest naturally starts with most recent;
+                                // all other sort modes start ascending.
+                                descending = choice == LocalTreeSort.NEWEST
+                            }
+                        }) {
                         Text((if (sortMode == choice) "✓ " else "") +
                             when (choice) {
                                 LocalTreeSort.NAME -> "Name"
@@ -365,6 +376,12 @@ internal fun LocalTreePane(
                                 LocalTreeSort.NEWEST -> "Newest"
                             })
                     }
+                }
+                Button(enabled = enabled,
+                    modifier = Modifier.heightIn(min = 48.dp)
+                        .testTag("saf-sort-direction"),
+                    onClick = { descending = !descending }) {
+                    Text(if (descending) "Descending ↓" else "Ascending ↑")
                 }
             }
             Text("Showing " + visibleEntries.size + " of " + state.entries.size +
