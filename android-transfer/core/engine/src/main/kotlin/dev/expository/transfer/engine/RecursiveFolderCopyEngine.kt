@@ -221,6 +221,14 @@ object RecursiveFolderCopyEngine {
                     } catch (_: Exception) {
                         return stopped("DIRECTORY_ATTEMPT_NOT_DURABLE_OR_ALREADY_STARTED")
                     }
+                    // A stop can race the durable beginAttempt write.
+                    // Recheck immediately before the mutating provider call;
+                    // the recorded attempt remains reviewable and non-replayable.
+                    if (!runCatching { continueRequested() }.getOrDefault(false)) {
+                        runCatching { journal.markUncertain(ticket.digest) }
+                        return outcome(RecursiveCopyResult.UNCERTAIN,
+                            "STOPPED_AFTER_DURABLE_ATTEMPT_NO_CREATE_REPLAY")
+                    }
                     // From this point, the provider might have created a child,
                     // even if its response or journal acknowledgement fails.
                     try {

@@ -187,6 +187,43 @@ object CopyEngineSuite {
             }, continueRequested = { count++ < 3 })
             check(receipt.proof == CopyProof.UNCERTAIN)
         }
+        scenario("stop while blocking source read returns before any additional write") {
+            val out = ByteArrayOutputStream()
+            var permitted = true
+            val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
+                override fun openSource(): InputStream = object : ByteArrayInputStream(bytes) {
+                    override fun read(b: ByteArray, off: Int, len: Int): Int {
+                        val n = super.read(b, off, len)
+                        permitted = false // user pressed Stop during provider read
+                        return n
+                    }
+                }
+                override fun openNewDestination(): OutputStream = out
+                override fun openDestinationReadBack(): InputStream =
+                    ByteArrayInputStream(out.toByteArray())
+            }, continueRequested = { permitted })
+            check(out.size() == 0 && receipt.proof == CopyProof.UNCERTAIN &&
+                receipt.bytesWritten == 0L)
+        }
+        scenario("stop while waiting for final readback EOF cannot claim verified") {
+            var permitted = true
+            val out = ByteArrayOutputStream()
+            val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
+                override fun openSource() = ByteArrayInputStream(bytes)
+                override fun openNewDestination(): OutputStream = out
+                override fun openDestinationReadBack(): InputStream =
+                    object : ByteArrayInputStream(out.toByteArray()) {
+                        override fun read(b: ByteArray, off: Int, len: Int): Int {
+                            val n = super.read(b, off, len)
+                            if (n == -1) permitted = false
+                            return n
+                        }
+                    }
+            }, continueRequested = { permitted })
+            check(out.toByteArray().contentEquals(bytes) &&
+                receipt.proof == CopyProof.UNCERTAIN &&
+                receipt.reason == "VERIFY_READ_FAILED")
+        }
         scenario("writer throws: never report verified") {
             val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
                 override fun openSource() = ByteArrayInputStream(bytes)
