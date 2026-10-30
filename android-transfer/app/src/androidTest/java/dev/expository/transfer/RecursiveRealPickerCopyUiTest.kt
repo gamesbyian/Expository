@@ -222,7 +222,18 @@ class RecursiveRealPickerCopyUiTest {
         // A true MANAGE_DOCUMENTS provider denies raw access before the OS
         // returns this grant. Only NOW is independent source reading legal.
         assertOriginal()
-        compose.onNodeWithTag("saf-recursive-copy-shows").performClick()
+        // Observe the target app's ACTION_OPEN_DOCUMENT_TREE dispatch,
+        // independently of DocumentsUI's intermittent accessibility tree.
+        // The monitor does not block, replace, spoof or auto-grant the OS UI.
+        val targetLaunchMonitor = instrumentation.addMonitor(
+            android.content.IntentFilter(android.content.Intent.ACTION_OPEN_DOCUMENT_TREE),
+            null, false)
+        val targetIntentObserved = try {
+            compose.onNodeWithTag("saf-recursive-copy-shows").performClick()
+            instrumentation.checkMonitorHit(targetLaunchMonitor, 1)
+        } finally {
+            instrumentation.removeMonitor(targetLaunchMonitor)
+        }
         // A second OS activity MUST actually be foreground before any
         // swipe or UiAutomator root navigation. Otherwise a left-edge
         // gesture can back-navigate and destroy Expository itself.
@@ -301,6 +312,7 @@ class RecursiveRealPickerCopyUiTest {
                 "_ACCESSIBILITY_ATTACHED_" + accessiblePicker +
                 "_ACTIVITY_RESUMED_" + resumedSystemPicker +
                 "_FOREGROUND_" + foregroundKind +
+                "_OS_INTENT_MONITOR_HIT_" + targetIntentObserved +
                 "_UI_" + uiProbe +
                 "_SYSTEM_CONTROLS_" + pickerControls)
         }
