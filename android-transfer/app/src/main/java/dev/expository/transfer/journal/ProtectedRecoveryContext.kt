@@ -167,6 +167,10 @@ class ProtectedRecoveryContextStore(context: Context) {
                 output.toByteArray()
             }
         } catch (_: FileNotFoundException) {
+            // An existing base or backup that cannot be opened is a damaged
+            // hint, not permission to report "legacy record, no context".
+            if (base.exists() || File(base.path + ".bak").exists())
+                throw IOException("RECOVERY_CONTEXT_INACCESSIBLE")
             return@synchronized null
         } catch (_: Exception) {
             throw IOException("RECOVERY_CONTEXT_UNREADABLE")
