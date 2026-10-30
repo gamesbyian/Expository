@@ -108,10 +108,65 @@ class RecursiveRealPickerCopyUiTest {
                 }
             }
         }
-        assertTrue("DocumentsUI roots drawer not discoverable through CTS selectors",
-            rootsListFound)
+        if (!selectedRoot) {
+            // Google DocumentsUI on the API35 emulator may expose a valid
+            // roots drawer through accessibility without CTS's AOSP
+            // container_roots/roots_list resource IDs. Never let a missing
+            // private view ID masquerade as missing provider permission.
+            val pickerPackages = setOf("com.google.android.documentsui",
+                "com.android.documentsui")
+            fun pickerForeground() =
+                device.currentPackageName in pickerPackages ||
+                    pickerPackages.any { device.hasObject(By.pkg(it)) }
+            assertTrue("DocumentsUI must still be foreground", pickerForeground())
+            val drawerDescriptions = listOf("Show roots", "Open navigation drawer",
+                "Show navigation drawer", "Show locations")
+            for (description in drawerDescriptions) {
+                if (device.hasObject(By.text(title))) break
+                val button = device.findObject(By.desc(description)) ?: continue
+                button.click()
+                device.wait(Until.hasObject(By.text(title)), 1_000L)
+            }
+            if (!device.hasObject(By.text(title))) {
+                // A navigation icon without a stable label is permissible
+                // only in the confirmed OS picker toolbar. It is never
+                // clicked on Expository's own activity.
+                val icon = device.findObjects(By.clazz("android.widget.ImageButton"))
+                    .firstOrNull {
+                        val bounds = it.visibleBounds
+                        bounds.centerX() < device.displayWidth / 3 &&
+                            bounds.centerY() < device.displayHeight / 4
+                    }
+                if (icon != null && pickerForeground()) {
+                    icon.click()
+                    device.wait(Until.hasObject(By.text(title)), 1_500L)
+                }
+            }
+            if (!device.hasObject(By.text(title)) && pickerForeground()) {
+                // Last resort: the platform's left-edge drawer gesture,
+                // restricted to the verified DocumentsUI foreground activity.
+                device.swipe(2, device.displayHeight / 2,
+                    device.displayWidth * 2 / 3, device.displayHeight / 2, 20)
+            }
+            for (attempt in 0 until 10) {
+                if (!pickerForeground()) break
+                val root = device.findObject(By.text(title))
+                    ?: device.findObject(By.textContains(title))
+                if (root != null) {
+                    try {
+                        root.click()
+                        selectedRoot = true
+                        break
+                    } catch (_: StaleObjectException) { }
+                }
+                // Scroll the left portion of the open roots drawer only.
+                device.swipe(device.displayWidth / 5,
+                    device.displayHeight * 4 / 5,
+                    device.displayWidth / 5, device.displayHeight / 4, 14)
+            }
+        }
         assertTrue("Fixture DocumentsProvider root not selectable in OS picker: " +
-            title, selectedRoot)
+            title + " (CTS drawer present=" + rootsListFound + ")", selectedRoot)
         val use = if (visible("Use this folder", 4_000L))
             "Use this folder" else "USE THIS FOLDER"
         click(use, "USE_THIS_FOLDER")
