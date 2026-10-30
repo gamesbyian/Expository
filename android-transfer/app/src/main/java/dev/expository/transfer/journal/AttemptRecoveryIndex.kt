@@ -6,7 +6,13 @@ import dev.expository.transfer.engine.DurableAttemptJournal
 import dev.expository.transfer.planner.JournalState
 
 /** A non-reversible, abbreviated private journal key. No names or URLs. */
-data class RecoveryReviewReference(val opaqueSuffix: String, val status: String)
+data class RecoveryReviewReference(
+    val opaqueSuffix: String,
+    val status: String,
+    /** Separate encrypted, non-executable human-readable context if present. */
+    val context: ProtectedRecoveryContext? = null,
+    val contextWarning: String? = null
+)
 
 data class RecoveryCounts(
     val requiresReview: Int,
@@ -47,8 +53,17 @@ object AttemptRecoveryIndex {
         val digests = journalDigests(names).sorted()
         val details = ArrayList<RecoveryReviewReference>(MAX_REVIEW_REFERENCES)
         fun reference(digest: String, status: String) {
-            if (details.size < MAX_REVIEW_REFERENCES)
-                details += RecoveryReviewReference(digest.takeLast(12), status)
+            if (details.size >= MAX_REVIEW_REFERENCES) return
+            val hint = runCatching {
+                ProtectedRecoveryContextStore(context).read(digest)
+            }
+            details += RecoveryReviewReference(digest.takeLast(12), status,
+                context = hint.getOrNull(),
+                contextWarning = if (hint.isFailure)
+                    "Saved destination context unreadable; independently inspect the destination."
+                else if (hint.getOrNull() == null)
+                    "Older record without saved destination context."
+                else null)
         }
         var uncertain = 0
         var verified = 0

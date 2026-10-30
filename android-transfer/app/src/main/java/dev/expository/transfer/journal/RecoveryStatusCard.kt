@@ -71,14 +71,26 @@ fun RecoveryStatusCard() {
                         else "Show review references")
                 }
                 if (showReviewReferences) {
-                    Text("Reference suffixes identify app-private operation journals only. " +
-                        "They contain no filenames, server addresses, grants or credentials. " +
-                        "They cannot identify which remote file needs inspection.",
+                    Text("Reference suffixes identify app-private operation journals. " +
+                        "New one-file Android Copy operations can also save encrypted " +
+                        "source/destination labels for manual review. No URI, grant, " +
+                        "credential or automatic retry is persisted.",
                         style = MaterialTheme.typography.bodySmall)
                     review.reviewReferences.take(12).forEachIndexed { index, entry ->
                         Text("Record " + (index + 1) + " · …" + entry.opaqueSuffix +
                             " · " + entry.status,
                             style = MaterialTheme.typography.bodySmall)
+                        entry.context?.let { detail ->
+                            Text("Source: " + detail.sourceLabel +
+                                " · Destination: " + detail.destinationLabel +
+                                " · Android provider: " + detail.destinationProvider +
+                                ". Re-select that destination through Android Files " +
+                                "to inspect; this saved label conveys no access.",
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                        entry.contextWarning?.let { warning ->
+                            Text(warning, style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                     val hidden = review.additionalReviewCount +
                         (review.reviewReferences.size - 12).coerceAtLeast(0)
