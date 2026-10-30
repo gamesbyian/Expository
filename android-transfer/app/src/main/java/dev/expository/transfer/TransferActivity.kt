@@ -213,7 +213,7 @@ private fun DeveloperPreview(
     var copyBusy by remember { mutableStateOf(false) }
     var remoteRelayBusy by remember { mutableStateOf(false) }
     var copyStatus by remember { mutableStateOf(
-        "Choose two device folders and select 1–12 source files for reviewed Copy.") }
+        "Choose a source and destination; Copy needs explicit review.") }
     var copyPermit by remember { mutableStateOf<AtomicBoolean?>(null) }
 
     fun tree(which: WorkspacePane): LocalTreeBrowseState = when (which) {
@@ -1067,7 +1067,8 @@ private fun DeveloperPreview(
                             },
                             onCopyFolder = if (treeSingle.complete && !copyBusy &&
                                 !remoteRelayBusy && treeSingle.crumbs.size == 1)
-                                ::launchSingleFolderCopy else null
+                                ::launchSingleFolderCopy else null,
+                            copyFeedback = copyStatus
                         )
                         if (singleFolderReview != null) {
                             val reviewed = requireNotNull(singleFolderReview)
@@ -1108,7 +1109,6 @@ private fun DeveloperPreview(
                                 Text("Stop folder Copy")
                             }
                         }
-                        Text(copyStatus, style = MaterialTheme.typography.bodySmall)
                         val pickedId = treeSingle.selected.singleOrNull()
                         val source = if (pickedId != null && treeSingle.treeUri != null)
                             runCatching {
