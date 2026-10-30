@@ -452,14 +452,19 @@ private fun DeveloperPreview(
         val uri = state.treeUri ?: return
         val parent = state.folderId ?: return
         if (copyBusy || remoteRelayBusy || pendingSingleFolderPicker != null ||
-            singleFolderReview != null || recursiveProposal != null ||
-            model.view != WorkspaceView.SINGLE ||
-            !model.single.endpoint.isSaf ||
+            singleFolderReview != null || recursiveProposal != null) {
+            copyStatus = "Folder Copy unavailable: another operation or review is active. Stop or finish it first."
+            return
+        }
+        if (model.view != WorkspaceView.SINGLE || !model.single.endpoint.isSaf ||
             state.loading || !state.complete || state.crumbs.size != 1 ||
             !folder.directory || state.entries.count {
                 it.documentId == folder.documentId && it.title == folder.title &&
                     it.directory
-            } != 1) return
+            } != 1) {
+            copyStatus = "Folder Copy unavailable: source folder selection is stale or incomplete. Refresh and choose again."
+            return
+        }
         val witness = SingleFolderTargetPickerWitness(
             uri, parent, folder.documentId, folder.title,
             state.generation, currentShareEpoch(), model.single.endpoint

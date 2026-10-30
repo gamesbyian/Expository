@@ -253,6 +253,14 @@ class RecursiveRealPickerCopyUiTest {
                     "Choose a different, writable Android provider destination",
                     substring = true).fetchSemanticsNodes().isNotEmpty() ->
                     "LAUNCH_REQUESTED_WITHOUT_PICKER"
+                compose.onAllNodesWithText(
+                    "Folder Copy unavailable: another operation",
+                    substring = true).fetchSemanticsNodes().isNotEmpty() ->
+                    "ALREADY_BUSY_OR_PENDING"
+                compose.onAllNodesWithText(
+                    "Folder Copy unavailable: source folder selection",
+                    substring = true).fetchSemanticsNodes().isNotEmpty() ->
+                    "STALE_OR_INCOMPLETE_SOURCE"
                 else -> "COPY_PROPOSAL_REJECTED_OR_ACTIVITY_MISSING"
             }
             throw AssertionError("SYSTEM_DESTINATION_PICKER_NOT_FOREGROUND_" + reason +
