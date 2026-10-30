@@ -224,6 +224,25 @@ object CopyEngineSuite {
                 receipt.proof == CopyProof.UNCERTAIN &&
                 receipt.reason == "VERIFY_READ_FAILED")
         }
+        scenario("stop after successful readback close preserves committed SHA proof") {
+            var permitted = true
+            val out = ByteArrayOutputStream()
+            val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
+                override fun openSource() = ByteArrayInputStream(bytes)
+                override fun openNewDestination(): OutputStream = out
+                override fun openDestinationReadBack(): InputStream =
+                    object : ByteArrayInputStream(out.toByteArray()) {
+                        override fun close() {
+                            super.close()
+                            permitted = false // Stop pressed exactly after readback
+                        }
+                    }
+            }, continueRequested = { permitted })
+            check(!permitted && out.toByteArray().contentEquals(bytes) &&
+                receipt.proof == CopyProof.BYTES_VERIFIED &&
+                receipt.reason == "READBACK_SHA256_MATCH" &&
+                receipt.bytesWritten == bytes.size.toLong())
+        }
         scenario("writer throws: never report verified") {
             val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
                 override fun openSource() = ByteArrayInputStream(bytes)
