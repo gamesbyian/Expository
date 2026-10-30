@@ -1,5 +1,6 @@
 package dev.expository.transfer
 
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -186,8 +187,22 @@ class RecursiveRealPickerCopyUiTest {
     }
 
     @Test fun genuineSystemTreeGrantsCopyNestedAndEmptyFoldersInSingle() {
-        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        val resolver = InstrumentationRegistry.getInstrumentation().targetContext.contentResolver
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        // The source and target picker windows belong to an external SYSTEM
+        // app, rather than the Compose Activity under instrumentation. Make
+        // this UI automation service explicitly retrieve interactive windows
+        // and stable view IDs before attempting any OS UI selection.
+        // This does not grant DocumentsProvider read/write access.
+        val automation = instrumentation.uiAutomation
+        automation.serviceInfo?.let { info ->
+            info.flags = info.flags or
+                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+            automation.serviceInfo = info
+        }
+        val device = UiDevice.getInstance(instrumentation)
+        val resolver = instrumentation.targetContext.contentResolver
         // The fixture APK must actually be present. Android discovers its
         // two roots through the real system picker; do not forcibly restart
         // that system UI mid-instrumentation, which can desynchronize
