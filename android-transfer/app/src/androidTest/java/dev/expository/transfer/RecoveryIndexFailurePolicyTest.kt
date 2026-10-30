@@ -178,6 +178,17 @@ class RecoveryIndexFailurePolicyTest {
             assertTrue(runCatching {
                 journal.beginAttempt(digest, "synthetic_attempt_02")
             }.isFailure)
+            // Corrupting the supplementary encrypted hint must not hide the
+            // authoritative write-ahead journal or allow a blind retry.
+            val encrypted = File(sandbox, "transfer_recovery_context_v1_" + digest)
+            encrypted.writeBytes(byteArrayOf(1, 2, 3))
+            val damagedHint = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, damagedHint.requiresReview)
+            assertEquals(null, damagedHint.reviewReferences.single().context)
+            assertTrue(damagedHint.reviewReferences.single()
+                .contextWarning?.contains("unreadable") == true)
+            assertEquals(JournalState.UNCERTAIN,
+                journal.recoverAfterRestart()?.state)
         } finally {
             sandbox.listFiles()?.forEach { it.delete() }
             sandbox.delete()
