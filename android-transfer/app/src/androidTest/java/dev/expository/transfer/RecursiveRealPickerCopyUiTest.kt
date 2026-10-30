@@ -226,9 +226,23 @@ class RecursiveRealPickerCopyUiTest {
         // A second OS activity MUST actually be foreground before any
         // swipe or UiAutomator root navigation. Otherwise a left-edge
         // gesture can back-navigate and destroy Expository itself.
-        val targetPickerVisible =
+        // API35's DocumentsUI may be a resumed Android Activity before its
+        // accessibility window is exposed to UiAutomator. Treat a positively
+        // identified *resumed system picker* as visible, but never assume the
+        // picker launched merely because the test clicked a button.
+        fun systemPickerResumed(): Boolean {
+            val activityState = device.executeShellCommand("dumpsys activity activities")
+            return activityState.lineSequence().any { line ->
+                (line.contains("mResumedActivity") ||
+                    line.contains("topResumedActivity")) &&
+                    line.contains("documentsui", ignoreCase = true)
+            }
+        }
+        val accessiblePicker =
             device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")), 12_000L) ||
                 device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 3_000L)
+        val resumedSystemPicker = systemPickerResumed()
+        val targetPickerVisible = accessiblePicker || resumedSystemPicker
         if (!targetPickerVisible) {
             // Only inspect synthetic, fixed application status categories.
             // Never dump a real user's picker hierarchy, path or account.
@@ -241,7 +255,9 @@ class RecursiveRealPickerCopyUiTest {
                     "LAUNCH_REQUESTED_WITHOUT_PICKER"
                 else -> "COPY_PROPOSAL_REJECTED_OR_ACTIVITY_MISSING"
             }
-            throw AssertionError("SYSTEM_DESTINATION_PICKER_NOT_FOREGROUND_" + reason)
+            throw AssertionError("SYSTEM_DESTINATION_PICKER_NOT_FOREGROUND_" + reason +
+                "_ACCESSIBILITY_ATTACHED_" + accessiblePicker +
+                "_ACTIVITY_RESUMED_" + resumedSystemPicker)
         }
         chooseFixtureRoot(device, "Expository Target Lab")
         compose.waitUntil(30_000L) {
