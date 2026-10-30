@@ -56,7 +56,27 @@ class LocalPickerCancelSmokeTest {
             3L, 4L, sameSession = true))
         org.junit.Assert.assertFalse(ownsSftpBrowseCompletion(
             4L, 4L, sameSession = false))
+        assertFrozenPickerCopyWitness()
     }
+
+    // Kept in a helper so the narrowly allowlisted ownership test can cover
+    // this new invariant without depending on API35 DocumentsUI visibility.
+    private fun assertFrozenPickerCopyWitness() {
+        val source = android.net.Uri.parse("content://synthetic.source/document/item-1")
+        val different = android.net.Uri.parse("content://synthetic.source/document/item-2")
+        val approval = FrozenPickerCopyApproval(
+            sourceUri = source, selectionRevision = 42L, shareEpoch = 7L)
+        assertTrue(approval.stillMatches(source, 42L, 7L))
+        org.junit.Assert.assertFalse(approval.stillMatches(different, 42L, 7L))
+        org.junit.Assert.assertFalse(approval.stillMatches(null, 42L, 7L))
+        org.junit.Assert.assertFalse(approval.stillMatches(source, 43L, 7L))
+        org.junit.Assert.assertFalse(approval.stillMatches(source, 42L, 8L))
+        org.junit.Assert.assertFalse(FrozenPickerCopyApproval(
+            source, -1L, 7L).stillMatches(source, -1L, 7L))
+    }
+
+    @Test fun frozenLocalCopyApprovalIsSingleSourceAndEpochBound() =
+        assertFrozenPickerCopyWitness()
 
     @Test fun openSystemPickerAndCancelLeavesCopyDisabled() {
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())

@@ -51,6 +51,21 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal fun shareEpochUnchanged(launched: Long, current: Long): Boolean =
     launched >= 0L && launched == current
 
+/** One immutable permission context replaces three independently mutable picker fields.
+ * A saved source URI alone is not authorization after a new selection/share.
+ */
+internal data class FrozenPickerCopyApproval(
+    val sourceUri: Uri,
+    val selectionRevision: Long,
+    val shareEpoch: Long
+) {
+    fun stillMatches(currentSource: Uri?, currentRevision: Long,
+        currentShareEpoch: Long): Boolean =
+        currentSource == sourceUri && selectionRevision >= 0L &&
+        selectionRevision == currentRevision &&
+        shareEpochUnchanged(shareEpoch, currentShareEpoch)
+}
+
 /** Exact foreground copy ownership, including operator cancellation. */
 internal fun activeLocalCopyProgress(
     current: AtomicBoolean?, expected: AtomicBoolean, busy: Boolean
@@ -80,10 +95,10 @@ fun LocalCopyCard(
     var receipt by remember { mutableStateOf<CopyReceipt?>(null) }
     var selectionRevision by remember { mutableLongStateOf(0L) }
     var openPickerRevision by remember { mutableLongStateOf(-1L) }
-    var savePickerRevision by remember { mutableLongStateOf(-1L) }
+    var pendingSaveApproval by remember {
+        mutableStateOf<FrozenPickerCopyApproval?>(null)
+    }
     var openPickerShareEpoch by remember { mutableLongStateOf(-1L) }
-    var savePickerShareEpoch by remember { mutableLongStateOf(-1L) }
-    var frozenSaveSource by remember { mutableStateOf<Uri?>(null) }
     var adoptedTreeSource by remember { mutableStateOf<Uri?>(null) }
 
     // A selected child from the Single-view SAF browser is an explicitly
@@ -175,20 +190,18 @@ fun LocalCopyCard(
     }
 
     val save = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val sourceUri = frozenSaveSource
-        val originalRevision = savePickerRevision
-        val originalShareEpoch = savePickerShareEpoch
-        frozenSaveSource = null
-        savePickerRevision = -1L
-        savePickerShareEpoch = -1L
+        val approval = pendingSaveApproval
+        // Consume an OS-picker result only once, even if the callback is
+        // followed by a new selection, Share or reentrant launcher event.
+        pendingSaveApproval = null
         val targetUri = result.data?.data
         if (result.resultCode != Activity.RESULT_OK || targetUri == null) {
             status = "Save As canceled. No transfer started."
-        } else if (sourceUri == null || sourceUri != selected ||
-            originalRevision != selectionRevision ||
-            !shareEpochUnchanged(originalShareEpoch, currentShareEpoch())) {
+        } else if (approval?.stillMatches(
+                selected, selectionRevision, currentShareEpoch()) != true) {
             status = "Source selection changed while Save As was open. No copy started. The picker may have created an empty document."
         } else {
+            val sourceUri = approval.sourceUri
             val permit = AtomicBoolean(true)
             continueCopy = permit
             busy = true
@@ -309,9 +322,8 @@ fun LocalCopyCard(
                 }) { Text("Choose file") }
                 Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !busy && selected != null, onClick = {
                     val source = selected ?: return@Button
-                    frozenSaveSource = source
-                    savePickerRevision = selectionRevision
-                    savePickerShareEpoch = currentShareEpoch()
+                    pendingSaveApproval = FrozenPickerCopyApproval(
+                        source, selectionRevision, currentShareEpoch())
                     val sourceName = displayName ?: "copy.bin"
                     save.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
