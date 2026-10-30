@@ -62,6 +62,61 @@ object FtpsSecuritySuite {
                 check(runCatching { FtpsPath.checkedChild(name) }.isFailure)
             }
         }
+        checkCase("FTPS RETR requires final completion even after reading all bytes") {
+            var complete = true
+            var finalChecks = 0
+            var closeFailure = false
+            var finalFailure = false
+            val expected = byteArrayOf(7, 1, 9, 3)
+            val client = object : org.apache.commons.net.ftp.FTPSClient(false) {
+                override fun retrieveFileStream(remote: String): java.io.InputStream {
+                    check(remote == "/source.bin")
+                    return object : java.io.ByteArrayInputStream(expected) {
+                        override fun close() {
+                            if (closeFailure) throw IllegalStateException(
+                                "password: test-only raw sensitive close error")
+                            super.close()
+                        }
+                    }
+                }
+                override fun completePendingCommand(): Boolean {
+                    finalChecks++
+                    if (finalFailure) throw IllegalStateException(
+                        "secret test-only final FTP reply")
+                    return complete
+                }
+            }
+            FtpsSession(client).use { session ->
+                check(session.openRead("/source.bin").use { it.readBytes() }
+                    .contentEquals(expected))
+                check(finalChecks == 1)
+                complete = false
+                val rejected = runCatching {
+                    session.openRead("/source.bin").use { it.readBytes() }
+                }.exceptionOrNull()
+                check(rejected is FtpsSafeFailure &&
+                    rejected.stage == "READ_FINAL" && finalChecks == 2)
+                closeFailure = true
+                val rawClose = runCatching {
+                    session.openRead("/source.bin").use { it.readBytes() }
+                }.exceptionOrNull()
+                check(rawClose is FtpsSafeFailure &&
+                    rawClose.stage == "READ_FINAL" &&
+                    rawClose.message.orEmpty().contains("PARSER_OR_POLICY") &&
+                    !rawClose.message.orEmpty().contains("password") &&
+                    finalChecks == 3)
+                closeFailure = false
+                finalFailure = true
+                val rawFinal = runCatching {
+                    session.openRead("/source.bin").use { it.readBytes() }
+                }.exceptionOrNull()
+                check(rawFinal is FtpsSafeFailure &&
+                    rawFinal.stage == "READ_FINAL" &&
+                    rawFinal.message.orEmpty().contains("PARSER_OR_POLICY") &&
+                    !rawFinal.message.orEmpty().contains("secret") &&
+                    finalChecks == 4)
+            }
+        }
         checkCase("MLST file observation is required for remote file identity") {
             val expected = org.apache.commons.net.ftp.FTPFile().apply {
                 name = "file.txt"

@@ -310,12 +310,17 @@ class FtpsSession internal constructor(private val client: FTPSClient) : AutoClo
             override fun close() {
                 if (closed) return
                 closed = true
-                var failure: IOException? = null
+                // Even if the stream's close implementation fails, consume
+                // the final 226/250 completion reply (or its failure). A
+                // third-party transport can throw unchecked exceptions with
+                // private paths/credentials in their messages: never expose
+                // them directly, and never record mere EOF as success.
+                var failure: Exception? = null
                 try { super.close() }
-                catch (e: IOException) { failure = e }
-                var finalError: IOException? = null
+                catch (error: Exception) { failure = error }
+                var finalError: Exception? = null
                 val completed = try { client.completePendingCommand() }
-                    catch (error: IOException) {
+                    catch (error: Exception) {
                         finalError = error
                         false
                     }
