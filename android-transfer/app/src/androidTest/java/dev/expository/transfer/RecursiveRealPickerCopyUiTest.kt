@@ -150,8 +150,24 @@ class RecursiveRealPickerCopyUiTest {
                     device.displayWidth / 5, device.displayHeight / 4, 14)
             }
         }
+        // Diagnostics contain only OS widget class/resource IDs and fixed
+        // synthetic labels. Never publish an arbitrary picker hierarchy,
+        // accounts, filesystem paths, or ContentProvider data.
+        val pickerAlive = listOf("com.google.android.documentsui",
+            "com.android.documentsui").any { device.hasObject(By.pkg(it)) }
+        val toolbarIds = if (pickerAlive && !selectedRoot)
+            device.findObjects(By.clazz("android.widget.ImageButton"))
+                .filter {
+                    val bounds = it.visibleBounds
+                    bounds.centerX() < device.displayWidth / 3 &&
+                        bounds.centerY() < device.displayHeight / 4
+                }.take(4).map {
+                    it.resourceName?.substringAfterLast('/')?.take(60) ?: "unlabeled"
+                } else emptyList()
         assertTrue("Fixture DocumentsProvider root not selectable in OS picker: " +
-            title + " (CTS drawer present=" + rootsListFound + ")", selectedRoot)
+            title + " (CTS drawer=" + rootsListFound +
+            ", pickerAlive=" + pickerAlive +
+            ", toolbar IDs=" + toolbarIds.joinToString(",") + ")", selectedRoot)
         val use = if (visible("Use this folder", 4_000L))
             "Use this folder" else "USE THIS FOLDER"
         click(use, "USE_THIS_FOLDER")
