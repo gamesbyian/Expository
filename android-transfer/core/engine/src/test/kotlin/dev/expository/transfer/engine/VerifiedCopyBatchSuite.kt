@@ -114,6 +114,26 @@ object VerifiedCopyBatchSuite {
             check(first.openedDestination == 1 && second.openedDestination == 1)
         }
 
+        case("fatal display Error propagates and leaves first attempt reviewable") {
+            val first = Streams()
+            val later = Streams()
+            val disk = Disk()
+            val failure = runCatching {
+                VerifiedCopyBatchQueue.run(
+                    listOf(job('a', first, disk), job('b', later)),
+                    onItemProgress = { _, _ ->
+                        throw AssertionError("synthetic fatal observer error")
+                    }
+                )
+            }.exceptionOrNull()
+            check(failure is AssertionError)
+            check(first.openedDestination == 1)
+            check(later.openedSource == 0 && later.openedDestination == 0)
+            val journal = DurableAttemptJournal(disk)
+            check(journal.current()?.state == JournalState.ATTEMPT_RECORDED)
+            check(journal.recoverAfterRestart()?.state == JournalState.UNCERTAIN)
+        }
+
         case("unverified write acknowledgment stops later jobs and restart stays uncertain") {
             val first = Streams(readback = false)
             val later = Streams()
