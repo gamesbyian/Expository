@@ -281,6 +281,18 @@ class RecursiveRealPickerCopyUiTest {
                     substring = true).fetchSemanticsNodes().isNotEmpty() -> "LAUNCH_FAILURE"
                 compose.onAllNodesWithText("Choose a different, writable Android provider destination",
                     substring = true).fetchSemanticsNodes().isNotEmpty() -> "LAUNCH_REQUESTED"
+                compose.onAllNodesWithText("Folder destination picker canceled",
+                    substring = true).fetchSemanticsNodes().isNotEmpty() -> "PICKER_RETURNED_CANCELED"
+                compose.onAllNodesWithText("Source folder or app context changed",
+                    substring = true).fetchSemanticsNodes().isNotEmpty() -> "APP_CONTEXT_CHANGED"
+                compose.onAllNodesWithText("Folder destination cannot be authorized",
+                    substring = true).fetchSemanticsNodes().isNotEmpty() -> "DESTINATION_AUTH_REJECTED"
+                compose.onAllNodesWithText("Android returned an invalid target folder",
+                    substring = true).fetchSemanticsNodes().isNotEmpty() -> "TARGET_DOCUMENT_INVALID"
+                compose.onAllNodesWithText("Checking nested source",
+                    substring = true).fetchSemanticsNodes().isNotEmpty() -> "SCANNING_AFTER_PICKER"
+                compose.onAllNodesWithText("Folder Copy blocked by provider capability",
+                    substring = true).fetchSemanticsNodes().isNotEmpty() -> "PREFLIGHT_BLOCKED"
                 else -> "STATUS_NOT_IN_COMPOSE_SEMANTICS"
             }
             val pickerControls = listOf("Use this folder", "USE THIS FOLDER",
