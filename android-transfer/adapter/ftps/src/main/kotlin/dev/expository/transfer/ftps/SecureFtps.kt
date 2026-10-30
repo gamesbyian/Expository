@@ -283,11 +283,17 @@ class FtpsSession internal constructor(private val client: FTPSClient) : AutoClo
         } catch (error: Exception) {
             throw FtpsFailureCodes.classify("STAT", client.replyCode, error)
         } ?: throw FtpsFailureCodes.classify("STAT", client.replyCode, null)
+        val expectedName = FtpsPath.checkedChild(path.substringAfterLast('/'))
+        // MLST can return an absolute pathname or its final component.
+        // A different name is not an observation of the requested file,
+        // even if its type/size/time happen to match. Never manufacture a
+        // source identity from our request without checking server evidence.
+        val serverName = stat.name
         val modified = stat.timestamp?.timeInMillis
-        if (!stat.isFile || stat.size < 0L || modified == null)
+        if (!stat.isFile || stat.size < 0L || modified == null ||
+            modified <= 0L || (serverName != expectedName && serverName != path))
             throw IOException("FTPS_FILE_STAT_UNVERIFIED")
-        return FtpsFileObservation(FtpsPath.checkedChild(path.substringAfterLast('/')),
-            stat.size, modified)
+        return FtpsFileObservation(expectedName, stat.size, modified)
     }
 
     fun openRead(absoluteFile: String): InputStream {

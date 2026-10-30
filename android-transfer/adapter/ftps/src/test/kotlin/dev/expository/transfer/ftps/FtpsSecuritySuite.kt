@@ -80,6 +80,60 @@ object FtpsSecuritySuite {
                 check(runCatching { session.statFile("/safe/unknown") }.isFailure)
             }
         }
+        checkCase("MLST returned name must match requested file precisely") {
+            val originalPath = "/protected/Example.bin"
+            var observed = "Example.bin"
+            val client = object : org.apache.commons.net.ftp.FTPSClient(false) {
+                override fun mlistFile(pathname: String): org.apache.commons.net.ftp.FTPFile {
+                    check(pathname == originalPath)
+                    return org.apache.commons.net.ftp.FTPFile().apply {
+                        name = observed
+                        type = org.apache.commons.net.ftp.FTPFile.FILE_TYPE
+                        size = 79
+                        timestamp = java.util.GregorianCalendar(
+                            java.util.TimeZone.getTimeZone("UTC")).apply {
+                            timeInMillis = 1_700_000_000_000L
+                        }
+                    }
+                }
+            }
+            FtpsSession(client).use { session ->
+                check(session.statFile(originalPath).name == "Example.bin")
+                observed = originalPath // MLST absolute-path syntax is acceptable
+                check(session.statFile(originalPath).size == 79L)
+                for (spoof in listOf("Other.bin", "example.bin",
+                    "/another/Example.bin", "../Example.bin",
+                    "/protected/Example.bin.backup", "", "Example.bin\r")) {
+                    observed = spoof
+                    val failure = runCatching {
+                        session.statFile(originalPath)
+                    }.exceptionOrNull()
+                    check(failure is java.io.IOException &&
+                        failure.message == "FTPS_FILE_STAT_UNVERIFIED") {
+                        "MLST must reject mismatched server file identity"
+                    }
+                }
+            }
+        }
+        checkCase("MLST stale zero timestamp cannot prove source revision") {
+            val client = object : org.apache.commons.net.ftp.FTPSClient(false) {
+                override fun mlistFile(pathname: String) =
+                    org.apache.commons.net.ftp.FTPFile().apply {
+                        name = "Example.bin"
+                        type = org.apache.commons.net.ftp.FTPFile.FILE_TYPE
+                        size = 79
+                        timestamp = java.util.GregorianCalendar(
+                            java.util.TimeZone.getTimeZone("UTC")).apply {
+                            timeInMillis = 0L
+                        }
+                    }
+            }
+            val failure = runCatching {
+                FtpsSession(client).use { it.statFile("/protected/Example.bin") }
+            }.exceptionOrNull()
+            check(failure is java.io.IOException &&
+                failure.message == "FTPS_FILE_STAT_UNVERIFIED")
+        }
         checkCase("MLST missing timestamp or file identity fails closed") {
             val bad = org.apache.commons.net.ftp.FTPFile().apply {
                 name = "file.txt"
