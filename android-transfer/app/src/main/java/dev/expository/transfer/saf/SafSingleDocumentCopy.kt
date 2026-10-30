@@ -40,7 +40,7 @@ class SafSingleDocumentCopy(private val resolver: ContentResolver,
     /** Hide provider-supplied controls and bound labels before encrypted storage. */
     private fun reviewLabel(label: String): String =
         label.map { if (it.code < 32 || it.code == 127) ' ' else it }
-            .trim().take(180).ifBlank { "Selected document" }
+            .joinToString("").trim().take(180).ifBlank { "Selected document" }
 
     fun observe(uri: Uri): SafDocumentObservation {
         require(uri.scheme == ContentResolver.SCHEME_CONTENT)
