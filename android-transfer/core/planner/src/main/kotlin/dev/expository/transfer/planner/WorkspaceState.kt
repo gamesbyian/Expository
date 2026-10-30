@@ -59,10 +59,15 @@ data class BrowsePaneState(
         }
         val fresh = FolderVisit(observed.freeze())
         val old = current ?: return copy(current = fresh)
-        if (old.location.key.authorityId != observed.key.authorityId ||
-            old.location.key.rootId != observed.key.rootId) {
-            // A new account, grant, or remote authority cannot inherit any old
-            // history/selection or imply an old authenticated namespace.
+        if (old.location.key.kind != observed.key.kind ||
+            old.location.key.authorityId != observed.key.authorityId ||
+            old.location.key.rootId != observed.key.rootId ||
+            old.location.key.grantId != observed.key.grantId ||
+            old.location.verifiedNamespace != observed.verifiedNamespace ||
+            old.location.verifiedStorageDomain != observed.verifiedStorageDomain) {
+            // A changed SAF grant or verified remote namespace/storage domain
+            // may share the same provider authority and root labels. Treat it
+            // as a new access boundary: no old history, selection, or scroll.
             return BrowsePaneState(endpoint, fresh)
         }
         if (old.location.key == observed.key && old.location.folder == observed.folder) {
