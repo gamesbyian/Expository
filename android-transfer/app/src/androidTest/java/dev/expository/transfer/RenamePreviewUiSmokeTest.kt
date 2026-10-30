@@ -13,6 +13,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import dev.expository.transfer.planner.*
 import dev.expository.transfer.sftp.SftpBrowsePage
 import dev.expository.transfer.sftp.SftpRemoteEntry
 import org.junit.Rule
@@ -26,6 +27,32 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class RenamePreviewUiSmokeTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test fun cleanupRegexCompilesOnAndroidIcuAndRetainsMeaningfulTags() {
+        // JVM java.util.regex accepts some unescaped bracket literals that
+        // Android's ICU regex rejects at RenamePlannerKt class initialization.
+        // Exercise the real Android runtime before any Compose UI recompose.
+        val location = LocationRef(
+            LocationKey(LocationKind.REMOTE_SFTP, "disposable", "root", "/test"),
+            emptyList(), "immutable-listing", emptyMap())
+        val names = listOf(
+            "photo ()  (copy).jpg",
+            "Document [] {}.txt",
+            "Episode (2019) [1080p].mkv"
+        )
+        val items = names.mapIndexed { index, name ->
+            RenameItem("id" + index, name, "v" + index, ItemKind.FILE)
+        }
+        val snapshot = RenameSnapshot(location, items, items.map { it.id },
+            "complete-source-fixture", true)
+        val plan = RenamePlanner.preview(snapshot,
+            RenameRecipe(listOf(RenameEdit.CleanUp)), 0L)
+        org.junit.Assert.assertEquals(
+            listOf("photo.jpg", "Document.txt", "Episode (2019) [1080p].mkv"),
+            plan.preview.map { it.proposed })
+        org.junit.Assert.assertTrue("No destructive rename is authorized",
+            !plan.executable && plan.steps.isEmpty())
+    }
 
     @Test fun selectAllShowsPreviewAndApplyRemainsUnavailable() {
         val observed = SftpBrowsePage(

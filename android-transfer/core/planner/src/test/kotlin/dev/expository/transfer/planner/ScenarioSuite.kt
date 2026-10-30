@@ -257,11 +257,13 @@ object ScenarioSuite {
         }
         test("opt-in conservative cleanup removes only copy tags and empty brackets") {
             val s = snapshot(listOf("photo ()  (copy).jpg",
-                "Episode (2019)  [1080p].mkv", "notes [ ].txt"))
+                "Episode (2019)  [1080p].mkv", "notes [ ].txt",
+                "Manual (copy) notes.txt"))
             val recipe = RenameRecipe(listOf(RenameEdit.CleanUp))
             val p = RenamePlanner.preview(s, recipe, NOW)
             check(p.executable && p.preview.map { it.proposed } ==
-                listOf("photo.jpg", "Episode (2019) [1080p].mkv", "notes.txt"))
+                listOf("photo.jpg", "Episode (2019) [1080p].mkv",
+                    "notes.txt", "Manual (copy) notes.txt"))
             check(p.changed == 3)
             assertStepsPreserveAll(s, p)
             check(RenamePlanner.revalidate(p, s, recipe, NOW))
