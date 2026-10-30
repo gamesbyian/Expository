@@ -142,7 +142,13 @@ class ProtectedRecoveryContextStore(context: Context) {
 
     /** Missing legacy hint is null; unreadable/tampered hint FAILS CLOSED. */
     fun read(digest: String): ProtectedRecoveryContext? = synchronized(LOCK) {
-        val atomic = AtomicFile(destinationFile(digest))
+        val base = destinationFile(digest)
+        // A stranded new file may represent a crash before AtomicFile's
+        // first successful commit. It is NOT equivalent to a legacy absent
+        // hint. Preserve it for inspection and signal damaged metadata.
+        if (!base.exists() && File(base.path + ".new").exists())
+            throw IOException("RECOVERY_CONTEXT_INTERRUPTED_WRITE")
+        val atomic = AtomicFile(base)
         val bytes = try {
             atomic.openRead().use { stream ->
                 val output = ByteArrayOutputStream()

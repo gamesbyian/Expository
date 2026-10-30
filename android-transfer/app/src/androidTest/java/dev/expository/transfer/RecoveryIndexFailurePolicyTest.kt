@@ -139,6 +139,12 @@ class RecoveryIndexFailurePolicyTest {
             assertTrue(runCatching { store.read(digest) }.isFailure)
             // The original one-shot rule remains even after corruption.
             assertTrue(runCatching { store.recordNew(digest, hint) }.isFailure)
+            // A failed first commit that leaves only .new is reported as
+            // damaged, never downgraded to "no prior record".
+            record.delete()
+            File(record.path + ".new").writeBytes(byteArrayOf(1, 2, 3))
+            assertTrue(runCatching { store.read(digest) }.isFailure)
+            assertTrue(runCatching { store.recordNew(digest, hint) }.isFailure)
         } finally {
             sandbox.listFiles()?.forEach { it.delete() }
             sandbox.delete()
