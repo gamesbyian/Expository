@@ -127,27 +127,10 @@ class RecursiveRealPickerCopyUiTest {
                 button.click()
                 device.wait(Until.hasObject(By.text(title)), 1_000L)
             }
-            if (!device.hasObject(By.text(title))) {
-                // A navigation icon without a stable label is permissible
-                // only in the confirmed OS picker toolbar. It is never
-                // clicked on Expository's own activity.
-                val icon = device.findObjects(By.clazz("android.widget.ImageButton"))
-                    .firstOrNull {
-                        val bounds = it.visibleBounds
-                        bounds.centerX() < device.displayWidth / 3 &&
-                            bounds.centerY() < device.displayHeight / 4
-                    }
-                if (icon != null && pickerForeground()) {
-                    icon.click()
-                    device.wait(Until.hasObject(By.text(title)), 1_500L)
-                }
-            }
-            if (!device.hasObject(By.text(title)) && pickerForeground()) {
-                // Last resort: the platform's left-edge drawer gesture,
-                // restricted to the verified DocumentsUI foreground activity.
-                device.swipe(2, device.displayHeight / 2,
-                    device.displayWidth * 2 / 3, device.displayHeight / 2, 20)
-            }
+            // Never guess at an unlabeled top-left icon or edge-swipe:
+            // both can invoke Back and close the real picker. Only the
+            // known, explicitly labeled OS drawer controls above may open it.
+            // If the fixture root remains undiscoverable, fail closed.
             for (attempt in 0 until 10) {
                 if (!pickerForeground()) break
                 val root = device.findObject(By.text(title))
@@ -160,6 +143,8 @@ class RecursiveRealPickerCopyUiTest {
                     } catch (_: StaleObjectException) { }
                 }
                 // Scroll the left portion of the open roots drawer only.
+                // Scrolling remains inside the already-confirmed OS
+                // picker; never swipe from the navigation-gesture edge.
                 device.swipe(device.displayWidth / 5,
                     device.displayHeight * 4 / 5,
                     device.displayWidth / 5, device.displayHeight / 4, 14)
