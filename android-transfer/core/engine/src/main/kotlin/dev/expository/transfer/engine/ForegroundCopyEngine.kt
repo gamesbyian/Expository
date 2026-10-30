@@ -91,7 +91,12 @@ object ForegroundCopyEngine {
                         // authority over the bytes or journal. If a display
                         // callback throws, preserve the stream result and
                         // let the explicit cancellation predicate stop it.
-                        runCatching { onProgress(transferred) }
+                        try { onProgress(transferred) }
+                        catch (_: Exception) {
+                            // Ordinary UI observer failures cannot affect byte
+                            // proof. Fatal VM errors must propagate so an
+                            // in-flight journal remains reviewable, not hidden.
+                        }
                     }
                     output.flush()
                 }

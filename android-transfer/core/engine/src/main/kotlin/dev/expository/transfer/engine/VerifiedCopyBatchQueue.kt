@@ -83,7 +83,11 @@ object VerifiedCopyBatchQueue {
                 // must not turn already-committed destination bytes into an
                 // artificial UNCERTAIN write or abort subsequent verified jobs.
                 onProgress = { bytes ->
-                    runCatching { onItemProgress(index, bytes) }
+                    try { onItemProgress(index, bytes) }
+                    catch (_: Exception) {
+                        // Ignore only recoverable display faults; never
+                        // suppress an OutOfMemoryError or similar VM failure.
+                    }
                 }
             )
             results += receipt
