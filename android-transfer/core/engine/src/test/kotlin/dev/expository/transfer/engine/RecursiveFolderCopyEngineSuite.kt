@@ -191,6 +191,32 @@ object RecursiveFolderCopyEngineSuite {
             })
             check(callbacks == 3 && result.result == RecursiveCopyResult.COMPLETE_VERIFIED)
         }
+        case("canceled progress scope cannot authorize another folder mutation") {
+            val f = Fake()
+            val error = runCatching {
+                f.run(onVerifiedStep = {
+                    throw java.util.concurrent.CancellationException("synthetic UI teardown")
+                })
+            }.exceptionOrNull()
+            check(error is java.util.concurrent.CancellationException)
+            check(f.created == setOf("Shows") && f.copied == null)
+            check(f.journals.size == 1)
+            check(DurableAttemptJournal(f.journals.getValue(0))
+                .current()?.state == JournalState.VERIFIED)
+            // Crash/cancel does not replay the already journaled first step.
+            check(f.run().result == RecursiveCopyResult.BLOCKED)
+        }
+        case("fatal progress observer error stops before next mutation") {
+            val f = Fake()
+            val error = runCatching {
+                f.run(onVerifiedStep = { throw AssertionError("synthetic fatal observer") })
+            }.exceptionOrNull()
+            check(error is AssertionError)
+            check(f.created == setOf("Shows") && f.copied == null)
+            check(f.journals.size == 1)
+            check(DurableAttemptJournal(f.journals.getValue(0))
+                .current()?.state == JournalState.VERIFIED)
+        }
         case("replay same durable step blocked without second write") {
             val f = Fake()
             check(f.run().result == RecursiveCopyResult.COMPLETE_VERIFIED)
