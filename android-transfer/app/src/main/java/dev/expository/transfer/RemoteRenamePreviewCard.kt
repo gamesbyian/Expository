@@ -61,6 +61,7 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
     val recipe = when (mode) {
         "Prefix" -> RenameRecipe(listOf(RenameEdit.Prefix(value)), extensionLocked)
         "Suffix" -> RenameRecipe(listOf(RenameEdit.Suffix(value)), extensionLocked)
+        "Clean up" -> RenameRecipe(listOf(RenameEdit.CleanUp), extensionLocked)
         "Number" -> RenameRecipe(listOf(RenameEdit.Number(
             start = numberStart ?: 0L, step = numberStep ?: 1L,
             width = numberWidth ?: 1, separator = " ", prefix = numberAtFront
@@ -148,7 +149,7 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.fillMaxWidth()) {
                     listOf("Replace", "Prefix", "Suffix", "Number",
-                        "Uppercase", "Lowercase").forEach { option ->
+                        "Uppercase", "Lowercase", "Clean up").forEach { option ->
                         Button(enabled = enabled, modifier = Modifier.heightIn(min = 48.dp),
                             onClick = { mode = option }) {
                             Text(if (mode == option) "•" + option else option,
@@ -202,6 +203,12 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
                             "and digits 1–12. No preview or Apply is available.",
                             style = MaterialTheme.typography.bodySmall)
                     }
+                }
+                if (mode == "Clean up") {
+                    Text("Clean up removes empty brackets, explicit (copy) suffixes " +
+                        "and repeated spaces. Meaningful labels are retained; " +
+                        "all collisions still block Apply.",
+                        style = MaterialTheme.typography.bodySmall)
                 }
                 Text("Selection: " + selectedExisting.size + " / " + rows.size,
                     style = MaterialTheme.typography.bodySmall)
