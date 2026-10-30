@@ -32,7 +32,16 @@ data class SafDocumentObservation(
  * results and exist only in memory. No broad file permissions or cloud OAuth.
  */
 class SafSingleDocumentCopy(private val resolver: ContentResolver,
-    private val storageForPlan: ((String) -> AtomicAttemptStorage)? = null) {
+    private val recordRecoveryContext: ((String, String, String, String) -> Unit)? = null,
+    // Keep the existing single-argument storage factory as the LAST lambda
+    // parameter: older callers may use SafSingleDocumentCopy(resolver) { ... }.
+    private val storageForPlan: ((String) -> AtomicAttemptStorage)? = null
+) {
+    /** Hide provider-supplied controls and bound labels before encrypted storage. */
+    private fun reviewLabel(label: String): String =
+        label.map { if (it.code < 32 || it.code == 127) ' ' else it }
+            .joinToString("").trim().take(180).ifBlank { "Selected document" }
+
     fun observe(uri: Uri): SafDocumentObservation {
         require(uri.scheme == ContentResolver.SCHEME_CONTENT)
         var displayName: String? = null
@@ -120,6 +129,23 @@ class SafSingleDocumentCopy(private val resolver: ContentResolver,
         }
         val factory = storageForPlan ?: return ForegroundCopyEngine.copy(
             initialPlan, fresh, streams, continueRequested, onProgress)
+        if (!initialPlan.executable)
+            return CopyReceipt(initialPlan.digest, CopyProof.BLOCKED, 0,
+                "SOURCE_OR_DESTINATION_PLAN_NOT_EXECUTABLE")
+        // The operator needs a bounded, encrypted context after process death.
+        // This independent record is committed before the attempt journal can
+        // record a possible destination write. No URI or grant is persisted.
+        if (recordRecoveryContext != null) {
+            try {
+                recordRecoveryContext.invoke(initialPlan.digest,
+                    reviewLabel(observe(source).displayName),
+                    reviewLabel(observe(destination).displayName),
+                    reviewLabel(destination.authority ?: "Android document provider"))
+            } catch (_: Exception) {
+                return CopyReceipt(initialPlan.digest, CopyProof.BLOCKED, 0,
+                    "RECOVERY_CONTEXT_UNAVAILABLE")
+            }
+        }
         val journal = try { DurableAttemptJournal(factory(initialPlan.digest)) }
             catch (_: Exception) {
                 return CopyReceipt(initialPlan.digest, CopyProof.BLOCKED, 0, "JOURNAL_UNAVAILABLE")

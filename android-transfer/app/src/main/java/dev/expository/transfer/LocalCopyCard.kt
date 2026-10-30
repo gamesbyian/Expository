@@ -34,6 +34,8 @@ import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.engine.CopyReceipt
 import dev.expository.transfer.saf.SafSingleDocumentCopy
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
+import dev.expository.transfer.journal.ProtectedRecoveryContext
+import dev.expository.transfer.journal.ProtectedRecoveryContextStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -80,9 +82,16 @@ fun LocalCopyCard(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val service = remember(context) {
-        SafSingleDocumentCopy(context.contentResolver) { digest ->
-            AndroidAtomicAttemptStorage(context.applicationContext, digest)
-        }
+        val app = context.applicationContext
+        val recovery = ProtectedRecoveryContextStore(app)
+        SafSingleDocumentCopy(context.contentResolver,
+            storageForPlan = { digest ->
+                AndroidAtomicAttemptStorage(app, digest)
+            },
+            recordRecoveryContext = { digest, sourceName, destinationName, provider ->
+                recovery.recordNew(digest, ProtectedRecoveryContext(
+                    "SAF_PICKER_COPY", sourceName, destinationName, provider))
+            })
     }
     var selected by remember { mutableStateOf<Uri?>(null) }
     var displayName by remember { mutableStateOf<String?>(null) }

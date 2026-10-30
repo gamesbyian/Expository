@@ -98,6 +98,103 @@ class RecoveryIndexFailurePolicyTest {
         }.isFailure)
     }
 
+    @Test fun encryptedRecoveryContextRequiresExplicitReviewAndRejectsTamper() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "private-hint-test-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val digest = "1".repeat(64)
+        val otherDigest = "2".repeat(64)
+        val provider = "test.documents.provider"
+        val sourceName = "PRIVATE Synthetic Source 49371"
+        val destinationName = "PRIVATE Synthetic Destination 80265"
+        val hint = dev.expository.transfer.journal.ProtectedRecoveryContext(
+            "SAF_PICKER_COPY", sourceName, destinationName, provider)
+        val store = dev.expository.transfer.journal.ProtectedRecoveryContextStore(isolated)
+        val record = File(sandbox, "transfer_recovery_context_v1_" + digest)
+        val wrong = File(sandbox, "transfer_recovery_context_v1_" + otherDigest)
+        try {
+            assertEquals(null, store.read(digest))
+            store.recordNew(digest, hint)
+            assertEquals(hint, store.read(digest))
+            assertTrue(record.isFile)
+            val ciphertext = record.readBytes()
+            val visible = String(ciphertext, Charsets.ISO_8859_1)
+            assertTrue(!visible.contains(sourceName) &&
+                !visible.contains(destinationName) && !visible.contains(provider))
+            // An existing record, even if unauthenticated or interrupted, may
+            // never be silently reset to point to a different target.
+            assertTrue(runCatching {
+                store.recordNew(digest, hint.copy(destinationLabel = "replacement"))
+            }.isFailure)
+            assertEquals(hint, store.read(digest))
+            // Ciphertext moved under another digest cannot authenticate:
+            // AAD binds the operation to its exact private journal key.
+            wrong.writeBytes(ciphertext)
+            assertTrue(runCatching { store.read(otherDigest) }.isFailure)
+            // Truncated/tampered hints never return invented labels.
+            record.writeBytes(ciphertext.copyOf(ciphertext.size - 7))
+            assertTrue(runCatching { store.read(digest) }.isFailure)
+            // The original one-shot rule remains even after corruption.
+            assertTrue(runCatching { store.recordNew(digest, hint) }.isFailure)
+            // A failed first commit that leaves only .new is reported as
+            // damaged, never downgraded to "no prior record".
+            record.delete()
+            File(record.path + ".new").writeBytes(byteArrayOf(1, 2, 3))
+            assertTrue(runCatching { store.read(digest) }.isFailure)
+            assertTrue(runCatching { store.recordNew(digest, hint) }.isFailure)
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
+    @Test fun encryptedRecoveryHintIsOnlyManualContextForUncertainJournal() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "review-hint-test-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val digest = "3".repeat(64)
+        val hint = dev.expository.transfer.journal.ProtectedRecoveryContext(
+            "SAF_PICKER_COPY", "Synthetic Original.txt",
+            "Synthetic Copy.txt", "synthetic.document.provider")
+        try {
+            dev.expository.transfer.journal.ProtectedRecoveryContextStore(isolated)
+                .recordNew(digest, hint)
+            val journal = DurableAttemptJournal(
+                dev.expository.transfer.journal.AndroidAtomicAttemptStorage(isolated, digest))
+            journal.confirm(digest)
+            journal.beginAttempt(digest, "synthetic_attempt_01")
+            val recovered = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, recovered.requiresReview)
+            assertEquals(hint, recovered.reviewReferences.single().context)
+            assertEquals(null, recovered.reviewReferences.single().contextWarning)
+            assertEquals(JournalState.UNCERTAIN, journal.recoverAfterRestart()?.state)
+            // The UI context can never authorize a fresh mutation or replay.
+            assertTrue(runCatching {
+                journal.beginAttempt(digest, "synthetic_attempt_02")
+            }.isFailure)
+            // Corrupting the supplementary encrypted hint must not hide the
+            // authoritative write-ahead journal or allow a blind retry.
+            val encrypted = File(sandbox, "transfer_recovery_context_v1_" + digest)
+            encrypted.writeBytes(byteArrayOf(1, 2, 3))
+            val damagedHint = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, damagedHint.requiresReview)
+            assertEquals(null, damagedHint.reviewReferences.single().context)
+            assertTrue(damagedHint.reviewReferences.single()
+                .contextWarning?.contains("unreadable") == true)
+            assertEquals(JournalState.UNCERTAIN,
+                journal.recoverAfterRestart()?.state)
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
     @Test fun recoveryReviewReferencesAreBoundedPrivateAndNeverAuthorizeReplay() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val sandbox = File(app.cacheDir, "recovery-test-" + UUID.randomUUID())
