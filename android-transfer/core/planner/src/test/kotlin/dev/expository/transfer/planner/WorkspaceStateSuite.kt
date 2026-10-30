@@ -54,7 +54,7 @@ object WorkspaceStateSuite {
             b = BrowsePaneState(BrowseEndpoint.SFTP).visit(sftp))
         val singlePlan = selectedSingle.singleCopyProposal(sftp, reviewedListing, NOW)
         val dualPlan = comparableDual.copyProposal(WorkspacePane.A, reviewedListing, NOW)
-        check(singlePlan == dualPlan && singlePlan?.executable == true)
+        check(singlePlan != null && singlePlan.executable && singlePlan == dualPlan)
         check(singlePlan.operation == Operation.COPY &&
             singlePlan.route == TransferRoute.DEVICE_RELAY)
         check(selectedSingle.singleCopyProposal(sftp, null, NOW)?.executable == false)
