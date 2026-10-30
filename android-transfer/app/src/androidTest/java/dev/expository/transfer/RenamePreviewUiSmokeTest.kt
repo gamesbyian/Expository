@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.expository.transfer.planner.*
+import dev.expository.transfer.sftp.SftpFolderSort
 import dev.expository.transfer.sftp.SftpBrowsePage
 import dev.expository.transfer.sftp.SftpRemoteEntry
 import org.junit.Rule
@@ -171,6 +172,28 @@ class RenamePreviewUiSmokeTest {
         rule.onNodeWithText("→ Episode (2019) [1080p].mkv").assertExists()
         rule.onNodeWithTag("rename-preview-results").performScrollToIndex(1)
         rule.onNodeWithText("→ photo.jpg").assertExists()
+        rule.onNodeWithText("Apply disabled.", substring = true).assertExists()
+    }
+
+    @Test fun numberOrderUsesBrowserSortNotHardCodedAlphabeticalNames() {
+        val observed = SftpBrowsePage(listOf(
+            SftpRemoteEntry("alpha.mkv", false, 100, 100L),
+            SftpRemoteEntry("beta.mkv", false, 300, 200L)
+        ), truncated = false)
+        rule.setContent {
+            MaterialTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    RemoteRenamePreviewCard("synthetic-session", "/ordered",
+                        observed, true, SftpFolderSort.SIZE, descending = true)
+                }
+            }
+        }
+        rule.onNodeWithText("Select all").performClick()
+        rule.onNodeWithText("Number").performScrollTo().performClick()
+        rule.onNodeWithTag("rename-preview-results").performScrollToIndex(0)
+        rule.onNodeWithText("→ 01 beta.mkv").assertExists()
+        rule.onNodeWithTag("rename-preview-results").performScrollToIndex(1)
+        rule.onNodeWithText("→ 02 alpha.mkv").assertExists()
         rule.onNodeWithText("Apply disabled.", substring = true).assertExists()
     }
 

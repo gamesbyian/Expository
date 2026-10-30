@@ -1612,7 +1612,8 @@ internal fun SftpBrowseCard(
                     onClick = { showRenamePreview = !showRenamePreview }
                 ) { Text(if (showRenamePreview) "Hide rename preview" else "Bulk rename preview…") }
                 if (showRenamePreview) page?.let { current ->
-                    RemoteRenamePreviewCard(sessionId, folder, current, !busy)
+                    RemoteRenamePreviewCard(sessionId, folder, current, !busy,
+                        sortMode, descending)
                 }
                 if (activeDeviceTarget != null) {
                     val count = peerBatchSelection.files.size
