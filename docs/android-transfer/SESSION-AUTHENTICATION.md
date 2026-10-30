@@ -2,6 +2,10 @@
 
 **2026-10-27 implementation boundary:** The policy reducer has E1 acceptance. The AndroidKeyStore AES-256-GCM, app-private no-backup store is now used by **explicitly saved SFTP connection-only bookmarks** (#234). Bookmarks hold host/port/folder/username/pinned SSH host key, not passwords or private keys. Loading one never connects and always requires a freshly supplied password. The key does NOT require biometric/user unlock and is not a credentials vault. No biometric prompt, unlock settings UI, persisted gate choice, or production access enforcement is shipped. Implement these before describing profile remembering or biometric authentication as available.
 
+## Dispatcher enforcement requirement from architecture audit
+
+SessionAccessGate E1 reducer remains non-enforcing until wired to the actual common operation dispatcher. A biometric UI must not merely unlock a visual pane while another route writes through a direct adapter path. Any protected Copy/Move/Rename requires fresh, exact-scope authorization bound to the same frozen command and operation token used by Single/Dual/share/button/drag, with explicit logout, lifecycle and process-death invalidation; do not save authority in `rememberSaveable`. Track cross-layer migration through [architecture audit](ARCHITECTURE-AUDIT-2026-10-29.md), [decisions](ARCHITECTURE-DECISIONS.md), and [#324](https://github.com/gamesbyian/Expository/issues/324); user-facing auth through [#25](https://github.com/gamesbyian/Expository/issues/25).
+
 ## Requested product experience
 
 Each separately configured scope has an optional access gate:

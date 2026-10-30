@@ -1,6 +1,6 @@
 # Expository Transfer: dependency-first delivery plan
 
-**Reconciled against main 4d34b999 (2026-10-30 UTC).** This is the living execution architecture and sequencing policy, not a claim of shipped features. The binding requirements live in [CURRENT-CONTRACT.md](CURRENT-CONTRACT.md), [WORKSPACE-AND-BULK-RENAME.md](WORKSPACE-AND-BULK-RENAME.md), [UNIVERSAL-LOCATIONS.md](UNIVERSAL-LOCATIONS.md), [GOOGLE-DRIVE-INTEGRATION.md](GOOGLE-DRIVE-INTEGRATION.md), and [SESSION-AUTHENTICATION.md](SESSION-AUTHENTICATION.md). [The ranked queue](../../android-transfer/WORK-QUEUE.md) names the next executable slices. [The release ledger](RELEASE-READINESS.md) alone records accepted evidence; older implementation narratives and Git history are not independent status sources.
+**Reconciled against audit baseline 14bbeece (2026-10-30 UTC).** This is the living execution architecture and sequencing policy, not a claim of shipped features. The binding requirements live in [CURRENT-CONTRACT.md](CURRENT-CONTRACT.md), [WORKSPACE-AND-BULK-RENAME.md](WORKSPACE-AND-BULK-RENAME.md), [UNIVERSAL-LOCATIONS.md](UNIVERSAL-LOCATIONS.md), [GOOGLE-DRIVE-INTEGRATION.md](GOOGLE-DRIVE-INTEGRATION.md), and [SESSION-AUTHENTICATION.md](SESSION-AUTHENTICATION.md). [The ranked queue](../../android-transfer/WORK-QUEUE.md) names the next executable slices. [The release ledger](RELEASE-READINESS.md) alone records accepted evidence; older implementation narratives and Git history are not independent status sources.
 
 ## Diagnosis: preserve the good foundations, close the integration gap
 
@@ -9,6 +9,17 @@ The Kotlin core/planner already contains opaque location/item identity, three-st
 The integration debt is now more important than another isolated helper: TransferActivity.kt is roughly 1,250 lines, SftpBrowseCard.kt roughly 2,000 lines, and endpoint-specific cards still own operation orchestration and picker/review lifecycle. There is a risk of implementing each source/destination pairing again in different UI cards, with divergent safety checks, progress and receipts. Do **not** discard the existing accepted code or perform a big-bang Compose refactor. Extract one tested vertical seam at a time, preserving the app's working flows.
 
 The other bottleneck is **proof, not just implementation**. Open PR #292 attempts real OS-picked source and destination trees using a separate synthetic DocumentsProvider APK. The latest exact-head Android E2 run [#41002248669](https://github.com/gamesbyian/Expository/actions/runs/41002248669) failed at SYSTEM_DESTINATION_PICKER_NOT_FOREGROUND_COPY_PROPOSAL_REJECTED_OR_ACTIVITY_MISSING, before byte acceptance. Its APK compile succeeded; it **must remain unmerged** until the actual two-grant Copy is observed and independently read back. There is no verified Google account, physical handset, complete process-death recovery or signed release.
+
+## Newly adopted audit safeguards and sequencing
+
+The [2026-10-29 architecture audit](ARCHITECTURE-AUDIT-2026-10-29.md) supplies a file-linked A-01–A-15 register and B01–B14 backlog; [architecture ADR](ARCHITECTURE-DECISIONS.md) fixes the intended command, recovery and evidence boundaries, while [operation UX](OPERATION-STATE-UX.md) fixes user-visible review/progress/uncertainty semantics. These recommendations have **not** shipped merely by being recorded.
+
+- **First parallel lanes:** B01 real two-authority picker E2 (#292/#222); B02 coroutine cancellation and stale completion characterization (#322); B03 automatic Android compile/lint gate (#323); B09 reviewed dependency locking/verification (#326); B10 `check` contract (#323).
+- **Migration order:** B02 → B04 shared typed source/destination/intent, approval and token; prove one SAF Copy equivalence first; B04 → B06 Single/Dual parity. B05 protected recovery index may be developed in parallel with B04 by different file owners, but B07 persistent queue integration requires both and per-item fresh preflight.
+- **Independent future lanes:** secure FTPS/SFTP controlled E3 and negative cases, Drive SAF/API capability spike, auth policy E2, performance fixture design. Full UI route work must pass B04; cross-authority Move/rename Apply and auto-reconcile must wait for B05, trustworthy no-replace capabilities and actual receipts. E4/E5 remain final gates.
+- **No silent architecture churn:** retain `:core:planner`, `:core:engine`, explicit SFTP/FTPS trust and minimal journal. No broad ViewModel rewrite/DI framework/new modules absent proved need. Update evidence before deleting old implementation.
+- **Cancellation:** blocking adapters must use operation Job cancellation plus explicit stop permit and failure-to-UNCERTAIN bookkeeping. This is a **probable issue awaiting tests**, not a confirmed data-loss report.
+- **Recovery:** legacy matrix prose requiring endpoints in the neutral journal is superseded; protected recovery index contains the minimal sensitive locator and versioned manifest, with independent auth and clear corruption/retention policy.
 
 ## Dependency graph: gates, not a decorative phase waterfall
 
