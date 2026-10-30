@@ -263,9 +263,34 @@ class RecursiveRealPickerCopyUiTest {
                     "STALE_OR_INCOMPLETE_SOURCE"
                 else -> "COPY_PROPOSAL_REJECTED_OR_ACTIVITY_MISSING"
             }
+            // Only report a small allowlisted diagnostic vocabulary. Never
+            // dump the user's picker hierarchy, provider tree, account or path.
+            val foregroundKind = when (device.currentPackageName) {
+                instrumentation.targetContext.packageName -> "EXPOSITORY"
+                "com.android.documentsui", "com.google.android.documentsui" -> "DOCUMENTSUI"
+                "android" -> "ANDROID_SYSTEM"
+                null -> "UNREPORTED"
+                else -> "OTHER"
+            }
+            val uiProbe = when {
+                compose.onAllNodesWithText("Folder Copy unavailable: another operation",
+                    substring = true).fetchSemanticsNodes().isNotEmpty() -> "BUSY"
+                compose.onAllNodesWithText("Folder Copy unavailable: source folder selection",
+                    substring = true).fetchSemanticsNodes().isNotEmpty() -> "STALE_SOURCE"
+                compose.onAllNodesWithText("Android destination picker unavailable",
+                    substring = true).fetchSemanticsNodes().isNotEmpty() -> "LAUNCH_FAILURE"
+                compose.onAllNodesWithText("Choose a different, writable Android provider destination",
+                    substring = true).fetchSemanticsNodes().isNotEmpty() -> "LAUNCH_REQUESTED"
+                else -> "STATUS_NOT_IN_COMPOSE_SEMANTICS"
+            }
+            val pickerControls = listOf("Use this folder", "USE THIS FOLDER",
+                "Recent", "Downloads").any { device.hasObject(By.text(it)) }
             throw AssertionError("SYSTEM_DESTINATION_PICKER_NOT_FOREGROUND_" + reason +
                 "_ACCESSIBILITY_ATTACHED_" + accessiblePicker +
-                "_ACTIVITY_RESUMED_" + resumedSystemPicker)
+                "_ACTIVITY_RESUMED_" + resumedSystemPicker +
+                "_FOREGROUND_" + foregroundKind +
+                "_UI_" + uiProbe +
+                "_SYSTEM_CONTROLS_" + pickerControls)
         }
         chooseFixtureRoot(device, "Expository Target Lab")
         compose.waitUntil(30_000L) {
