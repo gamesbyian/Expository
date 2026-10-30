@@ -57,6 +57,11 @@ import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.sftp.SftpAndroidCompat
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 
+/** A button-owned Boolean is not sufficient authorization after a coroutine is cancelled. */
+internal fun foregroundCopyAllowed(
+    permit: AtomicBoolean, owningJob: kotlinx.coroutines.Job?
+): Boolean = permit.get() && owningJob?.isActive == true
+
 /** Android-native picker-first transfer shell; synthetic planner stays isolated in Demo. */
 data class IncomingShareRequest(
     val payload: IncomingShare?,
@@ -506,6 +511,8 @@ private fun DeveloperPreview(
         copyBusy = true
         copyStatus = "Copying the reviewed whole folder to Android's chosen destination…"
         scope.launch {
+            val owningJob = kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]
+            try {
             val outcome = withContext(Dispatchers.IO) {
                 runCatching {
                     SafRecursiveTreeCopy(context.applicationContext,
@@ -517,12 +524,14 @@ private fun DeveloperPreview(
                                 // overwrite the next review or final receipt.
                                 scope.launch {
                                     if (copyBusy && copyPermit === permit &&
+                                        foregroundCopyAllowed(permit, owningJob) &&
                                         model.view == WorkspaceView.SINGLE)
                                         copyStatus = verifiedFolderProgress(verified)
                                 }
-                            }) { permit.get() }
+                            }) { foregroundCopyAllowed(permit, owningJob) }
                 }.getOrNull()
             }
+            if (copyPermit !== permit) return@launch
             copyStatus = if (outcome == null) {
                 "Copy outcome cannot be observed. Inspect the selected destination and durable recovery records before retrying."
             } else when (outcome.result) {
@@ -543,8 +552,13 @@ private fun DeveloperPreview(
                         " directories and " + outcome.verifiedFiles +
                         " files. " + outcome.reason + ". Do not automatically retry."
             }
-            copyPermit = null
-            copyBusy = false
+            } finally {
+                permit.set(false)
+                if (copyPermit === permit) {
+                    copyPermit = null
+                    copyBusy = false
+                }
+            }
         }
     }
 
@@ -744,6 +758,8 @@ private fun DeveloperPreview(
         copyBusy = true
         copyStatus = "Running reviewed folder Copy with durable per-item receipts. Keep Expository open."
         scope.launch {
+            val owningJob = kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]
+            try {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     SafRecursiveTreeCopy(context.applicationContext,
@@ -751,12 +767,14 @@ private fun DeveloperPreview(
                         onVerifiedStep = { verified ->
                             scope.launch {
                                 if (copyBusy && copyPermit === permit &&
+                                    foregroundCopyAllowed(permit, owningJob) &&
                                     model.view == WorkspaceView.DUAL)
                                     copyStatus = verifiedFolderProgress(verified)
                             }
-                        }) { permit.get() }
+                        }) { foregroundCopyAllowed(permit, owningJob) }
                 }.getOrNull()
             }
+            if (copyPermit !== permit) return@launch
             copyStatus = if (result == null)
                 "Folder Copy outcome unavailable. Inspect the destination and recovery records before any retry. Sources were not deleted."
             else when (result.result) {
@@ -779,8 +797,6 @@ private fun DeveloperPreview(
                         " verified files. " + result.reason +
                         ". Do not retry without inspection."
             }
-            copyPermit = null
-            copyBusy = false
             // Refresh the currently selected destination without inventing a
             // new grant. A changed pane is never silently repopulated.
             val current = tree(pending.destinationPane)
@@ -789,6 +805,13 @@ private fun DeveloperPreview(
                 model.pane(pending.destinationPane).endpoint.isSaf) {
                 readTree(pending.destinationPane, request.destinationTree,
                     current.crumbs, maxVisible = current.visibleLimit)
+            }
+            } finally {
+                permit.set(false)
+                if (copyPermit === permit) {
+                    copyPermit = null
+                    copyBusy = false
+                }
             }
         }
     }
@@ -805,11 +828,13 @@ private fun DeveloperPreview(
         copyStatus = "Starting " + pending.size +
             " separately journaled device Copy operations. Keep Expository open."
         scope.launch {
+            val owningJob = kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]
+            try {
             var verified = 0
             var verifiedBytes = 0L
             var failure: CopyProof? = null
             for ((index, plan) in pending.withIndex()) {
-                if (!permit.get()) {
+                if (!foregroundCopyAllowed(permit, owningJob)) {
                     failure = CopyProof.UNCERTAIN
                     break
                 }
@@ -836,14 +861,15 @@ private fun DeveloperPreview(
                     SafTreeToTreeCopy(context.contentResolver) { digest ->
                         AndroidAtomicAttemptStorage(context.applicationContext, digest)
                     }.copy(current,
-                        continueRequested = { permit.get() },
+                        continueRequested = { foregroundCopyAllowed(permit, owningJob) },
                         onProgress = { bytes ->
                             val now = System.nanoTime()
                             val prev = lastReportNs.get()
                             if ((prev == 0L || now - prev >= 250_000_000L) &&
                                 lastReportNs.compareAndSet(prev, now)) {
                                 scope.launch {
-                                    if (copyBusy && copyPermit === permit && permit.get())
+                                    if (copyBusy && copyPermit === permit &&
+                                        foregroundCopyAllowed(permit, owningJob))
                                         copyStatus = "Copying file " + (index + 1) +
                                             "/" + pending.size + ": " + bytes +
                                             " bytes written. Originals untouched."
@@ -858,6 +884,7 @@ private fun DeveloperPreview(
                 verified++
                 verifiedBytes += receipt.bytesWritten
             }
+            if (copyPermit !== permit) return@launch
             copyStatus = if (failure == null) {
                 "Copy verified: " + verified + "/" + pending.size +
                     " files (" + verifiedBytes +
@@ -876,8 +903,13 @@ private fun DeveloperPreview(
                     " files independently verified. " + detail +
                     " Original sources were not deleted."
             }
-            copyPermit = null
-            copyBusy = false
+            } finally {
+                permit.set(false)
+                if (copyPermit === permit) {
+                    copyPermit = null
+                    copyBusy = false
+                }
+            }
         }
     }
 
