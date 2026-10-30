@@ -151,6 +151,29 @@ class RenamePreviewUiSmokeTest {
         rule.onNodeWithText("Proposed changes:", substring = true).assertDoesNotExist()
     }
 
+    @Test fun cleanupPreviewPreservesMeaningfulTagsAndNeverEnablesApply() {
+        val observed = SftpBrowsePage(listOf(
+            SftpRemoteEntry("photo ()  (copy).jpg", false, 37, null),
+            SftpRemoteEntry("Episode (2019)  [1080p].mkv", false, 850, null)
+        ), truncated = false)
+        rule.setContent {
+            MaterialTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    RemoteRenamePreviewCard("synthetic-session", "/cleanup", observed, true)
+                }
+            }
+        }
+        rule.onNodeWithText("Select all").performClick()
+        rule.onNodeWithText("Clean up").performScrollTo().performClick()
+        rule.onNodeWithText("Proposed changes: 2", substring = true)
+            .performScrollTo().assertExists()
+        rule.onNodeWithTag("rename-preview-results").performScrollToIndex(0)
+        rule.onNodeWithText("→ Episode (2019) [1080p].mkv").assertExists()
+        rule.onNodeWithTag("rename-preview-results").performScrollToIndex(1)
+        rule.onNodeWithText("→ photo.jpg").assertExists()
+        rule.onNodeWithText("Apply disabled.", substring = true).assertExists()
+    }
+
     @Test fun incompleteDirectoryCannotBecomeRenamePreview() {
         val truncated = SftpBrowsePage(
             listOf(SftpRemoteEntry("partial.mkv", false, 99, null)),
