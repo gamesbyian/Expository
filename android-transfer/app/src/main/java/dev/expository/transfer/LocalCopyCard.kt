@@ -201,7 +201,7 @@ fun LocalCopyCard(
                     val job = coroutineContext[Job]
                     var lastProgress = 0L
                     service.copy(sourceUri, targetUri,
-                        continueRequested = { permit.get() && job?.isActive == true },
+                        continueRequested = { foregroundCopyAllowed(permit, job) },
                         onProgress = { bytes ->
                             if (bytes - lastProgress >= 1024L * 1024L) {
                                 lastProgress = bytes

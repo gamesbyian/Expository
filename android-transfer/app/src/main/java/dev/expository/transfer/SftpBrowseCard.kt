@@ -71,6 +71,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -78,6 +79,11 @@ import kotlin.coroutines.coroutineContext
  * outlive the composing screen, so their result must never silently adopt a
  * newly connected server, folder, or selected remote file.
  */
+/** Late same-session folder responses must never supersede newer navigation. */
+internal fun ownsSftpBrowseCompletion(
+    requestGeneration: Long, latestGeneration: Long, sameSession: Boolean
+): Boolean = sameSession && requestGeneration == latestGeneration
+
 /** Review is tied to the exact authenticated destination and selected SAF child. */
 internal data class PeerUploadReview(
     val sources: List<LocalPaneUploadSource>,
@@ -152,6 +158,7 @@ internal fun SftpBrowseCard(
     var newFolderName by remember { mutableStateOf("") }
     var page by remember { mutableStateOf<SftpBrowsePage?>(null) }
     var browseLimit by remember { mutableStateOf(SftpBrowseBounds.INITIAL) }
+    val browseGeneration = remember { AtomicLong(0L) }
     var fileFilter by remember { mutableStateOf("") }
     var sortMode by remember { mutableStateOf(SftpFolderSort.NAME) }
     var descending by remember { mutableStateOf(false) }
@@ -808,13 +815,15 @@ internal fun SftpBrowseCard(
         val live = session ?: return
         val limit = runCatching { SftpBrowseBounds.requireValid(requestedLimit) }
             .getOrNull() ?: return
+        val generation = browseGeneration.incrementAndGet()
         busy = true
         status = "Loading remote directory…"
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching { live.browse(next, maxEntries = limit) }
             }
-            if (session === live) {
+            if (ownsSftpBrowseCompletion(generation, browseGeneration.get(),
+                session === live)) {
                 result.onSuccess {
                     if (folder != next) fileFilter = ""
                     folder = next
@@ -840,8 +849,8 @@ internal fun SftpBrowseCard(
                 }.onFailure {
                     status = "Unable to browse. Server permission, connection or listing may have changed."
                 }
+                busy = false // Only the winning request owns the busy state.
             }
-            busy = false
         }
     }
 

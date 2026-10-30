@@ -77,6 +77,10 @@ object ForegroundCopyEngine {
                     while (true) {
                         if (!continueRequested()) throw InterruptedException()
                         val count = input.read(buffer)
+                        // A provider read can block while the user stops the
+                        // operation. Recheck AFTER it returns, before sending
+                        // even one further byte to the destination.
+                        if (!continueRequested()) throw InterruptedException()
                         if (count == -1) break
                         if (count == 0) {
                             if (++emptyReadStreak >= MAX_CONSECUTIVE_EMPTY_READS)
@@ -98,6 +102,7 @@ object ForegroundCopyEngine {
                             // in-flight journal remains reviewable, not hidden.
                         }
                     }
+                    if (!continueRequested()) throw InterruptedException()
                     output.flush()
                 }
             }
@@ -105,6 +110,10 @@ object ForegroundCopyEngine {
             return result(if (destinationAttempted) CopyProof.UNCERTAIN else CopyProof.BLOCKED,
                 transferred, if (destinationAttempted) "PARTIAL_OR_UNCERTAIN_WRITE" else "STREAM_OPEN_FAILED")
         }
+        // A stop during the final source close must not turn into green
+        // verification (nor into an apparent clean preflight rejection).
+        if (!runCatching { continueRequested() }.getOrDefault(false))
+            return result(CopyProof.UNCERTAIN, transferred, "STOPPED_AFTER_WRITE_REVIEW")
         // Output close ACK alone is not destination proof. Source digest stays
         // local to this invocation; no file names or raw bytes enter receipts.
         val verifyStream = try { streams.openDestinationReadBack() }
@@ -123,6 +132,9 @@ object ForegroundCopyEngine {
                 while (true) {
                     if (!continueRequested()) throw InterruptedException()
                     val count = input.read(buffer)
+                    // Readback can block too. A cancellation while waiting for
+                    // its final EOF may not be reported as BYTES_VERIFIED.
+                    if (!continueRequested()) throw InterruptedException()
                     if (count == -1) break
                     if (count == 0) {
                         if (++emptyReadStreak >= MAX_CONSECUTIVE_EMPTY_READS)
@@ -137,6 +149,8 @@ object ForegroundCopyEngine {
         } catch (_: Exception) {
             return result(CopyProof.UNCERTAIN, transferred, "VERIFY_READ_FAILED")
         }
+        if (!runCatching { continueRequested() }.getOrDefault(false))
+            return result(CopyProof.UNCERTAIN, transferred, "STOPPED_DURING_VERIFICATION")
         return if (verifiedBytes == transferred &&
             destinationDigest.digest().contentEquals(sourceDigest.digest())) {
             result(CopyProof.BYTES_VERIFIED, transferred, "READBACK_SHA256_MATCH")

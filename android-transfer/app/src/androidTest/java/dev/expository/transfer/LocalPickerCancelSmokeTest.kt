@@ -44,6 +44,18 @@ class LocalPickerCancelSmokeTest {
         org.junit.Assert.assertFalse(activeLocalCopyProgress(
             first, first, busy = true))
         assertTrue(activeLocalCopyProgress(later, later, busy = true))
+        val owningJob = kotlinx.coroutines.Job()
+        assertTrue(foregroundCopyAllowed(later, owningJob))
+        owningJob.cancel()
+        org.junit.Assert.assertFalse(foregroundCopyAllowed(later, owningJob))
+        org.junit.Assert.assertFalse(foregroundCopyAllowed(
+            java.util.concurrent.atomic.AtomicBoolean(false), kotlinx.coroutines.Job()))
+        org.junit.Assert.assertFalse(foregroundCopyAllowed(later, null))
+        assertTrue(ownsSftpBrowseCompletion(4L, 4L, sameSession = true))
+        org.junit.Assert.assertFalse(ownsSftpBrowseCompletion(
+            3L, 4L, sameSession = true))
+        org.junit.Assert.assertFalse(ownsSftpBrowseCompletion(
+            4L, 4L, sameSession = false))
     }
 
     @Test fun openSystemPickerAndCancelLeavesCopyDisabled() {
