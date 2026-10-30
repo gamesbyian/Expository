@@ -4,6 +4,10 @@
 **Second-pass decisions and executable proof:** [product hardening](SECOND-PASS-DECISIONS.md) and [N01–N26 test matrix](TEST-AND-EVIDENCE-MATRIX.md). These refine picker cardinality, copy-vs-move proof, Drive handoff claims and renamer acceptance without claiming implementation.\n\n**Read before work:** [Critical review](CRITICAL-REVIEW.md), [Product proposal](PRODUCT-PROPOSAL.md), [Workspace and renamer](WORKSPACE-AND-BULK-RENAME.md), [Google Drive contract](GOOGLE-DRIVE-INTEGRATION.md).  
 **Do not confuse with:** the public Expository GitHub repository explorer. That product is read-only and must remain so.
 
+## 2026-10-30 audit-directed engineering constraints
+
+This older architectural design is subordinate to the current [independent architecture audit](ARCHITECTURE-AUDIT-2026-10-29.md), [adopted architecture decisions](ARCHITECTURE-DECISIONS.md), [operation/recovery UX](OPERATION-STATE-UX.md) and [dependency-first plan](EXECUTION-DEPENDENCIES.md) for **implementation sequencing and recovery journal format**, without weakening its product requirements. The current neutral `DurableAttemptJournal` stores only digest/state/attempt ID; user-reconcilable source/destination information must be separately protected and indexed. First characterize coroutine cancellation, then add a small shared command/approval/receipt coordinator and migrate a proven SAF route; do not perform broad UI refactoring or duplicate per-endpoint orchestration to increase feature count. CI Android compile/lint and standard `check` must become truthful gates; E4 and E5 remain distinct acceptance proofs.
+
 ## North-star workflows, all release critical
 
 1. Remote file → **Save to device** using Android `ACTION_CREATE_DOCUMENT`; remote selection → **Save folder** using permitted document tree. No broad all-files grant.

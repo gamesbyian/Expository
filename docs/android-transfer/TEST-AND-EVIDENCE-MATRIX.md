@@ -1,6 +1,6 @@
 # Expository Transfer: implementation proof matrix, v2
 
-**Status:** October 23, 2026 **scenario design** (IDs N01–N26), not the ranked workboard (IDs W01–W09). Android Transfer code and developer debug APK now exist; exact scoped results are in the [release ledger](RELEASE-READINESS.md), and next runnable tasks in the [native workboard](../../android-transfer/WORK-QUEUE.md). Read [second-pass decisions](SECOND-PASS-DECISIONS.md) and [hardened plan](HARDENED-IMPLEMENTATION-PLAN.md) first.
+**Status:** original October 23, 2026 scenario design (N01–N26), supplemented October 30 with audit scenarios N27–N34; these are specifications, **not run results**, and are not the ranked W-queue. Android Transfer code and developer debug APK now exist; exact scoped results are in the [release ledger](RELEASE-READINESS.md), and next runnable tasks in the [native workboard](../../android-transfer/WORK-QUEUE.md). Read [second-pass decisions](SECOND-PASS-DECISIONS.md) and [hardened plan](HARDENED-IMPLEMENTATION-PLAN.md) first.
 
 | ID | Scenario | Required observed result | Evidence gate |
 |---|---|---|---|
@@ -31,11 +31,28 @@
 | N25 | App protocol host key/certificate changed | Writes block pending explicit trust review; no insecure silent fallback | G3 fixture |
 | N26 | Attempt Move folder into own descendant | Block in pure planner and immediately before mutation | G1/G4 |
 
+## Audit-added negative/lifecycle scenarios (N27–N34, **not run**)
+
+| ID | Scenario | Required observed result | Evidence gate |
+|---|---|---|---|
+| N27 | Cancel blocking recursive Copy during source read, destination create/write and readback; rotate/dispose Activity | Job+permit stop promptly, unknown mutation stays UNCERTAIN, no post-cancel unapproved write | E1 slow streams + E2 provider |
+| N28 | Same SFTP session receives out-of-order two listings and stale picker; disconnect/reconnect | Old response never clears newer busy/status/authority; no overlap | E1 reducer + E2 UI |
+| N29 | Genuine two separately OS-picked DocumentsProvider trees, nested+empty folder Copy | Both real OS grants, confirmed source hierarchy, preserved originals, independent SHA-256 destination readback | E2 exact head #292, later E4 |
+| N30 | Kill/restart at journal states and corrupt protected recovery index | Failed index is REVIEW_REQUIRED, not empty; user can locate target after fresh auth; no duplicate mutation | E1 faults + E2 process kill |
+| N31 | Multi-item batch where item N verified and N+1 loses create ACK | Only verified N counts advance; no auto replay; fresh listing before each subsequent item | E1 queue + E2 provider |
+| N32 | Deliberately broken Compose compile, failing JavaExec assertion and artifact checksum | Default scoped CI/Gradle check rejects failures; unrelated core-only lane remains lean | PR/CI and clean toolchain |
+| N33 | UI mode/picker/grant/auth on rotation, share and process death, large type/TalkBack | Display state may restore; authorization never resurrected; same reviewed plan in Single/Dual/keyboard/drag | E1/E2, device E4 |
+| N34 | Real provider create race, 2k listings, 10k rename rows, signed production beta | No false no-replace/verification; measured performance only; E4 third-party and E5 independent signing | E2/E3/E4/E5 |
+
+See [audit](ARCHITECTURE-AUDIT-2026-10-29.md) and [operation UX](OPERATION-STATE-UX.md). Each scenario requires exact code SHA, fixture, failure phase, expected/actual outcome, and PASS/FAIL/NOT RUN. No acceptance is implied by this specification.
+
 ## Minimal journal acceptance
 
-Every action persists its `planDigest`, source/destination identities, adapter capability fingerprint, conflict decision, write-ahead mutation state, attempted operation ID, observed result, verification proof/evidence, and any uncertainty explanation. No UI completion state can be greener than the journal's proof grade.
+**Two distinct records are required, not one overstuffed journal.** The existing minimal app-private `DurableAttemptJournal` persists the immutable `planDigest`, attempt ID and monotonic mutation/proof state atomically. It deliberately contains **no filename, path, account, token, URI grant or endpoint**. Keep this neutral no-secret format until a separately tested migration is approved.
 
-For folder operations, the journal stores a manifest of discovered children and records whether recursion is incomplete. For remote rename cycles it records temporary staging paths **before** issuing mutating commands. For Google resumable sessions, store only necessary protected session state, never a bearer-like upload URL in telemetry or public logs.
+A **separate, encrypted/authenticated, bounded, versioned recovery index** associates opaque attempt IDs with the minimal protected source/destination locator, adapter capability fingerprint, conflict choice, necessary folder manifest/index, step-level evidence and user-readable reconciliation context. It must be independently access-controlled, have an explicit retention/corruption policy, and never retain passwords or uncontrolled bearer URLs. For rename cycles, record needed temporary staging identities **before** mutation in this protected recovery context; for Drive resumable sessions, store only carefully scoped, protected session state. No secrets, raw names or tokens in public logs/CI/artifacts. A recovery index read failure means REVIEW_REQUIRED, not empty/success.
+
+No UI completion state can exceed the durable verified evidence. Ambiguous mutations remain UNCERTAIN; never silently retry, delete source or call a Sharesheet a Drive Save. See [architecture ADR](ARCHITECTURE-DECISIONS.md).
 
 ## Evidence hierarchy and execution contract
 
