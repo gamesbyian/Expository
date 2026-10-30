@@ -32,8 +32,10 @@ data class SafDocumentObservation(
  * results and exist only in memory. No broad file permissions or cloud OAuth.
  */
 class SafSingleDocumentCopy(private val resolver: ContentResolver,
-    private val storageForPlan: ((String) -> AtomicAttemptStorage)? = null,
-    private val recordRecoveryContext: ((String, String, String, String) -> Unit)? = null
+    private val recordRecoveryContext: ((String, String, String, String) -> Unit)? = null,
+    // Keep the existing single-argument storage factory as the LAST lambda
+    // parameter: older callers may use SafSingleDocumentCopy(resolver) { ... }.
+    private val storageForPlan: ((String) -> AtomicAttemptStorage)? = null
 ) {
     /** Hide provider-supplied controls and bound labels before encrypted storage. */
     private fun reviewLabel(label: String): String =
