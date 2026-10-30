@@ -1,6 +1,6 @@
 # Expository Transfer: current product and execution contract
 
-**Reconciled:** 29 October 2026 UTC. **Status:** binding product requirements, not evidence that the requirements have shipped. Read [native work queue](../../android-transfer/WORK-QUEUE.md) for *next tasks* and [release ledger](RELEASE-READINESS.md) for *verified gate evidence*. This document supersedes conflicting **future-intent/status summaries**, not the detailed protocol, security, rename, Drive and UX acceptance specifications linked below.
+**Reconciled:** 29 October 2026 UTC. **Status:** binding product requirements, not evidence that the requirements have shipped. Read [the dependency-first execution plan](EXECUTION-DEPENDENCIES.md) for sequencing and architecture, [native work queue](../../android-transfer/WORK-QUEUE.md) for *next tasks* and [release ledger](RELEASE-READINESS.md) for *verified gate evidence*. This document supersedes conflicting **future-intent/status summaries**, not the detailed protocol, security, rename, Drive and UX acceptance specifications linked below.
 
 ## Product identity and scope
 
