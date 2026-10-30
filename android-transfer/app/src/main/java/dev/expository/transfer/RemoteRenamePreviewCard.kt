@@ -27,6 +27,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.expository.transfer.planner.*
 import dev.expository.transfer.sftp.SftpBrowseBounds
+import dev.expository.transfer.sftp.SftpBrowsePresentation
+import dev.expository.transfer.sftp.SftpFolderSort
 import dev.expository.transfer.sftp.SftpBrowsePage
 import java.security.MessageDigest
 
@@ -37,7 +39,9 @@ import java.security.MessageDigest
  */
 @Composable
 fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
-    page: SftpBrowsePage, enabled: Boolean
+    page: SftpBrowsePage, enabled: Boolean,
+    sortMode: SftpFolderSort = SftpFolderSort.NAME,
+    descending: Boolean = false
 ) {
     var selected by remember(folder, opaqueSessionId) { mutableStateOf<Set<String>>(emptySet()) }
     var mode by remember(folder) { mutableStateOf("Replace") }
@@ -54,7 +58,12 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
     val numberWidth = numberWidthText.toIntOrNull()?.takeIf { it in 1..12 }
     val numberingInvalid = mode == "Number" &&
         (numberStart == null || numberStep == null || numberWidth == null)
-    val rows = remember(folder, page) { page.entries.sortedBy { it.name } }
+    // Numbering order must mirror the user's actual remote browser order.
+    // The full original provider listing remains the immutable collision proof;
+    // filtering is deliberately absent, so hidden siblings cannot disappear.
+    val rows = remember(folder, page, sortMode, descending) {
+        SftpBrowsePresentation.rows(page.entries, "", sortMode, descending)
+    }
     val complete = !page.truncated && rows.size <= SftpBrowseBounds.MAX
     val selectedExisting = rows.filter { it.name in selected }.map { it.name }
     val blocked = !complete || opaqueSessionId.isBlank()
