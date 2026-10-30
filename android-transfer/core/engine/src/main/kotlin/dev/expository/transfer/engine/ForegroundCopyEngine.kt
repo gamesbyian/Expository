@@ -149,8 +149,11 @@ object ForegroundCopyEngine {
         } catch (_: Exception) {
             return result(CopyProof.UNCERTAIN, transferred, "VERIFY_READ_FAILED")
         }
-        if (!runCatching { continueRequested() }.getOrDefault(false))
-            return result(CopyProof.UNCERTAIN, transferred, "STOPPED_DURING_VERIFICATION")
+        // Once EOF and readback close both completed successfully, the byte
+        // proof belongs to this item even if Stop arrived during close().
+        // The batch coordinator checks Stop BEFORE opening the next item.
+        // Checking here would erase a valid SHA-256 proof and misclassify
+        // a fully committed item as UNCERTAIN (see VerifiedCopyBatchSuite).
         return if (verifiedBytes == transferred &&
             destinationDigest.digest().contentEquals(sourceDigest.digest())) {
             result(CopyProof.BYTES_VERIFIED, transferred, "READBACK_SHA256_MATCH")
