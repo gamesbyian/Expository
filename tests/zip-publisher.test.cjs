@@ -64,6 +64,10 @@ test('tree collision check catches files, directories and case folding',()=>{
  const collisions=api.findCollisions(files,{truncated:false,tree:[{path:'new.TXT',type:'blob'},{path:'A',type:'blob'}]});
  assert.deepEqual([...collisions],['NEW.txt','A/file.txt']);
  assert.throws(()=>api.findCollisions(files,{truncated:true,tree:[]}),/incomplete/);
+ const descendant=api.resolveEntries([file('assets')],'');
+ assert.deepEqual([...api.findCollisions(descendant,{truncated:false,
+  tree:[{path:'assets/images/logo.png',type:'blob'}]})],['assets'],
+  'An incoming blob cannot replace a parent folder of existing files');
  const unicode=api.resolveEntries([file('e\u0301/new.txt')],'');
  assert.deepEqual([...api.findCollisions(unicode,{truncated:false,
   tree:[{path:'é',type:'blob'}]})],['e\u0301/new.txt'],
