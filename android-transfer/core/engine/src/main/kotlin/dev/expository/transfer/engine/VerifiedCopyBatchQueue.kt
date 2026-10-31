@@ -84,9 +84,13 @@ object VerifiedCopyBatchQueue {
                 // artificial UNCERTAIN write or abort subsequent verified jobs.
                 onProgress = { bytes ->
                     try { onItemProgress(index, bytes) }
-                    catch (_: Exception) {
-                        // Ignore only recoverable display faults; never
-                        // suppress an OutOfMemoryError or similar VM failure.
+                    catch (cancelled: java.util.concurrent.CancellationException) {
+                        // A canceled owning UI scope must not start the next
+                        // item even if the continue predicate remains true.
+                        throw cancelled
+                    } catch (_: Exception) {
+                        // Ignore recoverable display faults only; fatal errors
+                        // and cancellation must stop further mutations.
                     }
                 }
             )
