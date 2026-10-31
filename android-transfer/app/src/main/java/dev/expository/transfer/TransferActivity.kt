@@ -449,8 +449,18 @@ private fun DeveloperPreview(
 
     fun launchSingleFolderCopy(folder: TreeEntry) {
         val state = treeSingle
-        val uri = state.treeUri ?: return
-        val parent = state.folderId ?: return
+        // Surface a truthful refusal instead of silently losing a tap when
+        // an asynchronous tree regrant or lifecycle transition cleared the
+        // observed source just before this action was delivered.
+        copyStatus = "Checking the selected folder for a safe Copy request…"
+        val uri = state.treeUri ?: run {
+            copyStatus = "Folder Copy unavailable: source tree permission was lost. Pick it again."
+            return
+        }
+        val parent = state.folderId ?: run {
+            copyStatus = "Folder Copy unavailable: source folder root was lost. Pick it again."
+            return
+        }
         if (copyBusy || remoteRelayBusy || pendingSingleFolderPicker != null ||
             singleFolderReview != null || recursiveProposal != null) {
             copyStatus = "Folder Copy unavailable: another operation or review is active. Stop or finish it first."
