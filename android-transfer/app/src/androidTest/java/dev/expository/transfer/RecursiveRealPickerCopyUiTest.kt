@@ -9,6 +9,9 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -256,7 +259,13 @@ class RecursiveRealPickerCopyUiTest {
         val targetLaunchMonitor = instrumentation.addMonitor(
             android.content.IntentFilter(android.content.Intent.ACTION_OPEN_DOCUMENT_TREE),
             null, false)
-        compose.onNodeWithTag("saf-recursive-copy-shows").performClick()
+        // LocalTreePane sits inside the outer workspace LazyColumn and owns
+        // a second inner LazyColumn. A semantics-only click can target a node
+        // without delivering a real touch to its placed Android host. The
+        // actual button must be scrolled into view and touched, as in the
+        // already accepted WorkspaceNavigationUiTest Android flow.
+        compose.onNodeWithTag("saf-recursive-copy-shows").performScrollTo()
+        compose.onNodeWithTag("saf-recursive-copy-shows").performTouchInput { click() }
         compose.waitForIdle()
         // A monitor's hit count is inspected AFTER the OS picker observation:
         // Compose ActivityResult dispatch can occur after performClick returns.
