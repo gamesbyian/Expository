@@ -44,6 +44,8 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import dev.expository.transfer.saf.SafNewFolder
 import dev.expository.transfer.saf.SafFolderCreateRequest
 import dev.expository.transfer.saf.SafFolderCreatePreflight
@@ -245,7 +247,9 @@ internal fun LocalTreePane(
     onLoadMore: () -> Unit,
     onSelect: (TreeEntry) -> Unit,
     /** Only an explicit directory request; no implicit provider write. */
-    onCopyFolder: ((TreeEntry) -> Unit)? = null
+    onCopyFolder: ((TreeEntry) -> Unit)? = null,
+    /** Single-view Copy status next to the folder selector, not off-screen. */
+    copyFeedback: String? = null
 ) {
     var fileFilter by remember(state.treeUri, state.folderId) { mutableStateOf("") }
     var sortMode by remember { mutableStateOf(LocalTreeSort.NAME) }
@@ -264,6 +268,12 @@ internal fun LocalTreePane(
         Column(Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("$label · $sourceLabel", style = MaterialTheme.typography.titleMedium)
+            if (copyFeedback != null) {
+                Text(copyFeedback,
+                    modifier = Modifier.testTag("saf-single-copy-feedback")
+                        .semantics { liveRegion = LiveRegionMode.Polite },
+                    style = MaterialTheme.typography.bodySmall)
+            }
             // FlowRow wraps at narrow widths and large font sizes rather than
             // squeezing Refresh outside the available touchable viewport.
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),

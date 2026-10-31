@@ -221,7 +221,7 @@ private fun DeveloperPreview(
     var copyBusy by remember { mutableStateOf(false) }
     var remoteRelayBusy by remember { mutableStateOf(false) }
     var copyStatus by remember { mutableStateOf(
-        "Choose two device folders and select 1–12 source files for reviewed Copy.") }
+        "Choose a source and destination; Copy needs explicit review.") }
     var copyPermit by remember { mutableStateOf<AtomicBoolean?>(null) }
 
     fun tree(which: WorkspacePane): LocalTreeBrowseState = when (which) {
@@ -457,17 +457,32 @@ private fun DeveloperPreview(
 
     fun launchSingleFolderCopy(folder: TreeEntry) {
         val state = treeSingle
-        val uri = state.treeUri ?: return
-        val parent = state.folderId ?: return
+        // Surface a truthful refusal instead of silently losing a tap when
+        // an asynchronous tree regrant or lifecycle transition cleared the
+        // observed source just before this action was delivered.
+        copyStatus = "Checking the selected folder for a safe Copy request…"
+        val uri = state.treeUri ?: run {
+            copyStatus = "Folder Copy unavailable: source tree permission was lost. Pick it again."
+            return
+        }
+        val parent = state.folderId ?: run {
+            copyStatus = "Folder Copy unavailable: source folder root was lost. Pick it again."
+            return
+        }
         if (copyBusy || remoteRelayBusy || pendingSingleFolderPicker != null ||
-            singleFolderReview != null || recursiveProposal != null ||
-            model.view != WorkspaceView.SINGLE ||
-            !model.single.endpoint.isSaf ||
+            singleFolderReview != null || recursiveProposal != null) {
+            copyStatus = "Folder Copy unavailable: another operation or review is active. Stop or finish it first."
+            return
+        }
+        if (model.view != WorkspaceView.SINGLE || !model.single.endpoint.isSaf ||
             state.loading || !state.complete || state.crumbs.size != 1 ||
             !folder.directory || state.entries.count {
                 it.documentId == folder.documentId && it.title == folder.title &&
                     it.directory
-            } != 1) return
+            } != 1) {
+            copyStatus = "Folder Copy unavailable: source folder selection is stale or incomplete. Refresh and choose again."
+            return
+        }
         val witness = SingleFolderTargetPickerWitness(
             uri, parent, folder.documentId, folder.title,
             state.generation, currentShareEpoch(), model.single.endpoint
@@ -1110,7 +1125,8 @@ private fun DeveloperPreview(
                             },
                             onCopyFolder = if (treeSingle.complete && !copyBusy &&
                                 !remoteRelayBusy && treeSingle.crumbs.size == 1)
-                                ::launchSingleFolderCopy else null
+                                ::launchSingleFolderCopy else null,
+                            copyFeedback = copyStatus
                         )
                         if (singleFolderReview != null) {
                             val reviewed = requireNotNull(singleFolderReview)
@@ -1151,7 +1167,6 @@ private fun DeveloperPreview(
                                 Text("Stop folder Copy")
                             }
                         }
-                        Text(copyStatus, style = MaterialTheme.typography.bodySmall)
                         val pickedId = treeSingle.selected.singleOrNull()
                         val source = if (pickedId != null && treeSingle.treeUri != null)
                             runCatching {
