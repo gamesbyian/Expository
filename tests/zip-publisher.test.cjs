@@ -51,7 +51,10 @@ test('writer rejects path traversal, unsafe Windows targets and ambiguous duplic
  assert.throws(()=>api.resolveEntries([file('assets'),file('assets/logo.png')],''),/path conflict/);
  assert.throws(()=>api.resolveEntries([file('ASSETS'),file('assets/logo.png')],''),/path conflict/);
  assert.throws(()=>api.resolveEntries([file('é'),file('e\u0301/child.png')],''),/path conflict/);
- assert.throws(()=>api.resolveEntries([file('nested/file.txt')],'a'.repeat(4090)),/too long/);
+ const validLongPrefix=Array(16).fill('a'.repeat(255)).join('/');
+ assert.equal(api.cleanPath(validLongPrefix),true,'Every 255-byte component is valid');
+ assert.throws(()=>api.resolveEntries([file('nested/file.txt')],validLongPrefix),/too long/,
+  'Only the combined prefix and member crosses the full 4096-byte limit');
  assert.throws(()=>api.resolveEntries([file('safe.txt')],'../bad'),/unsafe/);
  assert.throws(()=>api.resolveEntries([file('safe.txt')],'test/'),/unsafe/);
  assert.equal(api.branchPath('feature/zip-import'),true);
