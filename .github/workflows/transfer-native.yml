@@ -72,7 +72,7 @@ jobs:
           run=false
           while IFS= read -r file; do
             case "$file" in
-              android-transfer/app/*|android-transfer/core/*|android-transfer/adapter/*|android-transfer/settings.gradle.kts|android-transfer/gradle.properties|.github/workflows/transfer-native.yml)
+              android-transfer/app/*|android-transfer/core/*|android-transfer/adapter/*|android-transfer/build.gradle.kts|android-transfer/settings.gradle.kts|android-transfer/gradle.properties|.github/workflows/transfer-native.yml)
                 run=true
                 ;;
             esac
