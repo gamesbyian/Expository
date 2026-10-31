@@ -131,10 +131,20 @@ class SftpSameServerMove(private val storageForPlan: (String) -> AtomicAttemptSt
         // Independently list the complete old parent and observe new file.
         val moved = try {
             val oldListing = session.completeMutationListing(sourceParent)
+            val newListing = session.completeMutationListing(destFolder)
             val newStat = session.statFile(destination)
-            oldListing.truncated.not() &&
+            // stat(path) alone cannot prove the selected parent still owns
+            // that child: require one matching entry in a fresh, complete
+            // destination listing as well as source absence and unchanged
+            // metadata. Any ambiguous/moved/renamed result stays UNCERTAIN.
+            val child = newListing.entries.singleOrNull {
+                it.name == name && !it.directory
+            }
+            !oldListing.truncated && !newListing.truncated &&
                 oldListing.entries.none { it.name == name } &&
+                child != null && child.revision == newStat.revision &&
                 newStat.size == original.size &&
+                child.size == original.size &&
                 original.modifiedMillis != null &&
                 newStat.modifiedMillis == original.modifiedMillis
         } catch (_: Exception) { false }
