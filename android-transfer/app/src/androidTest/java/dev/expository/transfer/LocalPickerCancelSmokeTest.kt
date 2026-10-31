@@ -78,6 +78,23 @@ class LocalPickerCancelSmokeTest {
     @Test fun frozenLocalCopyApprovalIsSingleSourceAndEpochBound() =
         assertFrozenPickerCopyWitness()
 
+    @Test fun pickerSourceRequiresActualScopedReadGrantAndContentIdentity() {
+        val good = android.net.Uri.parse("content://synthetic.source/document/item-1")
+        val missingAuthority = android.net.Uri.parse("content:///document/item-1")
+        val unscoped = android.net.Uri.parse("file:///sdcard/private.txt")
+        val read = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+        val write = android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        assertTrue(readablePickedSource(good, read))
+        assertTrue(readablePickedSource(good, read or write))
+        org.junit.Assert.assertFalse(readablePickedSource(good, write))
+        org.junit.Assert.assertFalse(readablePickedSource(good, 0))
+        org.junit.Assert.assertFalse(readablePickedSource(unscoped, read))
+        org.junit.Assert.assertFalse(readablePickedSource(missingAuthority, read))
+        org.junit.Assert.assertFalse(readablePickedSource(null, read))
+        // No picker grant alone can turn an arbitrary URI into a selected
+        // source; the production callback also waits for fresh observation.
+    }
+
     @Test fun openSystemPickerAndCancelLeavesCopyDisabled() {
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         compose.onNodeWithText("Choose file").performClick()
