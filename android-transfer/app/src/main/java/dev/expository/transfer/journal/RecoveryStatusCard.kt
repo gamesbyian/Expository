@@ -48,9 +48,10 @@ fun RecoveryStatusCard() {
                     unreadable -> "Transfer history could not be safely inspected. No retry or cleanup was attempted."
                     status == null -> "Checking private operation journal…"
                     status!!.requiresReview > 0 || status!!.damagedOrUnrecognized > 0 ->
-                        "${status!!.requiresReview} prior attempt(s) uncertain, " +
+                        "${status!!.requiresReview} attempt(s) requiring inspection, " +
                         "${status!!.damagedOrUnrecognized} damaged/unrecognized. " +
-                        "Inspect the destination manually before retrying. Sources are never deleted."
+                        "An attempt may still be active; status refresh never stops or retries it. " +
+                        "Inspect unresolved destinations before any new approval. Sources are never deleted."
                     else -> "No uncertain prior journaled attempts found. " +
                         "${status!!.verifiedReceipts} verified journaled step(s), " +
                         "${status!!.notStarted} blocked/not-started attempt(s)."
