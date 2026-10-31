@@ -84,6 +84,47 @@ class RecursiveFolderCopyOfferUiTest {
             .assertTextContains("Folder Copy unavailable", substring = true)
     }
 
+    @Test fun rootWithExactlyOneObservedFolderOffersVisibleCopyWithoutNestedScroll() {
+        var requested = 0
+        compose.setContent {
+            MaterialTheme {
+                LocalTreePane(
+                    label = "Scoped root", state = state(false),
+                    scroll = rememberLazyListState(),
+                    onPick = {}, onOpen = {}, onParent = {}, onAncestor = {},
+                    onRefresh = {}, onLoadMore = {}, onSelect = {},
+                    onCopyFolder = { selected ->
+                        assertEquals("folder", selected.documentId)
+                        requested++
+                    })
+            }
+        }
+        compose.onNodeWithTag("saf-root-copy-matching-folder").assertExists()
+            .performClick()
+        assertEquals(1, requested)
+    }
+
+    @Test fun multipleRootDirectoriesCannotChooseAnImplicitCopySource() {
+        val many = state(false).copy(entries = listOf(
+            TreeEntry("folder-a", "Shows", true, null),
+            TreeEntry("folder-b", "Films", true, null)
+        ))
+        compose.setContent {
+            MaterialTheme {
+                LocalTreePane(
+                    label = "Scoped root", state = many,
+                    scroll = rememberLazyListState(),
+                    onPick = {}, onOpen = {}, onParent = {}, onAncestor = {},
+                    onRefresh = {}, onLoadMore = {}, onSelect = {},
+                    onCopyFolder = {})
+            }
+        }
+        compose.onNodeWithTag("saf-root-copy-matching-folder").assertDoesNotExist()
+        // Each folder still retains its independent explicit Copy action.
+        compose.onNodeWithTag("saf-recursive-copy-folder-a").assertExists()
+        compose.onNodeWithTag("saf-recursive-copy-folder-b").assertExists()
+    }
+
     @Test fun nestedDirectoryCannotPretendToBePickedRoot() {
         compose.setContent {
             MaterialTheme {
