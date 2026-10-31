@@ -13,6 +13,8 @@ import dev.expository.transfer.sftp.SecureSftp
 import dev.expository.transfer.sftp.SftpHostKeyPin
 import dev.expository.transfer.sftp.SftpRelayCopy
 import dev.expository.transfer.sftp.SftpRelayRequest
+import dev.expository.transfer.sftp.SftpSameServerMove
+import dev.expository.transfer.sftp.ServerMoveProof
 import dev.expository.transfer.sftp.SftpTarget
 import dev.expository.transfer.sftp.SafToSftpUpload
 import java.util.UUID
@@ -118,6 +120,75 @@ class SftpRelayAndroidLoopbackTest {
         }
     }
 
+
+    @Test fun pinnedSameServerMoveRequiresBothCompleteParentObservations() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        SftpAndroidCompat.configurePrivateHome(context.applicationContext.filesDir.toPath())
+        val root = Files.createTempDirectory(context.cacheDir.toPath(), "move-e2-")
+        val original = ByteArray(70_111) { ((it * 17 + 31) and 255).toByte() }
+        val foreign = ByteArray(17_131) { ((it * 7 + 3) and 255).toByte() }
+        Files.write(root.resolve("move-me.bin"), original)
+        Files.createDirectory(root.resolve("destination"))
+        Files.write(root.resolve("destination/occupied.bin"), foreign)
+        Files.write(root.resolve("occupied.bin"), original)
+        val key = KeyPairGenerator.getInstance("RSA").apply {
+            initialize(2048)
+        }.generateKeyPair()
+        val server = SshServer.setUpDefaultServer().apply {
+            host = "127.0.0.1"
+            port = 0
+            keyPairProvider = KeyPairProvider.wrap(key)
+            passwordAuthenticator = PasswordAuthenticator { user, password, _ ->
+                user == "test-account" && password == "disposable-test-secret"
+            }
+            subsystemFactories = listOf(SftpSubsystemFactory.Builder().build())
+            fileSystemFactory = VirtualFileSystemFactory(root)
+        }
+        try {
+            server.start()
+            val target = SftpTarget("127.0.0.1", server.port,
+                SftpHostKeyPin(SftpHostKeyPin.observed(key.public)))
+            SecureSftp.connect(target, "test-account",
+                "disposable-test-secret".toCharArray()).use { session ->
+                val mover = SftpSameServerMove { digest ->
+                    AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                }
+                val sessionId = "move-e2-" + UUID.randomUUID().toString()
+                val refused = mover.move(session, sessionId,
+                    "/occupied.bin", "/destination")
+                assertEquals(ServerMoveProof.BLOCKED, refused.proof)
+                assertArrayEquals(original, Files.readAllBytes(root.resolve("occupied.bin")))
+                assertArrayEquals(foreign, Files.readAllBytes(
+                    root.resolve("destination/occupied.bin")))
+                val moved = mover.move(session, sessionId, "/move-me.bin", "/destination")
+                assertEquals("Move receipt: " + moved.reason,
+                    ServerMoveProof.MOVE_OBSERVED, moved.proof)
+                assertFalse(Files.exists(root.resolve("move-me.bin")))
+                assertArrayEquals(original, Files.readAllBytes(
+                    root.resolve("destination/move-me.bin")))
+                val listing = session.completeMutationListing("/destination")
+                assertEquals(1, listing.entries.count {
+                    it.name == "move-me.bin" && !it.directory
+                })
+                assertEquals(JournalState.VERIFIED, DurableAttemptJournal(
+                    AndroidAtomicAttemptStorage(context.applicationContext, moved.planDigest)
+                ).recoverAfterRestart()?.state)
+                // No replay: the original file is gone and the destination is
+                // occupied. Neither old nor unrelated bytes can be overwritten.
+                val again = mover.move(session, sessionId, "/move-me.bin", "/destination")
+                assertEquals(ServerMoveProof.BLOCKED, again.proof)
+                assertArrayEquals(foreign, Files.readAllBytes(
+                    root.resolve("destination/occupied.bin")))
+            }
+        } finally {
+            runCatching { server.stop(true) }
+            Files.walk(root).use { paths ->
+                paths.sorted(Comparator.reverseOrder()).forEach {
+                    runCatching { Files.deleteIfExists(it) }
+                }
+            }
+        }
+    }
 
     /**
      * E2: two-file source selection, explicit destination-bound batch approval,
