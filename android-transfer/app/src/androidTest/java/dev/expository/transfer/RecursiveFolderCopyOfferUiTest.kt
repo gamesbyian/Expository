@@ -77,11 +77,11 @@ class RecursiveFolderCopyOfferUiTest {
             }
         }
         compose.onNodeWithTag("saf-single-copy-feedback")
-            .assertTextContains("Copy needs explicit review")
+            .assertTextContains("Copy needs explicit review", substring = true)
         compose.onNodeWithTag("saf-recursive-copy-folder")
             .assertIsEnabled().performClick()
         compose.onNodeWithTag("saf-single-copy-feedback")
-            .assertTextContains("Folder Copy unavailable")
+            .assertTextContains("Folder Copy unavailable", substring = true)
     }
 
     @Test fun nestedDirectoryCannotPretendToBePickedRoot() {
