@@ -61,7 +61,7 @@ function cleanPath(name){
  return typeof name==='string'&&name.length>0&&name.length<=4096&&!/[\x00-\x1f\x7f\\]/.test(name)&&!name.startsWith('/')&&!name.split('/').some(part=>!part||part==='.'||part==='..'||part.length>255||part.toLowerCase()==='.git'||/[<>:"|?*]/.test(part)||/[. ]$/.test(part)||/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(part));
 }
 function repoPath(repo){return /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repo)&&repo.length<260&&!repo.split('/').includes('..')}
-function branchPath(base){return typeof base==='string'&&base.length<256&&base.length>0&&!base.startsWith('/')&&!base.endsWith('/')&&!base.includes('..')&&!base.includes('//')&&!/[\x00-\x20\x7f~^:?*[\]\\]/.test(base)&&!base.split('/').some(x=>!x||x.endsWith('.lock')||x.startsWith('.')||x.endsWith('.'))}
+function branchPath(base){return typeof base==='string'&&base.length<256&&base.length>0&&!base.startsWith('/')&&!base.endsWith('/')&&!base.includes('..')&&!base.includes('//')&&!base.includes('@{')&&!/[\x00-\x20\x7f~^:?*[\]\\]/.test(base)&&!base.split('/').some(x=>!x||x.endsWith('.lock')||x.startsWith('.')||x.endsWith('.'))}
 function sizeText(bytes){return (bytes/1024/1024).toFixed(2)+' MB'}
 // GitHub paths can contain canonically equivalent Unicode spellings. Refuse
 // ambiguous uploads across case and NFC even on case-sensitive repositories.
@@ -94,7 +94,13 @@ function resolveEntries(source,prefix){
 function findCollisions(entries,tree){
  if(!tree||!Array.isArray(tree.tree)||tree.truncated)throw Error('GitHub tree coverage is incomplete; refusing to publish.');
  const occupied=new Map();
- for(const e of tree.tree)if(e&&typeof e.path==='string')occupied.set(pathKey(e.path),e.type);
+ for(const e of tree.tree){
+  if(!e||typeof e.path!=='string'||!['blob','tree','commit'].includes(e.type))
+   throw Error('GitHub tree contains unrecognized entries; refusing to publish.');
+  const key=pathKey(e.path);
+  if(occupied.has(key))throw Error('GitHub tree has ambiguous case/Unicode identities; refusing to publish.');
+  occupied.set(key,e.type)
+ }
  const blockers=[];
  for(const entry of entries){
   const full=pathKey(entry.path),parts=full.split('/');
