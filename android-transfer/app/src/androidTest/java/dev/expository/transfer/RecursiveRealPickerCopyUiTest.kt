@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -293,6 +294,12 @@ class RecursiveRealPickerCopyUiTest {
         // actual button must be scrolled into view and touched, as in the
         // already accepted WorkspaceNavigationUiTest Android flow.
         compose.onNodeWithTag("saf-recursive-copy-shows").performScrollTo()
+        compose.waitForIdle()
+        // The observed source must still expose an *enabled* folder action;
+        // a temporarily disabled button has no valid UI-launch evidence.
+        // Do not infer that a no-op performClick proved Android ignored an
+        // intent if the actual source action was not eligible.
+        compose.onNodeWithTag("saf-recursive-copy-shows").assertIsEnabled()
         // The nested folder list lives inside the workspace LazyColumn. A
         // coordinate tap can land outside the visible viewport even when
         // performScrollTo finds the inner LazyColumn item. The real semantic
