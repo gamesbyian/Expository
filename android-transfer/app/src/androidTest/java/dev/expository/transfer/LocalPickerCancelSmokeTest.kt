@@ -57,6 +57,7 @@ class LocalPickerCancelSmokeTest {
         org.junit.Assert.assertFalse(ownsSftpBrowseCompletion(
             4L, 4L, sameSession = false))
         assertFrozenPickerCopyWitness()
+        assertPickerGrantPolicy()
     }
 
     // Kept in a helper so the narrowly allowlisted ownership test can cover
@@ -78,7 +79,7 @@ class LocalPickerCancelSmokeTest {
     @Test fun frozenLocalCopyApprovalIsSingleSourceAndEpochBound() =
         assertFrozenPickerCopyWitness()
 
-    @Test fun pickerSourceRequiresActualScopedReadGrantAndContentIdentity() {
+    private fun assertPickerGrantPolicy() {
         val good = android.net.Uri.parse("content://synthetic.source/document/item-1")
         val missingAuthority = android.net.Uri.parse("content:///document/item-1")
         val unscoped = android.net.Uri.parse("file:///sdcard/private.txt")
@@ -94,6 +95,9 @@ class LocalPickerCancelSmokeTest {
         // No picker grant alone can turn an arbitrary URI into a selected
         // source; the production callback also waits for fresh observation.
     }
+
+    @Test fun pickerSourceRequiresActualScopedReadGrantAndContentIdentity() =
+        assertPickerGrantPolicy()
 
     @Test fun openSystemPickerAndCancelLeavesCopyDisabled() {
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
