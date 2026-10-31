@@ -94,18 +94,26 @@ function resolveEntries(source,prefix){
 }
 function findCollisions(entries,tree){
  if(!tree||!Array.isArray(tree.tree)||tree.truncated)throw Error('GitHub tree coverage is incomplete; refusing to publish.');
- const occupied=new Map();
+ const occupied=new Map(),existingAncestors=new Set();
  for(const e of tree.tree){
   if(!e||typeof e.path!=='string'||!['blob','tree','commit'].includes(e.type))
    throw Error('GitHub tree contains unrecognized entries; refusing to publish.');
   const key=pathKey(e.path);
   if(occupied.has(key))throw Error('GitHub tree has ambiguous case/Unicode identities; refusing to publish.');
-  occupied.set(key,e.type)
+  occupied.set(key,e.type);
+  // Index all existing path prefixes once. Avoid a 100-file × 100k-entry
+  // full-tree scan on mobile when looking for an existing child of a proposed
+  // blob. Exact, ancestor and descendant collisions stay fail-closed.
+  let boundary=key.indexOf('/');
+  while(boundary!==-1){
+   existingAncestors.add(key.slice(0,boundary));
+   boundary=key.indexOf('/',boundary+1)
+  }
  }
  const blockers=[];
  for(const entry of entries){
   const full=pathKey(entry.path),parts=full.split('/');
-  if(occupied.has(full)||[...occupied.keys()].some(p=>p.startsWith(full+'/')))blockers.push(entry.path);
+  if(occupied.has(full)||existingAncestors.has(full))blockers.push(entry.path);
   for(let n=1;n<parts.length;n++){const ancestor=parts.slice(0,n).join('/');if(occupied.get(ancestor)==='blob'||occupied.get(ancestor)==='commit'){blockers.push(entry.path);break}}
  }
  return [...new Set(blockers)];
