@@ -221,7 +221,7 @@ private fun DeveloperPreview(
     var copyBusy by remember { mutableStateOf(false) }
     var remoteRelayBusy by remember { mutableStateOf(false) }
     var copyStatus by remember { mutableStateOf(
-        "Choose two device folders and select 1–12 source files for reviewed Copy.") }
+        "Choose a source and destination; Copy needs explicit review.") }
     var copyPermit by remember { mutableStateOf<AtomicBoolean?>(null) }
 
     fun tree(which: WorkspacePane): LocalTreeBrowseState = when (which) {
