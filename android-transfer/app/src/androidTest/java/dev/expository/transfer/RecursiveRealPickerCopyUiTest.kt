@@ -7,6 +7,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithText
@@ -295,6 +297,13 @@ class RecursiveRealPickerCopyUiTest {
         // actual button must be scrolled into view and touched, as in the
         // already accepted WorkspaceNavigationUiTest Android flow.
         compose.onNodeWithTag("saf-recursive-copy-shows").performScrollTo()
+        // performScrollTo targets only the *nearest* LazyColumn (the inner
+        // 300dp folder list). The containing workspace is independently
+        // scrollable, and can still clip the entire inner control. Scroll
+        // its known outer owner to the exact descendant, then prove the
+        // interactive button is actually displayed, not merely composed.
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("saf-recursive-copy-shows"))
         compose.waitForIdle()
         // The observed source must still expose an *enabled* folder action;
         // a temporarily disabled button has no valid UI-launch evidence.
