@@ -8,7 +8,7 @@ assert.ok(start>=0&&end>start,'Publisher pure logic boundary present');
 const SHA={head:'a'.repeat(40),tree:'b'.repeat(40),blob:'c'.repeat(40),newTree:'d'.repeat(40),commit:'e'.repeat(40)};
 function setup(respond){
  const calls=[];
- const context=vm.createContext({Blob,URL,FileReader:class{
+ const context=vm.createContext({Blob,URL,TextEncoder,FileReader:class{
   readAsDataURL(blob){blob.arrayBuffer().then(bytes=>{this.result='data:application/octet-stream;base64,'+Buffer.from(bytes).toString('base64');this.onload()}).catch(e=>this.onerror?.(e))}
  },fetch:async(url,options)=>{
   calls.push({url,options,body:options.body?JSON.parse(options.body):undefined});
@@ -39,6 +39,11 @@ test('writer rejects path traversal, unsafe Windows targets and ambiguous duplic
  for(const p of ['../escape.txt','/absolute','dir//file.txt','CON.txt','folder/bad?.txt'])assert.equal(api.cleanPath(p),false,p);
  assert.equal(api.cleanPath('folder/ok.png'),true);
  assert.equal(api.cleanPath('.git/config'),false,'Git administration metadata cannot be published');
+ assert.equal(api.cleanPath('é'.repeat(127)),true,'254 UTF-8 bytes is safe');
+ assert.equal(api.cleanPath('é'.repeat(128)),false,'256 UTF-8 bytes exceeds one Git segment');
+ const longUtf8Path=Array(16).fill('é'.repeat(120)).join('/');
+ assert.equal(api.cleanPath(longUtf8Path),true,'under 4096 UTF-8 bytes can fit');
+ assert.equal(api.cleanPath(longUtf8Path+'/'+longUtf8Path),false,'combined multibyte path exceeds total bound');
  assert.throws(()=>api.resolveEntries([file('foo.png'),file('FOO.PNG')],''),/duplicate/);
  assert.throws(()=>api.resolveEntries([file('é.png'),file('e\u0301.PNG')],''),/duplicate/);
  assert.throws(()=>api.resolveEntries([file('assets'),file('assets/logo.png')],''),/path conflict/);
