@@ -98,10 +98,30 @@ class RecursiveRealPickerCopyUiTest {
             }
             return false
         }
-        // Follow CTS's container_roots/roots_list structure if present.
-        // Some builds use different IDs, so retain the labeled-widget fallback.
-        // Neither branch guesses toolbar icons nor performs edge-gesture Back.
+        // First prefer an already visible, exact synthetic root. Some API35
+        // DocumentsUI builds do not expose CTS's internal roots_list IDs, and
+        // scrolling an unidentified container can dismiss the OS picker.
+        // Use only a real visible system widget, never injected URI authority.
         var selectedRoot = false
+        val alreadyVisible = if (pickerForeground())
+            device.wait(Until.findObject(By.text(title)), 2_000L) else null
+        if (alreadyVisible != null && pickerForeground()) {
+            try {
+                alreadyVisible.click()
+                selectedRoot = true
+            } catch (_: StaleObjectException) { }
+        }
+        if (!selectedRoot && pickerForeground() && openLabeledRoots()) {
+            val newlyVisible = device.wait(Until.findObject(By.text(title)), 6_000L)
+            if (newlyVisible != null && pickerForeground()) {
+                try {
+                    newlyVisible.click()
+                    selectedRoot = true
+                } catch (_: StaleObjectException) { }
+            }
+        }
+        // CTS's roots_list remains a bounded fallback only if this exact,
+        // genuinely exposed system navigation surface is found.
         var rootsListFound = false
         for (pkg in packages) {
             if (selectedRoot) break
