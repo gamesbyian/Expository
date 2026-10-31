@@ -10,6 +10,7 @@ import java.io.File
 import java.util.UUID
 import dev.expository.transfer.journal.AttemptRecoveryIndex
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -307,7 +308,17 @@ class RecoveryIndexFailurePolicyTest {
                 dev.expository.transfer.journal.AndroidAtomicAttemptStorage(isolated, digest))
             journal.confirm(digest)
             journal.beginAttempt(digest, "isolated_test_attempt_01")
+            val activeBytes = File(sandbox, "transfer_attempt_" + digest).readBytes()
+            // A status refresh is allowed WHILE an actual writer is active.
+            // It may report a review-required step, but must not downgrade
+            // the durable journal and prevent a legitimate ACK/verification.
+            val active = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, active.requiresReview)
+            assertEquals(JournalState.ATTEMPT_RECORDED, journal.current()?.state)
+            assertArrayEquals(activeBytes,
+                File(sandbox, "transfer_attempt_" + digest).readBytes())
             journal.markWriteAcknowledged(digest)
+            val acknowledgedBytes = File(sandbox, "transfer_attempt_" + digest).readBytes()
             val record = AttemptRecoveryIndex.recover(isolated)
             assertEquals(1, record.requiresReview)
             assertEquals(0, record.verifiedReceipts)
@@ -316,10 +327,17 @@ class RecoveryIndexFailurePolicyTest {
             assertEquals("123456789abc", record.reviewReferences.single().opaqueSuffix)
             assertEquals("Requires independent destination review",
                 record.reviewReferences.single().status)
-            assertEquals(JournalState.UNCERTAIN, journal.current()?.state)
+            assertEquals(JournalState.WRITE_ACKNOWLEDGED, journal.current()?.state)
+            assertArrayEquals(acknowledgedBytes,
+                File(sandbox, "transfer_attempt_" + digest).readBytes())
             assertTrue(runCatching {
                 journal.beginAttempt(digest, "should_not_replay_01")
             }.isFailure)
+            journal.markVerified(digest)
+            val finished = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(0, finished.requiresReview)
+            assertEquals(1, finished.verifiedReceipts)
+            assertEquals(JournalState.VERIFIED, journal.current()?.state)
             // The indexed summary cannot expose any underlying destination,
             // user name, plaintext file path, source bytes, or account details.
             assertTrue(record.reviewReferences.single().opaqueSuffix.matches(
