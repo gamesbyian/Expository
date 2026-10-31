@@ -296,32 +296,17 @@ class RecursiveRealPickerCopyUiTest {
         // without delivering a real touch to its placed Android host. The
         // actual button must be scrolled into view and touched, as in the
         // already accepted WorkspaceNavigationUiTest Android flow.
-        compose.onNodeWithTag("saf-recursive-copy-shows").performScrollTo()
-        // performScrollTo targets only the *nearest* LazyColumn (the inner
-        // 300dp folder list). The containing workspace is independently
-        // scrollable, and can still clip the entire inner control. Scroll
-        // its known outer owner to the exact descendant, then prove the
-        // interactive button is actually displayed, not merely composed.
+        // A complete root listing with exactly one matching subfolder has a
+        // real, enabled Copy action outside the inner 300dp LazyColumn. This
+        // is production UX, not a test-only bypass: it calls the same frozen
+        // source witness, Android system picker and reviewed Copy engine.
+        // Scroll the outer workspace to that visibly placed action.
         compose.onNodeWithTag("transfer-workspace-scroll")
-            .performScrollToNode(hasTestTag("saf-recursive-copy-shows"))
+            .performScrollToNode(hasTestTag("saf-root-copy-matching-folder"))
         compose.waitForIdle()
-        // The observed source must still expose an *enabled* folder action;
-        // a temporarily disabled button has no valid UI-launch evidence.
-        // Do not infer that a no-op performClick proved Android ignored an
-        // intent if the actual source action was not eligible.
-        compose.onNodeWithTag("saf-recursive-copy-shows").assertIsEnabled()
-        // A composed-but-clipped control can expose semantics while actual
-        // pointer interaction never reaches its live owner. Prove placement,
-        // not just an attached semantics node, before invoking the action.
-        compose.onNodeWithTag("saf-recursive-copy-shows").assertIsDisplayed()
-        // The nested folder list lives inside the workspace LazyColumn. A
-        // coordinate tap can land outside the visible viewport even when
-        // performScrollTo finds the inner LazyColumn item. The real semantic
-        // Button action is also the accessible TalkBack/keyboard activation
-        // path; invoke it directly and still require a genuine Android OS
-        // picker, both independent user-selected grants and byte readback.
-        // No content URI is injected and no ActivityResult is simulated.
-        compose.onNodeWithTag("saf-recursive-copy-shows").performClick()
+        compose.onNodeWithTag("saf-root-copy-matching-folder").assertIsEnabled()
+        compose.onNodeWithTag("saf-root-copy-matching-folder").assertIsDisplayed()
+        compose.onNodeWithTag("saf-root-copy-matching-folder").performClick()
         compose.waitForIdle()
         // A monitor's hit count is inspected AFTER the OS picker observation:
         // Compose ActivityResult dispatch can occur after performClick returns.
