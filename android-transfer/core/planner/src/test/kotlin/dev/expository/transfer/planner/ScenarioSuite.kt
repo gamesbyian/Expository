@@ -403,8 +403,12 @@ object ScenarioSuite {
             check(!existingLower.executable && existingLower.steps.isEmpty())
             val mixed = RenamePlanner.preview(fixture,
                 RenameRecipe(listOf(RenameEdit.ChangeCase(false))), NOW)
-            check(mixed.executable && mixed.changed == 1 && mixed.steps.size == 1)
-            check(mixed.steps.single().itemId == "Already.txt")
+            // Case-only changes still require temporary staging on a
+            // case-insensitive or unknown filesystem. Preserve both steps.
+            check(mixed.executable && mixed.changed == 1 && mixed.steps.size == 2)
+            check(mixed.steps.map { it.phase } ==
+                listOf(RenamePhase.STAGE, RenamePhase.COMMIT))
+            check(mixed.steps.all { it.itemId == "Already.txt" })
             assertStepsPreserveAll(fixture, mixed)
         }
         test("10k actual rename steps use stable order and no overwrite") {
