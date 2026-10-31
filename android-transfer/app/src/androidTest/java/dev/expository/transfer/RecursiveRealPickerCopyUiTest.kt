@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
@@ -254,12 +255,12 @@ class RecursiveRealPickerCopyUiTest {
         val targetLaunchMonitor = instrumentation.addMonitor(
             android.content.IntentFilter(android.content.Intent.ACTION_OPEN_DOCUMENT_TREE),
             null, false)
-        val targetIntentObserved = try {
-            compose.onNodeWithTag("saf-recursive-copy-shows").performClick()
-            instrumentation.checkMonitorHit(targetLaunchMonitor, 1)
-        } finally {
-            instrumentation.removeMonitor(targetLaunchMonitor)
-        }
+        compose.onNodeWithTag("saf-recursive-copy-shows").performClick()
+        compose.waitForIdle()
+        // A monitor's hit count is inspected AFTER the OS picker observation:
+        // Compose ActivityResult dispatch can occur after performClick returns.
+        // Removing the monitor immediately can create false "not launched"
+        // diagnostics. The monitor never blocks or grants an Android URI.
         // A second OS activity MUST actually be foreground before any
         // swipe or UiAutomator root navigation. Otherwise a left-edge
         // gesture can back-navigate and destroy Expository itself.
@@ -280,6 +281,8 @@ class RecursiveRealPickerCopyUiTest {
                 device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 3_000L)
         val resumedSystemPicker = systemPickerResumed()
         val targetPickerVisible = accessiblePicker || resumedSystemPicker
+        val targetIntentObserved = instrumentation.checkMonitorHit(targetLaunchMonitor, 1)
+        instrumentation.removeMonitor(targetLaunchMonitor)
         if (!targetPickerVisible) {
             // Only inspect synthetic, fixed application status categories.
             // Never dump a real user's picker hierarchy, path or account.
@@ -332,9 +335,35 @@ class RecursiveRealPickerCopyUiTest {
                     substring = true).fetchSemanticsNodes().isNotEmpty() -> "PREFLIGHT_BLOCKED"
                 else -> "STATUS_NOT_IN_COMPOSE_SEMANTICS"
             }
+            // Only derive fixed allowlisted statuses from the app's tagged
+            // Compose feedback. Never echo a provider tree, filename, URI,
+            // account or unfiltered display text to public CI logs.
+            val feedbackNodes = compose.onAllNodesWithTag(
+                "saf-single-copy-feedback").fetchSemanticsNodes()
+            val feedbackText = feedbackNodes.firstOrNull()?.config
+                ?.getOrNull(SemanticsProperties.Text)
+                ?.joinToString(" ") { it.text }.orEmpty()
+            val feedbackCategory = when {
+                feedbackText.startsWith("Choose a different, writable Android provider") ->
+                    "LAUNCH_WITNESS_ARMED"
+                feedbackText.startsWith("Folder Copy unavailable: another") ->
+                    "BUSY"
+                feedbackText.startsWith("Folder Copy unavailable: source") ->
+                    "STALE_SOURCE"
+                feedbackText.startsWith("Android destination picker unavailable") ->
+                    "LAUNCH_THROWN"
+                feedbackText.startsWith("Folder destination picker canceled") ->
+                    "RETURNED_CANCELED"
+                feedbackText.startsWith("Folder opened.") -> "SOURCE_READY"
+                feedbackText.startsWith("Choose a source and destination") -> "INITIAL"
+                feedbackText.isBlank() -> "ABSENT_OR_EMPTY"
+                else -> "OTHER_STATUS"
+            }
             val pickerControls = listOf("Use this folder", "USE THIS FOLDER",
                 "Recent", "Downloads").any { device.hasObject(By.text(it)) }
             throw AssertionError("SYSTEM_DESTINATION_PICKER_NOT_FOREGROUND_" + reason +
+                "_FEEDBACK_" + feedbackCategory +
+                "_FEEDBACK_NODES_" + feedbackNodes.size +
                 "_ACCESSIBILITY_ATTACHED_" + accessiblePicker +
                 "_ACTIVITY_RESUMED_" + resumedSystemPicker +
                 "_FOREGROUND_" + foregroundKind +
