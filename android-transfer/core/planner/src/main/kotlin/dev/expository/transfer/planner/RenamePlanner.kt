@@ -166,6 +166,11 @@ object RenamePlanner {
             preview += RenamePreviewRow(item.id, item.name, target)
             if (!renameValid(target)) blockers += "INVALID_DESTINATION_NAME"
         }
+        // A request which changes no names has no mutation to approve.
+        // Do not let a future Apply executor mark an empty step sequence as
+        // a successful on-server rename or consume a durable attempt token.
+        if (preview.isNotEmpty() && preview.all { it.original == it.proposed })
+            blockers += "NO_RENAME_CHANGES"
         val targets = preview.map { nameKey(it.proposed) }
         if (targets.size != targets.toSet().size) blockers += "DUPLICATE_DESTINATIONS"
         val selected = frozen.selectionOrder.toSet()
