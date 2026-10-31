@@ -55,7 +55,7 @@ internal fun shareEpochUnchanged(launched: Long, current: Long): Boolean =
 
 /** Picker results are untrusted input until scoped READ and metadata succeed. */
 internal fun readablePickedSource(uri: Uri?, resultFlags: Int): Boolean =
-    uri?.scheme == "content" && !uri.authority.isNullOrBlank() &&
+    uri != null && uri.scheme == "content" && !uri.authority.isNullOrBlank() &&
         resultFlags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0
 
 /** One immutable permission context replaces three independently mutable picker fields.
