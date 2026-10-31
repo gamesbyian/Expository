@@ -13,6 +13,8 @@ function setup(respond){
  },fetch:async(url,options)=>{
   calls.push({url,options,body:options.body?JSON.parse(options.body):undefined});
   const answer=respond?respond(url,options,calls):undefined;
+  // Synthetic response codes, never a real account/token/network endpoint.
+  if(answer?.__httpStatus)return {ok:false,status:answer.__httpStatus};
   return {ok:true,json:async()=>answer??mock(url,options)};
  }});
  vm.runInContext(source.slice(start,end)+'\nglobalThis.published={cleanPath,repoPath,branchPath,resolveEntries,findCollisions,inspectDestination,writeNewBranch};',context);
@@ -102,6 +104,33 @@ test('new branch writer refuses a moved base branch before mutating Git objects'
  const plan=await api.inspectDestination('secret','owner/repo','main','',[file('new.txt')]);
  await assert.rejects(api.writeNewBranch(plan,'secret','expository/zip-demo',()=>{}),/changed/);
  assert.equal(calls.filter(x=>x.options.method==='POST').length,0);
+});
+
+test('401/403/429 preflight failures never issue any GitHub writes or echo credentials',async()=>{
+ for(const statusCode of [401,403,429]){
+  const {api,calls}=setup((url,options)=>{
+   if(options.method==='GET'&&url.includes('/git/ref/heads/'))
+    return {__httpStatus:statusCode};
+  });
+  await assert.rejects(api.inspectDestination(
+   'synthetic-sensitive-token','owner/repo','main','',[file('safe.txt')]),
+   error=>error.message.includes('HTTP '+statusCode)&&
+    !error.message.includes('synthetic-sensitive-token'));
+  assert.ok(calls.length>0&&calls.every(x=>x.options.method==='GET'));
+ }
+});
+
+test('upload rate limit after review never creates a Git branch ref',async()=>{
+ const {api,calls}=setup((url,options)=>{
+  if(options.method==='POST'&&url.endsWith('/git/blobs'))
+   return {__httpStatus:429};
+ });
+ const plan=await api.inspectDestination('synthetic-token','owner/repo',
+  'main','nested',[file('new.txt')]);
+ await assert.rejects(api.writeNewBranch(plan,'synthetic-token',
+  'expository/zip-rate-limit',()=>{}),/HTTP 429/);
+ assert.equal(calls.some(x=>x.url.endsWith('/git/refs')&&
+  x.options.method==='POST'),false);
 });
 
 test('read-only explorer passes checked ZIP payload to a nonce-only companion URL',async()=>{
