@@ -42,6 +42,35 @@ object WorkspaceStateSuite {
             state.single.visit(local).select(candidate).scroll(9, 13))
         check(state.copyProposal(WorkspacePane.A, null, NOW) == null)
 
+        // A separately observed destination in permanent Single must produce
+        // exactly the same immutable Copy plan as the identical selected source
+        // in Dual. This is pure planning, not permission to execute or a saved
+        // OS picker result. Neither path implies a Move or a no-replace claim.
+        val reviewedListing = DestinationListing("complete-single-dual", true, emptyList())
+        val selectedSingle = TransferWorkspaceState(single =
+            BrowsePaneState(BrowseEndpoint.LOCAL).visit(local).select(candidate))
+        val comparableDual = TransferWorkspaceState(view = WorkspaceView.DUAL,
+            a = selectedSingle.single,
+            b = BrowsePaneState(BrowseEndpoint.SFTP).visit(sftp))
+        val singlePlan = selectedSingle.singleCopyProposal(sftp, reviewedListing, NOW)
+        val dualPlan = comparableDual.copyProposal(WorkspacePane.A, reviewedListing, NOW)
+        check(singlePlan != null && singlePlan.executable && singlePlan == dualPlan)
+        check(singlePlan.operation == Operation.COPY &&
+            singlePlan.route == TransferRoute.DEVICE_RELAY)
+        check(selectedSingle.singleCopyProposal(sftp, null, NOW)?.executable == false)
+        check(selectedSingle.singleCopyProposal(sftp,
+            DestinationListing("incomplete", false, emptyList()), NOW)?.executable == false)
+        check(selectedSingle.singleCopyProposal(sftp,
+            reviewedListing.copy(siblings = listOf(candidate.name)), NOW)?.executable == false)
+        check(selectedSingle.singleCopyProposal(sftp.copy(revision = "changed"),
+            reviewedListing, NOW) != singlePlan)
+        check(selectedSingle.view(WorkspaceView.DUAL)
+            .singleCopyProposal(sftp, reviewedListing, NOW) == null)
+        check(selectedSingle.update(WorkspacePane.SINGLE,
+            selectedSingle.single.clearSelection())
+            .singleCopyProposal(sftp, reviewedListing, NOW) == null)
+        check(comparableDual.copyProposal(WorkspacePane.B, reviewedListing, NOW) == null)
+
         // SAF-backed document providers can occupy either pane without being
         // misrepresented as an SFTP or Google Drive API session. Grant
         // switching clears authority/selection and preserves planner guards.
