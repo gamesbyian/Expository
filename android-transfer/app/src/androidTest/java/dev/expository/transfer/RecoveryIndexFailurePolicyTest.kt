@@ -37,6 +37,69 @@ class RecoveryIndexFailurePolicyTest {
         assertEquals(emptyList<String>(), AttemptRecoveryIndex.journalDigests(emptyList()))
     }
 
+    @Test fun orphanedEncryptedContextAndMalformedHintsDemandManualInspection() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "orphan-hint-test-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val orphanDigest = "7".repeat(64)
+        val otherDigest = "8".repeat(64)
+        val names = listOf(
+            "transfer_recovery_context_v1_" + orphanDigest,
+            "transfer_recovery_context_v1_" + orphanDigest + ".bak",
+            "transfer_recovery_context_v1_" + orphanDigest + ".new",
+            "transfer_recovery_context_v1_" + otherDigest,
+            "transfer_recovery_context_v1_bad-digest",
+            "unrelated_app_file"
+        )
+        assertEquals(setOf(orphanDigest, otherDigest),
+            AttemptRecoveryIndex.contextDigests(names).toSet())
+        assertEquals(1, AttemptRecoveryIndex.malformedContextCount(names))
+        try {
+            val saved = dev.expository.transfer.journal.ProtectedRecoveryContext(
+                "SAF_PICKER_COPY", "Sensitive synthetic source",
+                "Sensitive synthetic destination", "synthetic.provider")
+            val store = dev.expository.transfer.journal.ProtectedRecoveryContextStore(isolated)
+            store.recordNew(orphanDigest, saved)
+            // A broken hint is counted separately even without a readable
+            // journal; no raw orphan label is displayed or deserialized.
+            File(sandbox, "transfer_recovery_context_v1_bad-digest")
+                .writeText("invalid record")
+            val orphan = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(0, orphan.requiresReview)
+            assertEquals(0, orphan.verifiedReceipts)
+            assertEquals(0, orphan.notStarted)
+            assertEquals(2, orphan.damagedOrUnrecognized)
+            assertEquals(1, orphan.reviewReferences.size)
+            assertEquals(orphanDigest.takeLast(12),
+                orphan.reviewReferences.single().opaqueSuffix)
+            assertEquals(null, orphan.reviewReferences.single().context)
+            assertTrue(orphan.reviewReferences.single().status.contains(
+                "no matching attempt journal"))
+            assertTrue(orphan.reviewReferences.single().contextWarning
+                ?.contains("Do not retry") == true)
+            // A correctly matched, separately journaled hint is not an
+            // orphan. Once an attempt starts, the neutral record governs it.
+            val journal = DurableAttemptJournal(
+                dev.expository.transfer.journal.AndroidAtomicAttemptStorage(
+                    isolated, orphanDigest))
+            journal.confirm(orphanDigest)
+            journal.beginAttempt(orphanDigest, "orphan_review_test")
+            val journaled = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, journaled.requiresReview)
+            assertEquals(1, journaled.damagedOrUnrecognized)
+            assertEquals(saved, journaled.reviewReferences.single().context)
+            assertTrue(runCatching {
+                journal.beginAttempt(orphanDigest, "unapproved_retry")
+            }.isFailure)
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
     @Test fun twoRenameStepsHaveSeparateRealAtomicJournalsAndRestartReview() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val digest = UUID.randomUUID().toString().replace("-", "").repeat(2)
