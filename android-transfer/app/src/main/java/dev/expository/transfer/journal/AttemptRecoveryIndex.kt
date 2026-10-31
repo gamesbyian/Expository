@@ -30,6 +30,8 @@ data class RecoveryCounts(
  */
 object AttemptRecoveryIndex {
     private val filePattern = Regex("transfer_attempt_([0-9a-f]{64})(?:\\.bak|\\.new)?")
+    private val contextPattern =
+        Regex("transfer_recovery_context_v1_([0-9a-f]{64})(?:\\.bak|\\.new)?")
     private const val MAX_REVIEW_REFERENCES = 32
 
     /**
@@ -46,6 +48,20 @@ object AttemptRecoveryIndex {
     /** Other app-private files are irrelevant; malformed journal records are not. */
     internal fun malformedJournalCount(names: List<String>): Int =
         names.count { it.startsWith("transfer_attempt_") && !filePattern.matches(it) }
+
+    /** Encrypted hints are NOT attempts. An unmatched hint is still an
+     * inspection anomaly, never permission to infer an execution or retry.
+     * AtomicFile .bak/.new aliases count as one digest.
+     */
+    internal fun contextDigests(names: List<String>): List<String> =
+        names.mapNotNull { contextPattern.matchEntire(it)?.groupValues?.get(1) }
+            .distinct()
+
+    internal fun malformedContextCount(names: List<String>): Int =
+        names.count {
+            it.startsWith("transfer_recovery_context_v1_") &&
+                !contextPattern.matches(it)
+        }
 
     fun recover(context: Context): RecoveryCounts {
         val names = context.noBackupFilesDir.listFiles()?.map { it.name }
@@ -68,7 +84,21 @@ object AttemptRecoveryIndex {
         var uncertain = 0
         var verified = 0
         var notStarted = 0
-        var damaged = malformedJournalCount(names)
+        var damaged = malformedJournalCount(names) + malformedContextCount(names)
+        val journalKeys = digests.toHashSet()
+        // A protected context is committed before its neutral journal. A crash
+        // between those independent writes must not masquerade as "no history".
+        // Never decrypt orphan metadata or invent a missing write receipt.
+        for (orphan in contextDigests(names).filterNot { it in journalKeys }.sorted()) {
+            damaged++
+            if (details.size < MAX_REVIEW_REFERENCES) {
+                details += RecoveryReviewReference(
+                    orphan.takeLast(12),
+                    "Protected context has no matching attempt journal",
+                    contextWarning = "No attempt record exists. Do not retry or infer destination state from this hint."
+                )
+            }
+        }
 
         for (digest in digests) {
             try {
