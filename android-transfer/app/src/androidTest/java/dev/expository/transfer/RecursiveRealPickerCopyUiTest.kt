@@ -350,6 +350,12 @@ class RecursiveRealPickerCopyUiTest {
             val feedbackCategory = when {
                 feedbackText.startsWith("Choose a different, writable Android provider") ->
                     "LAUNCH_WITNESS_ARMED"
+                feedbackText.startsWith("Checking the selected folder for a safe Copy") ->
+                    "HANDLER_ENTERED"
+                feedbackText.startsWith("Folder Copy unavailable: source tree permission") ->
+                    "MISSING_TREE"
+                feedbackText.startsWith("Folder Copy unavailable: source folder root") ->
+                    "MISSING_ROOT"
                 feedbackText.startsWith("Folder Copy unavailable: another") ->
                     "BUSY"
                 feedbackText.startsWith("Folder Copy unavailable: source") ->
