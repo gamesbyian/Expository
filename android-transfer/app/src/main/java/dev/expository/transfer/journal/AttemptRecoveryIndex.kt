@@ -27,6 +27,13 @@ data class RecoveryCounts(
  * Read-only reconciliation of private attempt records, on startup or refresh. This cannot inspect
  * remote state or SAF provider identity (journal intentionally has no paths),
  * so it NEVER retries, cleans up, deletes or reports a remote transfer verified.
+ *
+ * IMPORTANT: a UI refresh can happen while a Copy/rename is actively writing.
+ * Do NOT invoke DurableAttemptJournal.recoverAfterRestart() here: it mutates
+ * ATTEMPT_RECORDED/WRITE_ACKNOWLEDGED into UNCERTAIN, potentially corrupting
+ * the in-flight writer's valid state machine. Count these records as requiring
+ * inspection without changing their bytes. A real restart may separately
+ * transition them to UNCERTAIN only after ownership/liveness is established.
  */
 object AttemptRecoveryIndex {
     private val filePattern = Regex("transfer_attempt_([0-9a-f]{64})(?:\\.bak|\\.new)?")
@@ -104,7 +111,7 @@ object AttemptRecoveryIndex {
             try {
                 when (DurableAttemptJournal(
                     AndroidAtomicAttemptStorage(context, digest)
-                ).recoverAfterRestart()?.state) {
+                ).current()?.state) {
                     JournalState.ATTEMPT_RECORDED,
                     JournalState.WRITE_ACKNOWLEDGED,
                     JournalState.UNCERTAIN -> {
