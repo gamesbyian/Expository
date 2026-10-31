@@ -58,6 +58,7 @@ class LocalPickerCancelSmokeTest {
             4L, 4L, sameSession = false))
         assertFrozenPickerCopyWitness()
         assertPickerGrantPolicy()
+        assertFrozenDualCopyReviewWitness()
     }
 
     // Kept in a helper so the narrowly allowlisted ownership test can cover
@@ -74,6 +75,90 @@ class LocalPickerCancelSmokeTest {
         org.junit.Assert.assertFalse(approval.stillMatches(source, 42L, 8L))
         org.junit.Assert.assertFalse(FrozenPickerCopyApproval(
             source, -1L, 7L).stillMatches(source, -1L, 7L))
+    }
+
+    private fun assertFrozenDualCopyReviewWitness() {
+        val treeA = android.net.Uri.parse(
+            "content://disposable.provider.a/tree/root")
+        val treeB = android.net.Uri.parse(
+            "content://disposable.provider.b/tree/root")
+        val observedSource = LocalTreeBrowseState(
+            treeUri = treeA, crumbs = listOf(TreeCrumb("root-a", "Picked root")),
+            entries = listOf(TreeEntry("file-1", "Sample.bin", false, 101L)),
+            selected = setOf("file-1"), complete = true, generation = 11L)
+        val observedTarget = LocalTreeBrowseState(
+            treeUri = treeB, crumbs = listOf(TreeCrumb("root-b", "Target root")),
+            entries = emptyList(), complete = true, canWrite = true,
+            generation = 12L)
+        val locA = dev.expository.transfer.planner.LocationRef(
+            dev.expository.transfer.planner.LocationKey(
+                dev.expository.transfer.planner.LocationKind.LOCAL_SAF,
+                "disposable.provider.a", "root-a", "root-a", treeA.toString()),
+            listOf("Picked root"), "listing-a", emptyMap())
+        val locB = dev.expository.transfer.planner.LocationRef(
+            dev.expository.transfer.planner.LocationKey(
+                dev.expository.transfer.planner.LocationKind.LOCAL_SAF,
+                "disposable.provider.b", "root-b", "root-b", treeB.toString()),
+            listOf("Target root"), "listing-b", emptyMap())
+        val picked = dev.expository.transfer.planner.ItemRef(
+            dev.expository.transfer.planner.ItemKey(
+                "disposable.provider.a", "file-1", "rev-file-1"),
+            locA, locA.folder, "Sample.bin",
+            dev.expository.transfer.planner.ItemKind.FILE)
+        val dual = dev.expository.transfer.planner.TransferWorkspaceState(
+            view = dev.expository.transfer.planner.WorkspaceView.DUAL,
+            a = dev.expository.transfer.planner.BrowsePaneState(
+                dev.expository.transfer.planner.BrowseEndpoint.LOCAL)
+                .visit(locA).select(picked),
+            b = dev.expository.transfer.planner.BrowsePaneState(
+                dev.expository.transfer.planner.BrowseEndpoint.LOCAL).visit(locB))
+        val approval = requireNotNull(DualDeviceCopyApproval.capture(
+            dual, dev.expository.transfer.planner.WorkspacePane.A,
+            observedSource, observedTarget, shareEpoch = 31L))
+        assertTrue(approval.stillMatches(dual,
+            observedSource, observedTarget, 31L))
+        fun invalid(source: LocalTreeBrowseState = observedSource,
+            destination: LocalTreeBrowseState = observedTarget,
+            workspace: dev.expository.transfer.planner.TransferWorkspaceState = dual,
+            epoch: Long = 31L) {
+            org.junit.Assert.assertFalse(
+                approval.stillMatches(workspace, source, destination, epoch))
+        }
+        invalid(epoch = 32L)
+        invalid(source = observedSource.copy(selected = emptySet()))
+        invalid(source = observedSource.copy(generation = 13L))
+        invalid(source = observedSource.copy(complete = false))
+        invalid(source = observedSource.copy(entries = emptyList()))
+        invalid(source = observedSource.copy(entries =
+            observedSource.entries + observedSource.entries.first()))
+        invalid(source = observedSource.copy(
+            treeUri = android.net.Uri.parse("content://other.provider/tree/root")))
+        invalid(source = observedSource.copy(
+            crumbs = listOf(TreeCrumb("root-different", "Picked root"))))
+        invalid(destination = observedTarget.copy(canWrite = false))
+        invalid(destination = observedTarget.copy(generation = 15L))
+        invalid(destination = observedTarget.copy(loading = true))
+        invalid(destination = observedTarget.copy(
+            treeUri = android.net.Uri.parse("content://other.target/tree/root")))
+        invalid(workspace = dual.view(
+            dev.expository.transfer.planner.WorkspaceView.SINGLE))
+        invalid(workspace = dual.swap())
+        invalid(workspace = dual.update(
+            dev.expository.transfer.planner.WorkspacePane.A,
+            dual.a.clearSelection()))
+        invalid(workspace = dual.update(
+            dev.expository.transfer.planner.WorkspacePane.B,
+            dual.b.visit(locB.copy(revision = "re-observed-parent"))))
+        invalid(workspace = dual.update(
+            dev.expository.transfer.planner.WorkspacePane.A,
+            dual.a.endpoint(dev.expository.transfer.planner.BrowseEndpoint.FTPS)))
+        org.junit.Assert.assertNull(DualDeviceCopyApproval.capture(
+            dual.view(dev.expository.transfer.planner.WorkspaceView.SINGLE),
+            dev.expository.transfer.planner.WorkspacePane.A,
+            observedSource, observedTarget, 31L))
+        org.junit.Assert.assertNull(DualDeviceCopyApproval.capture(
+            dual, dev.expository.transfer.planner.WorkspacePane.SINGLE,
+            observedSource, observedTarget, 31L))
     }
 
     @Test fun frozenLocalCopyApprovalIsSingleSourceAndEpochBound() =

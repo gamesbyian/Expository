@@ -208,6 +208,9 @@ private fun DeveloperPreview(
     var scrollA by remember { mutableStateOf(LazyListState()) }
     var scrollB by remember { mutableStateOf(LazyListState()) }
     var proposedCopy by remember { mutableStateOf<List<TreeCopyPreflight>?>(null) }
+    var proposedCopyApproval by remember {
+        mutableStateOf<DualDeviceCopyApproval?>(null)
+    }
     var recursiveProposal by remember { mutableStateOf<RecursiveCopyReview?>(null) }
     var pendingSingleFolderPicker by remember {
         mutableStateOf<SingleFolderTargetPickerWitness?>(null)
@@ -603,6 +606,7 @@ private fun DeveloperPreview(
     fun requestDeviceCopy(sourcePane: WorkspacePane) {
         if (copyBusy || proposedCopy != null || recursiveProposal != null ||
             model.view != WorkspaceView.DUAL) return
+        proposedCopyApproval = null
         val from = tree(sourcePane)
         val destinationPane = if (sourcePane == WorkspacePane.A)
             WorkspacePane.B else WorkspacePane.A
@@ -628,9 +632,12 @@ private fun DeveloperPreview(
             TreeCopyRequest(sourceTree, sourceFolder, file.documentId, file.title,
                 destinationTree, destinationFolder, to.canWrite)
         }
-        val sourceGeneration = from.generation
-        val destinationGeneration = to.generation
-        val selectedIds = from.selected.toSet()
+        val approval = DualDeviceCopyApproval.capture(
+            model, sourcePane, from, to, currentShareEpoch()
+        ) ?: run {
+            copyStatus = "Copy blocked: reviewed source or destination authority is stale."
+            return
+        }
         copyBusy = true
         copyStatus = "Checking every selected source, destination create authority and collisions…"
         scope.launch {
@@ -645,24 +652,20 @@ private fun DeveloperPreview(
                     list.all { it != null }
                 }?.filterNotNull()
             }
-            if (tree(sourcePane).generation != sourceGeneration ||
-                tree(destinationPane).generation != destinationGeneration ||
-                tree(sourcePane).treeUri != sourceTree ||
-                tree(destinationPane).treeUri != destinationTree ||
-                tree(sourcePane).folderId != sourceFolder ||
-                tree(destinationPane).folderId != destinationFolder ||
-                tree(sourcePane).selected != selectedIds ||
-                !model.pane(sourcePane).endpoint.isSaf ||
-                !model.pane(destinationPane).endpoint.isSaf) {
+            if (!approval.stillMatches(model, tree(sourcePane),
+                    tree(destinationPane), currentShareEpoch())) {
                 proposedCopy = null
+                proposedCopyApproval = null
                 recursiveProposal = null
-                copyStatus = "Folder or source selection changed during preflight. No file was created."
+                copyStatus = "Folder, grant, share or source selection changed during preflight. No file was created."
             } else if (candidates == null || candidates.size != chosen.size) {
                 proposedCopy = null
+                proposedCopyApproval = null
                 recursiveProposal = null
                 copyStatus = "Batch Copy preflight refused: permissions, incomplete listing, ambiguous name or collision. No file was created."
             } else {
                 proposedCopy = candidates
+                proposedCopyApproval = approval
                 copyStatus = "Review " + candidates.size +
                     " selected files. No destination has been created."
             }
@@ -819,7 +822,20 @@ private fun DeveloperPreview(
     fun confirmDeviceCopy() {
         val pending = proposedCopy ?: return
         if (copyBusy || model.view != WorkspaceView.DUAL || pending.isEmpty()) return
+        val approval = proposedCopyApproval
+        if (approval == null || !approval.stillMatches(model,
+                tree(approval.sourcePane), tree(approval.destinationPane),
+                currentShareEpoch()) || pending.size != approval.selectedIds.size ||
+            pending.map { it.request.sourceDocumentId }.toSet() != approval.selectedIds) {
+            proposedCopy = null
+            proposedCopyApproval = null
+            recursiveProposal = null
+            copyStatus = "Copy review expired after selection, grant, share or pane changed. No write started."
+            return
+        }
+        // Consume the review exactly once before starting journaled I/O.
         proposedCopy = null
+        proposedCopyApproval = null
         recursiveProposal = null
         val permit = AtomicBoolean(true)
         val lastReportNs = AtomicLong(0L)
