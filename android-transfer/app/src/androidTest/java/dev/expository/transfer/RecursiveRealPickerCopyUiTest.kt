@@ -249,12 +249,15 @@ class RecursiveRealPickerCopyUiTest {
             "pm list packages dev.expository.transfer.fixture")
         assertTrue("Disposable picker fixture APK not installed",
             installed.contains("package:dev.expository.transfer.fixture"))
-        // The outer Single workspace is lazy too. A semantics-only click
-        // can target an unplaced element without delivering a real pointer
-        // event to ActivityResult's launcher on this emulator. Use the same
-        // placed touch contract at BOTH source and target picker launches.
+        // The outer Single workspace is also lazy. Use the same accessible
+        // Button activation for both source and destination picker launches,
+        // then independently require the REAL OS DocumentsUI foreground and
+        // user-selected fixture root. A coordinate tap can miss the placed
+        // control during nested scroll/layout, especially on API35 emulators.
+        // This invokes no synthetic ActivityResult and grants no URI.
         compose.onNodeWithText("Choose folder").performScrollTo()
-        compose.onNodeWithText("Choose folder").performTouchInput { click() }
+        compose.onNodeWithText("Choose folder").performClick()
+        compose.waitForIdle()
         chooseFixtureRoot(device, "Expository Source Lab")
         // The OS UI click returns before ActivityResult/URI-grant delivery.
         // Wait until Expository has received and opened its scoped tree.
