@@ -15,6 +15,8 @@ import dev.expository.transfer.sftp.SftpRelayCopy
 import dev.expository.transfer.sftp.SftpRelayRequest
 import dev.expository.transfer.sftp.SftpSameServerMove
 import dev.expository.transfer.sftp.ServerMoveProof
+import dev.expository.transfer.sftp.SftpNewFolder
+import dev.expository.transfer.sftp.FolderCreateProof
 import dev.expository.transfer.sftp.SftpTarget
 import dev.expository.transfer.sftp.SafToSftpUpload
 import java.util.UUID
@@ -120,6 +122,74 @@ class SftpRelayAndroidLoopbackTest {
         }
     }
 
+
+    @Test fun pinnedSftpNewFolderRequiresCompleteParentMembershipAndNoCollisions() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        SftpAndroidCompat.configurePrivateHome(context.applicationContext.filesDir.toPath())
+        val root = Files.createTempDirectory(context.cacheDir.toPath(), "mkdir-e2-")
+        val preserved = ByteArray(17_119) { ((it * 11 + 5) and 255).toByte() }
+        Files.createDirectory(root.resolve("parent"))
+        Files.write(root.resolve("parent/occupied.bin"), preserved)
+        val key = KeyPairGenerator.getInstance("RSA").apply {
+            initialize(2048)
+        }.generateKeyPair()
+        val server = SshServer.setUpDefaultServer().apply {
+            host = "127.0.0.1"
+            port = 0
+            keyPairProvider = KeyPairProvider.wrap(key)
+            passwordAuthenticator = PasswordAuthenticator { user, password, _ ->
+                user == "test-account" && password == "disposable-test-secret"
+            }
+            subsystemFactories = listOf(SftpSubsystemFactory.Builder().build())
+            fileSystemFactory = VirtualFileSystemFactory(root)
+        }
+        try {
+            server.start()
+            val target = SftpTarget("127.0.0.1", server.port,
+                SftpHostKeyPin(SftpHostKeyPin.observed(key.public)))
+            SecureSftp.connect(target, "test-account",
+                "disposable-test-secret".toCharArray()).use { session ->
+                val mkdir = SftpNewFolder { digest ->
+                    AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                }
+                val sessionId = "mkdir-e2-" + UUID.randomUUID()
+                val collision = mkdir.create(session, sessionId,
+                    "/parent", "occupied.bin")
+                assertEquals(FolderCreateProof.BLOCKED, collision.proof)
+                assertArrayEquals(preserved, Files.readAllBytes(
+                    root.resolve("parent/occupied.bin")))
+                val created = mkdir.create(session, sessionId,
+                    "/parent", "new-child")
+                assertEquals("New Folder receipt: " + created.reason,
+                    FolderCreateProof.DIRECTORY_CONFIRMED, created.proof)
+                assertTrue(Files.isDirectory(root.resolve("parent/new-child")))
+                val parent = session.completeMutationListing("/parent")
+                assertEquals(1, parent.entries.count {
+                    it.name == "new-child" && it.directory
+                })
+                assertEquals(JournalState.VERIFIED, DurableAttemptJournal(
+                    AndroidAtomicAttemptStorage(
+                        context.applicationContext, created.planDigest)
+                ).recoverAfterRestart()?.state)
+                // A second invocation cannot mutate or report another success
+                // after a fresh listing observes the new child.
+                val replay = mkdir.create(session, sessionId,
+                    "/parent", "new-child")
+                assertEquals(FolderCreateProof.BLOCKED, replay.proof)
+                assertEquals(1, session.completeMutationListing("/parent")
+                    .entries.count { it.name == "new-child" && it.directory })
+                assertArrayEquals(preserved, Files.readAllBytes(
+                    root.resolve("parent/occupied.bin")))
+            }
+        } finally {
+            runCatching { server.stop(true) }
+            Files.walk(root).use { paths ->
+                paths.sorted(Comparator.reverseOrder()).forEach {
+                    runCatching { Files.deleteIfExists(it) }
+                }
+            }
+        }
+    }
 
     @Test fun pinnedSameServerMoveRequiresBothCompleteParentObservations() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
