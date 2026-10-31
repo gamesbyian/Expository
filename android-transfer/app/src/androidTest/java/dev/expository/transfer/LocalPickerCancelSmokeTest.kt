@@ -90,8 +90,28 @@ class LocalPickerCancelSmokeTest {
             treeUri = treeB, crumbs = listOf(TreeCrumb("root-b", "Target root")),
             entries = emptyList(), complete = true, canWrite = true,
             generation = 12L)
+        val locA = dev.expository.transfer.planner.LocationRef(
+            dev.expository.transfer.planner.LocationKey(
+                dev.expository.transfer.planner.LocationKind.LOCAL_SAF,
+                "disposable.provider.a", "root-a", "root-a", treeA.toString()),
+            listOf("Picked root"), "listing-a", emptyMap())
+        val locB = dev.expository.transfer.planner.LocationRef(
+            dev.expository.transfer.planner.LocationKey(
+                dev.expository.transfer.planner.LocationKind.LOCAL_SAF,
+                "disposable.provider.b", "root-b", "root-b", treeB.toString()),
+            listOf("Target root"), "listing-b", emptyMap())
+        val picked = dev.expository.transfer.planner.ItemRef(
+            dev.expository.transfer.planner.ItemKey(
+                "disposable.provider.a", "file-1", "rev-file-1"),
+            locA, locA.folder, "Sample.bin",
+            dev.expository.transfer.planner.ItemKind.FILE)
         val dual = dev.expository.transfer.planner.TransferWorkspaceState(
-            view = dev.expository.transfer.planner.WorkspaceView.DUAL)
+            view = dev.expository.transfer.planner.WorkspaceView.DUAL,
+            a = dev.expository.transfer.planner.BrowsePaneState(
+                dev.expository.transfer.planner.BrowseEndpoint.LOCAL)
+                .visit(locA).select(picked),
+            b = dev.expository.transfer.planner.BrowsePaneState(
+                dev.expository.transfer.planner.BrowseEndpoint.LOCAL).visit(locB))
         val approval = requireNotNull(DualDeviceCopyApproval.capture(
             dual, dev.expository.transfer.planner.WorkspacePane.A,
             observedSource, observedTarget, shareEpoch = 31L))
@@ -123,6 +143,12 @@ class LocalPickerCancelSmokeTest {
         invalid(workspace = dual.view(
             dev.expository.transfer.planner.WorkspaceView.SINGLE))
         invalid(workspace = dual.swap())
+        invalid(workspace = dual.update(
+            dev.expository.transfer.planner.WorkspacePane.A,
+            dual.a.clearSelection()))
+        invalid(workspace = dual.update(
+            dev.expository.transfer.planner.WorkspacePane.B,
+            dual.b.visit(locB.copy(revision = "re-observed-parent"))))
         invalid(workspace = dual.update(
             dev.expository.transfer.planner.WorkspacePane.A,
             dual.a.endpoint(dev.expository.transfer.planner.BrowseEndpoint.FTPS)))
