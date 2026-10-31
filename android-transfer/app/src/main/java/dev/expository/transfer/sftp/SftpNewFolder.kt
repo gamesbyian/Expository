@@ -101,8 +101,16 @@ class SftpNewFolder(
             return FolderCreateReceipt(initial.digest, FolderCreateProof.UNCERTAIN,
                 "JOURNAL_WRITE_ACK_UNCERTAIN")
         }
-        val directoryObserved = try { session.observeDirectory(initial.absoluteTarget) }
-            catch (_: Exception) { false }
+        val directoryObserved = try {
+            // A successful SFTP MKDIR reply followed by stat(path) does not
+            // establish that the created child still belongs to the reviewed
+            // destination parent. Observe both a fresh COMPLETE parent
+            // listing and the direct directory's type before VERIFIED.
+            val current = session.completeMutationListing(parent)
+            !current.truncated &&
+                current.entries.count { it.name == name && it.directory } == 1 &&
+                session.observeDirectory(initial.absoluteTarget)
+        } catch (_: Exception) { false }
         if (!directoryObserved)
             return FolderCreateReceipt(initial.digest, FolderCreateProof.WRITE_ACKNOWLEDGED,
                 "DIRECTORY_POSTSTAT_UNAVAILABLE")
