@@ -15,6 +15,7 @@
 | E09 | Complete (#15; synthetic reviewed) | Size treemap from already fetched Git blob index, bounded groups with keyboard/touch list, folder/file drill-down, truncation disclosure; mobile visual atlas and actual Pixel acceptance separate |
 | E10 | Complete (#172; unit CI green) | Recursive all-file and all-image gallery scopes, exact-extension and HTML filters, folder grouping and direct containing-folder jumps, path/direction sorting, inert bounded document thumbnails. Browser smoke assertions added but dedicated Chromium/Pixel validation remains outstanding. |
 | E11 | Planned | Truthful per-file last-change/date sorting: opt-in, bounded commit-history enrichment with explicit date coverage, caching in tab memory only and rate-limit/cancellation handling. Do not synthesize timestamps from Git tree contents. |
+| E12 | In progress ([#174](https://github.com/gamesbyian/Expository/issues/174)) | ZIP virtual gallery, bounded extraction/share and isolated new-branch-only GitHub publisher exist. [PR #350](https://github.com/gamesbyian/Expository/pull/350) awaits CI for strict incoming path overlap, NFC/case ambiguities, UTF-8 path bounds, existing-tree fail-closed checks and 401/403/429 refusal tests. Remaining gate: actual Pages endpoint, controlled live-token new-branch/commit proof, Android Chrome/320–412px touch + accessibility, corrupted ZIP and publication interruption. Never call mocked Git POSTs live publisher acceptance; root explorer stays read-only. |
 
 ## Separate Expository Transfer (native Android)
 
