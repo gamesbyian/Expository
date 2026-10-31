@@ -389,6 +389,24 @@ object ScenarioSuite {
                 listOf(file("Example.txt", source)), target,
                 destinationListing = witness.copy(witness = DestinationWitness.COMPLETE_PARENT_LISTING)), NOW))
         }
+        test("no-op rename never claims executable steps or Apply authorization") {
+            val fixture = snapshot(listOf("Already.txt", "lower.txt"))
+            val empty = RenamePlanner.preview(fixture, RenameRecipe(emptyList()), NOW)
+            check(!empty.executable && empty.changed == 0 && empty.steps.isEmpty())
+            check("NO_RENAME_CHANGES" in empty.blockers)
+            val samePrefix = RenamePlanner.preview(fixture,
+                RenameRecipe(listOf(RenameEdit.Prefix(""))), NOW)
+            check(!samePrefix.executable && samePrefix.changed == 0)
+            check("NO_RENAME_CHANGES" in samePrefix.blockers)
+            val existingLower = RenamePlanner.preview(snapshot(listOf("lower.txt")),
+                RenameRecipe(listOf(RenameEdit.ChangeCase(false))), NOW)
+            check(!existingLower.executable && existingLower.steps.isEmpty())
+            val mixed = RenamePlanner.preview(fixture,
+                RenameRecipe(listOf(RenameEdit.ChangeCase(false))), NOW)
+            check(mixed.executable && mixed.changed == 1 && mixed.steps.size == 1)
+            check(mixed.steps.single().itemId == "Already.txt")
+            assertStepsPreserveAll(fixture, mixed)
+        }
         test("10k actual rename steps use stable order and no overwrite") {
             val names = (1..10000).map { "Test" + it.toString().padStart(5, '0') + ".txt" }
             val s = snapshot(names)
