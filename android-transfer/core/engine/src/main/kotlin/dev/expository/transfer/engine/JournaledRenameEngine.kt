@@ -138,6 +138,15 @@ object JournaledRenameEngine {
             } catch (_: Exception) {
                 return stopped("JOURNAL_NOT_COMMITTED_OR_PRIOR_ATTEMPT")
             }
+            // A stop can race a blocking observer or durable journal write.
+            // Once the attempt is recorded, do not invoke a *new* remote
+            // mutation after cancellation. Preserve its one-shot record as
+            // UNCERTAIN instead of silently reusing or resetting the slot.
+            if (!runCatching { continueRequested() }.getOrDefault(false)) {
+                runCatching { journal.markUncertain(approved.digest) }
+                return result(RenameExecutionProof.UNCERTAIN, verified,
+                    "STOPPED_AFTER_DURABLE_ATTEMPT_NO_RENAME_REPLAY")
+            }
             try {
                 endpoint.renameNoReplace(step.from, step.to)
             } catch (_: Exception) {

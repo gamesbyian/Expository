@@ -25,11 +25,14 @@ object JournaledRenameSuite {
     private class MemoryStorage : AtomicAttemptStorage {
         var committed: ByteArray? = null
         var rejectAttempt = false
+        var onAttemptRecorded: (() -> Unit)? = null
         override fun readCommitted(): ByteArray? = committed?.copyOf()
         override fun replaceAtomically(bytes: ByteArray) {
-            if (rejectAttempt && String(bytes, StandardCharsets.US_ASCII)
-                    .contains("ATTEMPT_RECORDED")) throw IOException("synthetic atomic failure")
+            val isAttempt = String(bytes, StandardCharsets.US_ASCII)
+                .contains("ATTEMPT_RECORDED")
+            if (rejectAttempt && isAttempt) throw IOException("synthetic atomic failure")
             committed = bytes.copyOf()
+            if (isAttempt) onAttemptRecorded?.invoke()
         }
     }
 
@@ -151,6 +154,24 @@ object JournaledRenameSuite {
             check(f.run().proof == RenameExecutionProof.BLOCKED)
             check(f.endpoint.operations == 0)
             check(f.state(0) == JournalState.CONFIRMED)
+            check(f.run().proof == RenameExecutionProof.BLOCKED)
+            check(f.endpoint.operations == 0)
+        }
+        scenario("stop during durable begin never starts a remote rename") {
+            val f = Fixture(arrayOf("a.txt"),
+                RenameRecipe(listOf(RenameEdit.Prefix("new-"))))
+            var keepRunning = true
+            f.storage[0] = MemoryStorage().apply {
+                onAttemptRecorded = { keepRunning = false }
+            }
+            val stopped = f.run { keepRunning }
+            check(stopped.proof == RenameExecutionProof.UNCERTAIN)
+            check(stopped.reason == "STOPPED_AFTER_DURABLE_ATTEMPT_NO_RENAME_REPLAY")
+            check(stopped.verifiedSteps == 0 && f.endpoint.operations == 0)
+            check(f.state(0) == JournalState.UNCERTAIN)
+            // A new approval is required; a recovered process may inspect the
+            // destination, but must never reuse the original attempt slot.
+            keepRunning = true
             check(f.run().proof == RenameExecutionProof.BLOCKED)
             check(f.endpoint.operations == 0)
         }
