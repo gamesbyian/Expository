@@ -4,9 +4,14 @@ import android.net.Uri
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
@@ -53,6 +58,30 @@ class RecursiveFolderCopyOfferUiTest {
         compose.onNodeWithTag("saf-recursive-copy-folder").performClick()
         assertEquals(1, requested)
         assertEquals(0, navigated)
+    }
+
+    @Test fun copyRefusalIsVisibleBesideTheAccessibleFolderAction() {
+        var status by mutableStateOf("Choose a source and destination; Copy needs explicit review.")
+        compose.setContent {
+            MaterialTheme {
+                LocalTreePane(
+                    label = "Scoped source", state = state(false),
+                    scroll = rememberLazyListState(),
+                    onPick = {}, onOpen = {}, onParent = {}, onAncestor = {},
+                    onRefresh = {}, onLoadMore = {}, onSelect = {},
+                    onCopyFolder = {
+                        status = "Folder Copy unavailable: source folder selection is stale or incomplete."
+                    },
+                    copyFeedback = status
+                )
+            }
+        }
+        compose.onNodeWithTag("saf-single-copy-feedback")
+            .assertTextContains("Copy needs explicit review")
+        compose.onNodeWithTag("saf-recursive-copy-folder")
+            .assertIsEnabled().performClick()
+        compose.onNodeWithTag("saf-single-copy-feedback")
+            .assertTextContains("Folder Copy unavailable")
     }
 
     @Test fun nestedDirectoryCannotPretendToBePickedRoot() {
