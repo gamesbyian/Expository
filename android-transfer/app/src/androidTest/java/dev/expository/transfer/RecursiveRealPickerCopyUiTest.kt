@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -300,6 +301,10 @@ class RecursiveRealPickerCopyUiTest {
         // Do not infer that a no-op performClick proved Android ignored an
         // intent if the actual source action was not eligible.
         compose.onNodeWithTag("saf-recursive-copy-shows").assertIsEnabled()
+        // A composed-but-clipped control can expose semantics while actual
+        // pointer interaction never reaches its live owner. Prove placement,
+        // not just an attached semantics node, before invoking the action.
+        compose.onNodeWithTag("saf-recursive-copy-shows").assertIsDisplayed()
         // The nested folder list lives inside the workspace LazyColumn. A
         // coordinate tap can land outside the visible viewport even when
         // performScrollTo finds the inner LazyColumn item. The real semantic
