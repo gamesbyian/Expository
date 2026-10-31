@@ -64,12 +64,38 @@ class RecursiveRealPickerCopyUiTest {
             // accessibility tree has not attached (API35 emulator race).
             device.executeShellCommand("dumpsys activity activities")
                 .contains("com.android.documentsui.picker.PickActivity"))
-        // Follow the AOSP CTS DocumentsClientTest root-navigation contract:
-        // container_roots / roots_list, toolbar ImageButton, UiScrollable.
-        // Screen-coordinate swipes against an unopened drawer can accidentally
-        // issue Android Back to the ACTUAL application, hiding the real defect.
-        // See: android.googlesource.com/platform/cts ... DocumentsClientTest
+        // A system-owned picker may be resumed while API35 UiAutomator has
+        // not attached an accessibility window. Verify the resumed SYSTEM
+        // activity independently, without accepting a generic Android package
+        // or inventing a grant. Never press an unlabeled toolbar image: on
+        // some picker versions that is Back, which exits the actual picker.
+        fun pickerResumed(): Boolean =
+            device.executeShellCommand("dumpsys activity activities")
+                .lineSequence().any { line ->
+                    (line.contains("mResumedActivity") ||
+                        line.contains("topResumedActivity")) &&
+                        line.contains("documentsui", ignoreCase = true)
+                }
         val packages = listOf("com.google.android.documentsui", "com.android.documentsui")
+        fun pickerForeground(): Boolean =
+            device.currentPackageName in packages ||
+                packages.any { device.hasObject(By.pkg(it)) } || pickerResumed()
+        val drawerDescriptions = listOf("Show roots", "Open navigation drawer",
+            "Show navigation drawer", "Show locations")
+        fun openLabeledRoots(): Boolean {
+            for (description in drawerDescriptions) {
+                val button = device.findObject(By.desc(description)) ?: continue
+                if (!pickerForeground()) return false
+                try {
+                    button.click()
+                    return true
+                } catch (_: StaleObjectException) { }
+            }
+            return false
+        }
+        // Follow CTS's container_roots/roots_list structure if present.
+        // Some builds use different IDs, so retain the labeled-widget fallback.
+        // Neither branch guesses toolbar icons nor performs edge-gesture Back.
         var selectedRoot = false
         var rootsListFound = false
         for (pkg in packages) {
@@ -80,15 +106,10 @@ class RecursiveRealPickerCopyUiTest {
                 val rootsList = UiSelector().resourceId("$pkg:id/container_roots")
                     .childSelector(UiSelector().resourceId(listId))
                 var list = device.findObject(rootsList)
-                if (!list.waitForExists(1_000L)) {
-                    val hamburger = device.findObject(
-                        UiSelector().resourceId("$pkg:id/toolbar")
-                            .childSelector(UiSelector()
-                                .className("android.widget.ImageButton").clickable(true)))
-                    if (hamburger.waitForExists(1_000L)) {
-                        try { hamburger.click() }
-                        catch (_: UiObjectNotFoundException) { }
-                    }
+                if (!list.waitForExists(1_000L) && pickerForeground()) {
+                    // Explicitly labeled OS navigation only. A generic
+                    // toolbar ImageButton may be the Back affordance.
+                    openLabeledRoots()
                 }
                 list = device.findObject(rootsList)
                 if (!list.waitForExists(3_000L)) continue
@@ -114,18 +135,11 @@ class RecursiveRealPickerCopyUiTest {
             // roots drawer through accessibility without CTS's AOSP
             // container_roots/roots_list resource IDs. Never let a missing
             // private view ID masquerade as missing provider permission.
-            val pickerPackages = setOf("com.google.android.documentsui",
-                "com.android.documentsui")
-            fun pickerForeground() =
-                device.currentPackageName in pickerPackages ||
-                    pickerPackages.any { device.hasObject(By.pkg(it)) }
-            assertTrue("DocumentsUI must still be foreground", pickerForeground())
-            val drawerDescriptions = listOf("Show roots", "Open navigation drawer",
-                "Show navigation drawer", "Show locations")
-            for (description in drawerDescriptions) {
-                if (device.hasObject(By.text(title))) break
-                val button = device.findObject(By.desc(description)) ?: continue
-                button.click()
+            assertTrue(
+                "SYSTEM_PICKER_EXITED_DURING_ROOT_DISCOVERY_NO_GRANT",
+                pickerForeground())
+            if (!device.hasObject(By.text(title))) {
+                openLabeledRoots()
                 device.wait(Until.hasObject(By.text(title)), 1_000L)
             }
             // Never guess at an unlabeled top-left icon or edge-swipe:
@@ -143,12 +157,11 @@ class RecursiveRealPickerCopyUiTest {
                         break
                     } catch (_: StaleObjectException) { }
                 }
-                // Scroll the left portion of the open roots drawer only.
-                // Scrolling remains inside the already-confirmed OS
-                // picker; never swipe from the navigation-gesture edge.
-                device.swipe(device.displayWidth / 5,
-                    device.displayHeight * 4 / 5,
-                    device.displayWidth / 5, device.displayHeight / 4, 14)
+                // Do not swipe when an identifiable roots list is absent.
+                // Guessing screen coordinates may close DocumentsUI. The
+                // required real grant remains unproven until the named root
+                // is exposed and explicitly selected.
+                if (!rootsListFound) break
             }
         }
         // Diagnostics contain only OS widget class/resource IDs and fixed
