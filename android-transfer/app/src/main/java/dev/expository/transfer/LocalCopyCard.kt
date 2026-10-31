@@ -53,6 +53,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal fun shareEpochUnchanged(launched: Long, current: Long): Boolean =
     launched >= 0L && launched == current
 
+/** Picker results are untrusted input until scoped READ and metadata succeed. */
+internal fun readablePickedSource(uri: Uri?, resultFlags: Int): Boolean =
+    uri != null && uri.scheme == "content" && !uri.authority.isNullOrBlank() &&
+        resultFlags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0
+
 /** One immutable permission context replaces three independently mutable picker fields.
  * A saved source URI alone is not authorization after a new selection/share.
  */
@@ -284,20 +289,35 @@ fun LocalCopyCard(
         val uri = result.data?.data
         if (result.resultCode != Activity.RESULT_OK || uri == null) {
             status = "File selection canceled."
-        } else {
-            selected = uri
-            destinationName = null
-            displayName = "Selected document"
+        } else if (!readablePickedSource(uri, result.data?.flags ?: 0)) {
+            selected = null
+            displayName = null
             receipt = null
-            status = "File selected. Choose Save copy to open Android Save As."
+            destinationName = null
+            status = "Android did not grant a readable document. Choose the file again."
+        } else {
+            // No Save or Share from a guessed URI: metadata must be positively
+            // observed through the actual scoped Android ContentResolver
+            // BEFORE this selection becomes actionable.
+            selected = null
+            adoptedTreeSource = null
+            destinationName = null
+            displayName = null
+            receipt = null
+            status = "Checking the selected document's read access…"
             scope.launch {
                 val observation = withContext(Dispatchers.IO) {
                     runCatching { service.observe(uri) }.getOrNull()
                 }
-                if (selectionRevision == launchedRevision &&
-                    selected == uri && observation != null) {
+                if (selectionRevision != launchedRevision || selected != null)
+                    return@launch
+                if (observation == null) {
+                    status = "Selected document cannot be read. Choose it again; no Copy started."
+                } else {
+                    selected = uri
                     displayName = observation.displayName
                     mime = observation.mimeType
+                    status = "File selected. Choose Save copy to open Android Save As."
                 }
             }
         }
@@ -323,23 +343,35 @@ fun LocalCopyCard(
                     receipt = null
                     mime = "application/octet-stream"
                     status = "Choose a file in Android's picker."
-                    open.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                        addCategory(Intent.CATEGORY_OPENABLE)
-                        type = "*/*"
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    })
+                    pendingSaveApproval = null
+                    try {
+                        open.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "*/*"
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        })
+                    } catch (_: Exception) {
+                        openPickerRevision = -1L
+                        openPickerShareEpoch = -1L
+                        status = "Android file picker unavailable. No selection or Copy was authorized."
+                    }
                 }) { Text("Choose file") }
                 Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !busy && selected != null, onClick = {
                     val source = selected ?: return@Button
                     pendingSaveApproval = FrozenPickerCopyApproval(
                         source, selectionRevision, currentShareEpoch())
                     val sourceName = displayName ?: "copy.bin"
-                    save.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                        addCategory(Intent.CATEGORY_OPENABLE)
-                        type = mime.takeUnless { it.isBlank() || it == "*/*" }
-                            ?: "application/octet-stream"
-                        putExtra(Intent.EXTRA_TITLE, sourceName)
-                    })
+                    try {
+                        save.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = mime.takeUnless { it.isBlank() || it == "*/*" }
+                                ?: "application/octet-stream"
+                            putExtra(Intent.EXTRA_TITLE, sourceName)
+                        })
+                    } catch (_: Exception) {
+                        pendingSaveApproval = null
+                        status = "Android Save As picker unavailable. No Copy started."
+                    }
                 }) { Text("Save copy…") }
                 Button(
                     modifier = Modifier.heightIn(min = 48.dp),
