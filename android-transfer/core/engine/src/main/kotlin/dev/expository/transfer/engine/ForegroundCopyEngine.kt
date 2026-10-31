@@ -96,10 +96,14 @@ object ForegroundCopyEngine {
                         // callback throws, preserve the stream result and
                         // let the explicit cancellation predicate stop it.
                         try { onProgress(transferred) }
-                        catch (_: Exception) {
-                            // Ordinary UI observer failures cannot affect byte
-                            // proof. Fatal VM errors must propagate so an
-                            // in-flight journal remains reviewable, not hidden.
+                        catch (cancelled: java.util.concurrent.CancellationException) {
+                            // The UI owner was canceled while bytes were being
+                            // written. Stop now; the outer stream handler turns
+                            // the possible partial destination into UNCERTAIN.
+                            throw cancelled
+                        } catch (_: Exception) {
+                            // Ordinary UI display faults do not affect byte
+                            // proof. Fatal VM errors continue to propagate.
                         }
                     }
                     if (!continueRequested()) throw InterruptedException()
