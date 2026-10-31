@@ -290,7 +290,14 @@ class RecursiveRealPickerCopyUiTest {
         // actual button must be scrolled into view and touched, as in the
         // already accepted WorkspaceNavigationUiTest Android flow.
         compose.onNodeWithTag("saf-recursive-copy-shows").performScrollTo()
-        compose.onNodeWithTag("saf-recursive-copy-shows").performTouchInput { click() }
+        // The nested folder list lives inside the workspace LazyColumn. A
+        // coordinate tap can land outside the visible viewport even when
+        // performScrollTo finds the inner LazyColumn item. The real semantic
+        // Button action is also the accessible TalkBack/keyboard activation
+        // path; invoke it directly and still require a genuine Android OS
+        // picker, both independent user-selected grants and byte readback.
+        // No content URI is injected and no ActivityResult is simulated.
+        compose.onNodeWithTag("saf-recursive-copy-shows").performClick()
         compose.waitForIdle()
         // A monitor's hit count is inspected AFTER the OS picker observation:
         // Compose ActivityResult dispatch can occur after performClick returns.
