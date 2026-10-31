@@ -60,6 +60,30 @@ object CopyEngineSuite {
             check(receipt.bytesWritten == bytes.size.toLong())
             check(out.toByteArray().contentEquals(bytes))
         }
+        scenario("canceled progress observer halts subsequent streaming") {
+            val out = ByteArrayOutputStream()
+            var notifications = 0
+            var readbackOpened = false
+            val streams = object : CopyStreams {
+                override fun openSource() = ByteArrayInputStream(bytes)
+                override fun openNewDestination(): OutputStream = out
+                override fun openDestinationReadBack(): InputStream {
+                    readbackOpened = true
+                    return ByteArrayInputStream(out.toByteArray())
+                }
+            }
+            val receipt = ForegroundCopyEngine.copy(p, { p }, streams,
+                onProgress = {
+                    notifications++
+                    throw java.util.concurrent.CancellationException(
+                        "synthetic canceled observer")
+                })
+            check(notifications == 1)
+            check(out.size() == 65_536)
+            check(!readbackOpened)
+            check(receipt.proof == CopyProof.UNCERTAIN)
+            check(receipt.bytesWritten == out.size().toLong())
+        }
         scenario("empty file read-back verified") {
             val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
                 override fun openSource() = ByteArrayInputStream(ByteArray(0))
