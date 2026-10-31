@@ -151,6 +151,42 @@ class RecoveryIndexFailurePolicyTest {
         }
     }
 
+    @Test fun encryptedRecursiveHintIsDistinctFromPickerAndCannotAuthorizeReplay() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "recursive-hint-test-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val digest = "9".repeat(64)
+        val hint = dev.expository.transfer.journal.ProtectedRecoveryContext(
+            "SAF_RECURSIVE_COPY", "Shows / Episode.bin",
+            "Selected Android folder / Shows / Episode.bin",
+            "private.scoped.provider")
+        try {
+            val store = dev.expository.transfer.journal.ProtectedRecoveryContextStore(isolated)
+            store.recordNew(digest, hint)
+            assertEquals(hint, store.read(digest))
+            assertTrue(runCatching {
+                store.recordNew(digest, hint.copy(sourceLabel = "Other"))
+            }.isFailure)
+            val journal = DurableAttemptJournal(
+                dev.expository.transfer.journal.AndroidAtomicAttemptStorage(isolated, digest))
+            journal.confirm(digest)
+            journal.beginAttempt(digest, "synthetic_rec_01")
+            assertEquals(JournalState.UNCERTAIN, journal.recoverAfterRestart()?.state)
+            val found = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, found.requiresReview)
+            assertEquals(hint, found.reviewReferences.single().context)
+            assertTrue(runCatching {
+                journal.beginAttempt(digest, "synthetic_rec_02")
+            }.isFailure)
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
     @Test fun encryptedRecoveryHintIsOnlyManualContextForUncertainJournal() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val sandbox = File(app.cacheDir, "review-hint-test-" + UUID.randomUUID())

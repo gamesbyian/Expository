@@ -72,7 +72,7 @@ fun RecoveryStatusCard() {
                 }
                 if (showReviewReferences) {
                     Text("Reference suffixes identify app-private operation journals. " +
-                        "New one-file Android Copy operations can also save encrypted " +
+                        "One-file and recursive Android Copy operations can save encrypted " +
                         "source/destination labels for manual review. No URI, grant, " +
                         "credential or automatic retry is persisted.",
                         style = MaterialTheme.typography.bodySmall)
