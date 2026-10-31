@@ -49,6 +49,7 @@ test('writer rejects path traversal, unsafe Windows targets and ambiguous duplic
  assert.throws(()=>api.resolveEntries([file('safe.txt')],'test/'),/unsafe/);
  assert.equal(api.branchPath('feature/zip-import'),true);
  assert.equal(api.branchPath('bad..branch'),false);
+ assert.equal(api.branchPath('topic@{head}'),false,'Git ref syntax must reject @{');
 });
 test('tree collision check catches files, directories and case folding',()=>{
  const {api}=setup();
@@ -64,6 +65,11 @@ test('tree collision check catches files, directories and case folding',()=>{
  assert.deepEqual([...api.findCollisions(duplicated,{truncated:false,
   tree:[{path:'É.TXT',type:'blob'}]})],['e\u0301.txt'],
   'Existing NFC/casefold equivalent file blocks a new blob');
+ assert.throws(()=>api.findCollisions(files,{truncated:false,
+  tree:[{path:'É.txt',type:'blob'},{path:'e\u0301.TXT',type:'tree'}]}),/ambiguous/,
+  'Malformed existing tree must not make an authority-colliding file disappear');
+ assert.throws(()=>api.findCollisions(files,{truncated:false,
+  tree:[{path:'mystery',type:'unknown'}]}),/unrecognized/);
 });
 test('destination inspection performs only reads before explicit confirmation',async()=>{
  const {api,calls}=setup();
