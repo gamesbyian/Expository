@@ -79,6 +79,26 @@ object JournaledCopySuite {
             check(streams.sourceOpened == 0 && streams.destinationOpened == 0)
             check(disk.commits == 0)
         }
+        checkCase("invalid attempt ID cannot poison an otherwise untouched journal") {
+            for (badId in listOf("", "short", "contains space", "a".repeat(129),
+                    "../secret", "bad\\nline")) {
+                val disk = AtomicDisk()
+                val streams = Streams()
+                val journal = DurableAttemptJournal(disk)
+                val receipt = JournaledCopyEngine.copy(plan, { plan }, streams,
+                    journal, badId)
+                check(receipt.proof == CopyProof.BLOCKED &&
+                    receipt.reason == "INVALID_ATTEMPT_ID")
+                check(disk.commits == 0 && journal.current() == null)
+                check(streams.sourceOpened == 0 && streams.destinationOpened == 0)
+                // The invalid identifier never consumed the only authorized
+                // attempt. A fresh valid ID may use this journal normally.
+                val valid = JournaledCopyEngine.copy(plan, { plan }, Streams(),
+                    journal, "valid_attempt_0001")
+                check(valid.proof == CopyProof.BYTES_VERIFIED)
+                check(journal.current()?.state == JournalState.VERIFIED)
+            }
+        }
         checkCase("attempt journal write failure cannot open destination") {
             val disk = AtomicDisk().also { it.failOnCommit = 2 }
             val streams = Streams()
