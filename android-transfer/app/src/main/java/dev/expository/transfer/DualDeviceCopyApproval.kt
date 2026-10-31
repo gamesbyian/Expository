@@ -2,6 +2,7 @@ package dev.expository.transfer
 
 import android.net.Uri
 import dev.expository.transfer.planner.BrowseEndpoint
+import dev.expository.transfer.planner.LocationKey
 import dev.expository.transfer.planner.TransferWorkspaceState
 import dev.expository.transfer.planner.WorkspacePane
 import dev.expository.transfer.planner.WorkspaceView
@@ -19,6 +20,10 @@ internal data class DualDeviceCopyApproval(
     val destinationPane: WorkspacePane,
     val sourceEndpoint: BrowseEndpoint,
     val destinationEndpoint: BrowseEndpoint,
+    val sourceKey: LocationKey,
+    val destinationKey: LocationKey,
+    val sourceListingRevision: String,
+    val destinationListingRevision: String,
     val sourceTree: Uri,
     val destinationTree: Uri,
     val sourceFolderId: String,
@@ -41,6 +46,14 @@ internal data class DualDeviceCopyApproval(
             currentShareEpoch != shareEpoch ||
             model.pane(sourcePane).endpoint != sourceEndpoint ||
             model.pane(destinationPane).endpoint != destinationEndpoint ||
+            model.pane(sourcePane).current?.location?.key != sourceKey ||
+            model.pane(destinationPane).current?.location?.key != destinationKey ||
+            model.pane(sourcePane).current?.location?.revision != sourceListingRevision ||
+            model.pane(destinationPane).current?.location?.revision !=
+                destinationListingRevision ||
+            model.pane(sourcePane).current?.selected?.map {
+                it.key.opaqueItemId
+            }?.toSet() != selectedIds ||
             !sourceEndpoint.isSaf || !destinationEndpoint.isSaf ||
             source.treeUri != sourceTree || destination.treeUri != destinationTree ||
             source.folderId != sourceFolderId ||
@@ -75,11 +88,20 @@ internal data class DualDeviceCopyApproval(
                 WorkspacePane.B else WorkspacePane.A
             val sourceTree = source.treeUri ?: return null
             val destinationTree = destination.treeUri ?: return null
+            val sourceVisit = model.pane(sourcePane).current ?: return null
+            val destinationVisit = model.pane(destinationPane).current ?: return null
+            // The same URI grant and listing that populated the browser must
+            // also own its planner model. Rendered crumbs are not authorization.
+            if (sourceVisit.location.key.grantId != sourceTree.toString() ||
+                destinationVisit.location.key.grantId != destinationTree.toString())
+                return null
             val sourceFolder = source.folderId ?: return null
             val destinationFolder = destination.folderId ?: return null
             val snapshot = DualDeviceCopyApproval(
                 sourcePane, destinationPane,
                 model.pane(sourcePane).endpoint, model.pane(destinationPane).endpoint,
+                sourceVisit.location.key, destinationVisit.location.key,
+                sourceVisit.location.revision, destinationVisit.location.revision,
                 sourceTree, destinationTree, sourceFolder, destinationFolder,
                 source.generation, destination.generation,
                 source.selected.toSet(), shareEpoch)
