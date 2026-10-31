@@ -173,6 +173,48 @@ class SafRecursiveTreeCopyAndroidTest {
             .getInt("creates"))
     }
 
+    @Test fun uncertainRecursiveStepHasEncryptedManualReviewContext() {
+        reset()
+        val app = targetContext
+        val before = dev.expository.transfer.journal.AttemptRecoveryIndex.journalDigests(
+            app.noBackupFilesDir.listFiles()?.map { it.name }).toSet()
+        val service = SafRecursiveTreeCopy(app, resolver)
+        val approved = requireNotNull(service.prepare(request()))
+        check(resolver.call(targetTree, "fixture-fail-after-create", null, null) != null)
+        val result = service.execute(request(), approved)
+        assertEquals(RecursiveCopyResult.UNCERTAIN, result.result)
+        assertEquals(0, result.verifiedDirectories)
+        val after = dev.expository.transfer.journal.AttemptRecoveryIndex.journalDigests(
+            app.noBackupFilesDir.listFiles()?.map { it.name }).toSet()
+        val newKeys = after - before
+        assertTrue("The attempted directory has an atomic private journal",
+            newKeys.isNotEmpty())
+        val store = dev.expository.transfer.journal.ProtectedRecoveryContextStore(app)
+        val hints = newKeys.mapNotNull { key ->
+            runCatching { key to store.read(key) }.getOrNull()
+        }
+        assertTrue("An uncertain recursive attempt needs protected locator context",
+            hints.any { (_, hint) ->
+                hint?.operation == "SAF_RECURSIVE_COPY" &&
+                    hint.sourceLabel == "Shows" &&
+                    hint.destinationLabel == "Selected Android folder / Shows" &&
+                    hint.destinationProvider == "test.copy.target.scoped"
+            })
+        val matchedKey = hints.first { it.second?.operation == "SAF_RECURSIVE_COPY" }.first
+        val ciphertext = java.io.File(app.noBackupFilesDir,
+            "transfer_recovery_context_v1_" + matchedKey).readBytes()
+                .toString(Charsets.ISO_8859_1)
+        assertTrue(!ciphertext.contains("test.copy.target.scoped") &&
+            !ciphertext.contains("Selected Android folder"))
+        // Saved labels cannot authorize an operation. A second invocation with
+        // the same frozen approval cannot create another destination child.
+        val retry = service.execute(request(), approved)
+        assertTrue(retry.result != RecursiveCopyResult.COMPLETE_VERIFIED)
+        assertEquals(1, resolver.call(targetTree, "fixture-stats", null, null)!!
+            .getInt("creates"))
+        assertArrayEquals(fixtureBytes, original())
+    }
+
     @Test fun changedOrRevokedScopedSourceBeforeCopyCannotWrite() {
         reset()
         val service = SafRecursiveTreeCopy(targetContext, resolver)
