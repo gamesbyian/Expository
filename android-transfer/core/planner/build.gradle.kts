@@ -57,3 +57,9 @@ tasks.register<JavaExec>("recursiveFolderScenarios") {
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("dev.expository.transfer.planner.RecursiveFolderCopySuite")
 }
+
+// These main()-based suites are not automatically discovered by Gradle's test task.
+// Keep the standard check lifecycle honest for local developers and CI.
+tasks.named("check") {
+    dependsOn("scenarios", "locationScenarios", "recursiveFolderScenarios", "directoryScenarios", "moveScenarios", "workspaceScenarios", "sessionAccessScenarios")
+}

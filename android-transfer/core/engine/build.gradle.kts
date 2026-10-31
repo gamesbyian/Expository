@@ -49,3 +49,9 @@ tasks.register<JavaExec>("recursiveCopyScenarios") {
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("dev.expository.transfer.engine.RecursiveFolderCopyEngineSuite")
 }
+
+// These main()-based suites are not automatically discovered by Gradle's test task.
+// Keep the standard check lifecycle honest for local developers and CI.
+tasks.named("check") {
+    dependsOn("scenarios", "journalScenarios", "journaledCopyScenarios", "batchQueueScenarios", "renameScenarios", "recursiveCopyScenarios")
+}

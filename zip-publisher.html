@@ -57,12 +57,16 @@ const MAX_FILES=100,MAX_BYTES=32*1024*1024,MAX_SINGLE=16*1024*1024;
 const $=id=>document.getElementById(id);
 let incoming=null,review=null,busy=false,writerAbort=null,channel=null;
 function status(message){$('status').textContent=message}
+function utf8Bytes(value){return new TextEncoder().encode(value).length}
 function cleanPath(name){
- return typeof name==='string'&&name.length>0&&name.length<=4096&&!/[\x00-\x1f\x7f\\]/.test(name)&&!name.startsWith('/')&&!name.split('/').some(part=>!part||part==='.'||part==='..'||part.length>255||part.toLowerCase()==='.git'||/[<>:"|?*]/.test(part)||/[. ]$/.test(part)||/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(part));
+ return typeof name==='string'&&name.length>0&&utf8Bytes(name)<=4096&&!/[\x00-\x1f\x7f\\]/.test(name)&&!name.startsWith('/')&&!name.split('/').some(part=>!part||part==='.'||part==='..'||utf8Bytes(part)>255||part.toLowerCase()==='.git'||/[<>:"|?*]/.test(part)||/[. ]$/.test(part)||/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(part));
 }
 function repoPath(repo){return /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repo)&&repo.length<260&&!repo.split('/').includes('..')}
-function branchPath(base){return typeof base==='string'&&base.length<256&&base.length>0&&!base.startsWith('/')&&!base.endsWith('/')&&!base.includes('..')&&!base.includes('//')&&!/[\x00-\x20\x7f~^:?*[\]\\]/.test(base)&&!base.split('/').some(x=>!x||x.endsWith('.lock')||x.startsWith('.')||x.endsWith('.'))}
+function branchPath(base){return typeof base==='string'&&base.length<256&&base.length>0&&!base.startsWith('/')&&!base.endsWith('/')&&!base.includes('..')&&!base.includes('//')&&!base.includes('@{')&&!/[\x00-\x20\x7f~^:?*[\]\\]/.test(base)&&!base.split('/').some(x=>!x||x.endsWith('.lock')||x.startsWith('.')||x.endsWith('.'))}
 function sizeText(bytes){return (bytes/1024/1024).toFixed(2)+' MB'}
+// GitHub paths can contain canonically equivalent Unicode spellings. Refuse
+// ambiguous uploads across case and NFC even on case-sensitive repositories.
+function pathKey(path){return path.normalize('NFC').toLowerCase()}
 function resolveEntries(source,prefix){
  if(!Array.isArray(source)||!source.length||source.length>MAX_FILES)throw Error('Selection must contain 1–100 files.');
  if(prefix&&!cleanPath(prefix))throw Error('Destination folder contains unsafe path segments.');
@@ -70,20 +74,46 @@ function resolveEntries(source,prefix){
  for(const entry of source){
   if(!entry||!cleanPath(entry.path)||!(entry.blob instanceof Blob)||entry.blob.size>MAX_SINGLE)throw Error('Unsafe member path or oversized file.');
   sum+=entry.blob.size;if(sum>MAX_BYTES)throw Error('Selected files exceed the 32 MB limit.');
-  const path=(prefix?prefix+'/':'')+entry.path,fold=path.toLowerCase();
+  const path=(prefix?prefix+'/':'')+entry.path;
+  if(!cleanPath(path))throw Error('Combined destination path is unsafe or too long.');
+  const fold=pathKey(path);
   if(names.has(fold))throw Error('Selected files contain ambiguous duplicate destinations.');
   names.add(fold);out.push({path,blob:entry.blob});
+ }
+ // A selected blob cannot also be an ancestor folder of another blob.
+ // Git would otherwise have to replace one file with a directory, and a
+ // successful preflight could hide which incoming file would survive.
+ for(const name of names){
+  let slash=name.indexOf('/');
+  while(slash!==-1){
+   if(names.has(name.slice(0,slash)))throw Error('Selected files contain a file/directory path conflict.');
+   slash=name.indexOf('/',slash+1)
+  }
  }
  return out;
 }
 function findCollisions(entries,tree){
  if(!tree||!Array.isArray(tree.tree)||tree.truncated)throw Error('GitHub tree coverage is incomplete; refusing to publish.');
- const occupied=new Map();
- for(const e of tree.tree)if(e&&typeof e.path==='string')occupied.set(e.path.toLowerCase(),e.type);
+ const occupied=new Map(),existingAncestors=new Set();
+ for(const e of tree.tree){
+  if(!e||typeof e.path!=='string'||!['blob','tree','commit'].includes(e.type))
+   throw Error('GitHub tree contains unrecognized entries; refusing to publish.');
+  const key=pathKey(e.path);
+  if(occupied.has(key))throw Error('GitHub tree has ambiguous case/Unicode identities; refusing to publish.');
+  occupied.set(key,e.type);
+  // Index all existing path prefixes once. Avoid a 100-file × 100k-entry
+  // full-tree scan on mobile when looking for an existing child of a proposed
+  // blob. Exact, ancestor and descendant collisions stay fail-closed.
+  let boundary=key.indexOf('/');
+  while(boundary!==-1){
+   existingAncestors.add(key.slice(0,boundary));
+   boundary=key.indexOf('/',boundary+1)
+  }
+ }
  const blockers=[];
  for(const entry of entries){
-  const full=entry.path.toLowerCase(),parts=full.split('/');
-  if(occupied.has(full)||[...occupied.keys()].some(p=>p.startsWith(full+'/')))blockers.push(entry.path);
+  const full=pathKey(entry.path),parts=full.split('/');
+  if(occupied.has(full)||existingAncestors.has(full))blockers.push(entry.path);
   for(let n=1;n<parts.length;n++){const ancestor=parts.slice(0,n).join('/');if(occupied.get(ancestor)==='blob'||occupied.get(ancestor)==='commit'){blockers.push(entry.path);break}}
  }
  return [...new Set(blockers)];

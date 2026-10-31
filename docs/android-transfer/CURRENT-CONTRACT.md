@@ -1,6 +1,10 @@
 # Expository Transfer: current product and execution contract
 
-**Reconciled:** 29 October 2026 UTC. **Status:** binding product requirements, not evidence that the requirements have shipped. Read [native work queue](../../android-transfer/WORK-QUEUE.md) for *next tasks* and [release ledger](RELEASE-READINESS.md) for *verified gate evidence*. This document supersedes conflicting **future-intent/status summaries**, not the detailed protocol, security, rename, Drive and UX acceptance specifications linked below.
+**Reconciled:** 29 October 2026 UTC. **Status:** binding product requirements, not evidence that the requirements have shipped. Read [the dependency-first execution plan](EXECUTION-DEPENDENCIES.md) for sequencing and architecture, [native work queue](../../android-transfer/WORK-QUEUE.md) for *next tasks* and [release ledger](RELEASE-READINESS.md) for *verified gate evidence*. This document supersedes conflicting **future-intent/status summaries**, not the detailed protocol, security, rename, Drive and UX acceptance specifications linked below.
+
+## Architecture integrity and truthful-operation contract (2026-10-30 audit)
+
+The [independent audit](ARCHITECTURE-AUDIT-2026-10-29.md), [architecture decisions](ARCHITECTURE-DECISIONS.md), and [operation/recovery UX design](OPERATION-STATE-UX.md) are authoritative **future implementation constraints**, not evidence of shipped features. Existing typed planner and durable engine remain the safety baseline; Single/Dual/button/keyboard/future drag must share the same frozen operation, stale-authority invalidation, consent, receipt and accessible review. Blocking Copy cancellation must couple operation lifetime with explicit stop and leave attempted uncertain side effects reviewable. Rich identifiable recovery data belongs in a separate protected index, never in the existing digest-only journal. A read-only recovery summary cannot be called actual process-death reconciliation. Do not claim performance optimization without measured device traces or a signed release from a debug APK. New work is tracked in native W-queue and [#322–#327](https://github.com/gamesbyian/Expository/issues/322).
 
 ## Product identity and scope
 

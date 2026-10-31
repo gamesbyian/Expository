@@ -140,6 +140,61 @@ class AndroidContentProviderCopyTest {
         AndroidAtomicAttemptStorage(context.applicationContext, digest)
     }
 
+    @Test fun interruptedAndroidProviderCopyCanBeLocatedWithProtectedReviewHint() {
+        val source = createPendingFixture()
+        val target = createPendingFixture()
+        val sandbox = java.io.File(context.cacheDir, "recovery-copy-test-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(context) {
+            override fun getNoBackupFilesDir(): java.io.File = sandbox
+        }
+        try {
+            val bytes = ByteArray(131_179) { i -> ((i * 37 + 13) and 255).toByte() }
+            write(source, bytes)
+            val store = dev.expository.transfer.journal.ProtectedRecoveryContextStore(isolated)
+            val copy = SafSingleDocumentCopy(resolver,
+                storageForPlan = { digest ->
+                    AndroidAtomicAttemptStorage(isolated, digest)
+                },
+                recordRecoveryContext = { digest, from, to, provider ->
+                    store.recordNew(digest,
+                        dev.expository.transfer.journal.ProtectedRecoveryContext(
+                            "SAF_PICKER_COPY", from, to, provider))
+                })
+            val permit = AtomicBoolean(true)
+            val receipt = copy.copy(source, target,
+                continueRequested = { permit.get() },
+                onProgress = { if (it >= 65_536L) permit.set(false) })
+            assertEquals(CopyProof.UNCERTAIN, receipt.proof)
+            val recovery = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, recovery.requiresReview)
+            val detail = recovery.reviewReferences.single().context
+            assertTrue("Encrypted context must explain the target to the operator",
+                detail != null && detail.operation == "SAF_PICKER_COPY")
+            val sourceLabel = copy.observe(source).displayName
+            val targetLabel = copy.observe(target).displayName
+            assertEquals(sourceLabel, detail?.sourceLabel)
+            assertEquals(targetLabel, detail?.destinationLabel)
+            val encrypted = java.io.File(sandbox,
+                "transfer_recovery_context_v1_" + receipt.planDigest).readBytes()
+            val diskText = String(encrypted, Charsets.ISO_8859_1)
+            assertTrue(!diskText.contains(sourceLabel) &&
+                !diskText.contains(targetLabel))
+            val journal = DurableAttemptJournal(
+                AndroidAtomicAttemptStorage(isolated, receipt.planDigest))
+            assertEquals(JournalState.UNCERTAIN, journal.recoverAfterRestart()?.state)
+            assertTrue(runCatching {
+                journal.beginAttempt(receipt.planDigest, "forbidden_duplicate_attempt")
+            }.isFailure)
+            assertArrayEquals(bytes, read(source))
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+            resolver.delete(target, null, null)
+            resolver.delete(source, null, null)
+        }
+    }
+
     @Test fun verifiedReadbackAndSourcePreservationThroughRealAndroidProvider() {
         val source = createPendingFixture()
         val target = createPendingFixture()

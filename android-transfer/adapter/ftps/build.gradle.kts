@@ -39,3 +39,9 @@ tasks.register<JavaExec>("plainFtpLoopback") {
     mainClass.set("dev.expository.transfer.ftps.PlainFtpLocalhostSuite")
     args(providers.gradleProperty("plainFtpLabPort").orNull ?: "21211")
 }
+
+// These main()-based suites are not automatically discovered by Gradle's test task.
+// Keep the standard check lifecycle honest for local developers and CI.
+tasks.named("check") {
+    dependsOn("scenarios")
+}

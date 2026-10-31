@@ -248,7 +248,7 @@ internal fun LocalTreePane(
     onSelect: (TreeEntry) -> Unit,
     /** Only an explicit directory request; no implicit provider write. */
     onCopyFolder: ((TreeEntry) -> Unit)? = null,
-    /** Single-view Copy status next to the folder selector, not off-screen. */
+    /** Contextual Copy feedback belongs beside the source browser control. */
     copyFeedback: String? = null
 ) {
     var fileFilter by remember(state.treeUri, state.folderId) { mutableStateOf("") }
@@ -280,7 +280,8 @@ internal fun LocalTreePane(
                 verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Button(
                     enabled = enabled && !state.loading,
-                    modifier = Modifier.heightIn(min = 48.dp),
+                    modifier = Modifier.heightIn(min = 48.dp)
+                        .testTag("saf-root-picker"),
                     onClick = onPick
                 ) { Text(if (state.treeUri == null) "Choose folder" else "Change folder") }
                 if (state.treeUri != null) {

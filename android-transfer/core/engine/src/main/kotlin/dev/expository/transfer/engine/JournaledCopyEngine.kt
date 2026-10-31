@@ -14,6 +14,8 @@ import java.io.OutputStream
  * always before any destination can be opened or mutated.
  */
 object JournaledCopyEngine {
+    private val attemptIdFormat = Regex("[A-Za-z0-9_-]{8,128}")
+
     fun copy(
         plan: TransferPlan,
         currentPlan: () -> TransferPlan,
@@ -23,6 +25,13 @@ object JournaledCopyEngine {
         continueRequested: () -> Boolean = { true },
         onProgress: (Long) -> Unit = {}
     ): CopyReceipt {
+        // Validate the attempt identifier BEFORE confirming an intent on
+        // durable storage. Otherwise confirm() commits a permanent CONFIRMED
+        // record and beginAttempt() rejects a malformed ID, unnecessarily
+        // poisoning an otherwise untouched operation's one-shot journal.
+        // Never log or persist a rejected, potentially sensitive identifier.
+        if (!attemptIdFormat.matches(attemptId)) return CopyReceipt(
+            plan.digest, CopyProof.BLOCKED, 0L, "INVALID_ATTEMPT_ID")
         var started = false
         val journalled = object : CopyStreams {
             override fun openSource(): InputStream {

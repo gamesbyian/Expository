@@ -62,6 +62,61 @@ object FtpsSecuritySuite {
                 check(runCatching { FtpsPath.checkedChild(name) }.isFailure)
             }
         }
+        checkCase("FTPS RETR requires final completion even after reading all bytes") {
+            var complete = true
+            var finalChecks = 0
+            var closeFailure = false
+            var finalFailure = false
+            val expected = byteArrayOf(7, 1, 9, 3)
+            val client = object : org.apache.commons.net.ftp.FTPSClient(false) {
+                override fun retrieveFileStream(remote: String): java.io.InputStream {
+                    check(remote == "/source.bin")
+                    return object : java.io.ByteArrayInputStream(expected) {
+                        override fun close() {
+                            if (closeFailure) throw IllegalStateException(
+                                "password: test-only raw sensitive close error")
+                            super.close()
+                        }
+                    }
+                }
+                override fun completePendingCommand(): Boolean {
+                    finalChecks++
+                    if (finalFailure) throw IllegalStateException(
+                        "secret test-only final FTP reply")
+                    return complete
+                }
+            }
+            FtpsSession(client).use { session ->
+                check(session.openRead("/source.bin").use { it.readBytes() }
+                    .contentEquals(expected))
+                check(finalChecks == 1)
+                complete = false
+                val rejected = runCatching {
+                    session.openRead("/source.bin").use { it.readBytes() }
+                }.exceptionOrNull()
+                check(rejected is FtpsSafeFailure &&
+                    rejected.stage == "READ_FINAL" && finalChecks == 2)
+                closeFailure = true
+                val rawClose = runCatching {
+                    session.openRead("/source.bin").use { it.readBytes() }
+                }.exceptionOrNull()
+                check(rawClose is FtpsSafeFailure &&
+                    rawClose.stage == "READ_FINAL" &&
+                    rawClose.message.orEmpty().contains("PARSER_OR_POLICY") &&
+                    !rawClose.message.orEmpty().contains("password") &&
+                    finalChecks == 3)
+                closeFailure = false
+                finalFailure = true
+                val rawFinal = runCatching {
+                    session.openRead("/source.bin").use { it.readBytes() }
+                }.exceptionOrNull()
+                check(rawFinal is FtpsSafeFailure &&
+                    rawFinal.stage == "READ_FINAL" &&
+                    rawFinal.message.orEmpty().contains("PARSER_OR_POLICY") &&
+                    !rawFinal.message.orEmpty().contains("secret") &&
+                    finalChecks == 4)
+            }
+        }
         checkCase("MLST file observation is required for remote file identity") {
             val expected = org.apache.commons.net.ftp.FTPFile().apply {
                 name = "file.txt"
@@ -79,6 +134,60 @@ object FtpsSecuritySuite {
                 check(stat.revision.isNotBlank())
                 check(runCatching { session.statFile("/safe/unknown") }.isFailure)
             }
+        }
+        checkCase("MLST returned name must match requested file precisely") {
+            val originalPath = "/protected/Example.bin"
+            var observed = "Example.bin"
+            val client = object : org.apache.commons.net.ftp.FTPSClient(false) {
+                override fun mlistFile(pathname: String): org.apache.commons.net.ftp.FTPFile {
+                    check(pathname == originalPath)
+                    return org.apache.commons.net.ftp.FTPFile().apply {
+                        name = observed
+                        type = org.apache.commons.net.ftp.FTPFile.FILE_TYPE
+                        size = 79
+                        timestamp = java.util.GregorianCalendar(
+                            java.util.TimeZone.getTimeZone("UTC")).apply {
+                            timeInMillis = 1_700_000_000_000L
+                        }
+                    }
+                }
+            }
+            FtpsSession(client).use { session ->
+                check(session.statFile(originalPath).name == "Example.bin")
+                observed = originalPath // MLST absolute-path syntax is acceptable
+                check(session.statFile(originalPath).size == 79L)
+                for (spoof in listOf("Other.bin", "example.bin",
+                    "/another/Example.bin", "../Example.bin",
+                    "/protected/Example.bin.backup", "", "Example.bin\r")) {
+                    observed = spoof
+                    val failure = runCatching {
+                        session.statFile(originalPath)
+                    }.exceptionOrNull()
+                    check(failure is java.io.IOException &&
+                        failure.message == "FTPS_FILE_STAT_UNVERIFIED") {
+                        "MLST must reject mismatched server file identity"
+                    }
+                }
+            }
+        }
+        checkCase("MLST stale zero timestamp cannot prove source revision") {
+            val client = object : org.apache.commons.net.ftp.FTPSClient(false) {
+                override fun mlistFile(pathname: String) =
+                    org.apache.commons.net.ftp.FTPFile().apply {
+                        name = "Example.bin"
+                        type = org.apache.commons.net.ftp.FTPFile.FILE_TYPE
+                        size = 79
+                        timestamp = java.util.GregorianCalendar(
+                            java.util.TimeZone.getTimeZone("UTC")).apply {
+                            timeInMillis = 0L
+                        }
+                    }
+            }
+            val failure = runCatching {
+                FtpsSession(client).use { it.statFile("/protected/Example.bin") }
+            }.exceptionOrNull()
+            check(failure is java.io.IOException &&
+                failure.message == "FTPS_FILE_STAT_UNVERIFIED")
         }
         checkCase("MLST missing timestamp or file identity fails closed") {
             val bad = org.apache.commons.net.ftp.FTPFile().apply {

@@ -27,6 +27,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.expository.transfer.planner.*
 import dev.expository.transfer.sftp.SftpBrowseBounds
+import dev.expository.transfer.sftp.SftpBrowsePresentation
+import dev.expository.transfer.sftp.SftpFolderSort
 import dev.expository.transfer.sftp.SftpBrowsePage
 import java.security.MessageDigest
 
@@ -37,7 +39,9 @@ import java.security.MessageDigest
  */
 @Composable
 fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
-    page: SftpBrowsePage, enabled: Boolean
+    page: SftpBrowsePage, enabled: Boolean,
+    sortMode: SftpFolderSort = SftpFolderSort.NAME,
+    descending: Boolean = false
 ) {
     var selected by remember(folder, opaqueSessionId) { mutableStateOf<Set<String>>(emptySet()) }
     var mode by remember(folder) { mutableStateOf("Replace") }
@@ -45,22 +49,39 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
     var value by remember(folder) { mutableStateOf("") }
     var extensionLocked by remember(folder) { mutableStateOf(true) }
     var numberAtFront by remember(folder) { mutableStateOf(true) }
-    val rows = remember(folder, page) { page.entries.sortedBy { it.name } }
+    var numberStartText by remember(folder) { mutableStateOf("1") }
+    var numberStepText by remember(folder) { mutableStateOf("1") }
+    var numberWidthText by remember(folder) { mutableStateOf("2") }
+    // Invalid human input cannot silently become a default recipe.
+    val numberStart = numberStartText.toLongOrNull()?.takeIf { it >= 0L }
+    val numberStep = numberStepText.toLongOrNull()?.takeIf { it > 0L }
+    val numberWidth = numberWidthText.toIntOrNull()?.takeIf { it in 1..12 }
+    val numberingInvalid = mode == "Number" &&
+        (numberStart == null || numberStep == null || numberWidth == null)
+    // Numbering order must mirror the user's actual remote browser order.
+    // The full original provider listing remains the immutable collision proof;
+    // filtering is deliberately absent, so hidden siblings cannot disappear.
+    val rows = remember(folder, page, sortMode, descending) {
+        SftpBrowsePresentation.rows(page.entries, "", sortMode, descending)
+    }
     val complete = !page.truncated && rows.size <= SftpBrowseBounds.MAX
     val selectedExisting = rows.filter { it.name in selected }.map { it.name }
     val blocked = !complete || opaqueSessionId.isBlank()
     val recipe = when (mode) {
         "Prefix" -> RenameRecipe(listOf(RenameEdit.Prefix(value)), extensionLocked)
         "Suffix" -> RenameRecipe(listOf(RenameEdit.Suffix(value)), extensionLocked)
+        "Clean up" -> RenameRecipe(listOf(RenameEdit.CleanUp), extensionLocked)
         "Number" -> RenameRecipe(listOf(RenameEdit.Number(
-            start = 1L, step = 1L, width = 2, separator = " ", prefix = numberAtFront
+            start = numberStart ?: 0L, step = numberStep ?: 1L,
+            width = numberWidth ?: 1, separator = " ", prefix = numberAtFront
         )), extensionLocked)
         "Uppercase" -> RenameRecipe(listOf(RenameEdit.ChangeCase(upper = true)), extensionLocked)
         "Lowercase" -> RenameRecipe(listOf(RenameEdit.ChangeCase(upper = false)), extensionLocked)
         else -> RenameRecipe(listOf(RenameEdit.Replace(find, value)), extensionLocked)
     }
-    val preview = remember(rows, selectedExisting, recipe, folder, opaqueSessionId, blocked) {
-        if (blocked || selectedExisting.isEmpty()) null
+    val preview = remember(rows, selectedExisting, recipe, folder,
+        opaqueSessionId, blocked, numberingInvalid) {
+        if (blocked || numberingInvalid || selectedExisting.isEmpty()) null
         else {
             val identity = opaqueSessionId
             val fileMetadata = rows.joinToString("\n") {
@@ -137,7 +158,7 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.fillMaxWidth()) {
                     listOf("Replace", "Prefix", "Suffix", "Number",
-                        "Uppercase", "Lowercase").forEach { option ->
+                        "Uppercase", "Lowercase", "Clean up").forEach { option ->
                         Button(enabled = enabled, modifier = Modifier.heightIn(min = 48.dp),
                             onClick = { mode = option }) {
                             Text(if (mode == option) "•" + option else option,
@@ -169,6 +190,34 @@ fun RemoteRenamePreviewCard(opaqueSessionId: String, folder: String,
                         Text("Numbers before names",
                             style = MaterialTheme.typography.bodyMedium)
                     }
+                    // Single-column input stays usable on 360dp and large
+                    // text; all preview changes remain non-mutating.
+                    OutlinedTextField(numberStartText,
+                        { numberStartText = it.take(19) },
+                        modifier = Modifier.fillMaxWidth().testTag("rename-number-start"),
+                        enabled = enabled, singleLine = true,
+                        label = { Text("Start") })
+                    OutlinedTextField(numberStepText,
+                        { numberStepText = it.take(19) },
+                        modifier = Modifier.fillMaxWidth().testTag("rename-number-step"),
+                        enabled = enabled, singleLine = true,
+                        label = { Text("Step") })
+                    OutlinedTextField(numberWidthText,
+                        { numberWidthText = it.take(2) },
+                        modifier = Modifier.fillMaxWidth().testTag("rename-number-width"),
+                        enabled = enabled, singleLine = true,
+                        label = { Text("Digits") })
+                    if (numberingInvalid) {
+                        Text("Invalid numbering: start must be non-negative, step positive, " +
+                            "and digits 1–12. No preview or Apply is available.",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                if (mode == "Clean up") {
+                    Text("Clean up removes empty brackets, explicit (copy) suffixes " +
+                        "and repeated spaces. Meaningful labels are retained; " +
+                        "all collisions still block Apply.",
+                        style = MaterialTheme.typography.bodySmall)
                 }
                 Text("Selection: " + selectedExisting.size + " / " + rows.size,
                     style = MaterialTheme.typography.bodySmall)

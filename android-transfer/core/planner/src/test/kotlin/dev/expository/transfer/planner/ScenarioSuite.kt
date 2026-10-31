@@ -255,6 +255,29 @@ object ScenarioSuite {
             check(p.executable && p.preview.map { it.proposed } ==
                 listOf("007 scene10.mkv", "009 scene2.mkv"))
         }
+        test("opt-in conservative cleanup removes only copy tags and empty brackets") {
+            val s = snapshot(listOf("photo ()  (copy).jpg",
+                "Episode (2019)  [1080p].mkv", "notes [ ].txt",
+                "Manual (copy) notes.txt"))
+            val recipe = RenameRecipe(listOf(RenameEdit.CleanUp))
+            val p = RenamePlanner.preview(s, recipe, NOW)
+            check(p.executable && p.preview.map { it.proposed } ==
+                listOf("photo.jpg", "Episode (2019) [1080p].mkv",
+                    "notes.txt", "Manual (copy) notes.txt"))
+            check(p.changed == 3)
+            assertStepsPreserveAll(s, p)
+            check(RenamePlanner.revalidate(p, s, recipe, NOW))
+            check(!RenamePlanner.revalidate(p, s,
+                RenameRecipe(listOf(RenameEdit.Prefix("x"))), NOW))
+        }
+        test("cleanup never overwrites an occupied unselected sibling") {
+            val s = snapshot(listOf("photo.jpg", "photo (copy).jpg"),
+                listOf("photo (copy).jpg"))
+            val p = RenamePlanner.preview(s,
+                RenameRecipe(listOf(RenameEdit.CleanUp)), NOW)
+            check(!p.executable && "OCCUPIED_DESTINATION" in p.blockers &&
+                p.steps.isEmpty() && p.preview.single().proposed == "photo.jpg")
+        }
         test("rename revalidation fails on sibling drift and recipe changes") {
             val s = snapshot(listOf("a", "b"))
             val recipe = RenameRecipe(listOf(RenameEdit.Prefix("new-")))
@@ -365,6 +388,28 @@ object ScenarioSuite {
             check(!OperationPlanner.revalidate(copy, TransferRequest(
                 listOf(file("Example.txt", source)), target,
                 destinationListing = witness.copy(witness = DestinationWitness.COMPLETE_PARENT_LISTING)), NOW))
+        }
+        test("no-op rename never claims executable steps or Apply authorization") {
+            val fixture = snapshot(listOf("Already.txt", "lower.txt"))
+            val empty = RenamePlanner.preview(fixture, RenameRecipe(emptyList()), NOW)
+            check(!empty.executable && empty.changed == 0 && empty.steps.isEmpty())
+            check("NO_RENAME_CHANGES" in empty.blockers)
+            val samePrefix = RenamePlanner.preview(fixture,
+                RenameRecipe(listOf(RenameEdit.Prefix(""))), NOW)
+            check(!samePrefix.executable && samePrefix.changed == 0)
+            check("NO_RENAME_CHANGES" in samePrefix.blockers)
+            val existingLower = RenamePlanner.preview(snapshot(listOf("lower.txt")),
+                RenameRecipe(listOf(RenameEdit.ChangeCase(false))), NOW)
+            check(!existingLower.executable && existingLower.steps.isEmpty())
+            val mixed = RenamePlanner.preview(fixture,
+                RenameRecipe(listOf(RenameEdit.ChangeCase(false))), NOW)
+            // Case-only changes still require temporary staging on a
+            // case-insensitive or unknown filesystem. Preserve both steps.
+            check(mixed.executable && mixed.changed == 1 && mixed.steps.size == 2)
+            check(mixed.steps.map { it.phase } ==
+                listOf(RenamePhase.STAGE, RenamePhase.COMMIT))
+            check(mixed.steps.all { it.itemId == "Already.txt" })
+            assertStepsPreserveAll(fixture, mixed)
         }
         test("10k actual rename steps use stable order and no overwrite") {
             val names = (1..10000).map { "Test" + it.toString().padStart(5, '0') + ".txt" }

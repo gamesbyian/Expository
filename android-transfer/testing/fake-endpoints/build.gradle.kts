@@ -10,3 +10,9 @@ tasks.register<JavaExec>("scenarios") {
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("dev.expository.transfer.fakes.FakeEndpointSuite")
 }
+
+// These main()-based suites are not automatically discovered by Gradle's test task.
+// Keep the standard check lifecycle honest for local developers and CI.
+tasks.named("check") {
+    dependsOn("scenarios")
+}

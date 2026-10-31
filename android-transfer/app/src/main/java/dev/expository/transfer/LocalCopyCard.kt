@@ -34,6 +34,8 @@ import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.engine.CopyReceipt
 import dev.expository.transfer.saf.SafSingleDocumentCopy
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
+import dev.expository.transfer.journal.ProtectedRecoveryContext
+import dev.expository.transfer.journal.ProtectedRecoveryContextStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -51,6 +53,26 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal fun shareEpochUnchanged(launched: Long, current: Long): Boolean =
     launched >= 0L && launched == current
 
+/** Picker results are untrusted input until scoped READ and metadata succeed. */
+internal fun readablePickedSource(uri: Uri?, resultFlags: Int): Boolean =
+    uri != null && uri.scheme == "content" && !uri.authority.isNullOrBlank() &&
+        resultFlags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0
+
+/** One immutable permission context replaces three independently mutable picker fields.
+ * A saved source URI alone is not authorization after a new selection/share.
+ */
+internal data class FrozenPickerCopyApproval(
+    val sourceUri: Uri,
+    val selectionRevision: Long,
+    val shareEpoch: Long
+) {
+    fun stillMatches(currentSource: Uri?, currentRevision: Long,
+        currentShareEpoch: Long): Boolean =
+        currentSource == sourceUri && selectionRevision >= 0L &&
+        selectionRevision == currentRevision &&
+        shareEpochUnchanged(shareEpoch, currentShareEpoch)
+}
+
 /** Exact foreground copy ownership, including operator cancellation. */
 internal fun activeLocalCopyProgress(
     current: AtomicBoolean?, expected: AtomicBoolean, busy: Boolean
@@ -65,9 +87,16 @@ fun LocalCopyCard(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val service = remember(context) {
-        SafSingleDocumentCopy(context.contentResolver) { digest ->
-            AndroidAtomicAttemptStorage(context.applicationContext, digest)
-        }
+        val app = context.applicationContext
+        val recovery = ProtectedRecoveryContextStore(app)
+        SafSingleDocumentCopy(context.contentResolver,
+            storageForPlan = { digest ->
+                AndroidAtomicAttemptStorage(app, digest)
+            },
+            recordRecoveryContext = { digest, sourceName, destinationName, provider ->
+                recovery.recordNew(digest, ProtectedRecoveryContext(
+                    "SAF_PICKER_COPY", sourceName, destinationName, provider))
+            })
     }
     var selected by remember { mutableStateOf<Uri?>(null) }
     var displayName by remember { mutableStateOf<String?>(null) }
@@ -80,10 +109,10 @@ fun LocalCopyCard(
     var receipt by remember { mutableStateOf<CopyReceipt?>(null) }
     var selectionRevision by remember { mutableLongStateOf(0L) }
     var openPickerRevision by remember { mutableLongStateOf(-1L) }
-    var savePickerRevision by remember { mutableLongStateOf(-1L) }
+    var pendingSaveApproval by remember {
+        mutableStateOf<FrozenPickerCopyApproval?>(null)
+    }
     var openPickerShareEpoch by remember { mutableLongStateOf(-1L) }
-    var savePickerShareEpoch by remember { mutableLongStateOf(-1L) }
-    var frozenSaveSource by remember { mutableStateOf<Uri?>(null) }
     var adoptedTreeSource by remember { mutableStateOf<Uri?>(null) }
 
     // A selected child from the Single-view SAF browser is an explicitly
@@ -175,20 +204,18 @@ fun LocalCopyCard(
     }
 
     val save = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val sourceUri = frozenSaveSource
-        val originalRevision = savePickerRevision
-        val originalShareEpoch = savePickerShareEpoch
-        frozenSaveSource = null
-        savePickerRevision = -1L
-        savePickerShareEpoch = -1L
+        val approval = pendingSaveApproval
+        // Consume an OS-picker result only once, even if the callback is
+        // followed by a new selection, Share or reentrant launcher event.
+        pendingSaveApproval = null
         val targetUri = result.data?.data
         if (result.resultCode != Activity.RESULT_OK || targetUri == null) {
             status = "Save As canceled. No transfer started."
-        } else if (sourceUri == null || sourceUri != selected ||
-            originalRevision != selectionRevision ||
-            !shareEpochUnchanged(originalShareEpoch, currentShareEpoch())) {
+        } else if (approval?.stillMatches(
+                selected, selectionRevision, currentShareEpoch()) != true) {
             status = "Source selection changed while Save As was open. No copy started. The picker may have created an empty document."
         } else {
+            val sourceUri = approval.sourceUri
             val permit = AtomicBoolean(true)
             continueCopy = permit
             busy = true
@@ -201,7 +228,7 @@ fun LocalCopyCard(
                     val job = coroutineContext[Job]
                     var lastProgress = 0L
                     service.copy(sourceUri, targetUri,
-                        continueRequested = { permit.get() && job?.isActive == true },
+                        continueRequested = { foregroundCopyAllowed(permit, job) },
                         onProgress = { bytes ->
                             if (bytes - lastProgress >= 1024L * 1024L) {
                                 lastProgress = bytes
@@ -262,20 +289,35 @@ fun LocalCopyCard(
         val uri = result.data?.data
         if (result.resultCode != Activity.RESULT_OK || uri == null) {
             status = "File selection canceled."
-        } else {
-            selected = uri
-            destinationName = null
-            displayName = "Selected document"
+        } else if (!readablePickedSource(uri, result.data?.flags ?: 0)) {
+            selected = null
+            displayName = null
             receipt = null
-            status = "File selected. Choose Save copy to open Android Save As."
+            destinationName = null
+            status = "Android did not grant a readable document. Choose the file again."
+        } else {
+            // No Save or Share from a guessed URI: metadata must be positively
+            // observed through the actual scoped Android ContentResolver
+            // BEFORE this selection becomes actionable.
+            selected = null
+            adoptedTreeSource = null
+            destinationName = null
+            displayName = null
+            receipt = null
+            status = "Checking the selected document's read access…"
             scope.launch {
                 val observation = withContext(Dispatchers.IO) {
                     runCatching { service.observe(uri) }.getOrNull()
                 }
-                if (selectionRevision == launchedRevision &&
-                    selected == uri && observation != null) {
+                if (selectionRevision != launchedRevision || selected != null)
+                    return@launch
+                if (observation == null) {
+                    status = "Selected document cannot be read. Choose it again; no Copy started."
+                } else {
+                    selected = uri
                     displayName = observation.displayName
                     mime = observation.mimeType
+                    status = "File selected. Choose Save copy to open Android Save As."
                 }
             }
         }
@@ -301,24 +343,35 @@ fun LocalCopyCard(
                     receipt = null
                     mime = "application/octet-stream"
                     status = "Choose a file in Android's picker."
-                    open.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                        addCategory(Intent.CATEGORY_OPENABLE)
-                        type = "*/*"
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    })
+                    pendingSaveApproval = null
+                    try {
+                        open.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "*/*"
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        })
+                    } catch (_: Exception) {
+                        openPickerRevision = -1L
+                        openPickerShareEpoch = -1L
+                        status = "Android file picker unavailable. No selection or Copy was authorized."
+                    }
                 }) { Text("Choose file") }
                 Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !busy && selected != null, onClick = {
                     val source = selected ?: return@Button
-                    frozenSaveSource = source
-                    savePickerRevision = selectionRevision
-                    savePickerShareEpoch = currentShareEpoch()
+                    pendingSaveApproval = FrozenPickerCopyApproval(
+                        source, selectionRevision, currentShareEpoch())
                     val sourceName = displayName ?: "copy.bin"
-                    save.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                        addCategory(Intent.CATEGORY_OPENABLE)
-                        type = mime.takeUnless { it.isBlank() || it == "*/*" }
-                            ?: "application/octet-stream"
-                        putExtra(Intent.EXTRA_TITLE, sourceName)
-                    })
+                    try {
+                        save.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = mime.takeUnless { it.isBlank() || it == "*/*" }
+                                ?: "application/octet-stream"
+                            putExtra(Intent.EXTRA_TITLE, sourceName)
+                        })
+                    } catch (_: Exception) {
+                        pendingSaveApproval = null
+                        status = "Android Save As picker unavailable. No Copy started."
+                    }
                 }) { Text("Save copy…") }
                 Button(
                     modifier = Modifier.heightIn(min = 48.dp),

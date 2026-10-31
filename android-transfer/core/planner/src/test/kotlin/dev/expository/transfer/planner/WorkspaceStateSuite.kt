@@ -42,6 +42,35 @@ object WorkspaceStateSuite {
             state.single.visit(local).select(candidate).scroll(9, 13))
         check(state.copyProposal(WorkspacePane.A, null, NOW) == null)
 
+        // A separately observed destination in permanent Single must produce
+        // exactly the same immutable Copy plan as the identical selected source
+        // in Dual. This is pure planning, not permission to execute or a saved
+        // OS picker result. Neither path implies a Move or a no-replace claim.
+        val reviewedListing = DestinationListing("complete-single-dual", true, emptyList())
+        val selectedSingle = TransferWorkspaceState(single =
+            BrowsePaneState(BrowseEndpoint.LOCAL).visit(local).select(candidate))
+        val comparableDual = TransferWorkspaceState(view = WorkspaceView.DUAL,
+            a = selectedSingle.single,
+            b = BrowsePaneState(BrowseEndpoint.SFTP).visit(sftp))
+        val singlePlan = selectedSingle.singleCopyProposal(sftp, reviewedListing, NOW)
+        val dualPlan = comparableDual.copyProposal(WorkspacePane.A, reviewedListing, NOW)
+        check(singlePlan != null && singlePlan.executable && singlePlan == dualPlan)
+        check(singlePlan.operation == Operation.COPY &&
+            singlePlan.route == TransferRoute.DEVICE_RELAY)
+        check(selectedSingle.singleCopyProposal(sftp, null, NOW)?.executable == false)
+        check(selectedSingle.singleCopyProposal(sftp,
+            DestinationListing("incomplete", false, emptyList()), NOW)?.executable == false)
+        check(selectedSingle.singleCopyProposal(sftp,
+            reviewedListing.copy(siblings = listOf(candidate.name)), NOW)?.executable == false)
+        check(selectedSingle.singleCopyProposal(sftp.copy(revision = "changed"),
+            reviewedListing, NOW) != singlePlan)
+        check(selectedSingle.view(WorkspaceView.DUAL)
+            .singleCopyProposal(sftp, reviewedListing, NOW) == null)
+        check(selectedSingle.update(WorkspacePane.SINGLE,
+            selectedSingle.single.clearSelection())
+            .singleCopyProposal(sftp, reviewedListing, NOW) == null)
+        check(comparableDual.copyProposal(WorkspacePane.B, reviewedListing, NOW) == null)
+
         // SAF-backed document providers can occupy either pane without being
         // misrepresented as an SFTP or Google Drive API session. Grant
         // switching clears authority/selection and preserves planner guards.
@@ -63,6 +92,46 @@ object WorkspaceStateSuite {
         check(documentToDevice.preset(DualPairing.REMOTE_REMOTE).a.endpoint ==
             BrowseEndpoint.SFTP)
         check(documents.visit(localOther).current?.selected?.isEmpty() == true)
+
+        // A second SAF tree-picker grant may expose the same authority/root,
+        // but it must never inherit the old grant's paths or selections.
+        val granted = local.copy(key = local.key.copy(grantId = "tree-A"))
+        val childUnderGrant = granted.copy(
+            key = granted.key.copy(containerId = "inbox-child"),
+            folder = listOf("Inbox", "Child"))
+        val oldGrantNavigation = BrowsePaneState(BrowseEndpoint.DOCUMENTS)
+            .visit(granted).select(item(granted, "private"))
+            .visit(childUnderGrant).scroll(17, 4)
+        check(oldGrantNavigation.back.size == 1)
+        val regranted = granted.copy(key = granted.key.copy(grantId = "tree-B"))
+        val newGrantNavigation = oldGrantNavigation.visit(regranted)
+        check(newGrantNavigation.current?.location == regranted)
+        check(newGrantNavigation.current?.selected?.isEmpty() == true)
+        check(newGrantNavigation.current?.firstVisibleIndex == 0)
+        check(newGrantNavigation.back.isEmpty() && newGrantNavigation.forward.isEmpty())
+        check(newGrantNavigation.back() == newGrantNavigation)
+        // An unchanged grant can navigate back; it only loses mutation proof,
+        // as the existing safe history contract requires.
+        check(oldGrantNavigation.back().current?.location?.capabilities?.isEmpty() == true)
+
+        // A reauthenticated remote session with matching display/root IDs is
+        // a separate trust boundary if its verified namespace/storage differs.
+        val remoteChild = sftp.copy(
+            key = sftp.key.copy(containerId = "remote-child"),
+            folder = listOf("destination", "child"))
+        val oldRemoteNavigation = BrowsePaneState(BrowseEndpoint.SFTP)
+            .visit(sftp).select(item(sftp, "remote-private"))
+            .visit(remoteChild).scroll(11)
+        check(oldRemoteNavigation.back.size == 1)
+        val changedNamespace = remoteChild.copy(verifiedNamespace = "new-authenticated-namespace")
+        val namespaceReset = oldRemoteNavigation.visit(changedNamespace)
+        check(namespaceReset.current?.location == changedNamespace)
+        check(namespaceReset.back.isEmpty() && namespaceReset.forward.isEmpty())
+        check(namespaceReset.current?.firstVisibleIndex == 0)
+        val changedStorage = remoteChild.copy(verifiedStorageDomain = "new-storage-domain")
+        val storageReset = oldRemoteNavigation.visit(changedStorage)
+        check(storageReset.current?.location == changedStorage)
+        check(storageReset.back.isEmpty() && storageReset.forward.isEmpty())
 
         // Switching away and back to the same selected provider must not
         // resurrect a grant, browsing history or any selected item.

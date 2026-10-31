@@ -83,7 +83,15 @@ object VerifiedCopyBatchQueue {
                 // must not turn already-committed destination bytes into an
                 // artificial UNCERTAIN write or abort subsequent verified jobs.
                 onProgress = { bytes ->
-                    runCatching { onItemProgress(index, bytes) }
+                    try { onItemProgress(index, bytes) }
+                    catch (cancelled: java.util.concurrent.CancellationException) {
+                        // A canceled owning UI scope must not start the next
+                        // item even if the continue predicate remains true.
+                        throw cancelled
+                    } catch (_: Exception) {
+                        // Ignore recoverable display faults only; fatal errors
+                        // and cancellation must stop further mutations.
+                    }
                 }
             )
             results += receipt

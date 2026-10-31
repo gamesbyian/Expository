@@ -115,9 +115,17 @@ object RecursiveFolderCopyEngine {
             val snapshot = RecursiveCopyProgress(
                 approved.digest, files, folders, bytes,
                 files + folders, approved.entries.size)
-            // An optional observer cannot alter durable verification, authorize
-            // another write, leak provider identities, or abort a verified step.
-            runCatching { onVerifiedStep(snapshot) }
+            // Presentation exceptions cannot erase a committed proof. However,
+            // cancellation of the owning UI scope must STOP the coordinator
+            // before it starts another step; fatal VM errors must also escape.
+            // The just-verified step remains durable and non-replayable.
+            try {
+                onVerifiedStep(snapshot)
+            } catch (cancelled: java.util.concurrent.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // A recoverable display failure must not falsify byte proof.
+            }
         }
 
         if (!approved.reviewable || !digestFormat.matches(approved.digest) ||
@@ -220,6 +228,14 @@ object RecursiveFolderCopyEngine {
                         journal.beginAttempt(ticket.digest, UUID.randomUUID().toString())
                     } catch (_: Exception) {
                         return stopped("DIRECTORY_ATTEMPT_NOT_DURABLE_OR_ALREADY_STARTED")
+                    }
+                    // A stop can race the durable beginAttempt write.
+                    // Recheck immediately before the mutating provider call;
+                    // the recorded attempt remains reviewable and non-replayable.
+                    if (!runCatching { continueRequested() }.getOrDefault(false)) {
+                        runCatching { journal.markUncertain(ticket.digest) }
+                        return outcome(RecursiveCopyResult.UNCERTAIN,
+                            "STOPPED_AFTER_DURABLE_ATTEMPT_NO_CREATE_REPLAY")
                     }
                     // From this point, the provider might have created a child,
                     // even if its response or journal acknowledgement fails.

@@ -40,6 +40,7 @@ jobs:
           # PR refs/pull/N/merge disappears quickly after squash merge.
           # Validate the immutable PR head instead of racing its merge ref.
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -47,11 +48,68 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.13"
-      - name: Offline deterministic G1 synthetic scenarios
+      - name: Standard check includes every offline deterministic suite
         working-directory: android-transfer
-        run: gradle :core:planner:scenarios :core:planner:locationScenarios :core:planner:recursiveFolderScenarios :core:planner:directoryScenarios :core:planner:moveScenarios :core:planner:workspaceScenarios :core:planner:sessionAccessScenarios :core:engine:scenarios :core:engine:journalScenarios :core:engine:journaledCopyScenarios :core:engine:batchQueueScenarios :core:engine:renameScenarios :core:engine:recursiveCopyScenarios :adapter:ftps:scenarios :adapter:sftp:scenarios :testing:fake-endpoints:scenarios --no-daemon
+        run: gradle check --no-daemon
+
+  android-pr-compile:
+    # Every app-affecting PR must compile its app AND instrumentation sources.
+    # Pure documentation and unrelated native-only changes keep the cheap JVM lane.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Determine exact PR paths using trusted GitHub metadata
+        id: affected
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          files="$(gh api --paginate "repos/$REPO/pulls/$NUMBER/files?per_page=100" --jq '.[].filename')"
+          run=false
+          while IFS= read -r file; do
+            case "$file" in
+              android-transfer/app/*|android-transfer/core/*|android-transfer/adapter/*|android-transfer/build.gradle.kts|android-transfer/settings.gradle.kts|android-transfer/gradle.properties|.github/workflows/transfer-native.yml)
+                run=true
+                ;;
+            esac
+          done <<< "$files"
+          printf 'run=%s\n' "$run" >> "$GITHUB_OUTPUT"
+          if [[ "$run" == true ]]; then
+            echo "Android source/build affected: debug app + androidTest compilation and lint required."
+          else
+            echo "No Android source/build changes: Android compile not applicable."
+          fi
+      - uses: actions/checkout@v4
+        if: steps.affected.outputs.run == 'true'
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        if: steps.affected.outputs.run == 'true'
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+        if: steps.affected.outputs.run == 'true'
+      - name: Install only the required compile SDK
+        if: steps.affected.outputs.run == 'true'
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.affected.outputs.run == 'true'
+        with:
+          gradle-version: "8.13"
+          cache-read-only: true
+      - name: Compile app and Android tests, then lint (no emulator or external endpoints)
+        if: steps.affected.outputs.run == 'true'
+        working-directory: android-transfer
+        run: gradle -PwithAndroid=true :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin :app:lintDebug --no-daemon
+
   android-debug:
-    # Android builds remain opt-in and non-blocking; PRs use cheap JVM evidence.
+    # Developer debug APK artifacts remain opt-in; the app compile/lint PR gate above is mandatory when applicable.
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.build_apk) ||
       (github.event_name == 'issue_comment' &&

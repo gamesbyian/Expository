@@ -59,10 +59,15 @@ data class BrowsePaneState(
         }
         val fresh = FolderVisit(observed.freeze())
         val old = current ?: return copy(current = fresh)
-        if (old.location.key.authorityId != observed.key.authorityId ||
-            old.location.key.rootId != observed.key.rootId) {
-            // A new account, grant, or remote authority cannot inherit any old
-            // history/selection or imply an old authenticated namespace.
+        if (old.location.key.kind != observed.key.kind ||
+            old.location.key.authorityId != observed.key.authorityId ||
+            old.location.key.rootId != observed.key.rootId ||
+            old.location.key.grantId != observed.key.grantId ||
+            old.location.verifiedNamespace != observed.verifiedNamespace ||
+            old.location.verifiedStorageDomain != observed.verifiedStorageDomain) {
+            // A changed SAF grant or verified remote namespace/storage domain
+            // may share the same provider authority and root labels. Treat it
+            // as a new access boundary: no old history, selection, or scroll.
             return BrowsePaneState(endpoint, fresh)
         }
         if (old.location.key == observed.key && old.location.folder == observed.folder) {
@@ -190,6 +195,32 @@ data class TransferWorkspaceState(
     )
 
     /**
+     * Shared immutable planner entry point for Single's explicit destination
+     * and Dual's opposite observed pane. This only proposes an action: it
+     * never grants permission, opens a stream or treats an old listing as fresh.
+     */
+    private fun planSelected(origin: FolderVisit, destination: LocationRef,
+        listing: DestinationListing?, operation: Operation,
+        deletionAuthorized: Boolean, nowMillis: Long): TransferPlan? {
+        if (origin.selected.isEmpty()) return null
+        return OperationPlanner.transfer(TransferRequest(origin.selected,
+            destination, operation, deletionAuthorized, listing), nowMillis)
+    }
+
+    /**
+     * Single and Dual now use exactly the same plan construction. A Single
+     * destination must be separately and currently observed by the adapter;
+     * a display breadcrumb or OS picker invocation is never a destination.
+     * The caller still owns explicit review, freshness and durable execution.
+     */
+    fun singleCopyProposal(destination: LocationRef,
+        destinationListing: DestinationListing?, nowMillis: Long): TransferPlan? =
+        if (view != WorkspaceView.SINGLE) null else single.current?.let {
+            planSelected(it, destination, destinationListing,
+                Operation.COPY, false, nowMillis)
+        }
+
+    /**
      * A and B are symmetrical. This builds immutable plans only; adapters
      * must obtain fresh capabilities/listings, display preflight, journal,
      * and revalidate before any write or source deletion.
@@ -200,10 +231,8 @@ data class TransferWorkspaceState(
         val origin = pane(source).current ?: return null
         val other = if (source == WorkspacePane.A) WorkspacePane.B else WorkspacePane.A
         val destination = pane(other).current?.location ?: return null
-        if (origin.selected.isEmpty()) return null
-        return OperationPlanner.transfer(
-            TransferRequest(origin.selected, destination, operation,
-                deletionAuthorized, destinationListing), nowMillis)
+        return planSelected(origin, destination, destinationListing, operation,
+            deletionAuthorized, nowMillis)
     }
 
     /** Button and drag must yield the identical, non-destructive Copy plan. */

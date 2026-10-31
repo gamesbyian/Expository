@@ -4,9 +4,14 @@ import android.net.Uri
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
@@ -53,6 +58,71 @@ class RecursiveFolderCopyOfferUiTest {
         compose.onNodeWithTag("saf-recursive-copy-folder").performClick()
         assertEquals(1, requested)
         assertEquals(0, navigated)
+    }
+
+    @Test fun copyRefusalIsVisibleBesideTheAccessibleFolderAction() {
+        var status by mutableStateOf("Choose a source and destination; Copy needs explicit review.")
+        compose.setContent {
+            MaterialTheme {
+                LocalTreePane(
+                    label = "Scoped source", state = state(false),
+                    scroll = rememberLazyListState(),
+                    onPick = {}, onOpen = {}, onParent = {}, onAncestor = {},
+                    onRefresh = {}, onLoadMore = {}, onSelect = {},
+                    onCopyFolder = {
+                        status = "Folder Copy unavailable: source folder selection is stale or incomplete."
+                    },
+                    copyFeedback = status
+                )
+            }
+        }
+        compose.onNodeWithTag("saf-single-copy-feedback")
+            .assertTextContains("Copy needs explicit review", substring = true)
+        compose.onNodeWithTag("saf-recursive-copy-folder")
+            .assertIsEnabled().performClick()
+        compose.onNodeWithTag("saf-single-copy-feedback")
+            .assertTextContains("Folder Copy unavailable", substring = true)
+    }
+
+    @Test fun rootWithExactlyOneObservedFolderOffersVisibleCopyWithoutNestedScroll() {
+        var requested = 0
+        compose.setContent {
+            MaterialTheme {
+                LocalTreePane(
+                    label = "Scoped root", state = state(false),
+                    scroll = rememberLazyListState(),
+                    onPick = {}, onOpen = {}, onParent = {}, onAncestor = {},
+                    onRefresh = {}, onLoadMore = {}, onSelect = {},
+                    onCopyFolder = { selected ->
+                        assertEquals("folder", selected.documentId)
+                        requested++
+                    })
+            }
+        }
+        compose.onNodeWithTag("saf-root-copy-matching-folder").assertExists()
+            .performClick()
+        assertEquals(1, requested)
+    }
+
+    @Test fun multipleRootDirectoriesCannotChooseAnImplicitCopySource() {
+        val many = state(false).copy(entries = listOf(
+            TreeEntry("folder-a", "Shows", true, null),
+            TreeEntry("folder-b", "Films", true, null)
+        ))
+        compose.setContent {
+            MaterialTheme {
+                LocalTreePane(
+                    label = "Scoped root", state = many,
+                    scroll = rememberLazyListState(),
+                    onPick = {}, onOpen = {}, onParent = {}, onAncestor = {},
+                    onRefresh = {}, onLoadMore = {}, onSelect = {},
+                    onCopyFolder = {})
+            }
+        }
+        compose.onNodeWithTag("saf-root-copy-matching-folder").assertDoesNotExist()
+        // Each folder still retains its independent explicit Copy action.
+        compose.onNodeWithTag("saf-recursive-copy-folder-a").assertExists()
+        compose.onNodeWithTag("saf-recursive-copy-folder-b").assertExists()
     }
 
     @Test fun nestedDirectoryCannotPretendToBePickedRoot() {

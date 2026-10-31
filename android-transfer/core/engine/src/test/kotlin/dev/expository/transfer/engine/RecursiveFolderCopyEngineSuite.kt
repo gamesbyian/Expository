@@ -33,16 +33,22 @@ object RecursiveFolderCopyEngineSuite {
         entry("file", "Episode.bin", ItemKind.FILE, listOf("Shows", "Episode.bin"))
     ), 1, 2, emptyList())
 
-    private class Store : AtomicAttemptStorage {
+    private class Store(private val afterCommit: () -> Unit = {}) : AtomicAttemptStorage {
         var data: ByteArray? = null
         override fun readCommitted() = data?.copyOf()
-        override fun replaceAtomically(bytes: ByteArray) { data = bytes.copyOf() }
+        override fun replaceAtomically(bytes: ByteArray) {
+            data = bytes.copyOf()
+            afterCommit()
+        }
     }
     private class Fake : RecursiveCopyEndpoint {
         val journals = mutableMapOf<Int, Store>()
         val created = linkedSetOf<String>()
         val trace = mutableListOf<String>()
         var copied: ByteArray? = null
+        var permitted = true
+        var cancelAfterFirstBegin = false
+        var firstStepCommits = 0
         var sourceChanged: String? = null
         var ticketChanged = false
         var expiry = 1000L
@@ -55,7 +61,10 @@ object RecursiveFolderCopyEngineSuite {
         var refresh: () -> RecursiveFolderManifest? = { manifest() }
 
         fun storage(digest: String, i: Int): AtomicAttemptStorage =
-            journals.getOrPut(i) { Store() }
+            journals.getOrPut(i) { Store {
+                if (i == 0 && ++firstStepCommits == 2 && cancelAfterFirstBegin)
+                    permitted = false
+            } }
         private fun ticket(e: RecursiveCopyEntry) = RecursiveDirectoryTicket(
             if (e.relativePath.size == 1) "1".repeat(64) else "2".repeat(64),
             e.relativePath, "authenticated-parent", expiry)
@@ -182,6 +191,32 @@ object RecursiveFolderCopyEngineSuite {
             })
             check(callbacks == 3 && result.result == RecursiveCopyResult.COMPLETE_VERIFIED)
         }
+        case("canceled progress scope cannot authorize another folder mutation") {
+            val f = Fake()
+            val error = runCatching {
+                f.run(onVerifiedStep = {
+                    throw java.util.concurrent.CancellationException("synthetic UI teardown")
+                })
+            }.exceptionOrNull()
+            check(error is java.util.concurrent.CancellationException)
+            check(f.created == setOf("Shows") && f.copied == null)
+            check(f.journals.size == 1)
+            check(DurableAttemptJournal(f.journals.getValue(0))
+                .current()?.state == JournalState.VERIFIED)
+            // Crash/cancel does not replay the already journaled first step.
+            check(f.run().result == RecursiveCopyResult.BLOCKED)
+        }
+        case("fatal progress observer error stops before next mutation") {
+            val f = Fake()
+            val error = runCatching {
+                f.run(onVerifiedStep = { throw AssertionError("synthetic fatal observer") })
+            }.exceptionOrNull()
+            check(error is AssertionError)
+            check(f.created == setOf("Shows") && f.copied == null)
+            check(f.journals.size == 1)
+            check(DurableAttemptJournal(f.journals.getValue(0))
+                .current()?.state == JournalState.VERIFIED)
+        }
         case("replay same durable step blocked without second write") {
             val f = Fake()
             check(f.run().result == RecursiveCopyResult.COMPLETE_VERIFIED)
@@ -292,6 +327,18 @@ object RecursiveFolderCopyEngineSuite {
             check(result.result == RecursiveCopyResult.UNCERTAIN)
             check(DurableAttemptJournal(f.journals.getValue(2)).current()?.state ==
                 JournalState.WRITE_ACKNOWLEDGED)
+        }
+        case("stop immediately after committed beginAttempt prevents directory create") {
+            val f = Fake().apply { cancelAfterFirstBegin = true }
+            val result = f.run(permission = { f.permitted })
+            check(result.result == RecursiveCopyResult.UNCERTAIN &&
+                result.reason == "STOPPED_AFTER_DURABLE_ATTEMPT_NO_CREATE_REPLAY")
+            check(f.created.isEmpty() && "mkdir" !in f.trace &&
+                f.copied == null)
+            check(DurableAttemptJournal(f.journals.getValue(0)).current()?.state ==
+                JournalState.UNCERTAIN)
+            // A second invocation may not replay a durable attempted step.
+            check(f.run().result == RecursiveCopyResult.BLOCKED)
         }
         case("operator cancels after verified first folder") {
             val f = Fake()

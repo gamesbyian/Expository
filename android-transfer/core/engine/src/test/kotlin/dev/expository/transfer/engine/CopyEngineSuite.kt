@@ -60,6 +60,30 @@ object CopyEngineSuite {
             check(receipt.bytesWritten == bytes.size.toLong())
             check(out.toByteArray().contentEquals(bytes))
         }
+        scenario("canceled progress observer halts subsequent streaming") {
+            val out = ByteArrayOutputStream()
+            var notifications = 0
+            var readbackOpened = false
+            val streams = object : CopyStreams {
+                override fun openSource() = ByteArrayInputStream(bytes)
+                override fun openNewDestination(): OutputStream = out
+                override fun openDestinationReadBack(): InputStream {
+                    readbackOpened = true
+                    return ByteArrayInputStream(out.toByteArray())
+                }
+            }
+            val receipt = ForegroundCopyEngine.copy(p, { p }, streams,
+                onProgress = {
+                    notifications++
+                    throw java.util.concurrent.CancellationException(
+                        "synthetic canceled observer")
+                })
+            check(notifications == 1)
+            check(out.size() == 65_536)
+            check(!readbackOpened)
+            check(receipt.proof == CopyProof.UNCERTAIN)
+            check(receipt.bytesWritten == out.size().toLong())
+        }
         scenario("empty file read-back verified") {
             val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
                 override fun openSource() = ByteArrayInputStream(ByteArray(0))
@@ -186,6 +210,62 @@ object CopyEngineSuite {
                 override fun openDestinationReadBack(): InputStream? = null
             }, continueRequested = { count++ < 3 })
             check(receipt.proof == CopyProof.UNCERTAIN)
+        }
+        scenario("stop while blocking source read returns before any additional write") {
+            val out = ByteArrayOutputStream()
+            var permitted = true
+            val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
+                override fun openSource(): InputStream = object : ByteArrayInputStream(bytes) {
+                    override fun read(b: ByteArray, off: Int, len: Int): Int {
+                        val n = super.read(b, off, len)
+                        permitted = false // user pressed Stop during provider read
+                        return n
+                    }
+                }
+                override fun openNewDestination(): OutputStream = out
+                override fun openDestinationReadBack(): InputStream =
+                    ByteArrayInputStream(out.toByteArray())
+            }, continueRequested = { permitted })
+            check(out.size() == 0 && receipt.proof == CopyProof.UNCERTAIN &&
+                receipt.bytesWritten == 0L)
+        }
+        scenario("stop while waiting for final readback EOF cannot claim verified") {
+            var permitted = true
+            val out = ByteArrayOutputStream()
+            val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
+                override fun openSource() = ByteArrayInputStream(bytes)
+                override fun openNewDestination(): OutputStream = out
+                override fun openDestinationReadBack(): InputStream =
+                    object : ByteArrayInputStream(out.toByteArray()) {
+                        override fun read(b: ByteArray, off: Int, len: Int): Int {
+                            val n = super.read(b, off, len)
+                            if (n == -1) permitted = false
+                            return n
+                        }
+                    }
+            }, continueRequested = { permitted })
+            check(out.toByteArray().contentEquals(bytes) &&
+                receipt.proof == CopyProof.UNCERTAIN &&
+                receipt.reason == "VERIFY_READ_FAILED")
+        }
+        scenario("stop after successful readback close preserves committed SHA proof") {
+            var permitted = true
+            val out = ByteArrayOutputStream()
+            val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
+                override fun openSource() = ByteArrayInputStream(bytes)
+                override fun openNewDestination(): OutputStream = out
+                override fun openDestinationReadBack(): InputStream =
+                    object : ByteArrayInputStream(out.toByteArray()) {
+                        override fun close() {
+                            super.close()
+                            permitted = false // Stop pressed exactly after readback
+                        }
+                    }
+            }, continueRequested = { permitted })
+            check(!permitted && out.toByteArray().contentEquals(bytes) &&
+                receipt.proof == CopyProof.BYTES_VERIFIED &&
+                receipt.reason == "READBACK_SHA256_MATCH" &&
+                receipt.bytesWritten == bytes.size.toLong())
         }
         scenario("writer throws: never report verified") {
             val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {

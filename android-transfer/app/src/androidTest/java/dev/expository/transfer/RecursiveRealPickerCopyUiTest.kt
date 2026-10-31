@@ -259,9 +259,35 @@ class RecursiveRealPickerCopyUiTest {
         // user-selected fixture root. A coordinate tap can miss the placed
         // control during nested scroll/layout, especially on API35 emulators.
         // This invokes no synthetic ActivityResult and grants no URI.
-        compose.onNodeWithText("Choose folder").performScrollTo()
-        compose.onNodeWithText("Choose folder").performClick()
+        // As with the destination, prove the source selector is genuinely
+        // displayed and enabled in the OUTER workspace before clicking.
+        // A composed-but-clipped Button is not an observed OS launch.
+        val sourceLaunchMonitor = instrumentation.addMonitor(
+            android.content.IntentFilter(android.content.Intent.ACTION_OPEN_DOCUMENT_TREE),
+            null, false)
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("saf-root-picker"))
+        compose.onNodeWithTag("saf-root-picker").assertIsEnabled()
+        compose.onNodeWithTag("saf-root-picker").assertIsDisplayed()
+        compose.onNodeWithTag("saf-root-picker").performClick()
         compose.waitForIdle()
+        // Check foreground and the nonblocking intent monitor separately;
+        // neither grants permission or stands in for an OS-selected root.
+        val sourcePickerAccessible =
+            device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")), 8_000L) ||
+                device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 3_000L)
+        val sourcePickerResumed = device.executeShellCommand("dumpsys activity activities")
+            .lineSequence().any { line ->
+                (line.contains("mResumedActivity") ||
+                    line.contains("topResumedActivity")) &&
+                    line.contains("documentsui", ignoreCase = true)
+            }
+        val sourceIntentObserved = instrumentation.checkMonitorHit(sourceLaunchMonitor, 1)
+        instrumentation.removeMonitor(sourceLaunchMonitor)
+        assertTrue("SYSTEM_SOURCE_PICKER_NOT_FOREGROUND_INTENT_HIT_" +
+            sourceIntentObserved + "_ACCESSIBILITY_" + sourcePickerAccessible +
+            "_RESUMED_" + sourcePickerResumed,
+            sourcePickerAccessible || sourcePickerResumed)
         chooseFixtureRoot(device, "Expository Source Lab")
         // The OS UI click returns before ActivityResult/URI-grant delivery.
         // Wait until Expository has received and opened its scoped tree.
