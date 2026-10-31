@@ -40,6 +40,11 @@ test('writer rejects path traversal, unsafe Windows targets and ambiguous duplic
  assert.equal(api.cleanPath('folder/ok.png'),true);
  assert.equal(api.cleanPath('.git/config'),false,'Git administration metadata cannot be published');
  assert.throws(()=>api.resolveEntries([file('foo.png'),file('FOO.PNG')],''),/duplicate/);
+ assert.throws(()=>api.resolveEntries([file('é.png'),file('e\u0301.PNG')],''),/duplicate/);
+ assert.throws(()=>api.resolveEntries([file('assets'),file('assets/logo.png')],''),/path conflict/);
+ assert.throws(()=>api.resolveEntries([file('ASSETS'),file('assets/logo.png')],''),/path conflict/);
+ assert.throws(()=>api.resolveEntries([file('é'),file('e\u0301/child.png')],''),/path conflict/);
+ assert.throws(()=>api.resolveEntries([file('nested/file.txt')],'a'.repeat(4090)),/too long/);
  assert.throws(()=>api.resolveEntries([file('safe.txt')],'../bad'),/unsafe/);
  assert.throws(()=>api.resolveEntries([file('safe.txt')],'test/'),/unsafe/);
  assert.equal(api.branchPath('feature/zip-import'),true);
@@ -51,6 +56,14 @@ test('tree collision check catches files, directories and case folding',()=>{
  const collisions=api.findCollisions(files,{truncated:false,tree:[{path:'new.TXT',type:'blob'},{path:'A',type:'blob'}]});
  assert.deepEqual([...collisions],['NEW.txt','A/file.txt']);
  assert.throws(()=>api.findCollisions(files,{truncated:true,tree:[]}),/incomplete/);
+ const unicode=api.resolveEntries([file('e\u0301/new.txt')],'');
+ assert.deepEqual([...api.findCollisions(unicode,{truncated:false,
+  tree:[{path:'é',type:'blob'}]})],['e\u0301/new.txt'],
+  'Existing canonically equivalent blob blocks a directory beneath it');
+ const duplicated=api.resolveEntries([file('e\u0301.txt')],'');
+ assert.deepEqual([...api.findCollisions(duplicated,{truncated:false,
+  tree:[{path:'É.TXT',type:'blob'}]})],['e\u0301.txt'],
+  'Existing NFC/casefold equivalent file blocks a new blob');
 });
 test('destination inspection performs only reads before explicit confirmation',async()=>{
  const {api,calls}=setup();
