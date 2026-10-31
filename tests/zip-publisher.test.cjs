@@ -8,11 +8,13 @@ assert.ok(start>=0&&end>start,'Publisher pure logic boundary present');
 const SHA={head:'a'.repeat(40),tree:'b'.repeat(40),blob:'c'.repeat(40),newTree:'d'.repeat(40),commit:'e'.repeat(40)};
 function setup(respond){
  const calls=[];
- const context=vm.createContext({Blob,URL,FileReader:class{
+ const context=vm.createContext({Blob,URL,TextEncoder,FileReader:class{
   readAsDataURL(blob){blob.arrayBuffer().then(bytes=>{this.result='data:application/octet-stream;base64,'+Buffer.from(bytes).toString('base64');this.onload()}).catch(e=>this.onerror?.(e))}
  },fetch:async(url,options)=>{
   calls.push({url,options,body:options.body?JSON.parse(options.body):undefined});
   const answer=respond?respond(url,options,calls):undefined;
+  // Synthetic response codes, never a real account/token/network endpoint.
+  if(answer?.__httpStatus)return {ok:false,status:answer.__httpStatus};
   return {ok:true,json:async()=>answer??mock(url,options)};
  }});
  vm.runInContext(source.slice(start,end)+'\nglobalThis.published={cleanPath,repoPath,branchPath,resolveEntries,findCollisions,inspectDestination,writeNewBranch};',context);
@@ -39,11 +41,25 @@ test('writer rejects path traversal, unsafe Windows targets and ambiguous duplic
  for(const p of ['../escape.txt','/absolute','dir//file.txt','CON.txt','folder/bad?.txt'])assert.equal(api.cleanPath(p),false,p);
  assert.equal(api.cleanPath('folder/ok.png'),true);
  assert.equal(api.cleanPath('.git/config'),false,'Git administration metadata cannot be published');
+ assert.equal(api.cleanPath('é'.repeat(127)),true,'254 UTF-8 bytes is safe');
+ assert.equal(api.cleanPath('é'.repeat(128)),false,'256 UTF-8 bytes exceeds one Git segment');
+ const longUtf8Path=Array(16).fill('é'.repeat(120)).join('/');
+ assert.equal(api.cleanPath(longUtf8Path),true,'under 4096 UTF-8 bytes can fit');
+ assert.equal(api.cleanPath(longUtf8Path+'/'+longUtf8Path),false,'combined multibyte path exceeds total bound');
  assert.throws(()=>api.resolveEntries([file('foo.png'),file('FOO.PNG')],''),/duplicate/);
+ assert.throws(()=>api.resolveEntries([file('é.png'),file('e\u0301.PNG')],''),/duplicate/);
+ assert.throws(()=>api.resolveEntries([file('assets'),file('assets/logo.png')],''),/path conflict/);
+ assert.throws(()=>api.resolveEntries([file('ASSETS'),file('assets/logo.png')],''),/path conflict/);
+ assert.throws(()=>api.resolveEntries([file('é'),file('e\u0301/child.png')],''),/path conflict/);
+ const validLongPrefix=Array(16).fill('a'.repeat(255)).join('/');
+ assert.equal(api.cleanPath(validLongPrefix),true,'Every 255-byte component is valid');
+ assert.throws(()=>api.resolveEntries([file('nested/file.txt')],validLongPrefix),/too long/,
+  'Only the combined prefix and member crosses the full 4096-byte limit');
  assert.throws(()=>api.resolveEntries([file('safe.txt')],'../bad'),/unsafe/);
  assert.throws(()=>api.resolveEntries([file('safe.txt')],'test/'),/unsafe/);
  assert.equal(api.branchPath('feature/zip-import'),true);
  assert.equal(api.branchPath('bad..branch'),false);
+ assert.equal(api.branchPath('topic@{head}'),false,'Git ref syntax must reject @{');
 });
 test('tree collision check catches files, directories and case folding',()=>{
  const {api}=setup();
@@ -51,6 +67,23 @@ test('tree collision check catches files, directories and case folding',()=>{
  const collisions=api.findCollisions(files,{truncated:false,tree:[{path:'new.TXT',type:'blob'},{path:'A',type:'blob'}]});
  assert.deepEqual([...collisions],['NEW.txt','A/file.txt']);
  assert.throws(()=>api.findCollisions(files,{truncated:true,tree:[]}),/incomplete/);
+ const descendant=api.resolveEntries([file('assets')],'');
+ assert.deepEqual([...api.findCollisions(descendant,{truncated:false,
+  tree:[{path:'assets/images/logo.png',type:'blob'}]})],['assets'],
+  'An incoming blob cannot replace a parent folder of existing files');
+ const unicode=api.resolveEntries([file('e\u0301/new.txt')],'');
+ assert.deepEqual([...api.findCollisions(unicode,{truncated:false,
+  tree:[{path:'é',type:'blob'}]})],['e\u0301/new.txt'],
+  'Existing canonically equivalent blob blocks a directory beneath it');
+ const duplicated=api.resolveEntries([file('e\u0301.txt')],'');
+ assert.deepEqual([...api.findCollisions(duplicated,{truncated:false,
+  tree:[{path:'É.TXT',type:'blob'}]})],['e\u0301.txt'],
+  'Existing NFC/casefold equivalent file blocks a new blob');
+ assert.throws(()=>api.findCollisions(files,{truncated:false,
+  tree:[{path:'É.txt',type:'blob'},{path:'e\u0301.TXT',type:'tree'}]}),/ambiguous/,
+  'Malformed existing tree must not make an authority-colliding file disappear');
+ assert.throws(()=>api.findCollisions(files,{truncated:false,
+  tree:[{path:'mystery',type:'unknown'}]}),/unrecognized/);
 });
 test('destination inspection performs only reads before explicit confirmation',async()=>{
  const {api,calls}=setup();
@@ -78,6 +111,33 @@ test('new branch writer refuses a moved base branch before mutating Git objects'
  const plan=await api.inspectDestination('secret','owner/repo','main','',[file('new.txt')]);
  await assert.rejects(api.writeNewBranch(plan,'secret','expository/zip-demo',()=>{}),/changed/);
  assert.equal(calls.filter(x=>x.options.method==='POST').length,0);
+});
+
+test('401/403/429 preflight failures never issue any GitHub writes or echo credentials',async()=>{
+ for(const statusCode of [401,403,429]){
+  const {api,calls}=setup((url,options)=>{
+   if(options.method==='GET'&&url.includes('/git/ref/heads/'))
+    return {__httpStatus:statusCode};
+  });
+  await assert.rejects(api.inspectDestination(
+   'synthetic-sensitive-token','owner/repo','main','',[file('safe.txt')]),
+   error=>error.message.includes('HTTP '+statusCode)&&
+    !error.message.includes('synthetic-sensitive-token'));
+  assert.ok(calls.length>0&&calls.every(x=>x.options.method==='GET'));
+ }
+});
+
+test('upload rate limit after review never creates a Git branch ref',async()=>{
+ const {api,calls}=setup((url,options)=>{
+  if(options.method==='POST'&&url.endsWith('/git/blobs'))
+   return {__httpStatus:429};
+ });
+ const plan=await api.inspectDestination('synthetic-token','owner/repo',
+  'main','nested',[file('new.txt')]);
+ await assert.rejects(api.writeNewBranch(plan,'synthetic-token',
+  'expository/zip-rate-limit',()=>{}),/HTTP 429/);
+ assert.equal(calls.some(x=>x.url.endsWith('/git/refs')&&
+  x.options.method==='POST'),false);
 });
 
 test('read-only explorer passes checked ZIP payload to a nonce-only companion URL',async()=>{
