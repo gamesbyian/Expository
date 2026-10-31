@@ -52,6 +52,13 @@ object DirectoryCreatePlanner {
             parent.key.authorityId.isBlank() || parent.key.rootId.isBlank() ||
             parent.key.containerId.isBlank() || parent.revision.isBlank() ||
             parent.folder.any { !valid(it) }) blockers += "UNVERIFIED_PARENT_IDENTITY"
+        // The opaque parent container and the separately displayed
+        // breadcrumb segments MUST bind to the same SFTP absolute directory.
+        // Otherwise an old UI visit may authorize creating a child in a
+        // different location than the one actually reviewed.
+        val observedParentPath = "/" + parent.folder.joinToString("/")
+        if (parent.key.containerId != observedParentPath)
+            blockers += "PARENT_PATH_IDENTITY_MISMATCH"
         if (parent.verifiedNamespace.isNullOrBlank() ||
             parent.verifiedStorageDomain.isNullOrBlank()) blockers += "UNVERIFIED_REMOTE_NAMESPACE"
         for (cap in listOf(Capability.WRITE, Capability.CREATE_CHILD)) {

@@ -39,6 +39,24 @@ object DirectoryCreateSuite {
             val expired = DirectoryCreatePlanner.plan(req, 600_001L)
             check(!expired.executable)
         }
+        case("parent container identity must match frozen breadcrumb path") {
+            val expected = DirectoryCreatePlanner.plan(req, 100L)
+            val stale = req.copy(parent = parent.copy(
+                key = parent.key.copy(containerId = "/different-opaque-parent")))
+            val inconsistent = DirectoryCreatePlanner.plan(stale, 100L)
+            check(!inconsistent.executable)
+            check("PARENT_PATH_IDENTITY_MISMATCH" in inconsistent.blockers)
+            check(inconsistent.digest != expected.digest)
+            // A root folder has an exact "/" identity, not an empty or
+            // user-interface placeholder container ID.
+            val root = parent.copy(
+                key = parent.key.copy(containerId = "/"), folder = emptyList())
+            val rootPlan = DirectoryCreatePlanner.plan(req.copy(parent = root), 100L)
+            check(rootPlan.executable && rootPlan.absoluteTarget == "/New Season")
+            val wrongRoot = root.copy(key = root.key.copy(containerId = "/shows"))
+            check("PARENT_PATH_IDENTITY_MISMATCH" in
+                DirectoryCreatePlanner.plan(req.copy(parent = wrongRoot), 100L).blockers)
+        }
         case("incomplete listing cannot authorize write") {
             val a = DirectoryCreatePlanner.plan(req.copy(listing = listing.copy(complete = false)), 100L)
             check("PARENT_LISTING_NOT_COMPLETE" in a.blockers)
