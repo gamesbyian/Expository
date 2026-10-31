@@ -8,6 +8,8 @@ import dev.expository.transfer.LocalTreeReader
 import dev.expository.transfer.TreeEntry
 import dev.expository.transfer.engine.*
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
+import dev.expository.transfer.journal.ProtectedRecoveryContext
+import dev.expository.transfer.journal.ProtectedRecoveryContextStore
 import dev.expository.transfer.planner.*
 import java.io.FileNotFoundException
 import java.io.InputStream
@@ -60,8 +62,26 @@ internal class SafRecursiveTreeCopy(
             { scanner.reobserve(request, confirmed) },
             { digest, index ->
                 // Never put a path, account ID, URI or filename into private journal names.
-                AndroidAtomicAttemptStorage(appContext,
-                    hash(listOf("SAF_RECURSIVE_STEP_V1", digest, index.toString())))
+                val privateKey = hash(listOf(
+                    "SAF_RECURSIVE_STEP_V1", digest, index.toString()))
+                val item = confirmed.entries[index]
+                val relative = item.relativePath.joinToString(" / ")
+                // Record user-readable context BEFORE the durable write attempt.
+                // Failure stops this step; no provider creation can occur.
+                // Metadata remains encrypted, per-step and non-executable.
+                fun boundedLabel(text: String): String =
+                    text.map { if (it.code < 32 || it.code == 127) ' ' else it }
+                        .joinToString("").trim().take(180).ifBlank { "Selected folder" }
+                ProtectedRecoveryContextStore(appContext).recordNew(
+                    privateKey, ProtectedRecoveryContext(
+                        "SAF_RECURSIVE_COPY",
+                        boundedLabel(relative),
+                        boundedLabel("Selected Android folder / " + relative),
+                        boundedLabel(request.destinationTree.authority
+                            ?: "Android document provider")
+                    )
+                )
+                AndroidAtomicAttemptStorage(appContext, privateKey)
             },
             continueRequested,
             clockMillis,
