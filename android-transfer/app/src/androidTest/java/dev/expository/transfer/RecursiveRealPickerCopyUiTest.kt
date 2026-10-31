@@ -232,6 +232,19 @@ class RecursiveRealPickerCopyUiTest {
             compose.onAllNodesWithText("Folder opened. Scoped Android browser",
                 substring = true).fetchSemanticsNodes().isNotEmpty()
         }
+        // The source ActivityResult may publish its complete folder listing
+        // before TransferActivity actually resumes from system DocumentsUI.
+        // A second picker launched while our Activity is still paused may be
+        // denied or silently dropped by Android background-start restrictions.
+        // Synchronize with actual lifecycle + foreground ownership, not merely
+        // an already-produced Compose text snapshot.
+        compose.waitUntil(30_000L) {
+            compose.activity.lifecycle.currentState.isAtLeast(
+                androidx.lifecycle.Lifecycle.State.RESUMED) &&
+                device.currentPackageName ==
+                    instrumentation.targetContext.packageName
+        }
+        compose.waitForIdle()
         // A true MANAGE_DOCUMENTS provider denies raw access before the OS
         // returns this grant. Only NOW is independent source reading legal.
         assertOriginal()
