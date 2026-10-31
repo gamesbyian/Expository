@@ -341,9 +341,12 @@ class RecursiveRealPickerCopyUiTest {
             // account or unfiltered display text to public CI logs.
             val feedbackNodes = compose.onAllNodesWithTag(
                 "saf-single-copy-feedback").fetchSemanticsNodes()
-            val feedbackText = feedbackNodes.firstOrNull()?.config
-                ?.getOrNull(SemanticsProperties.Text)
-                ?.joinToString(" ") { it.text }.orEmpty()
+            val feedbackText = feedbackNodes.firstOrNull()?.let { node ->
+                runCatching {
+                    node.config[SemanticsProperties.Text]
+                        .joinToString(" ") { annotation -> annotation.text }
+                }.getOrNull()
+            }.orEmpty()
             val feedbackCategory = when {
                 feedbackText.startsWith("Choose a different, writable Android provider") ->
                     "LAUNCH_WITNESS_ARMED"
