@@ -368,6 +368,29 @@ internal fun LocalTreePane(
                 label = { Text("Filter observed names") },
                 singleLine = true, enabled = enabled,
                 modifier = Modifier.fillMaxWidth())
+            // Root folder Copy is otherwise buried inside a 300dp LazyColumn
+            // nested in the workspace's outer LazyColumn. A semantic click
+            // can reach a composed but visually clipped row. Expose a real,
+            // accessible top-level action whenever the *presentation filter*
+            // leaves exactly one observed subfolder. Filtering never grants
+            // mutation authority: the parent-listing, identity, scope and
+            // lifetime checks still happen in the same existing callback.
+            val rootMatches = if (state.crumbs.size == 1 && state.complete &&
+                !state.loading && onCopyFolder != null)
+                visibleEntries.filter { it.directory } else emptyList()
+            if (rootMatches.size == 1) {
+                val folder = rootMatches.single()
+                Button(
+                    enabled = enabled && !state.loading,
+                    modifier = Modifier.heightIn(min = 48.dp)
+                        .testTag("saf-root-copy-matching-folder")
+                        .semantics { contentDescription = "Copy folder " + folder.title },
+                    onClick = { onCopyFolder?.invoke(folder) }
+                ) { Text("Copy folder: " + folder.title + "…") }
+                Text("Copy requires a separate destination picker and explicit review. " +
+                    "The original folder is never deleted.",
+                    style = MaterialTheme.typography.bodySmall)
+            }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 LocalTreeSort.entries.forEach { choice ->
