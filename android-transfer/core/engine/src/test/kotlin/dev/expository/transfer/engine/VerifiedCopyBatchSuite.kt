@@ -114,6 +114,27 @@ object VerifiedCopyBatchSuite {
             check(first.openedDestination == 1 && second.openedDestination == 1)
         }
 
+        case("canceled progress scope stops the batch and journals first item uncertain") {
+            val first = Streams()
+            val later = Streams()
+            val disk = Disk()
+            val report = VerifiedCopyBatchQueue.run(
+                listOf(job('a', first, disk), job('b', later)),
+                onItemProgress = { _, _ ->
+                    throw java.util.concurrent.CancellationException(
+                        "synthetic presentation scope canceled")
+                }
+            )
+            check(report.stop == VerifiedBatchStop.ITEM_REQUIRES_REVIEW)
+            check(report.verifiedItems == 0 && report.nextUnstartedIndex == 1)
+            check(report.items.single().proof == CopyProof.UNCERTAIN)
+            check(first.openedDestination == 1)
+            check(later.openedSource == 0 && later.openedDestination == 0)
+            check(DurableAttemptJournal(disk).current()?.state == JournalState.UNCERTAIN)
+            check(DurableAttemptJournal(disk).recoverAfterRestart()?.state ==
+                JournalState.UNCERTAIN)
+        }
+
         case("fatal display Error propagates and leaves first attempt reviewable") {
             val first = Streams()
             val later = Streams()
