@@ -47,3 +47,8 @@ node review/build-atlas.cjs --source-sha <sha> --fixture synthetic
 The first is cheap. Browser smoke needs installed Chrome and exercises deterministic **synthetic** GitHub responses. The visual atlas generator packages those ignored screenshots into a self-contained, inspectable offline HTML review artifact; the second and third run together in the manual workflow. See [validation policy](docs/quality/VALIDATION.md) for evidence and limits.
 
 **Precedence:** current source + observed behavior > older implementation reports; [work queue](docs/WORK-QUEUE.md) = immediate priorities; [feature roadmap](FEATURE-ROADMAP.md) = strategic scope; [visual contract](docs/quality/VISUAL-REVIEW.md) = acceptance definitions. Public visibility does not supply an OSS license; add a license only after owner choice.
+
+
+## Automatic Android skill selection
+
+For **every `android-transfer/` native Android implementation, review, test, regression, lifecycle, accessibility, storage, security, widget or performance task**, read and apply [Android evidence-first](.agents/skills/android-evidence-first/SKILL.md) without waiting for the owner to request it. During task discovery identify relevant specialist skill references in that file and, **if installed and available**, read the appropriate Google Android, Android Testing or Compose Performance skill; use official Android documentation otherwise. Apply narrow skills to the actual failure mode, not indiscriminately. The repository's normative specifications, agent ownership, security rules, CI policy and proof gates always take precedence. Record when a specialist skill materially changed the implementation or test plan; never treat a skill as proof of working behavior.
