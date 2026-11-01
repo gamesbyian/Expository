@@ -1,5 +1,9 @@
 package dev.expository.transfer.planner
 
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+
 /** E1-only in-memory workspace tests. No Android, connections or file writes. */
 object WorkspaceStateSuite {
     private const val NOW = 1_000L
@@ -81,6 +85,29 @@ object WorkspaceStateSuite {
         check(!invalidBeforeClaim.claimOnce(reorderedSource, null, 14L))
         check(invalidBeforeClaim.claimOnce(reorderedSource, frozenTarget, 14L))
         check(!invalidBeforeClaim.claimOnce(reorderedSource, frozenTarget, 14L))
+
+        // A one-shot confirmation is an atomic shared capability, not merely
+        // a UI flag. A burst of simultaneously delivered callbacks must
+        // authorize exactly one, even when every callback sees fresh identity.
+        val raced = FrozenCopyCommand.capture(frozenSource, frozenTarget, 14L)!!
+        val workers = Executors.newFixedThreadPool(8)
+        try {
+            val ready = CountDownLatch(8)
+            val release = CountDownLatch(1)
+            val claims = (0 until 8).map {
+                workers.submit<Boolean> {
+                    ready.countDown()
+                    check(release.await(30L, TimeUnit.SECONDS))
+                    raced.claimOnce(reorderedSource, frozenTarget, 14L)
+                }
+            }
+            check(ready.await(30L, TimeUnit.SECONDS))
+            release.countDown()
+            check(claims.count { it.get(30L, TimeUnit.SECONDS) } == 1)
+            check(!raced.claimOnce(reorderedSource, frozenTarget, 14L))
+        } finally {
+            workers.shutdownNow()
+        }
 
         // Single is the independent default, not dual A hidden as a tab.
         var state = TransferWorkspaceState()
