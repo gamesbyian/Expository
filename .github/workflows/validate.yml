@@ -1,23 +1,32 @@
 name: Expository checks
 on:
   pull_request:
+  merge_group:
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: expository-check-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: expository-check-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   quick:
     name: Fast source and behavior
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        id: source
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
-      - run: node --test tests/expository.test.cjs tests/pages-audit.test.cjs
+      - name: Execute deterministic Node regressions
+        id: node-tests
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/expository.test.cjs tests/pages-audit.test.cjs tests/ci-orchestration.test.cjs tests/ci-selection.test.cjs tests/ci-failure-digest.test.cjs tests/ci-action-pins.test.cjs tests/ci-selection-shell.test.cjs 2>&1 | tee "$RUNNER_TEMP/expository-node-tests.log"
       - name: Validate browser and atlas scripts
         run: |
           node --check tests/browser-smoke.cjs
@@ -30,3 +39,20 @@ jobs:
           test -f docs/WORK-QUEUE.md
           test ! -e .expository-managed
           ! grep -q 'github_pat_[A-Za-z0-9]' index.html
+      - name: Produce safe diagnostic JSON for failed checks
+        if: failure() && steps.source.outcome == 'success'
+        env:
+          CI_SUITE: web
+          CI_TESTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CI_CHECK_OUTCOME: ${{ steps.node-tests.outcome }}
+          CI_LOG_PATH: ${{ runner.temp }}/expository-node-tests.log
+          CI_REPRO: node --test tests/expository.test.cjs tests/pages-audit.test.cjs tests/ci-orchestration.test.cjs tests/ci-selection.test.cjs tests/ci-failure-digest.test.cjs tests/ci-action-pins.test.cjs tests/ci-selection-shell.test.cjs
+        run: node scripts/ci-failure-digest.cjs
+      - name: Attach redacted failure digest
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: expository-web-failure-digest
+          path: ci-failure-digest.json
+          if-no-files-found: ignore
+          retention-days: 5

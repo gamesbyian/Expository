@@ -13,7 +13,7 @@ This is a **small enduring router**, not a dated work diary. For what to do next
 | Browser behavior, accessibility, UI | [visual review contract](docs/quality/VISUAL-REVIEW.md), `tests/browser-smoke.cjs`, actual app |
 | Agent visual review / screenshot atlas | [review tooling](review/README.md), manual [Visual review workflow](.github/workflows/visual-review.yml) |
 | Security, private repos, token or API changes | This guide's invariants, browser network/API logic and relevant regression tests |
-| CI or performance | [lean validation policy](docs/quality/VALIDATION.md), `tests/expository.test.cjs`, workflow YAML |
+| CI or performance | [CI engineering standard](docs/CI-ENGINEERING-STANDARD.md), [lean validation policy](docs/quality/VALIDATION.md), `tests/ci-orchestration.test.cjs`, workflow YAML |
 | Repo housekeeping | [work queue](docs/WORK-QUEUE.md), ownership notes, current source/tests |
 | Android-native Expository Transfer **independent app under development** | [native agent guide](android-transfer/AGENTS.md), [ranked native queue](android-transfer/WORK-QUEUE.md), [current native contract](docs/android-transfer/CURRENT-CONTRACT.md), [G0–G9 ledger](docs/android-transfer/RELEASE-READINESS.md). Native code is scoped to `android-transfer/`; NEVER port writer behaviors into the read-only Pages explorer |
 
