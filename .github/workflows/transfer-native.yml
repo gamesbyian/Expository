@@ -59,12 +59,13 @@ jobs:
           REPO: ${{ github.repository }}
           NUMBER: ${{ github.event.pull_request.number }}
           EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+          EVENT_BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          actual_head="$(gh api "repos/$REPO/pulls/$NUMBER" --jq '.head.sha')"
-          total="$(gh api "repos/$REPO/pulls/$NUMBER" --jq '.changed_files')"
-          if [[ "$actual_head" != "$EVENT_HEAD" || ! "$total" =~ ^[1-9][0-9]*$ ]]; then
-            echo "::error::Stale PR source or invalid file-count metadata"; exit 2
+          metadata="$(gh api "repos/$REPO/pulls/$NUMBER" --jq '[.head.sha, .base.sha, .changed_files] | @tsv')"
+          IFS=$'\t' read -r actual_head actual_base total <<< "$metadata"
+          if [[ "$actual_head" != "$EVENT_HEAD" || "$actual_base" != "$EVENT_BASE" || ! "$total" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Stale PR head/base or invalid changed-file count"; exit 2
           fi
           gh api --paginate "repos/$REPO/pulls/$NUMBER/files?per_page=100" --jq '.[] | {filename, previous_filename, status} | @json' > "$RUNNER_TEMP/expository-pr-files.jsonl"
           observed="$(wc -l < "$RUNNER_TEMP/expository-pr-files.jsonl")"
@@ -77,11 +78,12 @@ jobs:
             node scripts/ci-selection.cjs "$RUNNER_TEMP/expository-pr-files.jsonl"
             echo "Verified $observed/$total changed paths including rename origins." >> "$GITHUB_STEP_SUMMARY"
           fi
-          newest="$(gh api "repos/$REPO/pulls/$NUMBER" --jq '.head.sha')"
-          if [[ "$newest" != "$EVENT_HEAD" ]]; then
-            echo "::error::PR head changed during selection; refusing stale evidence"; exit 2
+          newest="$(gh api "repos/$REPO/pulls/$NUMBER" --jq '[.head.sha, .base.sha] | @tsv')"
+          IFS=$'\t' read -r newest_head newest_base <<< "$newest"
+          if [[ "$newest_head" != "$EVENT_HEAD" || "$newest_base" != "$EVENT_BASE" ]]; then
+            echo "::error::PR head or base moved during selection; refusing stale evidence"; exit 2
           fi
-          echo "Base-trusted selector; exact PR source $EVENT_HEAD." >> "$GITHUB_STEP_SUMMARY"
+          echo "Base-trusted selector $EVENT_BASE; exact PR source $EVENT_HEAD." >> "$GITHUB_STEP_SUMMARY"
 
   planner:
     name: planner
