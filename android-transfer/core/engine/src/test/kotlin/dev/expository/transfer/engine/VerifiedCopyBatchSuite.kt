@@ -315,6 +315,16 @@ object VerifiedCopyBatchSuite {
             val inconsistentBlocked = CopyOutcomeLedger.begin(1).accept(
                 CopyReceipt("", CopyProof.BLOCKED, 5L, "INVALID"))
             check(inconsistentBlocked.state == CopyOutcomeState.REVIEW_REQUIRED)
+            // A syntactically valid reviewed digest must not turn an
+            // impossible BLOCKED-after-bytes receipt into a clean preflight
+            // refusal. There may be a partial destination to inspect.
+            val blockedAfterWrite = partial.accept(
+                CopyReceipt("b".repeat(64), CopyProof.BLOCKED, 5L, "PARTIAL_WRITE"),
+                expectedPlanDigest = "b".repeat(64))
+            check(blockedAfterWrite.state == CopyOutcomeState.REVIEW_REQUIRED &&
+                blockedAfterWrite.stopProof == CopyProof.UNCERTAIN &&
+                blockedAfterWrite.verifiedItems == 1 &&
+                blockedAfterWrite.verifiedBytes == 42L)
             val cancelled = partial.halt(CopyProof.UNCERTAIN)
             check(cancelled.state == CopyOutcomeState.REVIEW_REQUIRED &&
                 cancelled.verifiedItems == 1)
