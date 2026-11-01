@@ -2,8 +2,7 @@ name: Expository Transfer manual external smoke
 # Maintainer-only exact PR comment commands run trusted main code, never PR-head
 # code. No automatic push, PR, or scheduled external test traffic.
 on:
-  issue_comment:
-    types: [created]
+  workflow_call:
   workflow_dispatch:
     inputs:
       profile:

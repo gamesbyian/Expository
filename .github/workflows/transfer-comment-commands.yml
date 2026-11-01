@@ -1,0 +1,53 @@
+name: Expository Transfer authorized comment commands
+# GitHub cannot filter issue_comment events by comment text at dispatch time.
+# Centralizing here avoids four redundant workflow runs per comment while
+# retaining each command's reviewed-main trust boundary and opt-in scope.
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+jobs:
+  native:
+    if: >-
+      github.event.issue.pull_request != null &&
+      github.event.comment.user.login == 'gamesbyian' &&
+      (github.event.comment.body == '/transfer-native apk' ||
+       github.event.comment.body == '/transfer-native ftps-lab' ||
+       github.event.comment.body == '/transfer-native sftp-lab')
+    uses: ./.github/workflows/transfer-native.yml
+
+  emulator-main:
+    if: >-
+      github.event.issue.pull_request != null &&
+      github.event.comment.user.login == 'gamesbyian' &&
+      github.event.comment.body == '/transfer-native emulator'
+    uses: ./.github/workflows/transfer-emulator-ui.yml
+
+  apk-pr:
+    if: >-
+      github.event.issue.pull_request != null &&
+      github.event.comment.user.login == 'gamesbyian' &&
+      github.event.comment.body == '/transfer-native apk-pr'
+    uses: ./.github/workflows/transfer-pr-apk.yml
+
+  emulator-pr:
+    if: >-
+      github.event.issue.pull_request != null &&
+      github.event.comment.user.login == 'gamesbyian' &&
+      (github.event.comment.body == '/transfer-native emulator-pr' ||
+       startsWith(github.event.comment.body, '/transfer-native emulator-pr '))
+    uses: ./.github/workflows/transfer-pr-emulator.yml
+
+  smoke:
+    if: >-
+      github.event.issue.pull_request != null &&
+      github.event.comment.user.login == 'gamesbyian' &&
+      (github.event.comment.body == '/transfer-smoke rebex-explicit' ||
+       github.event.comment.body == '/transfer-smoke rebex-implicit' ||
+       github.event.comment.body == '/transfer-smoke rebex-tls12' ||
+       github.event.comment.body == '/transfer-smoke wing-implicit' ||
+       github.event.comment.body == '/transfer-smoke owner-explicit' ||
+       github.event.comment.body == '/transfer-smoke owner-implicit')
+    uses: ./.github/workflows/transfer-live-smoke.yml
+    secrets: inherit

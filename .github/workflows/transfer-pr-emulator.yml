@@ -2,8 +2,7 @@ name: Expository Transfer targeted PR Android emulator
 # A deliberate, owner-authored command tests an immutable same-repository PR
 # source revision. Workflow file comes from reviewed main, not the PR.
 on:
-  issue_comment:
-    types: [created]
+  workflow_call:
 permissions:
   contents: read
 jobs:
