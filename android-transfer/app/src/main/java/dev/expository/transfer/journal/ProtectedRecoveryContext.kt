@@ -9,6 +9,7 @@ import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.nio.charset.StandardCharsets
@@ -143,14 +144,16 @@ class ProtectedRecoveryContextStore(context: Context) {
     /** Missing legacy hint is null; unreadable/tampered hint FAILS CLOSED. */
     fun read(digest: String): ProtectedRecoveryContext? = synchronized(LOCK) {
         val base = destinationFile(digest)
-        // A stranded new file may represent a crash before AtomicFile's
-        // first successful commit. It is NOT equivalent to a legacy absent
-        // hint. Preserve it for inspection and signal damaged metadata.
-        if (!base.exists() && File(base.path + ".new").exists())
+        // A status refresh is purely observational. Android AtomicFile
+        // openRead() can rename a legacy .bak over the base and delete an
+        // outstanding .new while a writer is active. Never invoke it here:
+        // sidecars are evidence of an interrupted/ambiguous commit, not
+        // permission for a read path to repair or discard their bytes.
+        if (File(base.path + ".bak").exists() ||
+            File(base.path + ".new").exists())
             throw IOException("RECOVERY_CONTEXT_INTERRUPTED_WRITE")
-        val atomic = AtomicFile(base)
         val bytes = try {
-            atomic.openRead().use { stream ->
+            FileInputStream(base).use { stream ->
                 val output = ByteArrayOutputStream()
                 val buffer = ByteArray(512)
                 while (true) {
