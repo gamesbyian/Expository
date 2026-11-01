@@ -197,7 +197,15 @@ fun RecoveryStatusCard() {
             }
             Button(
                 modifier = Modifier.heightIn(min = 48.dp),
-                onClick = { refreshSerial++ }
+                onClick = {
+                    // Revoke a pending manual inspection synchronously, before
+                    // the refresh effect can run or an OS callback can arrive.
+                    inspectionRevision++
+                    inspectionTicket = null
+                    inspectionListing = null
+                    inspectionMessage = null
+                    refreshSerial++
+                }
             ) { Text("Refresh transfer status") }
         }
     }
