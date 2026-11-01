@@ -910,7 +910,13 @@ class WorkspaceNavigationUiTest {
                 10_000L) ||
                 device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 3_000L) ||
                 device.wait(Until.hasObject(By.text("Recent")), 3_000L) ||
-                device.wait(Until.hasObject(By.text("Downloads")), 3_000L)
+                device.wait(Until.hasObject(By.text("Downloads")), 3_000L) ||
+                // API35 can host a genuine PickActivity under the system
+                // `android` package instead of a DocumentsUI package. This
+                // only recognizes a candidate picker: below we still require
+                // test-owned folder navigation, OS Use/Allow and the real
+                // scoped callback. Never inject or synthesize a tree grant.
+                device.currentPackageName == "android"
             assertTrue("Android system folder picker required; windows=" +
                 pickerWindowKinds(), picker)
             var visible = false
