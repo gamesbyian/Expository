@@ -55,6 +55,8 @@ import dev.expository.transfer.saf.ScopedRecursiveSourceRequest
 import dev.expository.transfer.engine.RecursiveCopyResult
 import dev.expository.transfer.engine.RecursiveCopyProgress
 import dev.expository.transfer.engine.CopyProof
+import dev.expository.transfer.engine.CopyOutcomeLedger
+import dev.expository.transfer.engine.CopyOutcomeState
 import dev.expository.transfer.sftp.SftpAndroidCompat
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 
@@ -861,12 +863,10 @@ private fun DeveloperPreview(
         scope.launch {
             val owningJob = kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]
             try {
-            var verified = 0
-            var verifiedBytes = 0L
-            var failure: CopyProof? = null
+            var outcome = CopyOutcomeLedger.begin(pending.size)
             for ((index, plan) in pending.withIndex()) {
                 if (!foregroundCopyAllowed(permit, owningJob)) {
-                    failure = CopyProof.UNCERTAIN
+                    outcome = outcome.halt(CopyProof.UNCERTAIN)
                     break
                 }
                 // A verified earlier file has necessarily changed the
@@ -885,7 +885,7 @@ private fun DeveloperPreview(
                     current.sourceMime != plan.sourceMime ||
                     current.sourceRevision.isBlank() ||
                     current.sourceRevision != plan.sourceRevision) {
-                    failure = CopyProof.BLOCKED
+                    outcome = outcome.halt(CopyProof.BLOCKED)
                     break
                 }
                 val receipt = withContext(Dispatchers.IO) {
@@ -908,20 +908,21 @@ private fun DeveloperPreview(
                             }
                         })
                 }
-                if (receipt.proof != CopyProof.BYTES_VERIFIED) {
-                    failure = receipt.proof
-                    break  // never retry an ambiguous destination
-                }
-                verified++
-                verifiedBytes += receipt.bytesWritten
+                // The same immutable receipt reducer used by Single keeps
+                // duplicate/malformed receipts out of the verified count and
+                // forbids a later file after any uncertain result.
+                outcome = outcome.accept(receipt, current.plan.digest)
+                if (outcome.state != CopyOutcomeState.ACTIVE &&
+                    outcome.state != CopyOutcomeState.COMPLETE_VERIFIED)
+                    break
             }
             if (copyPermit !== permit) return@launch
-            copyStatus = if (failure == null) {
-                "Copy verified: " + verified + "/" + pending.size +
-                    " files (" + verifiedBytes +
+            copyStatus = if (outcome.complete) {
+                "Copy verified: " + outcome.verifiedItems + "/" + pending.size +
+                    " files (" + outcome.verifiedBytes +
                     " bytes) matched destination readback SHA-256. Cloud sync not confirmed."
             } else {
-                val detail = when (failure) {
+                val detail = when (outcome.stopProof) {
                     CopyProof.WRITE_ACKNOWLEDGED ->
                         "Provider acknowledged unverified bytes. Inspect before any retry."
                     CopyProof.BLOCKED ->
@@ -930,7 +931,7 @@ private fun DeveloperPreview(
                         "Copy cancelled, incomplete or uncertain. Inspect destination before retry."
                     else -> "Transfer was not verified."
                 }
-                "Batch stopped: " + verified + "/" + pending.size +
+                "Batch stopped: " + outcome.verifiedItems + "/" + pending.size +
                     " files independently verified. " + detail +
                     " Original sources were not deleted."
             }
