@@ -15,3 +15,9 @@ All external `uses:` references are pinned to fully qualified Git commit IDs, no
 A literal pin is not a security audit of vendor dependencies. It makes execution reproducible relative to reviewed trees and prevents floating-tag updates. Updates require explicit inventory and repeat validation of applicable manual/automatic paths. No privileges, secrets, events or artifact destinations are introduced.
 
 Offline tests fail if a new external Action is referenced by a floating tag. Workflow-file changes can dispatch resource-heavy protocol or emulator gates, which require exact-head evidence before acceptance. Synthetic fixture and emulator runs do not prove production server or physical device behavior.
+
+## Superseded PR jobs
+
+Before this PR, adjacent commits could leave duplicate expensive Android emulator checks running simultaneously. The prior SFTP Android source-revision runs [41257255897](https://github.com/gamesbyian/Expository/actions/runs/41257255897) and [41257310483](https://github.com/gamesbyian/Expository/actions/runs/41257310483) overlapped even though the first result was already superseded. The revised automatic plaintext FTP, synthetic SFTP relay and Android SFTP emulator workflows now cancel only older runs of **the same PR**; manual invocations have independent `github.run_id` identifiers and are not cancelled. The web validation workflow now uses the same PR-only cancellation rule rather than cancelling deliberate `workflow_dispatch` requests. The exact conditions are asserted in `tests/ci-orchestration.test.cjs`.
+
+This is observed duplicate-run prevention, **not** a claim that total runner minutes or merge latency have improved by a measured percentage. Use Actions job timings on comparable PRs before reporting performance gains.
