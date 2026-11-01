@@ -482,10 +482,26 @@ class LocalPickerPositiveCopyTest {
             compose.onNodeWithText(markerName).assertExists()
             val before = dev.expository.transfer.journal.AttemptRecoveryIndex.recover(context)
             compose.onNodeWithText("Copy A → B…").performSemanticsAction(SemanticsActions.OnClick)
-            compose.waitUntil(30_000L) {
-                compose.onAllNodesWithText("Review Device Copy").fetchSemanticsNodes()
-                    .isNotEmpty()
+            // Fail at the actual refusal, with a stable non-secret reason,
+            // rather than hiding a preflight rejection behind a 30s dialog
+            // timeout. Do not weaken the mandatory real review requirement.
+            val preflightRefusals = listOf(
+                "Copy blocked: select 1–12 distinct files",
+                "Copy blocked: reviewed source or destination authority is stale",
+                "Folder, grant, share or source selection changed during preflight",
+                "Batch Copy preflight refused:"
+            )
+            fun reviewVisible() = compose.onAllNodesWithText("Review Device Copy")
+                .fetchSemanticsNodes().isNotEmpty()
+            fun refusal() = preflightRefusals.firstOrNull { reason ->
+                compose.onAllNodesWithText(reason, substring = true)
+                    .fetchSemanticsNodes().isNotEmpty()
             }
+            compose.waitUntil(30_000L) { reviewVisible() || refusal() != null }
+            org.junit.Assert.assertTrue(
+                "DUAL_COPY_REVIEW_UNAVAILABLE: " +
+                    (refusal() ?: "Review never became visible"),
+                reviewVisible())
             if (fileCount == 2)
                 compose.onNodeWithText("Files (2):", substring = true).assertExists()
             compose.onNodeWithText("Confirm Copy").performSemanticsAction(SemanticsActions.OnClick)
