@@ -89,24 +89,47 @@ jobs:
     name: planner
     needs: select
     if: >-
-      (github.event_name == 'pull_request' || github.event_name == 'merge_group') &&
-      needs.select.outputs.jvm == 'true'
+      !cancelled() &&
+      (github.event_name == 'pull_request' || github.event_name == 'merge_group')
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
+      - name: Enforce native selection integrity before completing required check
+        shell: bash
+        env:
+          SELECT_RESULT: ${{ needs.select.result }}
+          SELECT_JVM: ${{ needs.select.outputs.jvm }}
+          SELECT_ANDROID: ${{ needs.select.outputs.android }}
+        run: |
+          set -euo pipefail
+          if [[ "$SELECT_RESULT" != "success" ]]; then
+            echo "::error::Native selection failed; required check cannot be skipped"
+            exit 2
+          fi
+          case "$SELECT_JVM:$SELECT_ANDROID" in
+            true:true|true:false|false:true|false:false) ;;
+            *) echo "::error::Native selection outputs invalid"; exit 2 ;;
+          esac
+      - name: Report lane non-applicability explicitly
+        if: needs.select.outputs.jvm == 'false'
+        run: echo "JVM verification not applicable; no Gradle/SDK ran." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         id: source
+        if: needs.select.outputs.jvm == 'true'
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        if: needs.select.outputs.jvm == 'true'
         with:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        if: needs.select.outputs.jvm == 'true'
         with:
           gradle-version: "8.13"
       - name: Run offline JVM suites
+        if: needs.select.outputs.jvm == 'true'
         id: jvm-tests
         working-directory: android-transfer
         shell: bash
@@ -123,7 +146,7 @@ jobs:
           CI_REPRO: gradle check --no-daemon
         run: node scripts/ci-failure-digest.cjs
       - name: Attach sanitized JVM failure JSON
-        if: failure()
+        if: failure() && steps.source.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: expository-native-jvm-failure-digest
@@ -135,28 +158,53 @@ jobs:
     name: android-pr-compile
     needs: select
     if: >-
-      (github.event_name == 'pull_request' || github.event_name == 'merge_group') &&
-      needs.select.outputs.android == 'true'
+      !cancelled() &&
+      (github.event_name == 'pull_request' || github.event_name == 'merge_group')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Enforce native selection integrity before completing required check
+        shell: bash
+        env:
+          SELECT_RESULT: ${{ needs.select.result }}
+          SELECT_JVM: ${{ needs.select.outputs.jvm }}
+          SELECT_ANDROID: ${{ needs.select.outputs.android }}
+        run: |
+          set -euo pipefail
+          if [[ "$SELECT_RESULT" != "success" ]]; then
+            echo "::error::Native selection failed; required check cannot be skipped"
+            exit 2
+          fi
+          case "$SELECT_JVM:$SELECT_ANDROID" in
+            true:true|true:false|false:true|false:false) ;;
+            *) echo "::error::Native selection outputs invalid"; exit 2 ;;
+          esac
+      - name: Report lane non-applicability explicitly
+        if: needs.select.outputs.android == 'false'
+        run: echo "Android verification not applicable; no Gradle/SDK ran." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         id: source
+        if: needs.select.outputs.android == 'true'
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        if: needs.select.outputs.android == 'true'
         with:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
+        if: needs.select.outputs.android == 'true'
       - name: Install Android compile SDK
+        if: needs.select.outputs.android == 'true'
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        if: needs.select.outputs.android == 'true'
         with:
           gradle-version: "8.13"
           cache-read-only: true
       - name: Compile app and tests; lint (no emulator or external endpoints)
+        if: needs.select.outputs.android == 'true'
         id: android-build
         working-directory: android-transfer
         shell: bash
@@ -173,7 +221,7 @@ jobs:
           CI_REPRO: gradle -PwithAndroid=true :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin :app:lintDebug --no-daemon
         run: node scripts/ci-failure-digest.cjs
       - name: Attach sanitized Android failure JSON
-        if: failure()
+        if: failure() && steps.source.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: expository-native-android-failure-digest
