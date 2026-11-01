@@ -279,7 +279,11 @@ fun LocalCopyCard(
                 receipt = if (outcome.stopProof != null &&
                     outcome.stopProof != copyReceipt.proof)
                     copyReceipt.copy(proof = outcome.stopProof,
-                        bytesWritten = 0L, reason = "UNTRUSTED_RECEIPT_REQUIRES_REVIEW")
+                        // A failed proof must not erase bytes the adapter
+                        // reports it may already have written. Preserve the
+                        // nonnegative count as *unverified* inspection context.
+                        bytesWritten = copyReceipt.bytesWritten.coerceAtLeast(0L),
+                        reason = "UNTRUSTED_RECEIPT_REQUIRES_REVIEW")
                 else copyReceipt
                 status = when (outcome.state) {
                     CopyOutcomeState.COMPLETE_VERIFIED ->
@@ -468,7 +472,9 @@ fun LocalCopyCard(
                 ) { Text(if (continueCopy?.get() == true) "Cancel copy" else "Stopping…") }
             }
             receipt?.let {
-                Text("Receipt: " + it.proof.name + " · " + it.bytesWritten + " bytes",
+                Text("Receipt: " + it.proof.name + " · " + it.bytesWritten +
+                    if (it.proof == CopyProof.BYTES_VERIFIED) " bytes verified"
+                    else " bytes reported (unverified)",
                     style = MaterialTheme.typography.labelMedium)
                 if (destinationName != null) Text("Destination: " + destinationName)
             }
