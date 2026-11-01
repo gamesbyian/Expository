@@ -911,7 +911,7 @@ private fun DeveloperPreview(
                 // The same immutable receipt reducer used by Single keeps
                 // duplicate/malformed receipts out of the verified count and
                 // forbids a later file after any uncertain result.
-                outcome = outcome.accept(receipt)
+                outcome = outcome.accept(receipt, current.digest)
                 if (outcome.state != CopyOutcomeState.ACTIVE &&
                     outcome.state != CopyOutcomeState.COMPLETE_VERIFIED)
                     break
