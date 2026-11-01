@@ -49,6 +49,14 @@ object WorkspaceStateSuite {
             sourceKey, "observed-source-v1", 7L, listOf("file-b", "file-a"))
         val frozenTarget = CopyCommandScope.freeze(BrowseEndpoint.SFTP,
             targetKey, "observed-target-v1", 9L, emptyList())
+        check(frozenSource == reorderedSource)
+        check(frozenSource?.hashCode() == reorderedSource?.hashCode())
+        // This is an authority witness; never expose a data-class copy()
+        // or generated component accessors that bypass freeze validation.
+        val scopeApi = CopyCommandScope::class.java.declaredMethods.map { it.name }
+        check(scopeApi.none { it == "copy" || it.startsWith("copy\$") ||
+            Regex("component[0-9]+").matches(it) })
+
         val owner = FrozenCopyCommand.capture(frozenSource, frozenTarget, 14L)
         check(owner != null && owner.intent == Operation.COPY)
         check(owner.stillMatches(reorderedSource, frozenTarget, 14L))
