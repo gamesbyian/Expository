@@ -302,6 +302,13 @@ object VerifiedCopyBatchSuite {
             val blocked = partial.halt(CopyProof.BLOCKED)
             check(blocked.state == CopyOutcomeState.BLOCKED &&
                 blocked.verifiedBytes == 42L)
+            val refusedBeforePlan = CopyOutcomeLedger.begin(1).accept(
+                CopyReceipt("", CopyProof.BLOCKED, 0L, "INVALID_PICKER_URI"))
+            check(refusedBeforePlan.state == CopyOutcomeState.BLOCKED &&
+                refusedBeforePlan.verifiedItems == 0)
+            val inconsistentBlocked = CopyOutcomeLedger.begin(1).accept(
+                CopyReceipt("", CopyProof.BLOCKED, 5L, "INVALID"))
+            check(inconsistentBlocked.state == CopyOutcomeState.REVIEW_REQUIRED)
             val cancelled = partial.halt(CopyProof.UNCERTAIN)
             check(cancelled.state == CopyOutcomeState.REVIEW_REQUIRED &&
                 cancelled.verifiedItems == 1)
