@@ -32,6 +32,11 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.engine.CopyReceipt
+import dev.expository.transfer.planner.BrowseEndpoint
+import dev.expository.transfer.planner.CopyCommandScope
+import dev.expository.transfer.planner.FrozenCopyCommand
+import dev.expository.transfer.planner.LocationKey
+import dev.expository.transfer.planner.LocationKind
 import dev.expository.transfer.saf.SafSingleDocumentCopy
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 import dev.expository.transfer.journal.ProtectedRecoveryContext
@@ -58,19 +63,35 @@ internal fun readablePickedSource(uri: Uri?, resultFlags: Int): Boolean =
     uri != null && uri.scheme == "content" && !uri.authority.isNullOrBlank() &&
         resultFlags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0
 
+/** The shared planner command witness remains in memory and holds no grant. */
+private fun pickerCopyScope(uri: Uri?, revision: Long): CopyCommandScope? {
+    if (uri?.scheme != "content" || uri.authority.isNullOrBlank()) return null
+    return CopyCommandScope.freeze(BrowseEndpoint.LOCAL,
+        LocationKey(LocationKind.LOCAL_SAF, uri.authority!!,
+            "os-open-document", uri.toString(), uri.toString()),
+        "selection-revision:" + revision, revision, listOf(uri.toString()))
+}
+
 /** One immutable permission context replaces three independently mutable picker fields.
- * A saved source URI alone is not authorization after a new selection/share.
+ * This first Single route now shares Copy command ownership with Dual SAF
+ * approval, without weakening the original picker result or grant guards.
  */
 internal data class FrozenPickerCopyApproval(
     val sourceUri: Uri,
     val selectionRevision: Long,
     val shareEpoch: Long
 ) {
+    private val copyCommand = FrozenCopyCommand.capture(
+        pickerCopyScope(sourceUri, selectionRevision), null, shareEpoch)
+
     fun stillMatches(currentSource: Uri?, currentRevision: Long,
         currentShareEpoch: Long): Boolean =
         currentSource == sourceUri && selectionRevision >= 0L &&
         selectionRevision == currentRevision &&
-        shareEpochUnchanged(shareEpoch, currentShareEpoch)
+        shareEpochUnchanged(shareEpoch, currentShareEpoch) &&
+        copyCommand?.stillMatches(
+            pickerCopyScope(currentSource, currentRevision), null,
+            currentShareEpoch) == true
 }
 
 /** Exact foreground copy ownership, including operator cancellation. */
