@@ -45,6 +45,3 @@ test('does not surface free-form log lines or auth secrets', () => {
   assert.equal(a.firstMeaningfulError,null);
   assert.doesNotMatch(JSON.stringify(a),/secret-value|some_password|private filenames/);
 });
-
-// CI diagnostic integration probe: deliberately fail the Node fast gate once.
-test('diagnostic CI probe intentionally fails', () => assert.equal('expected', 'actual'));
