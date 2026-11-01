@@ -33,6 +33,46 @@ object WorkspaceStateSuite {
         val ftps = observed(LocationKind.REMOTE_FTPS, "opaque-ftps", "/archive")
         val candidate = item(local, "source")
 
+        // Shared frozen COPY ownership is Android-free and identical across
+        // Single picker and Dual provider screens. Selection order is UI-only,
+        // but any source identity, destination, revision or epoch drift revokes
+        // execution authority before the adapter's stronger preflight.
+        val sourceKey = local.key.copy(grantId = "test-picked-source")
+        val targetKey = sftp.key.copy(grantId = "test-picked-target")
+        val frozenSource = CopyCommandScope.freeze(BrowseEndpoint.LOCAL,
+            sourceKey, "observed-source-v1", 7L, listOf("file-a", "file-b"))
+        val reorderedSource = CopyCommandScope.freeze(BrowseEndpoint.LOCAL,
+            sourceKey, "observed-source-v1", 7L, listOf("file-b", "file-a"))
+        val frozenTarget = CopyCommandScope.freeze(BrowseEndpoint.SFTP,
+            targetKey, "observed-target-v1", 9L, emptyList())
+        val owner = FrozenCopyCommand.capture(frozenSource, frozenTarget, 14L)
+        check(owner != null && owner.intent == Operation.COPY)
+        check(owner.stillMatches(reorderedSource, frozenTarget, 14L))
+        check(!owner.stillMatches(reorderedSource, frozenTarget, 15L))
+        check(!owner.stillMatches(reorderedSource, null, 14L))
+        check(!owner.stillMatches(reorderedSource, CopyCommandScope.freeze(
+            BrowseEndpoint.SFTP, targetKey, "changed", 9L, emptyList()), 14L))
+        check(!owner.stillMatches(CopyCommandScope.freeze(BrowseEndpoint.LOCAL,
+            sourceKey, "observed-source-v1", 8L, listOf("file-a", "file-b")),
+            frozenTarget, 14L))
+        check(!owner.stillMatches(CopyCommandScope.freeze(BrowseEndpoint.LOCAL,
+            sourceKey, "observed-source-v1", 7L, listOf("file-a")),
+            frozenTarget, 14L))
+        check(!owner.stillMatches(CopyCommandScope.freeze(BrowseEndpoint.LOCAL,
+            sourceKey.copy(grantId = "new-picker-grant"),
+            "observed-source-v1", 7L, listOf("file-a", "file-b")),
+            frozenTarget, 14L))
+        check(CopyCommandScope.freeze(BrowseEndpoint.SFTP, sourceKey,
+            "observed-source-v1", 7L, listOf("file-a")) == null)
+        check(CopyCommandScope.freeze(BrowseEndpoint.LOCAL, sourceKey,
+            "observed-source-v1", 7L, listOf("file-a", "file-a")) == null)
+        check(CopyCommandScope.freeze(BrowseEndpoint.LOCAL, sourceKey,
+            "", 7L, listOf("file-a")) == null)
+        check(FrozenCopyCommand.capture(frozenSource, null, 14L)
+            ?.stillMatches(reorderedSource, null, 14L) == true)
+        check(FrozenCopyCommand.capture(null, frozenTarget, 14L) == null)
+        check(FrozenCopyCommand.capture(frozenSource, frozenTarget, -1L) == null)
+
         // Single is the independent default, not dual A hidden as a tab.
         var state = TransferWorkspaceState()
         check(state.view == WorkspaceView.SINGLE)
