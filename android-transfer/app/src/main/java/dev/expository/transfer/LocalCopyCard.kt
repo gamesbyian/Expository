@@ -65,7 +65,7 @@ internal fun readablePickedSource(uri: Uri?, resultFlags: Int): Boolean =
 
 /** The shared planner command witness remains in memory and holds no grant. */
 private fun pickerCopyScope(uri: Uri?, revision: Long): CopyCommandScope? {
-    if (uri?.scheme != "content" || uri.authority.isNullOrBlank()) return null
+    if (uri == null || uri.scheme != "content" || uri.authority.isNullOrBlank()) return null
     return CopyCommandScope.freeze(BrowseEndpoint.LOCAL,
         LocationKey(LocationKind.LOCAL_SAF, uri.authority!!,
             "os-open-document", uri.toString(), uri.toString()),
