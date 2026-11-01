@@ -273,10 +273,14 @@ fun LocalCopyCard(
                 }
                 if (continueCopy !== permit) return@launch
                 destinationName = observedTarget ?: "Selected destination"
-                receipt = copyReceipt
                 // Single and Dual consume one verified-only receipt policy.
                 // An invalid receipt can never be displayed as verified.
                 val outcome = CopyOutcomeLedger.begin(1).accept(copyReceipt)
+                receipt = if (outcome.stopProof != null &&
+                    outcome.stopProof != copyReceipt.proof)
+                    copyReceipt.copy(proof = outcome.stopProof,
+                        bytesWritten = 0L, reason = "UNTRUSTED_RECEIPT_REQUIRES_REVIEW")
+                else copyReceipt
                 status = when (outcome.state) {
                     CopyOutcomeState.COMPLETE_VERIFIED ->
                         "Read-back bytes matched through the selected provider."
