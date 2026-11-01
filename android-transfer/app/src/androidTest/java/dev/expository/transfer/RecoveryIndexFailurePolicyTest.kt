@@ -18,6 +18,29 @@ import org.junit.runner.RunWith
 /** No real journal files are touched; tests input enumeration failures. */
 @RunWith(AndroidJUnit4::class)
 class RecoveryIndexFailurePolicyTest {
+    @Test fun manualRecoveryInspectionRequiresActualTreePickerReadGrant() {
+        val valid = android.net.Uri.parse("content://private.synthetic/tree/root")
+        val nonTree = android.net.Uri.parse("content://private.synthetic/document/item")
+        val unscoped = android.net.Uri.parse("file:///sdcard/private.txt")
+        val read = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+        val write = android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        assertTrue(dev.expository.transfer.journal.RecoveryManualInspection
+            .acceptsPickerResult(valid, read))
+        assertTrue(dev.expository.transfer.journal.RecoveryManualInspection
+            .acceptsPickerResult(valid, read or write))
+        assertTrue(!dev.expository.transfer.journal.RecoveryManualInspection
+            .acceptsPickerResult(valid, write))
+        assertTrue(!dev.expository.transfer.journal.RecoveryManualInspection
+            .acceptsPickerResult(nonTree, read))
+        assertTrue(!dev.expository.transfer.journal.RecoveryManualInspection
+            .acceptsPickerResult(unscoped, read))
+        assertTrue(!dev.expository.transfer.journal.RecoveryManualInspection
+            .acceptsPickerResult(null, read))
+        // None of these negative observations may open a provider or modify
+        // the neutral journal state. The folder chosen during manual review
+        // is never proof it was the old destination.
+    }
+
     @Test fun missingDirectoryListingIsAnInspectionErrorNotZeroUncertain() {
         val result = runCatching { AttemptRecoveryIndex.journalDigests(null) }
         assertTrue(result.isFailure)
