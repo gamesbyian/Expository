@@ -69,3 +69,34 @@ test('automatic expensive suites cancel superseded PRs but not manual runs', () 
   assert.match(read('transfer-plain-ftp-loopback.yml'), /^  workflow_dispatch:\s*$/m);
   assert.match(read('validate.yml'), /^  workflow_dispatch:\s*$/m);
 });
+
+test('all PRs reach a fail-closed native selector before the expensive lanes', () => {
+  const native = read('transfer-native.yml');
+  assert.match(native, /^  pull_request:\s*$/m);
+  assert.match(native, /^  merge_group:\s*$/m);
+  assert.doesNotMatch(native, /^\s+paths:\s*$/m, 'native prefilter would hide rename origins');
+  assert.match(native, /^  select:\s*$/m);
+  assert.match(native, /Native change-selection integrity/);
+  assert.match(native, /github\.event\.pull_request\.base\.sha/);
+  assert.match(native, /github\.event\.pull_request\.head\.sha/);
+  assert.match(native, /if \(\( total > 3000 \|\| observed != total \)\)/);
+  assert.match(native, /node scripts\/ci-selection\.cjs/);
+  assert.match(native, /newest.*EVENT_HEAD/);
+  assert.match(native, /Merge queue requires both native lanes/);
+  assert.equal((native.match(/^\s+needs: select\s*$/gm) || []).length, 2);
+  assert.match(native, /needs\.select\.outputs\.jvm == 'true'/);
+  assert.match(native, /needs\.select\.outputs\.android == 'true'/);
+  assert.match(native, /gh api --paginate/);
+  assert.match(native, /previous_filename/);
+  assert.match(native, /ref: main/, 'manual workflow remains reviewed-main');
+});
+
+test('merge-queue web and native verification do not depend on PR-only metadata', () => {
+  const native = read('transfer-native.yml');
+  const web = read('validate.yml');
+  assert.match(web, /^  merge_group:\s*$/m);
+  assert.match(native, /github\.event_name == 'merge_group'/);
+  assert.match(native, /echo "jvm=true"/);
+  assert.match(native, /echo "android=true"/);
+  assert.match(web, /github\.event\.pull_request\.head\.sha \|\| github\.sha/);
+});
