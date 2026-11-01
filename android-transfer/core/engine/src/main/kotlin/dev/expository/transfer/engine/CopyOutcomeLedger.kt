@@ -44,8 +44,17 @@ class CopyOutcomeLedger private constructor(
      * impossible receipts fail closed and cannot inflate the success count.
      * Terminal results never reopen, even if a late callback arrives.
      */
-    fun accept(receipt: CopyReceipt): CopyOutcomeLedger {
+    fun accept(
+        receipt: CopyReceipt,
+        expectedPlanDigest: String? = null
+    ): CopyOutcomeLedger {
         if (state != CopyOutcomeState.ACTIVE) return this
+        // Real Dual adapters know their freshly prepared immutable plan.
+        // An unrelated but well-formed old receipt cannot satisfy that item.
+        if (expectedPlanDigest != null &&
+            (!digestPattern.matches(expectedPlanDigest) ||
+                receipt.planDigest != expectedPlanDigest))
+            return finish(CopyOutcomeState.REVIEW_REQUIRED, CopyProof.UNCERTAIN)
         // A preflight-only rejection may legitimately lack a planned digest
         // (e.g. an invalid OS picker URI); it still cannot count as success.
         // A purported BLOCKED receipt with written bytes is inconsistent and
