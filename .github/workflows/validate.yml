@@ -14,10 +14,18 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        id: source
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test tests/expository.test.cjs tests/pages-audit.test.cjs tests/ci-orchestration.test.cjs tests/ci-selection.test.cjs
+      - name: Execute deterministic Node regressions
+        id: node-tests
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/expository.test.cjs tests/pages-audit.test.cjs tests/ci-orchestration.test.cjs tests/ci-selection.test.cjs tests/ci-failure-digest.test.cjs 2>&1 | tee "$RUNNER_TEMP/expository-node-tests.log"
       - name: Validate browser and atlas scripts
         run: |
           node --check tests/browser-smoke.cjs
@@ -30,3 +38,20 @@ jobs:
           test -f docs/WORK-QUEUE.md
           test ! -e .expository-managed
           ! grep -q 'github_pat_[A-Za-z0-9]' index.html
+      - name: Produce safe diagnostic JSON for failed checks
+        if: failure() && steps.source.outcome == 'success'
+        env:
+          CI_SUITE: web
+          CI_TESTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CI_CHECK_OUTCOME: ${{ steps.node-tests.outcome }}
+          CI_LOG_PATH: ${{ runner.temp }}/expository-node-tests.log
+          CI_REPRO: node --test tests/expository.test.cjs tests/pages-audit.test.cjs tests/ci-orchestration.test.cjs tests/ci-selection.test.cjs tests/ci-failure-digest.test.cjs
+        run: node scripts/ci-failure-digest.cjs
+      - name: Attach redacted failure digest
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: expository-web-failure-digest
+          path: ci-failure-digest.json
+          if-no-files-found: ignore
+          retention-days: 5
