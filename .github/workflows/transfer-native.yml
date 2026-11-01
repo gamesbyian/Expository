@@ -6,7 +6,11 @@ on:
   pull_request:
     paths:
       - "android-transfer/**"
-      - ".github/workflows/transfer-native.yml"
+      - "!android-transfer/**/*.md"
+      - "!android-transfer/*.md"
+      - ".github/workflows/transfer-*.yml"
+      - "scripts/ci-selection.cjs"
+      - "tests/ci-selection.test.cjs"
   workflow_dispatch:
     inputs:
       build_apk:
@@ -30,7 +34,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   planner:
-    if: github.event_name != 'issue_comment'
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -40,16 +44,34 @@ jobs:
           # Validate the immutable PR head instead of racing its merge ref.
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+      - name: Fetch PR change metadata, including rename origins
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$REPO/pulls/$NUMBER/files?per_page=100" --jq '.[] | {filename, previous_filename, status} | @json' > "$RUNNER_TEMP/expository-pr-files.jsonl"
+      - name: Select risk-appropriate verification
+        id: affected
+        run: node scripts/ci-selection.cjs "$RUNNER_TEMP/expository-pr-files.jsonl"
       - uses: actions/setup-java@v4
+        if: steps.affected.outputs.jvm == 'true'
         with:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
+        if: steps.affected.outputs.jvm == 'true'
         with:
           gradle-version: "8.13"
-      - name: Standard check includes every offline deterministic suite
+      - name: Run all applicable offline JVM suites
+        if: steps.affected.outputs.jvm == 'true'
         working-directory: android-transfer
         run: gradle check --no-daemon
+      - name: Record explicit JVM non-applicability
+        if: steps.affected.outputs.jvm == 'false'
+        run: echo "No JVM/native build impact in the recorded PR paths; check was NOT executed." >> "$GITHUB_STEP_SUMMARY"
 
   android-pr-compile:
     # Every app-affecting PR must compile its app AND instrumentation sources.
@@ -58,8 +80,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Determine exact PR paths using trusted GitHub metadata
-        id: affected
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Fetch exact PR paths, including rename origins
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -67,43 +92,27 @@ jobs:
           NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          files="$(gh api --paginate "repos/$REPO/pulls/$NUMBER/files?per_page=100" --jq '.[].filename')"
-          run=false
-          while IFS= read -r file; do
-            case "$file" in
-              android-transfer/app/*|android-transfer/core/*|android-transfer/adapter/*|android-transfer/build.gradle.kts|android-transfer/settings.gradle.kts|android-transfer/gradle.properties|.github/workflows/transfer-native.yml)
-                run=true
-                ;;
-            esac
-          done <<< "$files"
-          printf 'run=%s\n' "$run" >> "$GITHUB_OUTPUT"
-          if [[ "$run" == true ]]; then
-            echo "Android source/build affected: debug app + androidTest compilation and lint required."
-          else
-            echo "No Android source/build changes: Android compile not applicable."
-          fi
-      - uses: actions/checkout@v4
-        if: steps.affected.outputs.run == 'true'
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: false
+          gh api --paginate "repos/$REPO/pulls/$NUMBER/files?per_page=100" --jq '.[] | {filename, previous_filename, status} | @json' > "$RUNNER_TEMP/expository-pr-files.jsonl"
+      - name: Select Android compile and instrumentation gate
+        id: affected
+        run: node scripts/ci-selection.cjs "$RUNNER_TEMP/expository-pr-files.jsonl"
       - uses: actions/setup-java@v4
-        if: steps.affected.outputs.run == 'true'
+        if: steps.affected.outputs.android == 'true'
         with:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@v4
-        if: steps.affected.outputs.run == 'true'
+        if: steps.affected.outputs.android == 'true'
       - name: Install only the required compile SDK
-        if: steps.affected.outputs.run == 'true'
+        if: steps.affected.outputs.android == 'true'
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@v4
-        if: steps.affected.outputs.run == 'true'
+        if: steps.affected.outputs.android == 'true'
         with:
           gradle-version: "8.13"
           cache-read-only: true
       - name: Compile app and Android tests, then lint (no emulator or external endpoints)
-        if: steps.affected.outputs.run == 'true'
+        if: steps.affected.outputs.android == 'true'
         working-directory: android-transfer
         run: gradle -PwithAndroid=true :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin :app:lintDebug --no-daemon
 
