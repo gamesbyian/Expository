@@ -238,6 +238,58 @@ class RecoveryIndexFailurePolicyTest {
         }
     }
 
+    @Test fun journalStatusRefreshNeverRestoresOrDeletesAtomicSidecars() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "read-only-journal-test-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val digest = "e".repeat(64)
+        val base = File(sandbox, "transfer_attempt_" + digest)
+        val pending = File(base.path + ".new")
+        val backup = File(base.path + ".bak")
+        try {
+            val journal = DurableAttemptJournal(
+                dev.expository.transfer.journal.AndroidAtomicAttemptStorage(isolated, digest))
+            journal.confirm(digest)
+            journal.beginAttempt(digest, "recovery_read_only_fixture")
+            val committed = base.readBytes()
+            val pendingBytes = byteArrayOf(0, 1, 2, 3)
+            pending.writeBytes(pendingBytes)
+            val duringWrite = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(0, duringWrite.verifiedReceipts)
+            assertTrue(duringWrite.damagedOrUnrecognized > 0)
+            assertTrue(duringWrite.reviewReferences.any {
+                it.opaqueSuffix == digest.takeLast(12) &&
+                    it.status.contains("unreadable")
+            })
+            assertArrayEquals(committed, base.readBytes())
+            assertArrayEquals(pendingBytes, pending.readBytes())
+
+            pending.delete()
+            val backupBytes = byteArrayOf(4, 5, 6, 7)
+            backup.writeBytes(backupBytes)
+            val duringBackup = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(0, duringBackup.verifiedReceipts)
+            assertTrue(duringBackup.damagedOrUnrecognized > 0)
+            assertArrayEquals(committed, base.readBytes())
+            assertArrayEquals(backupBytes, backup.readBytes())
+
+            // Removing only test-created sidecars returns to a readable
+            // active journal; Refresh itself must not advance its state.
+            backup.delete()
+            val clean = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, clean.requiresReview)
+            assertEquals(0, clean.damagedOrUnrecognized)
+            assertEquals(JournalState.ATTEMPT_RECORDED, journal.current()?.state)
+            assertArrayEquals(committed, base.readBytes())
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
     @Test fun encryptedContextInspectionNeverRewritesAtomicSidecars() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val sandbox = File(app.cacheDir, "read-only-hint-test-" + UUID.randomUUID())
