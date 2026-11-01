@@ -101,3 +101,51 @@ test('metadata API failure or invalid count never emits a green skip',()=>{
     assert.notEqual(execute(patch).code,0);
   }
 });
+
+function requiredCheckGuards() {
+  const names = ['  planner:', '  android-pr-compile:', '  android-debug:'];
+  return [0,1].map(i => {
+    const start = yaml.indexOf(names[i]);
+    const end = yaml.indexOf(names[i+1], start + 1);
+    assert.ok(start >= 0 && end > start);
+    const section = yaml.slice(start,end);
+    const key = '      - name: Enforce native selection integrity before completing required check\n';
+    const guard = section.slice(section.indexOf(key)).split('      - name: Report lane non-applicability explicitly')[0];
+    assert.ok(section.includes(key));
+    const code = guard.split('        run: |\n')[1];
+    assert.ok(code);
+    return code.split('\n').map(line => line.startsWith('          ') ? line.slice(10) : line).join('\n');
+  });
+}
+function probeGuard(code, result, jvm, android) {
+  return spawnSync('bash',['-c',code],{
+    cwd:root, encoding:'utf8', timeout:1500,
+    env:{...process.env,SELECT_RESULT:result,SELECT_JVM:jvm,SELECT_ANDROID:android}
+  });
+}
+test('both existing check jobs fail if selector fails, skips, or is cancelled',()=>{
+  for(const code of requiredCheckGuards()){
+    for(const state of ['failure','skipped','cancelled']){
+      const r=probeGuard(code,state,'','');
+      assert.notEqual(r.status,0,state);
+      assert.match(r.stdout+r.stderr,/Native selection failed/);
+    }
+  }
+});
+test('both existing check jobs reject missing or corrupt selector outputs',()=>{
+  for(const code of requiredCheckGuards()){
+    for(const values of [['','false'],['true',''],['unknown','false'],['true','unknown']]){
+      const r=probeGuard(code,'success',...values);
+      assert.notEqual(r.status,0);
+      assert.match(r.stdout+r.stderr,/Native selection outputs invalid/);
+    }
+  }
+});
+test('both existing check jobs accept every explicit valid selection combination',()=>{
+  for(const code of requiredCheckGuards()){
+    for(const values of [['true','true'],['true','false'],['false','true'],['false','false']]){
+      const r=probeGuard(code,'success',...values);
+      assert.equal(r.status,0,r.stdout+r.stderr);
+    }
+  }
+});

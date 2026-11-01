@@ -100,3 +100,24 @@ test('merge-queue web and native verification do not depend on PR-only metadata'
   assert.match(native, /echo "android=true"/);
   assert.match(web, /github\.event\.pull_request\.head\.sha \|\| github\.sha/);
 });
+
+test('required native check contexts fail on selector failure, without unnecessary Gradle work', () => {
+  const workflow = read('transfer-native.yml');
+  for (const id of ['planner', 'android-pr-compile']) {
+    const start = workflow.indexOf('  ' + id + ':');
+    assert.ok(start >= 0);
+    const nextId = id === 'planner' ? 'android-pr-compile' : 'android-debug';
+    const end = workflow.indexOf('\n  ' + nextId + ':', start + 3);
+    assert.ok(end > start);
+    const portion = workflow.slice(start, end);
+    assert.match(portion, /needs: select/);
+    assert.match(portion, /!cancelled\(\)/, id + ' must execute when selector fails');
+    assert.match(portion, /Enforce native selection integrity before completing required check/);
+    assert.match(portion, /SELECT_RESULT: \${{ needs\.select\.result }}/);
+    assert.match(portion, /SELECT_JVM: \${{ needs\.select\.outputs\.jvm }}/);
+    assert.match(portion, /SELECT_ANDROID: \${{ needs\.select\.outputs\.android }}/);
+    assert.match(portion, /Report lane non-applicability explicitly/);
+  }
+  assert.equal((workflow.match(/Enforce native selection integrity before completing required check/g) || []).length, 2);
+  assert.equal((workflow.match(/Native selection failed; required check cannot be skipped/g) || []).length, 2);
+});
