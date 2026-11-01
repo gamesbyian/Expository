@@ -52,3 +52,20 @@ test('native PR gates, emulator jobs and manual workflows survive delegation', (
   assert.match(read('transfer-sftp-android-loopback.yml'), /^  pull_request:\s*$/m);
   assert.match(read('transfer-sftp-relay-acceptance.yml'), /^  pull_request:\s*$/m);
 });
+
+test('automatic expensive suites cancel superseded PRs but not manual runs', () => {
+  for (const name of [
+    'transfer-sftp-android-loopback.yml',
+    'transfer-sftp-relay-acceptance.yml',
+    'transfer-plain-ftp-loopback.yml',
+    'transfer-native.yml',
+    'validate.yml',
+  ]) {
+    const workflow = read(name);
+    assert.match(workflow, /^concurrency:\s*$/m, name);
+    assert.match(workflow, /cancel-in-progress: \${{ github\.event_name == 'pull_request' }}/, name);
+    assert.match(workflow, /github\.event\.pull_request\.number \|\| github\.run_id/, name);
+  }
+  assert.match(read('transfer-plain-ftp-loopback.yml'), /^  workflow_dispatch:\s*$/m);
+  assert.match(read('validate.yml'), /^  workflow_dispatch:\s*$/m);
+});
