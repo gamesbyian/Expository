@@ -92,6 +92,14 @@ internal data class FrozenPickerCopyApproval(
         copyCommand?.stillMatches(
             pickerCopyScope(currentSource, currentRevision), null,
             currentShareEpoch) == true
+
+    /** Only the accepted Save As callback may claim this review once. */
+    fun claimOnce(currentSource: Uri?, currentRevision: Long,
+        currentShareEpoch: Long): Boolean =
+        stillMatches(currentSource, currentRevision, currentShareEpoch) &&
+        copyCommand?.claimOnce(
+            pickerCopyScope(currentSource, currentRevision), null,
+            currentShareEpoch) == true
 }
 
 /** Exact foreground copy ownership, including operator cancellation. */
@@ -232,7 +240,7 @@ fun LocalCopyCard(
         val targetUri = result.data?.data
         if (result.resultCode != Activity.RESULT_OK || targetUri == null) {
             status = "Save As canceled. No transfer started."
-        } else if (approval?.stillMatches(
+        } else if (approval?.claimOnce(
                 selected, selectionRevision, currentShareEpoch()) != true) {
             status = "Source selection changed while Save As was open. No copy started. The picker may have created an empty document."
         } else {
