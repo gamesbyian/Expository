@@ -238,6 +238,117 @@ class RecoveryIndexFailurePolicyTest {
         }
     }
 
+    @Test fun journalStatusRefreshNeverRestoresOrDeletesAtomicSidecars() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "read-only-journal-test-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val digest = "e".repeat(64)
+        val base = File(sandbox, "transfer_attempt_" + digest)
+        val pending = File(base.path + ".new")
+        val backup = File(base.path + ".bak")
+        try {
+            val journal = DurableAttemptJournal(
+                dev.expository.transfer.journal.AndroidAtomicAttemptStorage(isolated, digest))
+            journal.confirm(digest)
+            journal.beginAttempt(digest, "recovery_read_only_fixture")
+            val committed = base.readBytes()
+            val pendingBytes = byteArrayOf(0, 1, 2, 3)
+            pending.writeBytes(pendingBytes)
+            val duringWrite = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(0, duringWrite.verifiedReceipts)
+            assertTrue(duringWrite.damagedOrUnrecognized > 0)
+            assertTrue(duringWrite.reviewReferences.any {
+                it.opaqueSuffix == digest.takeLast(12) &&
+                    it.status.contains("unreadable")
+            })
+            assertArrayEquals(committed, base.readBytes())
+            assertArrayEquals(pendingBytes, pending.readBytes())
+
+            pending.delete()
+            val backupBytes = byteArrayOf(4, 5, 6, 7)
+            backup.writeBytes(backupBytes)
+            val duringBackup = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(0, duringBackup.verifiedReceipts)
+            assertTrue(duringBackup.damagedOrUnrecognized > 0)
+            assertArrayEquals(committed, base.readBytes())
+            assertArrayEquals(backupBytes, backup.readBytes())
+
+            // Removing only test-created sidecars returns to a readable
+            // active journal; Refresh itself must not advance its state.
+            backup.delete()
+            val clean = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, clean.requiresReview)
+            assertEquals(0, clean.damagedOrUnrecognized)
+            assertEquals(JournalState.ATTEMPT_RECORDED, journal.current()?.state)
+            assertArrayEquals(committed, base.readBytes())
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
+    @Test fun encryptedContextInspectionNeverRewritesAtomicSidecars() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "read-only-hint-test-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val digest = "6".repeat(64)
+        val base = File(sandbox, "transfer_recovery_context_v1_" + digest)
+        val pending = File(base.path + ".new")
+        val backup = File(base.path + ".bak")
+        val hint = dev.expository.transfer.journal.ProtectedRecoveryContext(
+            "SAF_PICKER_COPY", "Fixture source", "Fixture destination",
+            "fixture.provider")
+        try {
+            val store = dev.expository.transfer.journal.ProtectedRecoveryContextStore(isolated)
+            store.recordNew(digest, hint)
+            val committedBytes = base.readBytes()
+            assertEquals(hint, store.read(digest))
+            val journal = DurableAttemptJournal(
+                dev.expository.transfer.journal.AndroidAtomicAttemptStorage(isolated, digest))
+            journal.confirm(digest)
+            journal.beginAttempt(digest, "read_only_hint_fixture")
+
+            // AtomicFile.openRead() deletes .new when base exists; a status
+            // refresh must preserve BOTH artifacts for independent inspection.
+            val pendingBytes = byteArrayOf(3, 1, 4, 1, 5)
+            pending.writeBytes(pendingBytes)
+            assertTrue(runCatching { store.read(digest) }.isFailure)
+            val pendingScan = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, pendingScan.requiresReview)
+            assertTrue(pendingScan.reviewReferences.single().contextWarning != null)
+            assertArrayEquals(committedBytes, base.readBytes())
+            assertArrayEquals(pendingBytes, pending.readBytes())
+            assertEquals(JournalState.ATTEMPT_RECORDED, journal.current()?.state)
+
+            pending.delete()
+            // AtomicFile.openRead() can rename .bak over an intact base;
+            // even a malformed backup must remain untouched by inspection.
+            val backupBytes = byteArrayOf(2, 7, 1, 8)
+            backup.writeBytes(backupBytes)
+            assertTrue(runCatching { store.read(digest) }.isFailure)
+            val backupScan = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, backupScan.requiresReview)
+            assertTrue(backupScan.reviewReferences.single().contextWarning != null)
+            assertArrayEquals(committedBytes, base.readBytes())
+            assertArrayEquals(backupBytes, backup.readBytes())
+            assertEquals(JournalState.ATTEMPT_RECORDED, journal.current()?.state)
+
+            base.delete()
+            assertTrue(runCatching { store.read(digest) }.isFailure)
+            assertArrayEquals(backupBytes, backup.readBytes())
+            assertTrue(runCatching { store.recordNew(digest, hint) }.isFailure)
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
     @Test fun encryptedRecursiveHintIsDistinctFromPickerAndCannotAuthorizeReplay() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val sandbox = File(app.cacheDir, "recursive-hint-test-" + UUID.randomUUID())
