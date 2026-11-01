@@ -59,8 +59,14 @@ class CopyOutcomeLedger private constructor(
         // (e.g. an invalid OS picker URI); it still cannot count as success.
         // A purported BLOCKED receipt with written bytes is inconsistent and
         // requires independent inspection instead.
-        if (receipt.proof == CopyProof.BLOCKED && receipt.bytesWritten == 0L)
-            return finish(CopyOutcomeState.BLOCKED, CopyProof.BLOCKED)
+        if (receipt.proof == CopyProof.BLOCKED) {
+            // A refusal claiming written bytes is ambiguous even when its
+            // digest matches the reviewed plan; never show "blocked before writing".
+            return if (receipt.bytesWritten == 0L)
+                finish(CopyOutcomeState.BLOCKED, CopyProof.BLOCKED)
+            else
+                finish(CopyOutcomeState.REVIEW_REQUIRED, CopyProof.UNCERTAIN)
+        }
         if (!digestPattern.matches(receipt.planDigest) ||
             receipt.bytesWritten < 0L ||
             receipt.planDigest in verifiedDigests) {
