@@ -26,7 +26,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          node --test tests/expository.test.cjs tests/pages-audit.test.cjs tests/ci-orchestration.test.cjs tests/ci-selection.test.cjs tests/ci-failure-digest.test.cjs tests/ci-action-pins.test.cjs 2>&1 | tee "$RUNNER_TEMP/expository-node-tests.log"
+          node --test tests/expository.test.cjs tests/pages-audit.test.cjs tests/ci-orchestration.test.cjs tests/ci-selection.test.cjs tests/ci-failure-digest.test.cjs tests/ci-action-pins.test.cjs tests/ci-selection-shell.test.cjs 2>&1 | tee "$RUNNER_TEMP/expository-node-tests.log"
       - name: Validate browser and atlas scripts
         run: |
           node --check tests/browser-smoke.cjs
@@ -46,7 +46,7 @@ jobs:
           CI_TESTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           CI_CHECK_OUTCOME: ${{ steps.node-tests.outcome }}
           CI_LOG_PATH: ${{ runner.temp }}/expository-node-tests.log
-          CI_REPRO: node --test tests/expository.test.cjs tests/pages-audit.test.cjs tests/ci-orchestration.test.cjs tests/ci-selection.test.cjs tests/ci-failure-digest.test.cjs tests/ci-action-pins.test.cjs
+          CI_REPRO: node --test tests/expository.test.cjs tests/pages-audit.test.cjs tests/ci-orchestration.test.cjs tests/ci-selection.test.cjs tests/ci-failure-digest.test.cjs tests/ci-action-pins.test.cjs tests/ci-selection-shell.test.cjs
         run: node scripts/ci-failure-digest.cjs
       - name: Attach redacted failure digest
         if: failure()
