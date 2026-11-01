@@ -72,6 +72,15 @@ object WorkspaceStateSuite {
             ?.stillMatches(reorderedSource, null, 14L) == true)
         check(FrozenCopyCommand.capture(null, frozenTarget, 14L) == null)
         check(FrozenCopyCommand.capture(frozenSource, frozenTarget, -1L) == null)
+        check(!owner.claimOnce(reorderedSource, frozenTarget, 13L))
+        check(owner.claimOnce(reorderedSource, frozenTarget, 14L))
+        check(!owner.claimOnce(reorderedSource, frozenTarget, 14L))
+        check(owner.stillMatches(reorderedSource, frozenTarget, 14L))
+        val invalidBeforeClaim = FrozenCopyCommand.capture(frozenSource,
+            frozenTarget, 14L)!!
+        check(!invalidBeforeClaim.claimOnce(reorderedSource, null, 14L))
+        check(invalidBeforeClaim.claimOnce(reorderedSource, frozenTarget, 14L))
+        check(!invalidBeforeClaim.claimOnce(reorderedSource, frozenTarget, 14L))
 
         // Single is the independent default, not dual A hidden as a tab.
         var state = TransferWorkspaceState()
