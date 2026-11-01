@@ -2,6 +2,8 @@ package dev.expository.transfer
 
 import android.net.Uri
 import dev.expository.transfer.planner.BrowseEndpoint
+import dev.expository.transfer.planner.CopyCommandScope
+import dev.expository.transfer.planner.FrozenCopyCommand
 import dev.expository.transfer.planner.LocationKey
 import dev.expository.transfer.planner.TransferWorkspaceState
 import dev.expository.transfer.planner.WorkspacePane
@@ -33,6 +35,16 @@ internal data class DualDeviceCopyApproval(
     val selectedIds: Set<String>,
     val shareEpoch: Long
 ) {
+    // The same immutable planner-level COPY owner now guards Single Save As
+    // and Dual SAF confirmation. This is not a grant or an execution receipt.
+    private val commandOwner = FrozenCopyCommand.capture(
+        CopyCommandScope.freeze(sourceEndpoint, sourceKey,
+            sourceListingRevision, sourceGeneration, selectedIds),
+        CopyCommandScope.freeze(destinationEndpoint, destinationKey,
+            destinationListingRevision, destinationGeneration, emptyList()),
+        shareEpoch
+    )
+
     fun stillMatches(
         model: TransferWorkspaceState,
         source: LocalTreeBrowseState,
@@ -71,7 +83,18 @@ internal data class DualDeviceCopyApproval(
         }.map { it.documentId }.toSet() == selectedIds &&
             source.entries.count {
                 it.documentId in selectedIds && !it.directory
-            } == selectedIds.size
+            } == selectedIds.size &&
+            commandOwner?.stillMatches(
+                CopyCommandScope.freeze(model.pane(sourcePane).endpoint,
+                    requireNotNull(model.pane(sourcePane).current).location.key,
+                    requireNotNull(model.pane(sourcePane).current).location.revision,
+                    source.generation, source.selected),
+                CopyCommandScope.freeze(model.pane(destinationPane).endpoint,
+                    requireNotNull(model.pane(destinationPane).current).location.key,
+                    requireNotNull(model.pane(destinationPane).current).location.revision,
+                    destination.generation, emptyList()),
+                currentShareEpoch
+            ) == true
     }
 
     companion object {

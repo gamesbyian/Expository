@@ -75,6 +75,14 @@ class LocalPickerCancelSmokeTest {
         org.junit.Assert.assertFalse(approval.stillMatches(source, 42L, 8L))
         org.junit.Assert.assertFalse(FrozenPickerCopyApproval(
             source, -1L, 7L).stillMatches(source, -1L, 7L))
+        // Shared planner COPY ownership also refuses unscoped or malformed
+        // picker source identities; matching epochs alone confer no authority.
+        val unscoped = android.net.Uri.parse("file:///sdcard/old.bin")
+        val missingAuthority = android.net.Uri.parse("content:///document/old")
+        org.junit.Assert.assertFalse(FrozenPickerCopyApproval(
+            unscoped, 42L, 7L).stillMatches(unscoped, 42L, 7L))
+        org.junit.Assert.assertFalse(FrozenPickerCopyApproval(
+            missingAuthority, 42L, 7L).stillMatches(missingAuthority, 42L, 7L))
     }
 
     private fun assertFrozenDualCopyReviewWitness() {
