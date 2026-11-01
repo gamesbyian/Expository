@@ -39,6 +39,7 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+        id: source
         with:
           # PR refs/pull/N/merge disappears quickly after squash merge.
           # Validate the immutable PR head instead of racing its merge ref.
@@ -66,12 +67,34 @@ jobs:
         with:
           gradle-version: "8.13"
       - name: Run all applicable offline JVM suites
+        id: jvm-tests
         if: steps.affected.outputs.jvm == 'true'
         working-directory: android-transfer
-        run: gradle check --no-daemon
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle check --no-daemon 2>&1 | tee "$RUNNER_TEMP/expository-jvm.log"
       - name: Record explicit JVM non-applicability
         if: steps.affected.outputs.jvm == 'false'
         run: echo "No JVM/native build impact in the recorded PR paths; check was NOT executed." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish safe JVM failure digest
+        if: failure() && steps.source.outcome == 'success'
+        env:
+          CI_SUITE: android-jvm
+          CI_TESTED_SHA: ${{ github.event.pull_request.head.sha }}
+          CI_CHECK_OUTCOME: ${{ steps.jvm-tests.outcome }}
+          CI_LOG_PATH: ${{ runner.temp }}/expository-jvm.log
+          CI_REPRO: gradle check --no-daemon
+        run: node scripts/ci-failure-digest.cjs
+      - name: Attach sanitized JVM failure JSON
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: expository-native-jvm-failure-digest
+          path: ci-failure-digest.json
+          if-no-files-found: ignore
+          retention-days: 5
 
   android-pr-compile:
     # Every app-affecting PR must compile its app AND instrumentation sources.
@@ -81,6 +104,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        id: source
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
@@ -112,9 +136,34 @@ jobs:
           gradle-version: "8.13"
           cache-read-only: true
       - name: Compile app and Android tests, then lint (no emulator or external endpoints)
+        id: android-build
         if: steps.affected.outputs.android == 'true'
         working-directory: android-transfer
-        run: gradle -PwithAndroid=true :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin :app:lintDebug --no-daemon
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle -PwithAndroid=true :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin :app:lintDebug --no-daemon 2>&1 | tee "$RUNNER_TEMP/expository-android.log"
+      - name: Record explicit Android non-applicability
+        if: steps.affected.outputs.android == 'false'
+        run: echo "No Android compile impact in the recorded PR paths; check was NOT executed." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish safe Android failure digest
+        if: failure() && steps.source.outcome == 'success'
+        env:
+          CI_SUITE: android
+          CI_TESTED_SHA: ${{ github.event.pull_request.head.sha }}
+          CI_CHECK_OUTCOME: ${{ steps.android-build.outcome }}
+          CI_LOG_PATH: ${{ runner.temp }}/expository-android.log
+          CI_REPRO: gradle -PwithAndroid=true :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin :app:lintDebug --no-daemon
+        run: node scripts/ci-failure-digest.cjs
+      - name: Attach sanitized Android failure JSON
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: expository-native-android-failure-digest
+          path: ci-failure-digest.json
+          if-no-files-found: ignore
+          retention-days: 5
 
   android-debug:
     # Developer debug APK artifacts remain opt-in; the app compile/lint PR gate above is mandatory when applicable.
