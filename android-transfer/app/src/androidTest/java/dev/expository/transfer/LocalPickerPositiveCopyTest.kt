@@ -491,7 +491,7 @@ class LocalPickerPositiveCopyTest {
                 "Folder, grant, share or source selection changed during preflight",
                 "Batch Copy preflight refused:"
             )
-            fun reviewVisible() = compose.onAllNodesWithText("Review Device Copy")
+            fun reviewVisible() = compose.onAllNodesWithText("Review Android provider Copy")
                 .fetchSemanticsNodes().isNotEmpty()
             fun refusal() = preflightRefusals.firstOrNull { reason ->
                 compose.onAllNodesWithText(reason, substring = true)
