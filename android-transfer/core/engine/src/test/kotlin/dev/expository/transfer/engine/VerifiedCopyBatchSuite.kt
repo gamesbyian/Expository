@@ -248,6 +248,12 @@ object VerifiedCopyBatchSuite {
             check(single.complete && single.verifiedItems == 1 &&
                 single.verifiedBytes == 137_119L)
             check(single.accept(a) === single) // a late callback is inert
+            val bound = CopyOutcomeLedger.begin(1).accept(a, a.planDigest)
+            check(bound.complete)
+            val wrongPlan = CopyOutcomeLedger.begin(1).accept(
+                a, "b".repeat(64))
+            check(wrongPlan.state == CopyOutcomeState.REVIEW_REQUIRED &&
+                wrongPlan.verifiedItems == 0 && wrongPlan.verifiedBytes == 0L)
             val dualStart = CopyOutcomeLedger.begin(2)
             val dualFirst = dualStart.accept(a)
             check(dualFirst.state == CopyOutcomeState.ACTIVE &&
