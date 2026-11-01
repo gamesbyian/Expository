@@ -14,13 +14,34 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Real adapters must still independently validate source and destination,
  * consume an explicit human confirmation and journal before any mutation.
  */
-data class CopyCommandScope private constructor(
+class CopyCommandScope private constructor(
     val endpoint: BrowseEndpoint,
     val key: LocationKey,
     val listingRevision: String,
     val generation: Long,
     private val selectionFingerprint: String
 ) {
+    // The private validating constructor must stay the only construction
+    // path. Kotlin data-class copy() would otherwise let callers forge a
+    // different authority, generation or selection fingerprint. Equality is
+    // still by immutable value so canonicalized selection order is UI-only.
+    override fun equals(other: Any?): Boolean =
+        this === other || (other is CopyCommandScope &&
+            endpoint == other.endpoint &&
+            key == other.key &&
+            listingRevision == other.listingRevision &&
+            generation == other.generation &&
+            selectionFingerprint == other.selectionFingerprint)
+
+    override fun hashCode(): Int {
+        var result = endpoint.hashCode()
+        result = 31 * result + key.hashCode()
+        result = 31 * result + listingRevision.hashCode()
+        result = 31 * result + generation.hashCode()
+        result = 31 * result + selectionFingerprint.hashCode()
+        return result
+    }
+
     companion object {
         /**
          * Freeze a canonical selection without keeping mutable UI collections.
