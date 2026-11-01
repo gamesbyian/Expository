@@ -46,6 +46,12 @@ class CopyOutcomeLedger private constructor(
      */
     fun accept(receipt: CopyReceipt): CopyOutcomeLedger {
         if (state != CopyOutcomeState.ACTIVE) return this
+        // A preflight-only rejection may legitimately lack a planned digest
+        // (e.g. an invalid OS picker URI); it still cannot count as success.
+        // A purported BLOCKED receipt with written bytes is inconsistent and
+        // requires independent inspection instead.
+        if (receipt.proof == CopyProof.BLOCKED && receipt.bytesWritten == 0L)
+            return finish(CopyOutcomeState.BLOCKED, CopyProof.BLOCKED)
         if (!digestPattern.matches(receipt.planDigest) ||
             receipt.bytesWritten < 0L ||
             receipt.planDigest in verifiedDigests) {
