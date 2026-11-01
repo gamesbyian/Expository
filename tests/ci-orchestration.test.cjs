@@ -88,7 +88,7 @@ test('all PRs reach a fail-closed native selector before the expensive lanes', (
   assert.match(native, /needs\.select\.outputs\.android == 'true'/);
   assert.match(native, /gh api --paginate/);
   assert.match(native, /previous_filename/);
-  assert.match(native, /ref: main/, 'manual workflow remains reviewed-main');
+  assert.match(native, /github\.event_name == 'issue_comment' && 'main' \|\| github\.ref/, 'manual workflow remains reviewed-main');
 });
 
 test('merge-queue web and native verification do not depend on PR-only metadata', () => {
