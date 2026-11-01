@@ -28,3 +28,11 @@ test('missing or corrupt metadata is an explicit error, not a silent skip', () =
   assert.throws(() => classify([{status: 'modified'}]));
   assert.throws(() => classify(null));
 });
+
+verify('native code renamed outside native tree still demands complete downstream validation', [f('docs/moved-logic.kt', 'renamed', 'android-transfer/core/planner/src/main/kotlin/Logic.kt')], true, true);
+verify('app file renamed into web tree still requires Android', [f('web/removed-activity.txt', 'renamed', 'android-transfer/app/src/main/java/Activity.kt')], false, true);
+verify('shared workflow, action and diagnostic edits conservatively select both', [
+  f('.github/workflows/validate.yml'), f('.github/actions/common/action.yml'),
+  f('scripts/ci-failure-digest.cjs'), f('tests/ci-orchestration.test.cjs')
+], true, true);
+verify('metadata with only unknown root/Pages paths does not invent native execution', [f('index.html'), f('docs/quality/README.md')], false, false);
