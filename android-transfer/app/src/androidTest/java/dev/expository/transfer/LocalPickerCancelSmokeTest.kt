@@ -83,6 +83,13 @@ class LocalPickerCancelSmokeTest {
             unscoped, 42L, 7L).stillMatches(unscoped, 42L, 7L))
         org.junit.Assert.assertFalse(FrozenPickerCopyApproval(
             missingAuthority, 42L, 7L).stillMatches(missingAuthority, 42L, 7L))
+        val oneShot = FrozenPickerCopyApproval(source, 42L, 7L)
+        org.junit.Assert.assertFalse(oneShot.claimOnce(source, 42L, 8L))
+        assertTrue(oneShot.claimOnce(source, 42L, 7L))
+        org.junit.Assert.assertFalse(oneShot.claimOnce(source, 42L, 7L))
+        // Matching immutable identity is still observable for diagnostics,
+        // but it can never start a second Copy after the first claim.
+        assertTrue(oneShot.stillMatches(source, 42L, 7L))
     }
 
     private fun assertFrozenDualCopyReviewWitness() {
@@ -167,6 +174,13 @@ class LocalPickerCancelSmokeTest {
         org.junit.Assert.assertNull(DualDeviceCopyApproval.capture(
             dual, dev.expository.transfer.planner.WorkspacePane.SINGLE,
             observedSource, observedTarget, 31L))
+        invalid(epoch = 30L)
+        org.junit.Assert.assertFalse(approval.claimOnce(dual,
+            observedSource, observedTarget, 30L))
+        assertTrue(approval.claimOnce(dual, observedSource, observedTarget, 31L))
+        org.junit.Assert.assertFalse(approval.claimOnce(dual,
+            observedSource, observedTarget, 31L))
+        assertTrue(approval.stillMatches(dual, observedSource, observedTarget, 31L))
     }
 
     @Test fun frozenLocalCopyApprovalIsSingleSourceAndEpochBound() =

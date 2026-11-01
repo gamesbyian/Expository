@@ -76,7 +76,8 @@ private fun pickerCopyScope(uri: Uri?, revision: Long): CopyCommandScope? {
  * This first Single route now shares Copy command ownership with Dual SAF
  * approval, without weakening the original picker result or grant guards.
  */
-internal data class FrozenPickerCopyApproval(
+/** Non-copyable approval owner: synthesizing a copy would reset its one-shot claim. */
+internal class FrozenPickerCopyApproval(
     val sourceUri: Uri,
     val selectionRevision: Long,
     val shareEpoch: Long
@@ -90,6 +91,14 @@ internal data class FrozenPickerCopyApproval(
         selectionRevision == currentRevision &&
         shareEpochUnchanged(shareEpoch, currentShareEpoch) &&
         copyCommand?.stillMatches(
+            pickerCopyScope(currentSource, currentRevision), null,
+            currentShareEpoch) == true
+
+    /** Only the accepted Save As callback may claim this review once. */
+    fun claimOnce(currentSource: Uri?, currentRevision: Long,
+        currentShareEpoch: Long): Boolean =
+        stillMatches(currentSource, currentRevision, currentShareEpoch) &&
+        copyCommand?.claimOnce(
             pickerCopyScope(currentSource, currentRevision), null,
             currentShareEpoch) == true
 }
@@ -232,7 +241,7 @@ fun LocalCopyCard(
         val targetUri = result.data?.data
         if (result.resultCode != Activity.RESULT_OK || targetUri == null) {
             status = "Save As canceled. No transfer started."
-        } else if (approval?.stillMatches(
+        } else if (approval?.claimOnce(
                 selected, selectionRevision, currentShareEpoch()) != true) {
             status = "Source selection changed while Save As was open. No copy started. The picker may have created an empty document."
         } else {

@@ -17,7 +17,8 @@ import dev.expository.transfer.planner.WorkspaceView
  * before its side effects. The UI cannot execute an old proposal after a
  * pane, grant, selection or incoming Share changed while review was visible.
  */
-internal data class DualDeviceCopyApproval(
+/** Non-copyable approval owner: synthesizing a copy would reset its one-shot claim. */
+internal class DualDeviceCopyApproval(
     val sourcePane: WorkspacePane,
     val destinationPane: WorkspacePane,
     val sourceEndpoint: BrowseEndpoint,
@@ -95,6 +96,29 @@ internal data class DualDeviceCopyApproval(
                     destination.generation, emptyList()),
                 currentShareEpoch
             ) == true
+    }
+
+    /** User confirmation consumes this frozen command only after every
+     * existing pane, tree, selected item and Share witness has matched.
+     * No concurrent or duplicate event may initiate a second mutation.
+     */
+    fun claimOnce(
+        model: TransferWorkspaceState,
+        source: LocalTreeBrowseState,
+        destination: LocalTreeBrowseState,
+        currentShareEpoch: Long
+    ): Boolean {
+        if (!stillMatches(model, source, destination, currentShareEpoch))
+            return false
+        val from = requireNotNull(model.pane(sourcePane).current).location
+        val to = requireNotNull(model.pane(destinationPane).current).location
+        return commandOwner?.claimOnce(
+            CopyCommandScope.freeze(model.pane(sourcePane).endpoint,
+                from.key, from.revision, source.generation, source.selected),
+            CopyCommandScope.freeze(model.pane(destinationPane).endpoint,
+                to.key, to.revision, destination.generation, emptyList()),
+            currentShareEpoch
+        ) == true
     }
 
     companion object {

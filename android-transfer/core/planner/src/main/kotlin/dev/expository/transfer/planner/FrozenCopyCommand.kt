@@ -2,6 +2,7 @@ package dev.expository.transfer.planner
 
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * A short-lived authority witness shared by Single picker and Dual SAF Copy.
@@ -63,12 +64,14 @@ data class CopyCommandScope private constructor(
  * A changed source, destination, generation, selection or incoming Share
  * revokes this witness, even if the display name or route button is unchanged.
  */
-data class FrozenCopyCommand private constructor(
+class FrozenCopyCommand private constructor(
     val source: CopyCommandScope,
     val destination: CopyCommandScope?,
     val shareEpoch: Long,
     val intent: Operation = Operation.COPY
 ) {
+    private val claimed = AtomicBoolean(false)
+
     companion object {
         fun capture(
             source: CopyCommandScope?,
@@ -88,4 +91,19 @@ data class FrozenCopyCommand private constructor(
             currentSource != null && currentSource == source &&
             currentDestination == destination &&
             intent == Operation.COPY
+
+    /**
+     * Consume exactly once at an explicit user confirmation boundary.
+     * A stale caller cannot consume the token. This in-memory claim is not
+     * provider authority, a durable write attempt, or evidence of success.
+     * A blocked/uncertain execution must require a NEW review, never replay
+     * the previously claimed command.
+     */
+    fun claimOnce(
+        currentSource: CopyCommandScope?,
+        currentDestination: CopyCommandScope?,
+        currentShareEpoch: Long
+    ): Boolean =
+        stillMatches(currentSource, currentDestination, currentShareEpoch) &&
+            claimed.compareAndSet(false, true)
 }

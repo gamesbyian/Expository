@@ -838,10 +838,10 @@ private fun DeveloperPreview(
         val pending = proposedCopy ?: return
         if (copyBusy || model.view != WorkspaceView.DUAL || pending.isEmpty()) return
         val approval = proposedCopyApproval
-        if (approval == null || !approval.stillMatches(model,
-                tree(approval.sourcePane), tree(approval.destinationPane),
-                currentShareEpoch()) || pending.size != approval.selectedIds.size ||
-            pending.map { it.request.sourceDocumentId }.toSet() != approval.selectedIds) {
+        if (approval == null || pending.size != approval.selectedIds.size ||
+            pending.map { it.request.sourceDocumentId }.toSet() != approval.selectedIds ||
+            !approval.claimOnce(model, tree(approval.sourcePane),
+                tree(approval.destinationPane), currentShareEpoch())) {
             proposedCopy = null
             proposedCopyApproval = null
             recursiveProposal = null
