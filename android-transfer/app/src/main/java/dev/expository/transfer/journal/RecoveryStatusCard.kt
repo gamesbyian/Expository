@@ -1,5 +1,9 @@
 package dev.expository.transfer.journal
 
+import android.app.Activity
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,10 +17,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import dev.expository.transfer.LocalTreeReader
+import kotlinx.coroutines.launch
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -32,7 +39,56 @@ fun RecoveryStatusCard() {
     var unreadable by remember { mutableStateOf(false) }
     var refreshSerial by remember { mutableIntStateOf(0) }
     var showReviewReferences by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    // A one-shot, display-only review ticket. Never persist a picked tree URI,
+    // reauthorize a journal or infer that a matching name is the old target.
+    var inspectionRevision by remember { mutableIntStateOf(0) }
+    var inspectionTicket by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    var inspectionMessage by remember { mutableStateOf<String?>(null) }
+    var inspectionListing by remember { mutableStateOf<ManualRecoveryListing?>(null) }
+    val inspector = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val ticket = inspectionTicket
+        inspectionTicket = null
+        val uri = result.data?.data
+        if (ticket == null || ticket.second != inspectionRevision ||
+            status?.reviewReferences?.any {
+                it.opaqueSuffix == ticket.first && it.context != null
+            } != true) {
+            inspectionMessage = "Inspection selection is no longer current. Re-open the review reference."
+        } else if (result.resultCode != Activity.RESULT_OK || uri == null) {
+            inspectionMessage = "Folder inspection canceled. No transfer was changed."
+        } else if (!RecoveryManualInspection.acceptsPickerResult(
+                uri, result.data?.flags ?: 0)) {
+            inspectionMessage = "The selected folder has no usable Android READ grant. No review completed."
+        } else {
+            val revision = ticket.second
+            inspectionMessage = "Reading the newly selected folder without changing any files…"
+            scope.launch {
+                val observed = withContext(Dispatchers.IO) {
+                    runCatching {
+                        RecoveryManualInspection.inspect(context.contentResolver, uri)
+                    }
+                }
+                if (inspectionRevision != revision) return@launch
+                if (observed.isFailure) {
+                    inspectionMessage = "Unable to inspect the selected folder. It remains unresolved; no retry was made."
+                    inspectionListing = null
+                } else {
+                    inspectionListing = observed.getOrNull()
+                    inspectionMessage = "Manual inspection for record …" + ticket.first +
+                        " used a fresh Android tree grant. The selected folder is NOT proven " +
+                        "to be the original destination; the journal remains unchanged."
+                }
+            }
+        }
+    }
     LaunchedEffect(context, refreshSerial) {
+        inspectionRevision++
+        inspectionTicket = null
+        inspectionListing = null
+        inspectionMessage = null
         status = null
         unreadable = false
         val result = withContext(Dispatchers.IO) {
@@ -92,6 +148,27 @@ fun RecoveryStatusCard() {
                         entry.contextWarning?.let { warning ->
                             Text(warning, style = MaterialTheme.typography.bodySmall)
                         }
+                        if (entry.context != null) {
+                            Button(
+                                modifier = Modifier.heightIn(min = 48.dp),
+                                enabled = inspectionTicket == null,
+                                onClick = {
+                                    inspectionRevision++
+                                    inspectionTicket = entry.opaqueSuffix to inspectionRevision
+                                    inspectionListing = null
+                                    inspectionMessage = null
+                                    try {
+                                        inspector.launch(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        })
+                                    } catch (_: Exception) {
+                                        inspectionTicket = null
+                                        inspectionMessage =
+                                            "Android folder picker unavailable. No inspection or transfer attempted."
+                                    }
+                                }
+                            ) { Text("Inspect folder for record …" + entry.opaqueSuffix) }
+                        }
                     }
                     val hidden = review.additionalReviewCount +
                         (review.reviewReferences.size - 12).coerceAtLeast(0)
@@ -99,6 +176,24 @@ fun RecoveryStatusCard() {
                         "not shown. No automatic cleanup or retry is available.",
                         style = MaterialTheme.typography.bodySmall)
                 }
+            }
+            inspectionMessage?.let {
+                Text(it, modifier = Modifier.semantics {
+                    liveRegion = LiveRegionMode.Polite
+                }, style = MaterialTheme.typography.bodySmall)
+            }
+            inspectionListing?.let { observed ->
+                Text("Freshly selected folder: " + observed.observedChildren +
+                    " direct child item(s) observed" +
+                    (if (observed.complete) " (complete listing)." else
+                        " (incomplete listing; missing names are NOT proven absent)."),
+                    style = MaterialTheme.typography.bodySmall)
+                observed.sampleNames.forEach { title ->
+                    Text("Observed: " + title, style = MaterialTheme.typography.bodySmall)
+                }
+                Text("This is a read-only manual snapshot, not a matched recovery receipt. " +
+                    "No transfer, deletion, cleanup or automatic replay was authorized.",
+                    style = MaterialTheme.typography.bodySmall)
             }
             Button(
                 modifier = Modifier.heightIn(min = 48.dp),
