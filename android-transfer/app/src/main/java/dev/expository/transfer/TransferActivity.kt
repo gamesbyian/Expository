@@ -935,6 +935,24 @@ private fun DeveloperPreview(
                     " files independently verified. " + detail +
                     " Original sources were not deleted."
             }
+            // A verified Copy changes the destination contents. Re-list only
+            // the still-selected, still-granted destination so the user sees
+            // the result without a manual Refresh. Never turn this observation
+            // into an automatic retry or allow an old Share/pane to be rebound.
+            if (outcome.complete && currentShareEpoch() == approval.shareEpoch &&
+                model.view == WorkspaceView.DUAL) {
+                val reviewedTarget = pending.first().request
+                val visibleTarget = tree(approval.destinationPane)
+                if (model.pane(approval.destinationPane).endpoint ==
+                        approval.destinationEndpoint &&
+                    visibleTarget.treeUri == reviewedTarget.targetTree &&
+                    visibleTarget.folderId == reviewedTarget.targetFolderId &&
+                    visibleTarget.crumbs.isNotEmpty()) {
+                    readTree(approval.destinationPane, reviewedTarget.targetTree,
+                        visibleTarget.crumbs,
+                        maxVisible = visibleTarget.visibleLimit)
+                }
+            }
             } finally {
                 permit.set(false)
                 if (copyPermit === permit) {
