@@ -3,14 +3,9 @@ name: Expository Transfer native validation
 # main only. No secrets in these jobs and no untrusted PR-head execution.
 on:
   workflow_call:
+  # No path filters: rename origins are invisible before workflow dispatch.
   pull_request:
-    paths:
-      - "android-transfer/**"
-      - "!android-transfer/**/*.md"
-      - "!android-transfer/*.md"
-      - ".github/workflows/transfer-*.yml"
-      - "scripts/ci-selection.cjs"
-      - "tests/ci-selection.test.cjs"
+  merge_group:
   workflow_dispatch:
     inputs:
       build_apk:
@@ -33,56 +28,94 @@ concurrency:
   group: transfer-native-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  select:
+    name: Native change-selection integrity
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      jvm: ${{ steps.pr.outputs.jvm || steps.mq.outputs.jvm }}
+      android: ${{ steps.pr.outputs.android || steps.mq.outputs.android }}
+    steps:
+      - name: Merge queue requires both native lanes
+        id: mq
+        if: github.event_name == 'merge_group'
+        run: |
+          echo "jvm=true" >> "$GITHUB_OUTPUT"
+          echo "android=true" >> "$GITHUB_OUTPUT"
+          echo "Merge queue: full native assurance for combined changes." >> "$GITHUB_STEP_SUMMARY"
+      - name: Checkout trusted base selector, not untrusted PR selection code
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Verify exact PR head, complete file inventory and select suites
+        id: pr
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          actual_head="$(gh api "repos/$REPO/pulls/$NUMBER" --jq '.head.sha')"
+          total="$(gh api "repos/$REPO/pulls/$NUMBER" --jq '.changed_files')"
+          if [[ "$actual_head" != "$EVENT_HEAD" || ! "$total" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Stale PR source or invalid file-count metadata"; exit 2
+          fi
+          gh api --paginate "repos/$REPO/pulls/$NUMBER/files?per_page=100" --jq '.[] | {filename, previous_filename, status} | @json' > "$RUNNER_TEMP/expository-pr-files.jsonl"
+          observed="$(wc -l < "$RUNNER_TEMP/expository-pr-files.jsonl")"
+          if (( total > 3000 || observed != total )); then
+            # GitHub caps the REST PR-files endpoint at 3,000 entries.
+            echo "jvm=true" >> "$GITHUB_OUTPUT"
+            echo "android=true" >> "$GITHUB_OUTPUT"
+            echo "Incomplete PR metadata ($observed/$total); conservative full verification." >> "$GITHUB_STEP_SUMMARY"
+          else
+            node scripts/ci-selection.cjs "$RUNNER_TEMP/expository-pr-files.jsonl"
+            echo "Verified $observed/$total changed paths including rename origins." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          newest="$(gh api "repos/$REPO/pulls/$NUMBER" --jq '.head.sha')"
+          if [[ "$newest" != "$EVENT_HEAD" ]]; then
+            echo "::error::PR head changed during selection; refusing stale evidence"; exit 2
+          fi
+          echo "Base-trusted selector; exact PR source $EVENT_HEAD." >> "$GITHUB_STEP_SUMMARY"
+
   planner:
-    if: github.event_name == 'pull_request'
+    name: planner
+    needs: select
+    if: >-
+      (github.event_name == 'pull_request' || github.event_name == 'merge_group') &&
+      needs.select.outputs.jvm == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         id: source
         with:
-          # PR refs/pull/N/merge disappears quickly after squash merge.
-          # Validate the immutable PR head instead of racing its merge ref.
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - name: Fetch PR change metadata, including rename origins
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          gh api --paginate "repos/$REPO/pulls/$NUMBER/files?per_page=100" --jq '.[] | {filename, previous_filename, status} | @json' > "$RUNNER_TEMP/expository-pr-files.jsonl"
-      - name: Select risk-appropriate verification
-        id: affected
-        run: node scripts/ci-selection.cjs "$RUNNER_TEMP/expository-pr-files.jsonl"
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
-        if: steps.affected.outputs.jvm == 'true'
         with:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
-        if: steps.affected.outputs.jvm == 'true'
         with:
           gradle-version: "8.13"
-      - name: Run all applicable offline JVM suites
+      - name: Run offline JVM suites
         id: jvm-tests
-        if: steps.affected.outputs.jvm == 'true'
         working-directory: android-transfer
         shell: bash
         run: |
           set -o pipefail
           gradle check --no-daemon 2>&1 | tee "$RUNNER_TEMP/expository-jvm.log"
-      - name: Record explicit JVM non-applicability
-        if: steps.affected.outputs.jvm == 'false'
-        run: echo "No JVM/native build impact in the recorded PR paths; check was NOT executed." >> "$GITHUB_STEP_SUMMARY"
-
       - name: Publish safe JVM failure digest
         if: failure() && steps.source.outcome == 'success'
         env:
           CI_SUITE: android-jvm
-          CI_TESTED_SHA: ${{ github.event.pull_request.head.sha }}
+          CI_TESTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           CI_CHECK_OUTCOME: ${{ steps.jvm-tests.outcome }}
           CI_LOG_PATH: ${{ runner.temp }}/expository-jvm.log
           CI_REPRO: gradle check --no-daemon
@@ -97,61 +130,42 @@ jobs:
           retention-days: 5
 
   android-pr-compile:
-    # Every app-affecting PR must compile its app AND instrumentation sources.
-    # Pure documentation and unrelated native-only changes keep the cheap JVM lane.
-    if: github.event_name == 'pull_request'
+    name: android-pr-compile
+    needs: select
+    if: >-
+      (github.event_name == 'pull_request' || github.event_name == 'merge_group') &&
+      needs.select.outputs.android == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         id: source
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - name: Fetch exact PR paths, including rename origins
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          gh api --paginate "repos/$REPO/pulls/$NUMBER/files?per_page=100" --jq '.[] | {filename, previous_filename, status} | @json' > "$RUNNER_TEMP/expository-pr-files.jsonl"
-      - name: Select Android compile and instrumentation gate
-        id: affected
-        run: node scripts/ci-selection.cjs "$RUNNER_TEMP/expository-pr-files.jsonl"
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
-        if: steps.affected.outputs.android == 'true'
         with:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
-        if: steps.affected.outputs.android == 'true'
-      - name: Install only the required compile SDK
-        if: steps.affected.outputs.android == 'true'
+      - name: Install Android compile SDK
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
-        if: steps.affected.outputs.android == 'true'
         with:
           gradle-version: "8.13"
           cache-read-only: true
-      - name: Compile app and Android tests, then lint (no emulator or external endpoints)
+      - name: Compile app and tests; lint (no emulator or external endpoints)
         id: android-build
-        if: steps.affected.outputs.android == 'true'
         working-directory: android-transfer
         shell: bash
         run: |
           set -o pipefail
           gradle -PwithAndroid=true :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin :app:lintDebug --no-daemon 2>&1 | tee "$RUNNER_TEMP/expository-android.log"
-      - name: Record explicit Android non-applicability
-        if: steps.affected.outputs.android == 'false'
-        run: echo "No Android compile impact in the recorded PR paths; check was NOT executed." >> "$GITHUB_STEP_SUMMARY"
-
       - name: Publish safe Android failure digest
         if: failure() && steps.source.outcome == 'success'
         env:
           CI_SUITE: android
-          CI_TESTED_SHA: ${{ github.event.pull_request.head.sha }}
+          CI_TESTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           CI_CHECK_OUTCOME: ${{ steps.android-build.outcome }}
           CI_LOG_PATH: ${{ runner.temp }}/expository-android.log
           CI_REPRO: gradle -PwithAndroid=true :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin :app:lintDebug --no-daemon
