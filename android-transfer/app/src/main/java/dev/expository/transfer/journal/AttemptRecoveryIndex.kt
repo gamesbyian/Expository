@@ -110,7 +110,7 @@ object AttemptRecoveryIndex {
         for (digest in digests) {
             try {
                 when (DurableAttemptJournal(
-                    AndroidAtomicAttemptStorage(context, digest)
+                    AndroidReadOnlyAttemptStorage(context, digest)
                 ).current()?.state) {
                     JournalState.ATTEMPT_RECORDED,
                     JournalState.WRITE_ACKNOWLEDGED,
