@@ -58,8 +58,16 @@ tasks.register<JavaExec>("recursiveFolderScenarios") {
     mainClass.set("dev.expository.transfer.planner.RecursiveFolderCopySuite")
 }
 
+tasks.register<JavaExec>("smartMergeBasketScenarios") {
+    group = "verification"
+    description = "Pure M1 multi-provider N-source merge basket guards (no writes)"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.planner.SmartMergeBasketSuite")
+}
+
 // These main()-based suites are not automatically discovered by Gradle's test task.
 // Keep the standard check lifecycle honest for local developers and CI.
 tasks.named("check") {
-    dependsOn("scenarios", "locationScenarios", "recursiveFolderScenarios", "directoryScenarios", "moveScenarios", "workspaceScenarios", "sessionAccessScenarios")
+    dependsOn("scenarios", "locationScenarios", "recursiveFolderScenarios", "directoryScenarios", "moveScenarios", "workspaceScenarios", "sessionAccessScenarios", "smartMergeBasketScenarios")
 }
