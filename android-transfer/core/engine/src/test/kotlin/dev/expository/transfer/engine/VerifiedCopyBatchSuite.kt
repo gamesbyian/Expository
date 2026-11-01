@@ -239,6 +239,75 @@ object VerifiedCopyBatchSuite {
             check(replayStream.openedSource == 0 &&
                 replayStream.openedDestination == 0)
         }
+        case("Single and Dual share a verified-only, duplicate-proof receipt ledger") {
+            val a = CopyReceipt("a".repeat(64), CopyProof.BYTES_VERIFIED, 137_119L,
+                "READBACK_SHA256_MATCH")
+            val b = CopyReceipt("b".repeat(64), CopyProof.BYTES_VERIFIED, 0L,
+                "READBACK_SHA256_MATCH")
+            val single = CopyOutcomeLedger.begin(1).accept(a)
+            check(single.complete && single.verifiedItems == 1 &&
+                single.verifiedBytes == 137_119L)
+            check(single.accept(a) === single) // a late callback is inert
+            val dualStart = CopyOutcomeLedger.begin(2)
+            val dualFirst = dualStart.accept(a)
+            check(dualFirst.state == CopyOutcomeState.ACTIVE &&
+                dualFirst.verifiedItems == 1 && dualFirst.verifiedBytes == 137_119L)
+            val dualDone = dualFirst.accept(b)
+            check(dualDone.complete && dualDone.verifiedItems == 2 &&
+                dualDone.verifiedBytes == 137_119L)
+            check(dualDone.accept(b) === dualDone)
+            check(runCatching { CopyOutcomeLedger.begin(0) }.isFailure)
+            check(runCatching { CopyOutcomeLedger.begin(13) }.isFailure)
+        }
+
+        case("stale and fabricated receipts cannot advance the next item") {
+            val first = CopyReceipt("a".repeat(64), CopyProof.BYTES_VERIFIED, 19L,
+                "READBACK_SHA256_MATCH")
+            val afterFirst = CopyOutcomeLedger.begin(2).accept(first)
+            val duplicate = afterFirst.accept(first)
+            check(duplicate.state == CopyOutcomeState.REVIEW_REQUIRED &&
+                duplicate.stopProof == CopyProof.UNCERTAIN &&
+                duplicate.verifiedItems == 1 && duplicate.verifiedBytes == 19L)
+            check(duplicate.accept(CopyReceipt("b".repeat(64),
+                CopyProof.BYTES_VERIFIED, 7L, "late")) === duplicate)
+            val malformed = CopyOutcomeLedger.begin(1).accept(
+                CopyReceipt("not-a-digest", CopyProof.BYTES_VERIFIED, 1L, "bad"))
+            check(!malformed.complete && malformed.verifiedItems == 0 &&
+                malformed.state == CopyOutcomeState.REVIEW_REQUIRED)
+            val negative = CopyOutcomeLedger.begin(1).accept(
+                CopyReceipt("a".repeat(64), CopyProof.BYTES_VERIFIED, -1L, "bad"))
+            check(negative.state == CopyOutcomeState.REVIEW_REQUIRED &&
+                negative.verifiedBytes == 0L)
+            val max = CopyOutcomeLedger.begin(2).accept(
+                CopyReceipt("a".repeat(64), CopyProof.BYTES_VERIFIED,
+                    Long.MAX_VALUE, "verified"))
+            val overflow = max.accept(CopyReceipt("b".repeat(64),
+                CopyProof.BYTES_VERIFIED, 1L, "verified"))
+            check(overflow.state == CopyOutcomeState.REVIEW_REQUIRED &&
+                overflow.verifiedItems == 1 && overflow.verifiedBytes == Long.MAX_VALUE)
+        }
+
+        case("write ACK, uncertainty, preflight block and Stop retain prior proof") {
+            val verified = CopyReceipt("a".repeat(64), CopyProof.BYTES_VERIFIED,
+                42L, "verified")
+            val partial = CopyOutcomeLedger.begin(2).accept(verified)
+            for (proof in listOf(CopyProof.WRITE_ACKNOWLEDGED, CopyProof.UNCERTAIN)) {
+                val stopped = partial.accept(CopyReceipt(
+                    "b".repeat(64), proof, 21L, "UNVERIFIED"))
+                check(stopped.state == CopyOutcomeState.REVIEW_REQUIRED &&
+                    stopped.stopProof == proof &&
+                    stopped.verifiedItems == 1 && stopped.verifiedBytes == 42L)
+                check(!stopped.complete)
+            }
+            val blocked = partial.halt(CopyProof.BLOCKED)
+            check(blocked.state == CopyOutcomeState.BLOCKED &&
+                blocked.verifiedBytes == 42L)
+            val cancelled = partial.halt(CopyProof.UNCERTAIN)
+            check(cancelled.state == CopyOutcomeState.REVIEW_REQUIRED &&
+                cancelled.verifiedItems == 1)
+            check(runCatching { partial.halt(CopyProof.BYTES_VERIFIED) }.isFailure)
+        }
+
         println("PASS VERIFIED_BATCH total=" + passed +
             " evidence=synthetic-streams-no-blind-replay")
     }
