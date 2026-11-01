@@ -76,7 +76,8 @@ private fun pickerCopyScope(uri: Uri?, revision: Long): CopyCommandScope? {
  * This first Single route now shares Copy command ownership with Dual SAF
  * approval, without weakening the original picker result or grant guards.
  */
-internal data class FrozenPickerCopyApproval(
+/** Non-copyable approval owner: synthesizing a copy would reset its one-shot claim. */
+internal class FrozenPickerCopyApproval(
     val sourceUri: Uri,
     val selectionRevision: Long,
     val shareEpoch: Long
