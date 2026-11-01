@@ -276,9 +276,12 @@ fun LocalCopyCard(
                 // Single and Dual consume one verified-only receipt policy.
                 // An invalid receipt can never be displayed as verified.
                 val outcome = CopyOutcomeLedger.begin(1).accept(copyReceipt)
-                receipt = if (outcome.stopProof != null &&
-                    outcome.stopProof != copyReceipt.proof)
-                    copyReceipt.copy(proof = outcome.stopProof,
+                // stopProof is exported from another module; capture the
+                // immutable value locally before Kotlin's nullable check.
+                val finalStop = outcome.stopProof
+                receipt = if (finalStop != null &&
+                    finalStop != copyReceipt.proof)
+                    copyReceipt.copy(proof = finalStop,
                         // A failed proof must not erase bytes the adapter
                         // reports it may already have written. Preserve the
                         // nonnegative count as *unverified* inspection context.
