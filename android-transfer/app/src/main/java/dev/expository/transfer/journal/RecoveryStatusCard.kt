@@ -123,7 +123,17 @@ fun RecoveryStatusCard() {
             if (review != null &&
                 (review.requiresReview > 0 || review.damagedOrUnrecognized > 0)) {
                 Button(modifier = Modifier.heightIn(min = 48.dp),
-                    onClick = { showReviewReferences = !showReviewReferences }) {
+                    onClick = {
+                        if (showReviewReferences) {
+                            // Hiding sensitive labels also drops any manual
+                            // picker result and transient provider inventory.
+                            inspectionRevision++
+                            inspectionTicket = null
+                            inspectionListing = null
+                            inspectionMessage = null
+                        }
+                        showReviewReferences = !showReviewReferences
+                    }) {
                     Text(if (showReviewReferences) "Hide review references"
                         else "Show review references")
                 }
@@ -177,12 +187,12 @@ fun RecoveryStatusCard() {
                         style = MaterialTheme.typography.bodySmall)
                 }
             }
-            inspectionMessage?.let {
+            if (showReviewReferences) inspectionMessage?.let {
                 Text(it, modifier = Modifier.semantics {
                     liveRegion = LiveRegionMode.Polite
                 }, style = MaterialTheme.typography.bodySmall)
             }
-            inspectionListing?.let { observed ->
+            if (showReviewReferences) inspectionListing?.let { observed ->
                 Text("Freshly selected folder: " + observed.observedChildren +
                     " direct child item(s) observed" +
                     (if (observed.complete) " (complete listing)." else
