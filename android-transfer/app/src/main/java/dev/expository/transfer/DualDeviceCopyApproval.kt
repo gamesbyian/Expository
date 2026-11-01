@@ -17,7 +17,8 @@ import dev.expository.transfer.planner.WorkspaceView
  * before its side effects. The UI cannot execute an old proposal after a
  * pane, grant, selection or incoming Share changed while review was visible.
  */
-internal data class DualDeviceCopyApproval(
+/** Non-copyable approval owner: synthesizing a copy would reset its one-shot claim. */
+internal class DualDeviceCopyApproval(
     val sourcePane: WorkspacePane,
     val destinationPane: WorkspacePane,
     val sourceEndpoint: BrowseEndpoint,
