@@ -1,0 +1,1 @@
+Synthetic CI routing fixture for rename tests. This file is text only. The PR will rename this path to docs/quality/ci-366-probe.txt to exercise GitHub Action dispatch and Android selection. A sufficiently long inert fixture helps GitHub detect file renames rather than treating them as separate deletion and addition.
