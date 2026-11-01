@@ -509,6 +509,21 @@ class LocalPickerPositiveCopyTest {
                 compose.onAllNodesWithText("Copy verified:", substring = true)
                     .fetchSemanticsNodes().isNotEmpty()
             }
+            // The copy must be visible in the actual destination pane after
+            // a provider re-list, with no fabricated permission or optimistic
+            // in-memory row. Keep source preservation and receipt checks below.
+            compose.waitUntil(20_000L) {
+                compose.onAllNodesWithText(sourceName).fetchSemanticsNodes()
+                    .isNotEmpty()
+            }
+            compose.onNodeWithText(sourceName).assertExists()
+            if (fileCount == 2) {
+                compose.waitUntil(20_000L) {
+                    compose.onAllNodesWithText(extraName).fetchSemanticsNodes()
+                        .isNotEmpty()
+                }
+                compose.onNodeWithText(extraName).assertExists()
+            }
             val after = dev.expository.transfer.journal.AttemptRecoveryIndex.recover(context)
             assertTrue("A verified journal per file is required",
                 after.verifiedReceipts >= before.verifiedReceipts + fileCount)
