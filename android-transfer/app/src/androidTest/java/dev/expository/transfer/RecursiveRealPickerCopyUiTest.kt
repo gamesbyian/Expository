@@ -465,11 +465,37 @@ class RecursiveRealPickerCopyUiTest {
         compose.onNodeWithText("Contents: 2 folders including empty directories, 1 files")
             .assertExists()
         // Folder review is intentionally a separate affirmative action.
-        compose.onNodeWithText("Confirm folder Copy").performClick()
-        compose.waitUntil(60_000L) {
-            compose.onAllNodesWithText("Whole-folder Copy verified:",
-                substring = true).fetchSemanticsNodes().isNotEmpty()
+        // It sits BELOW a nested LazyColumn. An attached Compose semantics
+        // node can be clipped and a performClick may silently hit nothing.
+        // Prove that the real operator-facing Button is placed and enabled.
+        compose.onNodeWithText("Confirm folder Copy").performScrollTo()
+        compose.onNodeWithText("Confirm folder Copy").assertIsDisplayed()
+            .assertIsEnabled().performClick()
+        compose.waitForIdle()
+        // Never substitute a mere click or provider create ACK for byte proof.
+        // But do identify a blocked/uncertain terminal result immediately
+        // rather than timing out and obscuring the real transfer failure.
+        val terminalLabels = listOf(
+            "Whole-folder Copy verified:",
+            "Whole-folder Copy blocked:",
+            "Whole-folder Copy stopped after",
+            "Whole-folder Copy uncertain after",
+            "Copy outcome cannot be observed",
+            "Folder approval invalidated"
+        )
+        compose.waitUntil(30_000L) {
+            terminalLabels.any { label ->
+                compose.onAllNodesWithText(label, substring = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
         }
+        fun terminalVisible(label: String) =
+            compose.onAllNodesWithText(label, substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        val finalState = terminalLabels.firstOrNull(::terminalVisible)
+        assertEquals("Real reviewed Copy failed to produce verified bytes; " +
+            "terminal category=" + finalState,
+            "Whole-folder Copy verified:", finalState)
         val root = LocalTreeReader.list(resolver, targetTree,
             "lab-target-root", LocalTreeReader.MAX_BROWSE)
         assertTrue(root.complete)
