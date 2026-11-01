@@ -106,8 +106,10 @@ test('required native check contexts fail on selector failure, without unnecessa
   for (const id of ['planner', 'android-pr-compile']) {
     const start = workflow.indexOf('  ' + id + ':');
     assert.ok(start >= 0);
-    const end = workflow.indexOf('\n  ', start + 3);
-    const portion = workflow.slice(start, end > 0 ? end : undefined);
+    const nextId = id === 'planner' ? 'android-pr-compile' : 'android-debug';
+    const end = workflow.indexOf('\n  ' + nextId + ':', start + 3);
+    assert.ok(end > start);
+    const portion = workflow.slice(start, end);
     assert.match(portion, /needs: select/);
     assert.match(portion, /!cancelled\(\)/, id + ' must execute when selector fails');
     assert.match(portion, /Enforce native selection integrity before completing required check/);
