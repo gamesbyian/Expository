@@ -30,9 +30,10 @@ function classify(files) {
     }
     for (const filename of names) {
       // CI changes must prove both lanes. Even a renamed selector cannot self-exempt.
-      if (/^\.github\/workflows\/transfer-.*\.ya?ml$/.test(filename) ||
-          filename === 'scripts/ci-selection.cjs' ||
-          filename === 'tests/ci-selection.test.cjs') {
+      if (/^\.github\/workflows\/[^/]+\.ya?ml$/.test(filename) ||
+          /^\.github\/actions\//.test(filename) ||
+          /^scripts\/ci-[^/]+\.cjs$/.test(filename) ||
+          /^tests\/ci-[^/]+\.test\.cjs$/.test(filename)) {
         jvm = android = true;
         reasons.add('CI contract');
       } else if (filename.startsWith('android-transfer/')) {
