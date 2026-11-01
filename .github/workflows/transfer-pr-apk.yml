@@ -2,8 +2,7 @@ name: Expository Transfer targeted PR Android compile
 # A trusted maintainer comment can request compiling the *actual* PR head.
 # No production credentials, writable tokens, automatic CI or fork execution.
 on:
-  issue_comment:
-    types: [created]
+  workflow_call:
 permissions:
   contents: read
 jobs:

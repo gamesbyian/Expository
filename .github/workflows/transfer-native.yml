@@ -2,8 +2,7 @@ name: Expository Transfer native validation
 # Owner-authorized PR comments may trigger isolated labs/APK using reviewed
 # main only. No secrets in these jobs and no untrusted PR-head execution.
 on:
-  issue_comment:
-    types: [created]
+  workflow_call:
   pull_request:
     paths:
       - "android-transfer/**"

@@ -2,8 +2,7 @@ name: Expository Transfer opt-in Android emulator smoke
 # Only an owner PR comment may start this resource-heavy test. Checkout is
 # always reviewed main; no server passwords or PR-head execution.
 on:
-  issue_comment:
-    types: [created]
+  workflow_call:
 permissions:
   contents: read
 jobs:
