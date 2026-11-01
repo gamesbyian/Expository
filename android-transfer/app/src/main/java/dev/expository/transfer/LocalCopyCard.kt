@@ -31,6 +31,8 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import dev.expository.transfer.engine.CopyProof
+import dev.expository.transfer.engine.CopyOutcomeLedger
+import dev.expository.transfer.engine.CopyOutcomeState
 import dev.expository.transfer.engine.CopyReceipt
 import dev.expository.transfer.planner.BrowseEndpoint
 import dev.expository.transfer.planner.CopyCommandScope
@@ -272,14 +274,23 @@ fun LocalCopyCard(
                 if (continueCopy !== permit) return@launch
                 destinationName = observedTarget ?: "Selected destination"
                 receipt = copyReceipt
-                status = when (copyReceipt.proof) {
-                    CopyProof.BYTES_VERIFIED -> "Read-back bytes matched through the selected provider."
-                    CopyProof.WRITE_ACKNOWLEDGED ->
-                        "Provider acknowledged the write, but read-back verification was unavailable."
-                    CopyProof.UNCERTAIN ->
-                        "Copy incomplete or uncertain. The new destination may contain partial data."
-                    CopyProof.BLOCKED ->
+                // Single and Dual consume one verified-only receipt policy.
+                // An invalid receipt can never be displayed as verified.
+                val outcome = CopyOutcomeLedger.begin(1).accept(copyReceipt)
+                status = when (outcome.state) {
+                    CopyOutcomeState.COMPLETE_VERIFIED ->
+                        "Read-back bytes matched through the selected provider."
+                    CopyOutcomeState.BLOCKED ->
                         "Copy blocked before writing. The picker may already have created an empty document."
+                    CopyOutcomeState.REVIEW_REQUIRED -> when (outcome.stopProof) {
+                        CopyProof.WRITE_ACKNOWLEDGED ->
+                            "Provider acknowledged the write, but read-back verification was unavailable."
+                        CopyProof.UNCERTAIN ->
+                            "Copy incomplete or uncertain. The new destination may contain partial data."
+                        else -> "Copy receipt could not be verified. Inspect the destination before retrying."
+                    }
+                    CopyOutcomeState.ACTIVE ->
+                        "Copy receipt incomplete. Inspect the destination before retrying."
                 }
                 transferred = copyReceipt.bytesWritten
                 } catch (_: CancellationException) {
