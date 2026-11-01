@@ -54,7 +54,7 @@ object WorkspaceStateSuite {
         // This is an authority witness; never expose a data-class copy()
         // or generated component accessors that bypass freeze validation.
         val scopeApi = CopyCommandScope::class.java.declaredMethods.map { it.name }
-        check(scopeApi.none { it == "copy" || it.startsWith("copy\\$") ||
+        check(scopeApi.none { it == "copy" || it.startsWith("copy\$") ||
             Regex("component[0-9]+").matches(it) })
 
         val owner = FrozenCopyCommand.capture(frozenSource, frozenTarget, 14L)
