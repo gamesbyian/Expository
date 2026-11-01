@@ -77,7 +77,7 @@ test('head and base mismatch before selection are errors',()=>{
   for(const patch of [{FAKE_FIRST_HEAD:'c'.repeat(40)},{FAKE_FIRST_BASE:'d'.repeat(40)}]){
     const r=execute(patch);
     assert.notEqual(r.code,0);
-    assert.match(r.log,/Stale head\/base/);
+    assert.match(r.log,/Stale PR head\/base/);
   }
 });
 test('head and base moving during selection are errors',()=>{
