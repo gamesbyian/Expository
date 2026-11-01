@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- This separately installed disposable fixture application is built
+         ONLY by the opt-in real-picker E2 test workflow, never by standard
+         debug/release app builds. Neither authority carries personal data. -->
+    <application
+        android:label="Expository Disposable Picker Test"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="false">
+        <provider
+            android:name="dev.expository.transfer.RecursivePickerSourceProvider"
+            android:authorities="test.real.recursive.source.scoped"
+            android:permission="android.permission.MANAGE_DOCUMENTS"
+            android:grantUriPermissions="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+        <provider
+            android:name="dev.expository.transfer.RecursivePickerTargetProvider"
+            android:authorities="test.real.recursive.target.scoped"
+            android:permission="android.permission.MANAGE_DOCUMENTS"
+            android:grantUriPermissions="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+    </application>
+</manifest>

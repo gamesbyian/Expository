@@ -280,7 +280,8 @@ internal fun LocalTreePane(
                 verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Button(
                     enabled = enabled && !state.loading,
-                    modifier = Modifier.heightIn(min = 48.dp),
+                    modifier = Modifier.heightIn(min = 48.dp)
+                        .testTag("saf-root-picker"),
                     onClick = onPick
                 ) { Text(if (state.treeUri == null) "Choose folder" else "Change folder") }
                 if (state.treeUri != null) {

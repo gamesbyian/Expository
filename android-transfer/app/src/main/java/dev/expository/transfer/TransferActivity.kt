@@ -39,6 +39,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -966,7 +967,8 @@ private fun DeveloperPreview(
         // One outer scroll owner. Only the active connection form is composed;
         // switching away disposes its ephemeral session and credentials.
         LazyColumn(
-            Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            Modifier.fillMaxSize().padding(padding).padding(16.dp)
+                .testTag("transfer-workspace-scroll"),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item { Text("Expository Transfer", style = MaterialTheme.typography.headlineMedium) }
