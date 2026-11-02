@@ -108,9 +108,15 @@ fun SmartMergeFolder.inspectFresh(
     if (observed == null) return SmartMergeReobservation.MISSING_OR_UNOBSERVED
     val fresh = SmartMergeFolder.capture(collectedFrom, observed, generation, nowMillis)
         ?: return SmartMergeReobservation.UNAUTHORIZED_OR_EXPIRED
-    if (!sameObjectAs(fresh)) return SmartMergeReobservation.DIFFERENT_SOURCE
     val old = source
     val next = fresh.source
+    // First match the stable opaque object. A changed grant or authenticated
+    // storage namespace then has a distinct actionable status, never a match.
+    if (old.location.key.kind != next.location.key.kind ||
+        old.location.key.authorityId != next.location.key.authorityId ||
+        old.location.key.rootId != next.location.key.rootId ||
+        old.key.opaqueItemId != next.key.opaqueItemId)
+        return SmartMergeReobservation.DIFFERENT_SOURCE
     if (old.location.key.grantId != next.location.key.grantId ||
         old.location.verifiedNamespace != next.location.verifiedNamespace ||
         old.location.verifiedStorageDomain != next.location.verifiedStorageDomain)
