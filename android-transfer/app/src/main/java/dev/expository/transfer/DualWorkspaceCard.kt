@@ -22,7 +22,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.invisibleToUser
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
@@ -451,9 +452,20 @@ internal fun DualWorkspaceCard(
 // The subtree is still measured with nonzero width to preserve text-field
 // and nested list constraints. No component is removed from composition.
 private fun Modifier.retainInvisible(hidden: Boolean): Modifier =
-    if (!hidden) this else this
-        .clearAndSetSemantics { }
+    // Keep BOTH modifier node types installed across phone A/B tab changes.
+    // Dynamically adding/removing clearAndSetSemantics can detach a Material3
+    // child-semantics node while an observed Compose snapshot invalidates it
+    // (the API35 visitAncestors-on-unattached-node regression). The inactive
+    // pane stays composed to retain session identity, but has no placed pixels,
+    // pointer targets or accessible semantics.
+    this.semantics { if (hidden) invisibleToUser() }
         .layout { measurable, constraints ->
-            measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
-            layout(0, 0) { }
+            val child = measurable.measure(
+                if (hidden) constraints.copy(minWidth = 0, minHeight = 0)
+                else constraints
+            )
+            if (hidden) layout(0, 0) { }
+            else layout(child.width, child.height) {
+                child.placeRelative(0, 0)
+            }
         }
