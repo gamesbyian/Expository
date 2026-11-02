@@ -94,7 +94,7 @@ class ProtectedRecoveryContextStore(context: Context) {
     fun recordNew(digest: String, context: ProtectedRecoveryContext): Unit =
         synchronized(LOCK) {
             val targetFile = destinationFile(digest)
-            require(context.operation in setOf("SAF_PICKER_COPY", "SAF_RECURSIVE_COPY") &&
+            require(context.operation in setOf("SAF_PICKER_COPY", "SAF_RECURSIVE_COPY", "SAF_DUAL_COPY") &&
                 allowed(context.sourceLabel) &&
                 allowed(context.destinationLabel) &&
                 allowed(context.destinationProvider)) {
@@ -196,7 +196,7 @@ class ProtectedRecoveryContextStore(context: Context) {
                     val context = ProtectedRecoveryContext(
                         input.readUTF(), input.readUTF(), input.readUTF(), input.readUTF())
                     if (input.available() != 0 ||
-                        context.operation !in setOf("SAF_PICKER_COPY", "SAF_RECURSIVE_COPY") ||
+                        context.operation !in setOf("SAF_PICKER_COPY", "SAF_RECURSIVE_COPY", "SAF_DUAL_COPY") ||
                         !allowed(context.sourceLabel) ||
                         !allowed(context.destinationLabel) ||
                         !allowed(context.destinationProvider))
