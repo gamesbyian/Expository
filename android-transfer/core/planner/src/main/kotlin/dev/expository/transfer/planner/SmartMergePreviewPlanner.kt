@@ -20,7 +20,11 @@ enum class SmartMergeStructure { KEEP_SOURCE_DIRECTORIES, COALESCE_MATCHING_DIRE
 data class SmartMergeInventory(
     val collected: SmartMergeFolder,
     val manifest: RecursiveFolderManifest
-)
+) {
+    // Public data-class debug output must never dump the manifest's private
+    // source paths, provider IDs or filenames into shared diagnostics.
+    override fun toString(): String = "SmartMergeInventory(redacted)"
+}
 
 data class SmartMergePreviewEntry(
     val sourceIndex: Int,
@@ -33,7 +37,13 @@ data class SmartMergePreviewEntry(
     val sharedDirectory: Boolean,
     /** A deterministic " (2)", " (3)" ... name keeps both objects. */
     val renamedForCollision: Boolean
-)
+) {
+    // Preserve the useful nonsecret state while avoiding ItemRef/relative
+    // path exposure through Kotlin's generated data-class toString.
+    override fun toString(): String =
+        "SmartMergePreviewEntry(sourceIndex=$sourceIndex,sharedDirectory=$sharedDirectory," +
+            "renamedForCollision=$renamedForCollision)"
+}
 
 /**
  * Digest is a stable REVIEW fingerprint, not authority to create anything.
