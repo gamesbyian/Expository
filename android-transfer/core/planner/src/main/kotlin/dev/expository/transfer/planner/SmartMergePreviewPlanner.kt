@@ -292,6 +292,12 @@ object SmartMergePreviewPlanner {
         val planned = mutableListOf<SmartMergePreviewEntry>()
         val reserved = hashMapOf<List<String>, MutableMap<String, ItemKind>>()
         val dirs = hashMapOf<Pair<Int, List<String>>, List<String>>()
+        // Remember the earliest not-yet-tried suffix for each requested
+        // name, type and target parent. Children only ever ADD reservations:
+        // a successful earlier attempt can never become available later.
+        // This preserves the original first-free-name policy but prevents
+        // 64 sources with thousands of conflicts repeatedly scanning (2)…
+        val nextSuffix = hashMapOf<Triple<List<String>, String, ItemKind>, Int>()
         var renamed = 0
         var coalesced = 0
         if (errors.isEmpty()) {
@@ -323,7 +329,8 @@ object SmartMergePreviewPlanner {
                             shared = true
                             coalesced++
                         } else {
-                            var sequence = 2
+                            val suffixKey = Triple(parentTarget, requested, kind)
+                            var sequence = nextSuffix[suffixKey] ?: 2
                             var unique = false
                             while (sequence <= MAX_PREVIEW_ENTRIES + 1) {
                                 val candidate = safeSuffix(requested, kind, sequence) ?: break
@@ -332,6 +339,7 @@ object SmartMergePreviewPlanner {
                                     name = candidate
                                     key = candidateKey
                                     unique = true
+                                    nextSuffix[suffixKey] = sequence + 1
                                     break
                                 }
                                 sequence++
