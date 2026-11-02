@@ -26,8 +26,10 @@ object SmartMergePreviewPlannerSuite {
     private fun entry(root: ItemRef, segments: List<String>,
         kind: ItemKind = ItemKind.FILE): RecursiveCopyEntry {
         val path = root.parent + listOf(root.name) + segments.dropLast(1)
+        val parentId = if (segments.size == 1) root.key.opaqueItemId
+            else "item-" + root.name + "-" + segments.dropLast(1).joinToString("_")
         val location = root.location.copy(
-            key = root.location.key.copy(containerId = "parent-" + path.joinToString("_")),
+            key = root.location.key.copy(containerId = parentId),
             folder = path)
         val item = ItemRef(ItemKey(root.key.authorityId,
             "item-" + root.name + "-" + segments.joinToString("_"), "v1"),
@@ -182,6 +184,16 @@ object SmartMergePreviewPlannerSuite {
                     aFile.source.location.key.copy(grantId = "unrelated")))))))
         rejected(validA.copy(entries = listOf(validA.entries.first(),
             aFile.copy(relativePath = listOf("A", "missing-folder", "report.txt")))))
+        rejected(validA.copy(entries = listOf(validA.entries.first(),
+            aFile.copy(source = aFile.source.copy(location =
+                aFile.source.location.copy(key =
+                    aFile.source.location.key.copy(containerId = "different-parent-ID")))))))
+        val nestedWrongParent = entry(a.source, listOf("Album", "inside.txt"))
+        rejected(inventory(a, aFolder, nestedWrongParent.copy(source =
+            nestedWrongParent.source.copy(location =
+                nestedWrongParent.source.location.copy(key =
+                    nestedWrongParent.source.location.key.copy(containerId =
+                        a.source.key.opaqueItemId))))).manifest)
         rejected(validA.copy(entries = listOf(validA.entries.first(),
             aFile.copy(source = aFile.source.copy(key =
                 aFile.source.key.copy(opaqueItemId = ""))))))
