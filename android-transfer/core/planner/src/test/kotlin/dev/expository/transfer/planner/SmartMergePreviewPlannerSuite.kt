@@ -214,7 +214,22 @@ object SmartMergePreviewPlannerSuite {
                 entry(a.source, listOf("folder-" + it), ItemKind.DIRECTORY)
             }.toTypedArray()
         rejected(inventory(a, *tooManyDirectories).manifest)
-        rejected(validA.copy(files = 0, directories = 2))
+        // Per-entry authorization matters even when the basket root itself
+        // remains readable. A stale or explicitly unsupported child READ
+        // witness cannot produce an apparently reviewable multi-source plan.
+        val expiredChildRead = aFile.copy(source = aFile.source.copy(
+            location = aFile.source.location.copy(
+                capabilities = aFile.source.location.capabilities +
+                    (Capability.READ to CapabilityProof(
+                        Support.SUPPORTED, "expired-child", NOW - 1)))))
+        rejected(inventory(a, expiredChildRead).manifest)
+        val deniedChildRead = aFile.copy(source = aFile.source.copy(
+            location = aFile.source.location.copy(
+                capabilities = aFile.source.location.capabilities +
+                    (Capability.READ to CapabilityProof(
+                        Support.UNSUPPORTED, "child-denied", NOW + 10_000)))))
+        rejected(inventory(a, deniedChildRead).manifest)
+                rejected(validA.copy(files = 0, directories = 2))
         rejected(validA.copy(entries = validA.entries + aFile,
             files = 2, directories = 1)) // duplicate path/opaque ID
         rejected(validA.copy(entries = listOf(validA.entries.first(),
