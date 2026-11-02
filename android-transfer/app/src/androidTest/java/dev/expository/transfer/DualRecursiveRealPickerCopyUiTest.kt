@@ -181,5 +181,18 @@ class DualRecursiveRealPickerCopyUiTest {
         // down the Activity. This marker distinguishes a Compose lifecycle
         // regression at teardown from failed transfer-byte acceptance.
         Log.i("EXPO_DUAL_E2", "END_TO_END_ASSERTIONS_COMPLETE")
+        // Exercise a real post-transfer navigation transition, rather than
+        // leaving a still-attached Dual movable-content subtree to be torn
+        // down by the instrumentation rule. This is a user-visible lifecycle
+        // check: teardown itself must no longer throw stale Material3 child
+        // semantics. Navigating never alters the copied destination or
+        // reauthorizes a past Copy.
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(androidx.compose.ui.test.hasText(
+                "Single view", substring = true))
+        compose.onNodeWithText("Single view", substring = true)
+            .assertIsDisplayed().assertIsEnabled().performClick()
+        compose.waitForIdle()
+        Log.i("EXPO_DUAL_E2", "POST_COPY_SINGLE_NAVIGATION_COMPLETE")
     }
 }
