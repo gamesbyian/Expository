@@ -871,6 +871,9 @@ private fun DeveloperPreview(
         scope.launch {
             val owningJob = kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]
             try {
+                // Fixed, non-sensitive API35 diagnostic stages. No provider
+                // names, paths, URIs, credentials, source bytes or digests.
+                android.util.Log.i("EXPO_DUAL_E2", "APP_DISPATCH_BEGIN")
                 var recursiveReceipt: dev.expository.transfer.engine.RecursiveCopyRunReceipt? = null
                 val dispatched = withContext(Dispatchers.IO) {
                     runCatching {
@@ -887,6 +890,8 @@ private fun DeveloperPreview(
                                         context.contentResolver).execute(
                                         request, pending.manifest,
                                         onVerifiedStep = { verified ->
+                                            android.util.Log.i("EXPO_DUAL_E2",
+                                                "APP_STEP_VERIFIED_" + verified.completedSteps)
                                             scope.launch {
                                                 if (copyBusy && copyPermit === permit &&
                                                     foregroundCopyAllowed(permit, owningJob) &&
@@ -897,6 +902,8 @@ private fun DeveloperPreview(
                                         }) {
                                             foregroundCopyAllowed(permit, owningJob)
                                         }
+                                    android.util.Log.i("EXPO_DUAL_E2",
+                                        "APP_ENGINE_RESULT_" + observed.result.name)
                                     recursiveReceipt = observed
                                     observed.toDispatchCopyReceipt()
                                 }
@@ -906,6 +913,8 @@ private fun DeveloperPreview(
                 }
                 if (copyPermit !== permit) return@launch
                 val observed = recursiveReceipt
+                android.util.Log.i("EXPO_DUAL_E2", "APP_DISPATCH_RETURNED_" +
+                    (dispatched?.state?.name ?: "NO_RECEIPT"))
                 val proof = observed?.toDispatchCopyReceipt()
                 copyStatus = if (observed == null || dispatched == null || proof == null) {
                     "Folder Copy outcome unavailable. Inspect the destination and recovery records before any retry. Sources were not deleted."
@@ -943,6 +952,7 @@ private fun DeveloperPreview(
                             " verified files. " + observed.reason +
                             ". Do not retry without inspection."
                 }
+                android.util.Log.i("EXPO_DUAL_E2", "APP_STATUS_RENDER_REQUESTED")
                 // A late result must not refresh an unrelated pane or inherit
                 // any Share/picker authority after the request was frozen.
                 val current = tree(pending.destinationPane)
@@ -954,10 +964,13 @@ private fun DeveloperPreview(
                     current.generation == pending.destinationGeneration &&
                     current.treeUri == request.destinationTree &&
                     current.folderId == request.destinationParentId) {
+                    android.util.Log.i("EXPO_DUAL_E2", "APP_REFRESH_BEGIN")
                     readTree(pending.destinationPane, request.destinationTree,
                         current.crumbs, maxVisible = current.visibleLimit)
+                    android.util.Log.i("EXPO_DUAL_E2", "APP_REFRESH_SCHEDULED")
                 }
             } finally {
+                android.util.Log.i("EXPO_DUAL_E2", "APP_FINALLY")
                 permit.set(false)
                 if (copyPermit === permit) {
                     copyPermit = null
