@@ -64,7 +64,7 @@ test('automatic expensive suites cancel superseded PRs but not manual runs', () 
     const workflow = read(name);
     assert.match(workflow, /^concurrency:\s*$/m, name);
     assert.match(workflow, /cancel-in-progress: \${{ github\.event_name == 'pull_request' }}/, name);
-    assert.match(workflow, /github\.event\.pull_request\.number \|\| github\.run_id/, name);
+    assert.ok(workflow.includes('github.event.pull_request.number || github.run_id'), name);
   }
   assert.match(read('transfer-plain-ftp-loopback.yml'), /^  workflow_dispatch:\s*$/m);
   assert.match(read('validate.yml'), /^  workflow_dispatch:\s*$/m);
@@ -120,4 +120,19 @@ test('required native check contexts fail on selector failure, without unnecessa
   }
   assert.equal((workflow.match(/Enforce native selection integrity before completing required check/g) || []).length, 2);
   assert.equal((workflow.match(/Native selection failed; required check cannot be skipped/g) || []).length, 2);
+});
+
+
+test('isolated Single real-picker E2 methods stay behind exact owner-only allowlist', () => {
+  const workflow = read('transfer-pr-emulator.yml');
+  assert.ok(workflow.includes("github.event.comment.user.login == 'gamesbyian'"));
+  assert.match(workflow, /Fork or ambiguous PR source forbidden/);
+  for (const method of [
+    'LocalPickerPositiveCopyTest#selectAndSaveNewDocumentWithByteVerifiedReadback',
+    'LocalPickerPositiveCopyTest#incomingShareDuringSaveAsCannotSwitchTheSource',
+  ]) {
+    assert.ok(workflow.includes(method + ') ;;'), 'missing scoped gate: ' + method);
+  }
+  assert.match(workflow, /\*\) echo "Unsupported test selection"; exit 2/);
+  assert.ok(workflow.includes('TARGET_TEST_CLASS=dev.expository.transfer.%s'));
 });

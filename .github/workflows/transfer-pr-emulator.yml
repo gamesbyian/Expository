@@ -47,6 +47,11 @@ jobs:
               # One fixed Android DocumentsUI acceptance method. No arbitrary
               # method, package, sh fragment or wildcard is allowed.
               LocalPickerPositiveCopyTest#twoRealSystemPickedTreesCopyExactBytesAndPreserveSource) ;;
+              # Single's actual OS Open->Create Document journey, isolated
+              # from sibling Dual picker tests to avoid shared DocumentsUI state.
+              LocalPickerPositiveCopyTest#selectAndSaveNewDocumentWithByteVerifiedReadback) ;;
+              # The original source must never switch mid-Save As after Share.
+              LocalPickerPositiveCopyTest#incomingShareDuringSaveAsCannotSwitchTheSource) ;;
               # One isolated foreground Copy state gate, avoiding the known
               # intermittent DocumentsUI navigation tests on this runner.
               LocalPickerCancelSmokeTest#localCopyLateProgressDoesNotCrossCancellationOrAttemptBoundaries) ;;
