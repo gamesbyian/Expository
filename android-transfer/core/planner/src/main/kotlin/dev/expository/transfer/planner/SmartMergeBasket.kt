@@ -86,6 +86,44 @@ class SmartMergeFolder private constructor(
     }
 }
 
+/**
+ * Read-only status for a freshly observed folder matched by *index* to the M1
+ * basket. This NEVER refreshes permission, updates a selection or grants
+ * Copy/Merge authority. The user must explicitly re-review changed sources.
+ */
+enum class SmartMergeReobservation {
+    CURRENT_SNAPSHOT,
+    MISSING_OR_UNOBSERVED,
+    UNAUTHORIZED_OR_EXPIRED,
+    DIFFERENT_SOURCE,
+    AUTHORITY_OR_GRANT_CHANGED,
+    SOURCE_OR_LISTING_CHANGED
+}
+
+fun SmartMergeFolder.inspectFresh(
+    observed: ItemRef?,
+    generation: Long,
+    nowMillis: Long
+): SmartMergeReobservation {
+    if (observed == null) return SmartMergeReobservation.MISSING_OR_UNOBSERVED
+    val fresh = SmartMergeFolder.capture(collectedFrom, observed, generation, nowMillis)
+        ?: return SmartMergeReobservation.UNAUTHORIZED_OR_EXPIRED
+    if (!sameObjectAs(fresh)) return SmartMergeReobservation.DIFFERENT_SOURCE
+    val old = source
+    val next = fresh.source
+    if (old.location.key.grantId != next.location.key.grantId ||
+        old.location.verifiedNamespace != next.location.verifiedNamespace ||
+        old.location.verifiedStorageDomain != next.location.verifiedStorageDomain)
+        return SmartMergeReobservation.AUTHORITY_OR_GRANT_CHANGED
+    if (old != next)
+        return SmartMergeReobservation.SOURCE_OR_LISTING_CHANGED
+    // The old proof must still be valid. A newly observed proof never silently
+    // resurrects an expired grant that the basket originally captured.
+    if (old.location.capabilities[Capability.READ]?.valid(nowMillis) != true)
+        return SmartMergeReobservation.UNAUTHORIZED_OR_EXPIRED
+    return SmartMergeReobservation.CURRENT_SNAPSHOT
+}
+
 enum class SmartMergeAddStatus {
     ADDED, DUPLICATE_SOURCE, OVERLAPPING_SOURCE, LIMIT_REACHED
 }
@@ -109,6 +147,22 @@ class SmartMergeBasket private constructor(val folders: List<SmartMergeFolder>) 
     }
 
     val hasMinimumSources: Boolean get() = folders.size >= 2
+
+    /**
+     * One-to-one check of *new provider observations*, not saved browser
+     * history. Missing/unreadable entries remain visible in the basket but
+     * MUST be reselected/reapproved before any preview or execution. Order is
+     * fixed: a different folder cannot replace a stale one by sorting.
+     */
+    fun inspectFresh(observed: List<ItemRef?>, generation: Long,
+        nowMillis: Long): List<SmartMergeReobservation> {
+        require(observed.size == folders.size && generation >= 0) {
+            "MERGE_REOBSERVATION_SCOPE_MISMATCH"
+        }
+        return Collections.unmodifiableList(folders.indices.map { index ->
+            folders[index].inspectFresh(observed[index], generation, nowMillis)
+        })
+    }
 
     fun add(candidate: SmartMergeFolder): SmartMergeAddResult {
         if (folders.any { it.sameObjectAs(candidate) })
