@@ -139,10 +139,21 @@ class DualRecursiveRealPickerCopyUiTest {
         Log.i("EXPO_DUAL_E2", "CONFIRM_REAL_UI_BEGIN")
         confirmation!!.click()
         Log.i("EXPO_DUAL_E2", "CONFIRM_REAL_UI_DONE")
-        // Observe the final independently rendered app status via the OS
-        // accessibility window. Never pass on a journal ACK or an animation.
-        assertTrue("No independently verified Dual Copy completion in the live UI",
-            device.wait(Until.hasObject(By.textContains("Folder Copy verified:")), 30_000L))
+        // A real user on a narrow phone must scroll the outer workspace
+        // after the transient review Card disappears. UiAutomator observes
+        // only PLACED, visible text, unlike Compose's virtual semantics tree.
+        // Check the live result with bounded normal scrolling. Do not accept
+        // a progress label or provider create ACK as completion.
+        val verifiedLabel = By.textContains("Folder Copy verified:")
+        var verifiedVisible = device.wait(Until.hasObject(verifiedLabel), 3_000L)
+        for (attempt in 0 until 8) {
+            if (verifiedVisible) break
+            device.swipe(device.displayWidth / 2, device.displayHeight * 4 / 5,
+                device.displayWidth / 2, device.displayHeight / 5, 18)
+            verifiedVisible = device.wait(Until.hasObject(verifiedLabel), 1_500L)
+        }
+        assertTrue("No visible verified Dual Copy result after normal scroll",
+            verifiedVisible)
         Log.i("EXPO_DUAL_E2", "VERIFIED_STATUS_OBSERVED")
 
 
