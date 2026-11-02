@@ -175,6 +175,24 @@ object SmartMergePreviewPlannerSuite {
                 "report (3).txt", "report (4).txt"))
         check(occupied.collisionRenames == 2)
 
+        // The first source can plan successfully before a later collision
+        // proves that no legal keep-both suffix fits the provider's 255-byte
+        // component limit. Reject the ENTIRE preview, not just the final
+        // filename: no incomplete tree mapping or misleading success counts.
+        val maximumName = "x".repeat(251) + ".txt"
+        val unresolvable = plan(sources, listOf(
+            inventory(a, entry(a.source, listOf(maximumName))),
+            inventory(b, entry(b.source, listOf(maximumName)))
+        ))
+        check("MERGE_COLLISION_NAME_UNRESOLVED" in unresolvable.blockers)
+        check(!unresolvable.reviewable)
+        check(unresolvable.entries.isEmpty())
+        check(unresolvable.collisionRenames == 0 && unresolvable.sharedDirectories == 0)
+        check(unresolvable.digest == plan(sources, listOf(
+            inventory(a, entry(a.source, listOf(maximumName))),
+            inventory(b, entry(b.source, listOf(maximumName)))
+        )).digest)
+
         // Sixty-four independent folders, 96 collisions per filename:
         // the planner must still preserve all source entries and names.
         val bulk = (0 until SmartMergeBasket.MAX_SOURCES).map {
