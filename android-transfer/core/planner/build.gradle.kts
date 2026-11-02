@@ -66,8 +66,16 @@ tasks.register<JavaExec>("smartMergeBasketScenarios") {
     mainClass.set("dev.expository.transfer.planner.SmartMergeBasketSuite")
 }
 
+tasks.register<JavaExec>("smartMergePreviewScenarios") {
+    group = "verification"
+    description = "Pure M2 N-source merge preview, collision and incomplete-inventory guards"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.planner.SmartMergePreviewPlannerSuite")
+}
+
 // These main()-based suites are not automatically discovered by Gradle's test task.
 // Keep the standard check lifecycle honest for local developers and CI.
 tasks.named("check") {
-    dependsOn("scenarios", "locationScenarios", "recursiveFolderScenarios", "directoryScenarios", "moveScenarios", "workspaceScenarios", "sessionAccessScenarios", "smartMergeBasketScenarios")
+    dependsOn("scenarios", "locationScenarios", "recursiveFolderScenarios", "directoryScenarios", "moveScenarios", "workspaceScenarios", "sessionAccessScenarios", "smartMergeBasketScenarios", "smartMergePreviewScenarios")
 }
