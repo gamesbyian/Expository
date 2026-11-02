@@ -201,6 +201,19 @@ object SmartMergePreviewPlannerSuite {
             check("SOURCE_TREE_INCOMPLETE_OR_STALE" in result.blockers)
         }
         val validA = trees[0].manifest
+        // The real recursive scanner emits at most 2,048 entries and 128
+        // directories per source. An untrusted but internally consistent
+        // review manifest cannot silently expand those scan limits merely
+        // because the N-source preview itself supports 10,000 entries.
+        val tooManyFiles = (0 until RecursiveFolderCopyPlanner.MAX_ITEMS).map {
+            entry(a.source, listOf("oversized-" + it + ".bin"))
+        }.toTypedArray()
+        rejected(inventory(a, *tooManyFiles).manifest)
+        val tooManyDirectories =
+            (0 until RecursiveFolderCopyPlanner.MAX_DIRECTORIES).map {
+                entry(a.source, listOf("folder-" + it), ItemKind.DIRECTORY)
+            }.toTypedArray()
+        rejected(inventory(a, *tooManyDirectories).manifest)
         rejected(validA.copy(files = 0, directories = 2))
         rejected(validA.copy(entries = validA.entries + aFile,
             files = 2, directories = 1)) // duplicate path/opaque ID
