@@ -18,6 +18,36 @@ import org.junit.runner.RunWith
 /** No real journal files are touched; tests input enumeration failures. */
 @RunWith(AndroidJUnit4::class)
 class RecoveryIndexFailurePolicyTest {
+    @Test fun privateRecoveryDisplayObjectsNeverPrintUserContent() {
+        val source = "PRIVATE SOURCE 40977"
+        val destination = "PRIVATE DESTINATION 80412"
+        val provider = "secret.provider.account"
+        val child = "PRIVATE CHILD NAME 70132"
+        val hint = dev.expository.transfer.journal.ProtectedRecoveryContext(
+            "SAF_DUAL_COPY", source, destination, provider)
+        val reference = dev.expository.transfer.journal.RecoveryReviewReference(
+            "abcdef012345", "Requires independent destination review",
+            context = hint,
+            contextWarning = "Sensitive provider detail " + provider)
+        val summary = dev.expository.transfer.journal.RecoveryCounts(
+            1, 0, 0, 0, listOf(reference))
+        val listing = dev.expository.transfer.journal.ManualRecoveryListing(
+            1, true, listOf(child))
+        for (text in listOf(hint.toString(), reference.toString(),
+                summary.toString(), listing.toString())) {
+            check(!text.contains(source) && !text.contains(destination) &&
+                !text.contains(provider) && !text.contains(child) &&
+                !text.contains("abcdef012345"))
+        }
+        // Redaction of debug strings must not remove information from the
+        // actual operator-facing UI or alter immutable value equality.
+        assertEquals(source, hint.sourceLabel)
+        assertEquals(destination, reference.context?.destinationLabel)
+        assertEquals(provider, reference.context?.destinationProvider)
+        assertEquals(listOf(child), listing.sampleNames)
+        assertEquals(hint, hint.copy())
+    }
+
     @Test fun manualRecoveryInspectionRequiresActualTreePickerReadGrant() {
         val valid = android.net.Uri.parse("content://private.synthetic/tree/root")
         val nonTree = android.net.Uri.parse("content://private.synthetic/document/item")
