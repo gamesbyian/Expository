@@ -36,6 +36,12 @@ object SmartMergeBasketSuite {
         generation: Long = 1L, now: Long = NOW): SmartMergeFolder =
         requireNotNull(SmartMergeFolder.capture(pane, item, generation, now))
 
+    private fun basketOf(items: List<SmartMergeFolder>): SmartMergeBasket {
+        var result = SmartMergeBasket.empty()
+        items.forEach { result = result.add(it).basket }
+        return result
+    }
+
     @JvmStatic fun main(args: Array<String>) {
         val original = SmartMergeBasket.empty()
         check(original.folders.isEmpty() && !original.hasMinimumSources)
@@ -132,6 +138,44 @@ object SmartMergeBasketSuite {
             picked("Moved").copy(parent = listOf("Elsewhere")), 1L, NOW) == null)
         check(SmartMergeFolder.capture(WorkspacePane.A,
             picked("Invalid"), -1L, NOW) == null)
+
+        // A fresh provider observation is checked without making the old
+        // basket into a new grant or turning a cached browser visit into proof.
+        val chosen = many.folders.take(2)
+        val checkBasket = basketOf(chosen)
+        val observed = chosen.map { it.source }
+        check(checkBasket.inspectFresh(observed, 200L, NOW) ==
+            listOf(SmartMergeReobservation.CURRENT_SNAPSHOT,
+                SmartMergeReobservation.CURRENT_SNAPSHOT))
+        check(checkBasket.folders.first() === chosen.first()) // no mutation
+        check(checkBasket.inspectFresh(listOf(null, observed[1]), 200L, NOW).first() ==
+            SmartMergeReobservation.MISSING_OR_UNOBSERVED)
+        val alteredGrant = observed[0].copy(location = observed[0].location.copy(
+            key = observed[0].location.key.copy(grantId = "new-tree-grant")))
+        check(checkBasket.inspectFresh(listOf(alteredGrant, observed[1]), 200L, NOW).first() ==
+            SmartMergeReobservation.AUTHORITY_OR_GRANT_CHANGED)
+        val alteredVersion = observed[0].copy(key =
+            observed[0].key.copy(version = "different-file-version"))
+        check(checkBasket.inspectFresh(listOf(alteredVersion, observed[1]), 200L, NOW).first() ==
+            SmartMergeReobservation.SOURCE_OR_LISTING_CHANGED)
+        val alteredRevision = observed[0].copy(location =
+            observed[0].location.copy(revision = "new-listing"))
+        check(checkBasket.inspectFresh(listOf(alteredRevision, observed[1]), 200L, NOW).first() ==
+            SmartMergeReobservation.SOURCE_OR_LISTING_CHANGED)
+        val switchedObject = observed[0].copy(key =
+            observed[0].key.copy(opaqueItemId = "someone-else"))
+        check(checkBasket.inspectFresh(listOf(switchedObject, observed[1]), 200L, NOW).first() ==
+            SmartMergeReobservation.DIFFERENT_SOURCE)
+        val denied = observed[0].copy(location = observed[0].location.copy(
+            capabilities = emptyMap()))
+        check(checkBasket.inspectFresh(listOf(denied, observed[1]), 200L, NOW).first() ==
+            SmartMergeReobservation.UNAUTHORIZED_OR_EXPIRED)
+        check(checkBasket.inspectFresh(observed, 200L, NOW + 100_000L).first() ==
+            SmartMergeReobservation.UNAUTHORIZED_OR_EXPIRED)
+        check(runCatching { checkBasket.inspectFresh(observed.take(1), 200L, NOW) }
+            .isFailure)
+        check(runCatching { checkBasket.inspectFresh(observed, -1L, NOW) }
+            .isFailure)
 
         // Bound even a valid basket without reducing the required N>=20.
         var capped = SmartMergeBasket.empty()
