@@ -11,11 +11,12 @@ object SmartMergeBasketSuite {
         parent: List<String>, name: String, id: String,
         grant: String? = null, namespace: String? = null,
         storage: String? = null, revision: String = "listing",
-        version: String = "version", caps: Map<Capability, CapabilityProof> = read
+        version: String = "version", caps: Map<Capability, CapabilityProof> = read,
+        casePolicy: CasePolicy = CasePolicy.UNKNOWN
     ): ItemRef {
         val loc = LocationRef(
             LocationKey(kind, authority, root, parent.joinToString("/").ifBlank { "/" }, grant),
-            parent, revision, caps, namespace, storage)
+            parent, revision, caps, namespace, storage, casePolicy)
         return ItemRef(ItemKey(authority, id, version), loc, parent,
             name, ItemKind.DIRECTORY)
     }
@@ -91,6 +92,36 @@ object SmartMergeBasketSuite {
         check(overlap.basket === many)
         val prefixNotAncestor = many.add(collect(picked("2024-backup")))
         check(prefixNotAncestor.status == SmartMergeAddStatus.ADDED)
+
+        // Two distinct directories on the SAME proven case-sensitive
+        // provider may differ only by case. An overly broad case fold must
+        // not prevent an otherwise valid multi-source merge basket.
+        val upper = folder(LocationKind.LOCAL_SAF, "case-provider", "root",
+            listOf("Photos"), "Mix", "dir-upper", grant = "tree-case",
+            casePolicy = CasePolicy.CASE_SENSITIVE)
+        val lower = folder(LocationKind.LOCAL_SAF, "case-provider", "root",
+            listOf("Photos"), "mix", "dir-lower", grant = "tree-case",
+            casePolicy = CasePolicy.CASE_SENSITIVE)
+        val caseBasket = SmartMergeBasket.empty().add(collect(upper)).basket
+        check(caseBasket.add(collect(lower)).status == SmartMergeAddStatus.ADDED)
+        // If either observer has unknown or case-insensitive rules, continue
+        // to block a potentially aliased source. Canonically equivalent
+        // Unicode folder names remain overlapping even when case-sensitive.
+        check(caseBasket.add(collect(lower.copy(location =
+            lower.location.copy(casePolicy = CasePolicy.UNKNOWN)))).status ==
+            SmartMergeAddStatus.OVERLAPPING_SOURCE)
+        val unknownBasket = SmartMergeBasket.empty().add(collect(upper)).basket
+        check(unknownBasket.add(collect(lower.copy(location =
+            lower.location.copy(casePolicy = CasePolicy.UNKNOWN)))).status ==
+            SmartMergeAddStatus.OVERLAPPING_SOURCE)
+        val nfcUpper = folder(LocationKind.LOCAL_SAF, "unicode-provider", "root",
+            listOf("Photos"), "\u00e9", "dir-nfc", grant = "tree-unicode",
+            casePolicy = CasePolicy.CASE_SENSITIVE)
+        val nfdLower = folder(LocationKind.LOCAL_SAF, "unicode-provider", "root",
+            listOf("Photos"), "e\u0301", "dir-nfd", grant = "tree-unicode",
+            casePolicy = CasePolicy.CASE_SENSITIVE)
+        check(SmartMergeBasket.empty().add(collect(nfcUpper)).basket
+            .add(collect(nfdLower)).status == SmartMergeAddStatus.OVERLAPPING_SOURCE)
 
         // A source revision or grant change must carry a different frozen
         // observation into M2; it may never revive an old executable review.
