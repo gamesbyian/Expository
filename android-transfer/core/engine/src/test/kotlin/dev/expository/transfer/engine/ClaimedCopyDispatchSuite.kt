@@ -140,6 +140,43 @@ object ClaimedCopyDispatchSuite {
             }
         }.isFailure && attempts == 1)
 
+        // A recursive engine already journals every nested step and reads
+        // back each file. Only its COMPLETE_VERIFIED aggregate may become
+        // one verified-only dispatcher receipt; partial directories and
+        // acknowledged/uncertain bytes can never be promoted to success.
+        val recursiveOk = RecursiveCopyRunReceipt(a,
+            RecursiveCopyResult.COMPLETE_VERIFIED, 1, 2, 99L, "verified")
+            .toDispatchCopyReceipt()
+        check(recursiveOk.proof == CopyProof.BYTES_VERIFIED)
+        check(claimed().run(1, { true }) {
+            ClaimedCopyDispatch.Prepared(a) { recursiveOk }
+        }.outcome.complete)
+        val emptyTree = RecursiveCopyRunReceipt(a,
+            RecursiveCopyResult.COMPLETE_VERIFIED, 0, 1, 0L, "empty")
+            .toDispatchCopyReceipt()
+        check(emptyTree.proof == CopyProof.BYTES_VERIFIED)
+        check(claimed().run(1, { true }) {
+            ClaimedCopyDispatch.Prepared(a) { emptyTree }
+        }.outcome.complete)
+        val earlyBlock = RecursiveCopyRunReceipt(a,
+            RecursiveCopyResult.BLOCKED, 0, 0, 0L, "no authority")
+            .toDispatchCopyReceipt()
+        check(earlyBlock.proof == CopyProof.BLOCKED)
+        check(claimed().run(1, { true }) {
+            ClaimedCopyDispatch.Prepared(a) { earlyBlock }
+        }.outcome.state == CopyOutcomeState.BLOCKED)
+        for (type in listOf(RecursiveCopyResult.STOPPED_PARTIAL,
+                RecursiveCopyResult.UNCERTAIN, RecursiveCopyResult.BLOCKED)) {
+            val partial = RecursiveCopyRunReceipt(a, type,
+                0, 1, 0L, "folder may exist").toDispatchCopyReceipt()
+            check(partial.proof == CopyProof.UNCERTAIN)
+            val result = claimed().run(1, { true }) {
+                ClaimedCopyDispatch.Prepared(a) { partial }
+            }.outcome
+            check(result.state == CopyOutcomeState.REVIEW_REQUIRED)
+            check(!result.complete && result.verifiedItems == 0)
+        }
+
         println("PASS ClaimedCopyDispatch E1 single/dual, fresh preflight, stop, mismatch, replay")
     }
 }
