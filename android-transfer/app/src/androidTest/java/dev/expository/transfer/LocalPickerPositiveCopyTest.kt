@@ -300,11 +300,21 @@ class LocalPickerPositiveCopyTest {
                 }
             }
             check(saved) { "RACE_SAVE_ACTION_STALE" }
-            // Wait for the system picker to finish rather than searching for
-            // transient Compose status text: the incoming Share's deferred
-            // observation can legitimately overwrite the stale-picker label.
-            assertTrue("Save As must return to Expository before evidence is read",
-                device.wait(Until.hasObject(By.text("Copy a file on this device")), 20_000L))
+            // Require the genuine OS picker to return foreground ownership to
+            // our application. UiAutomator By.text does not reliably expose a
+            // Compose heading after Activity stop/resume on API35: use package
+            // foreground + Compose's own observable semantics, never a guessed
+            // picker result or a simulated URI grant. The write/journal/source
+            // assertions below remain mandatory after this condition.
+            val returned = device.wait(Until.hasObject(By.pkg(context.packageName)), 20_000L)
+            assertTrue("Save As did not restore Expository foreground; foreground=" +
+                (device.currentPackageName ?: "none"), returned)
+            compose.waitUntil(15_000L) {
+                runCatching {
+                    compose.onAllNodesWithText("Copy a file on this device")
+                        .fetchSemanticsNodes().isNotEmpty()
+                }.getOrDefault(false)
+            }
             compose.waitForIdle()
             assertEquals("Stale picker must not create any new attempted transfer",
                 journalBefore, AttemptRecoveryIndex.recover(context))
