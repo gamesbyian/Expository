@@ -379,8 +379,13 @@ object SmartMergePreviewPlanner {
                 if (errors.isNotEmpty()) break
             }
         }
-        parts += listOf("MAP", suppliedCount.toString(), planned.size.toString())
-        for (entry in planned) {
+        // A late naming/path conflict may arise after earlier sources have
+        // produced mappings. A blocked preview must not expose that partial
+        // prefix as an apparently usable merge plan or partial success count.
+        // Keep the diagnostic blockers; publish only an ALL-or-NOTHING map.
+        val published = if (errors.isEmpty()) planned else emptyList()
+        parts += listOf("MAP", suppliedCount.toString(), published.size.toString())
+        for (entry in published) {
             parts += listOf(entry.sourceIndex.toString(), entry.source.key.opaqueItemId,
                 entry.source.key.version, entry.source.kind.name,
                 entry.sourcePath.joinToString("\u0000"),
@@ -389,8 +394,9 @@ object SmartMergePreviewPlanner {
         }
         parts += errors.distinct().sorted()
         return SmartMergePreview(digest(parts),
-            Collections.unmodifiableList(planned.toList()),
+            Collections.unmodifiableList(published.toList()),
             Collections.unmodifiableList(errors.distinct()),
-            rootName, renamed, coalesced)
+            rootName, if (errors.isEmpty()) renamed else 0,
+            if (errors.isEmpty()) coalesced else 0)
     }
 }
