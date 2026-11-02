@@ -21,6 +21,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import dev.expository.transfer.journal.AttemptRecoveryIndex
+import dev.expository.transfer.journal.ProtectedRecoveryContextStore
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -481,6 +482,15 @@ class LocalPickerPositiveCopyTest {
             pickFolder(destDir, "B")
             compose.onNodeWithText(markerName).assertExists()
             val before = dev.expository.transfer.journal.AttemptRecoveryIndex.recover(context)
+            // Freeze existing private hint files before the confirmed write.
+            // This test still exercises real OS tree grants and real provider
+            // bytes; it never injects a URI or synthesizes a journal.
+            fun hintDigests(): Set<String> =
+                context.noBackupFilesDir.list().orEmpty().mapNotNull { name ->
+                    Regex("transfer_recovery_context_v1_([0-9a-f]{64})")
+                        .matchEntire(name)?.groupValues?.get(1)
+                }.toSet()
+            val oldHintDigests = hintDigests()
             compose.onNodeWithText("Copy A → B…").performSemanticsAction(SemanticsActions.OnClick)
             // Fail at the actual refusal, with a stable non-secret reason,
             // rather than hiding a preflight rejection behind a 30s dialog
@@ -527,6 +537,20 @@ class LocalPickerPositiveCopyTest {
             val after = dev.expository.transfer.journal.AttemptRecoveryIndex.recover(context)
             assertTrue("A verified journal per file is required",
                 after.verifiedReceipts >= before.verifiedReceipts + fileCount)
+            val newHints = hintDigests() - oldHintDigests
+            assertEquals("Every separately verified Dual Copy must have its own " +
+                "encrypted pre-attempt recovery hint", fileCount, newHints.size)
+            val recovered = newHints.map { digest ->
+                requireNotNull(ProtectedRecoveryContextStore(context).read(digest))
+            }
+            assertTrue(recovered.all {
+                it.operation == "SAF_DUAL_COPY" &&
+                    it.destinationLabel.startsWith("Folder: ") &&
+                    it.destinationProvider.isNotBlank()
+            })
+            assertEquals((listOf(sourceName) +
+                (if (fileCount == 2) listOf(extraName) else emptyList())).toSet(),
+                recovered.map { it.sourceLabel }.toSet())
             org.junit.Assert.assertArrayEquals(
                 "Source must remain byte-identical", content,
                 resolver.openInputStream(source)!!.use { it.readBytes() })
