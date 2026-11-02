@@ -205,10 +205,17 @@ class DualRecursiveRealPickerCopyUiTest {
         // Material3's detached ChildSemanticsNode error. Explicitly drain
         // pending Compose frames first. No lifecycle failure is suppressed:
         // an exception from idle or close still fails the exact E2 test.
-        restorePickerAccessibilityConfiguration()
+        // Let Compose settle while the real Activity and its accessibility
+        // observer are still attached. Avoid changing UiAutomation's service
+        // flags in the middle of outstanding Material3 semantics updates.
+        // Restore the temporary picker flags only after the Activity closes.
+        // Any idle/close exception remains a failing E2 test.
+        Log.i("EXPO_DUAL_E2", "COMPOSE_IDLE_BEGIN")
         compose.waitForIdle()
+        Log.i("EXPO_DUAL_E2", "COMPOSE_IDLE_COMPLETED")
         Log.i("EXPO_DUAL_E2", "ACTIVITY_CLOSE_BEGIN")
         compose.activityRule.scenario.close()
         Log.i("EXPO_DUAL_E2", "ACTIVITY_CLOSE_COMPLETED")
+        restorePickerAccessibilityConfiguration()
     }
 }
