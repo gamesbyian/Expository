@@ -80,6 +80,12 @@ class DualRecursiveRealPickerCopyUiTest {
             Log.i("EXPO_DUAL_E2", "PICKER_BEGIN_" + tag)
             press(tag)
             assertTrue("Genuine OS picker not foreground for " + tag, pickerVisible())
+            // On API35 an OS picker can be resumed before its interactive
+            // accessibility window is attached. Wait for actual DocumentsUI
+            // semantics rather than guessing a toolbar icon or URI grant.
+            assertTrue("SYSTEM_PICKER_ACCESSIBILITY_NOT_ATTACHED_" + tag,
+                device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")), 15_000L) ||
+                    device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 8_000L))
             RecursivePickerUi.chooseFixtureRoot(device, title)
             Log.i("EXPO_DUAL_E2", "PICKER_ROOT_SELECTED_" + tag)
             compose.waitUntil(30_000L) {
@@ -118,22 +124,27 @@ class DualRecursiveRealPickerCopyUiTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         Log.i("EXPO_DUAL_E2", "PROPOSAL_READY")
-        press("dual-recursive-confirm")
-        val terminal = listOf("Folder Copy verified:", "Folder Copy blocked:",
-            "Folder Copy stopped after", "Folder Copy uncertain after",
-            "Folder Copy outcome unavailable", "Folder Copy receipt mismatch")
-        compose.waitUntil(30_000L) {
-            terminal.any { label ->
-                compose.onAllNodesWithText(label, substring = true)
-                    .fetchSemanticsNodes().isNotEmpty()
-            }
-        }
-        val observed = terminal.firstOrNull { label ->
-            compose.onAllNodesWithText(label, substring = true)
-                .fetchSemanticsNodes().isNotEmpty()
-        }
-        assertEquals("Dual dispatcher must report independent byte verification",
-            "Folder Copy verified:", observed)
+        // This is the REAL operator-facing Compose Button, located through
+        // its accessible label and clicked by independent UiAutomator. Do not
+        // force Compose's test frame clock to rapidly replay semantics while
+        // the Material3 review Card is being removed from composition.
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("dual-recursive-confirm"))
+        compose.onNodeWithTag("dual-recursive-confirm")
+            .assertIsDisplayed().assertIsEnabled()
+        val confirmation = device.wait(
+            Until.findObject(By.text("Confirm folder Copy")), 5_000L)
+        assertTrue("Real accessible Dual confirmation control missing",
+            confirmation != null)
+        Log.i("EXPO_DUAL_E2", "CONFIRM_REAL_UI_BEGIN")
+        confirmation!!.click()
+        Log.i("EXPO_DUAL_E2", "CONFIRM_REAL_UI_DONE")
+        // Observe the final independently rendered app status via the OS
+        // accessibility window. Never pass on a journal ACK or an animation.
+        assertTrue("No independently verified Dual Copy completion in the live UI",
+            device.wait(Until.hasObject(By.textContains("Folder Copy verified:")), 30_000L))
+        Log.i("EXPO_DUAL_E2", "VERIFIED_STATUS_OBSERVED")
+
 
         val root = LocalTreeReader.list(resolver, targetTree,
             "lab-target-root", LocalTreeReader.MAX_BROWSE)
