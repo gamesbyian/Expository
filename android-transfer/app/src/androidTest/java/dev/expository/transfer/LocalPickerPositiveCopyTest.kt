@@ -121,7 +121,13 @@ class LocalPickerPositiveCopyTest {
 
         try {
             resolver.openOutputStream(source, "wt")!!.use { it.write(bytes) }
-            compose.onNodeWithText("Choose file").performClick()
+            // This card can be nested below the current viewport in the
+            // Single workspace. Exercise the actual Compose accessibility
+            // action (as the already-qualified Dual picker E2 does), rather
+            // than relying on UiAutomator clicking obscured screen geometry.
+            // The OS picker must still appear and grant an actual URI.
+            compose.onNodeWithText("Choose file")
+                .performSemanticsAction(SemanticsActions.OnClick)
             assertTrue("Android Open Document picker missing; foreground=" +
                 (device.currentPackageName ?: "none"), pickerIsVisible())
             var item = device.wait(Until.findObject(By.text(sourceName)), 5_000L)
@@ -142,7 +148,10 @@ class LocalPickerPositiveCopyTest {
                 compose.onAllNodesWithText("File selected.", substring = true)
                     .fetchSemanticsNodes().isNotEmpty()
             }
-            compose.onNodeWithText("Save copy…").performClick()
+            // Real user-facing Compose action, independent of scroll position;
+            // subsequent DocumentsUI and byte/Share assertions stay mandatory.
+            compose.onNodeWithText("Save copy…")
+                .performSemanticsAction(SemanticsActions.OnClick)
             assertTrue("Android Create Document picker missing; foreground=" +
                 (device.currentPackageName ?: "none"), pickerIsVisible())
             // Create only a fresh, random, test-owned document. Never overwrite.
@@ -231,7 +240,10 @@ class LocalPickerPositiveCopyTest {
                 compose.onAllNodesWithText("Source: " + aName)
                     .fetchSemanticsNodes().isNotEmpty()
             }
-            compose.onNodeWithText("Save copy…").performClick()
+            // Real user-facing Compose action, independent of scroll position;
+            // subsequent DocumentsUI and byte/Share assertions stay mandatory.
+            compose.onNodeWithText("Save copy…")
+                .performSemanticsAction(SemanticsActions.OnClick)
             val hasPicker = device.wait(
                 Until.hasObject(By.pkg("com.google.android.documentsui")), 8_000L
             ) || device.wait(
