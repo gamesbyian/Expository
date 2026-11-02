@@ -202,6 +202,39 @@ object ScenarioSuite {
             check(result.steps.isEmpty())
             check(loc.verifiedNamespace == null && loc.verifiedStorageDomain == null)
         }
+        test("rename plan refuses unverified parent authority despite a RENAME flag") {
+            val base = snapshot(listOf("episode.mkv"))
+            val recipe = RenameRecipe(listOf(RenameEdit.Prefix("archived-")))
+            fun blocked(location: LocationRef, reason: String) {
+                val result = RenamePlanner.preview(base.copy(location = location),
+                    recipe, NOW)
+                check(!result.executable && result.steps.isEmpty())
+                check(reason in result.blockers)
+            }
+            blocked(base.location.copy(key =
+                base.location.key.copy(authorityId = "")),
+                "RENAME_PARENT_IDENTITY_UNVERIFIED")
+            blocked(base.location.copy(key =
+                base.location.key.copy(containerId = "")),
+                "RENAME_PARENT_IDENTITY_UNVERIFIED")
+            blocked(base.location.copy(verifiedNamespace = null),
+                "RENAME_REMOTE_AUTHORITY_UNPROVEN")
+            blocked(base.location.copy(verifiedStorageDomain = ""),
+                "RENAME_REMOTE_AUTHORITY_UNPROVEN")
+            blocked(base.location.copy(key = base.location.key.copy(
+                kind = LocationKind.LOCAL_SAF, grantId = null)),
+                "RENAME_SCOPED_GRANT_UNPROVEN")
+            blocked(base.location.copy(key = base.location.key.copy(
+                kind = LocationKind.REMOTE_FTP)),
+                "RENAME_PROVIDER_UNQUALIFIED")
+            val picked = base.location.copy(key = base.location.key.copy(
+                kind = LocationKind.LOCAL_SAF,
+                grantId = "picked-tree-grant"))
+            val approved = RenamePlanner.preview(base.copy(location = picked),
+                recipe, NOW)
+            check(approved.executable && approved.steps.size == 1)
+        }
+
         test("N12 true A↔B swap stages safely") {
             val s = snapshot(listOf("A", "B"))
             val swap = RenamePlanner.preview(s, RenameRecipe(listOf(

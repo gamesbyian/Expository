@@ -142,6 +142,25 @@ object RenamePlanner {
         val stableRecipe = recipe.copy(edits = recipe.edits.toList())
         val digest = renameDigest(frozen, stableRecipe)
         val blockers = mutableListOf<String>()
+        // A supported RENAME flag alone cannot authenticate which server,
+        // document tree or parent directory the preview refers to. Reject
+        // detached location identities before any future Apply executor could
+        // mistake this pure plan for a mutation authorization.
+        val key = frozen.location.key
+        if (key.authorityId.isBlank() || key.rootId.isBlank() ||
+            key.containerId.isBlank() || frozen.location.revision.isBlank() ||
+            frozen.location.folder.any { !renameValid(it) })
+            blockers += "RENAME_PARENT_IDENTITY_UNVERIFIED"
+        when (key.kind) {
+            LocationKind.LOCAL_SAF, LocationKind.DRIVE_SAF ->
+                if (key.grantId.isNullOrBlank())
+                    blockers += "RENAME_SCOPED_GRANT_UNPROVEN"
+            LocationKind.REMOTE_SFTP, LocationKind.REMOTE_FTPS ->
+                if (frozen.location.verifiedNamespace.isNullOrBlank() ||
+                    frozen.location.verifiedStorageDomain.isNullOrBlank())
+                    blockers += "RENAME_REMOTE_AUTHORITY_UNPROVEN"
+            else -> blockers += "RENAME_PROVIDER_UNQUALIFIED"
+        }
         if (!frozen.complete || frozen.listingRevision.isBlank()) blockers += "INCOMPLETE_PARENT_LISTING"
         val proof = frozen.location.capabilities[Capability.RENAME]
         if (proof?.valid(nowMillis) != true) blockers += "RENAME_CAPABILITY_NOT_PROVEN"
