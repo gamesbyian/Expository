@@ -138,8 +138,10 @@ object SmartMergePreviewPlanner {
             manifest.files != entries.count { it.source.kind == ItemKind.FILE } ||
             manifest.directories != entries.count { it.source.kind == ItemKind.DIRECTORY })
             return false
-        val directoryPaths = entries.filter { it.source.kind == ItemKind.DIRECTORY }
-            .map { it.relativePath }.toSet()
+        // Bind each child to the exact opaque provider ID of its observed
+        // parent directory. Matching visible paths alone is insufficient.
+        val directories = entries.filter { it.source.kind == ItemKind.DIRECTORY }
+            .associate { it.relativePath to it.source }
         val paths = hashSetOf<List<String>>()
         val identities = hashSetOf<Pair<String, String>>()
         val root = origin.location
@@ -153,7 +155,9 @@ object SmartMergePreviewPlanner {
                 path.all(::validName) &&
                 paths.add(path) &&
                 identities.add(item.key.authorityId to item.key.opaqueItemId) &&
-                (path.size == 1 || path.dropLast(1) in directoryPaths) &&
+                (path.size == 1 ||
+                    directories[path.dropLast(1)]?.key?.opaqueItemId ==
+                        item.location.key.containerId) &&
                 item.parent == origin.parent + path.dropLast(1) &&
                 item.location.folder == item.parent &&
                 item.key.authorityId == root.key.authorityId &&
