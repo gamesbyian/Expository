@@ -76,8 +76,15 @@ class SmartMergeFolder private constructor(
             a.location.verifiedNamespace != b.location.verifiedNamespace ||
             a.location.verifiedStorageDomain != b.location.verifiedStorageDomain)
             return false
+        // Only fold names if at least one observation lacks a verified
+        // case-sensitive policy. On proven case-sensitive storage, "A" and
+        // "a" can be distinct siblings and should both enter an N-source
+        // basket. Unknown or conflicting policies still fail conservatively.
+        val caseSensitive = a.location.casePolicy == CasePolicy.CASE_SENSITIVE &&
+            b.location.casePolicy == CasePolicy.CASE_SENSITIVE
         fun path(item: ItemRef) = (item.parent + item.name).map {
-            Normalizer.normalize(it, Normalizer.Form.NFC).lowercase(Locale.ROOT)
+            val normalized = Normalizer.normalize(it, Normalizer.Form.NFC)
+            if (caseSensitive) normalized else normalized.lowercase(Locale.ROOT)
         }
         val first = path(a)
         val second = path(b)
