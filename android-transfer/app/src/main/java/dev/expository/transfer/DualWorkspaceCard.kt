@@ -188,7 +188,8 @@ internal fun DualWorkspaceCard(
         // sit far below the outer scrolling toolbar and controls.
         if (workspace.pane(workspace.activeDual).endpoint.isSaf) {
             Button(
-                modifier = Modifier.heightIn(min = 48.dp),
+                modifier = Modifier.heightIn(min = 48.dp)
+                    .testTag("dual-root-picker-" + workspace.activeDual.name),
                 enabled = !workspaceBusy,
                 onClick = { onPick(workspace.activeDual) }
             ) { Text("Choose Pane " + workspace.activeDual.name + " folder…") }
@@ -334,7 +335,8 @@ internal fun DualWorkspaceCard(
                         for (pane in listOf(WorkspacePane.A, WorkspacePane.B)) {
                             Button(
                                 enabled = !workspaceBusy,
-                                modifier = Modifier.heightIn(min = 48.dp).semantics {
+                                modifier = Modifier.heightIn(min = 48.dp)
+                                    .testTag("dual-pane-tab-" + pane.name).semantics {
                                     stateDescription =
                                         if (workspace.activeDual == pane) "Selected"
                                         else "Not selected"
@@ -420,7 +422,8 @@ internal fun DualWorkspaceCard(
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Button(enabled = !workspaceBusy,
-                            modifier = Modifier.heightIn(min = 48.dp),
+                            modifier = Modifier.heightIn(min = 48.dp)
+                                .testTag("dual-recursive-confirm"),
                             onClick = onConfirmRecursive) {
                             Text("Confirm folder Copy")
                         }
@@ -436,7 +439,8 @@ internal fun DualWorkspaceCard(
         if (busy) Button(onClick = onStopCopy, modifier = Modifier.heightIn(min = 48.dp)) {
             Text("Cancel transfer")
         }
-        Text(copyStatus, style = MaterialTheme.typography.bodySmall)
+        Text(copyStatus, modifier = Modifier.testTag("dual-copy-feedback"),
+            style = MaterialTheme.typography.bodySmall)
         Text("Device-to-Device and Local-to-SFTP Copy support 1–12 selected files. SFTP-to-SFTP Copy relays 1–12 selected files between independently authenticated servers with exclusive create, durable journaling and independent destination readback. Whole-folder Android provider Copy requires two distinctly scoped providers, a fresh review and a foreground transfer; same-provider recursive Copy, remaining remote routes and cross-pane Move are still unavailable.",
             style = MaterialTheme.typography.bodySmall)
     }
