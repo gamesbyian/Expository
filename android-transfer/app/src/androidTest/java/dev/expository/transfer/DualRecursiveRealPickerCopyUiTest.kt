@@ -3,6 +3,7 @@ package dev.expository.transfer
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.util.Log
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -57,12 +58,14 @@ class DualRecursiveRealPickerCopyUiTest {
                 .contains("package:dev.expository.transfer.fixture"))
 
         fun press(tag: String) {
+            Log.i("EXPO_DUAL_E2", "ACTION_BEGIN_" + tag)
             // Real placed Compose controls, never direct ActivityResult or URI injection.
             compose.onNodeWithTag("transfer-workspace-scroll")
                 .performScrollToNode(hasTestTag(tag))
             compose.onNodeWithTag(tag).performScrollTo()
                 .assertIsDisplayed().assertIsEnabled().performClick()
             compose.waitForIdle()
+            Log.i("EXPO_DUAL_E2", "ACTION_DONE_" + tag)
         }
         fun pickerVisible(): Boolean =
             device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")), 8_000L) ||
@@ -74,9 +77,11 @@ class DualRecursiveRealPickerCopyUiTest {
                             line.contains("documentsui", ignoreCase = true)
                     }
         fun pickRoot(tag: String, title: String) {
+            Log.i("EXPO_DUAL_E2", "PICKER_BEGIN_" + tag)
             press(tag)
             assertTrue("Genuine OS picker not foreground for " + tag, pickerVisible())
             RecursivePickerUi.chooseFixtureRoot(device, title)
+            Log.i("EXPO_DUAL_E2", "PICKER_ROOT_SELECTED_" + tag)
             compose.waitUntil(30_000L) {
                 compose.activity.lifecycle.currentState.isAtLeast(
                     androidx.lifecycle.Lifecycle.State.RESUMED) &&
@@ -86,14 +91,18 @@ class DualRecursiveRealPickerCopyUiTest {
                 compose.onAllNodesWithText("Folder opened. Scoped Android browser",
                     substring = true).fetchSemanticsNodes().isNotEmpty()
             }
+            Log.i("EXPO_DUAL_E2", "PICKER_BROWSE_READY_" + tag)
         }
 
+        Log.i("EXPO_DUAL_E2", "ENTER_DUAL")
         compose.onNodeWithText("Dual view", substring = true)
             .performScrollTo().assertIsEnabled().performClick()
+        Log.i("EXPO_DUAL_E2", "ENTER_DUAL_DONE")
         // Dual starts as Local/SFTP. Make both panes independent scoped
         // Android roots before any picker or review begins.
         compose.onNodeWithText("Device ↔ Device")
             .performScrollTo().assertIsEnabled().performClick()
+        Log.i("EXPO_DUAL_E2", "DUAL_LOCAL_PAIR_SELECTED")
         pickRoot("dual-root-picker-A", "Expository Source Lab")
         val originalFile = DocumentsContract.buildDocumentUriUsingTree(sourceTree, "clip")
         assertArrayEquals(fixtureBytes,
@@ -103,10 +112,12 @@ class DualRecursiveRealPickerCopyUiTest {
         pickRoot("dual-root-picker-B", "Expository Dual Target Lab")
         press("dual-pane-tab-A")
         press("saf-root-copy-matching-folder")
+        Log.i("EXPO_DUAL_E2", "PROPOSAL_WAIT")
         compose.waitUntil(30_000L) {
             compose.onAllNodesWithText("Review whole-folder Copy", substring = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
+        Log.i("EXPO_DUAL_E2", "PROPOSAL_READY")
         press("dual-recursive-confirm")
         val terminal = listOf("Folder Copy verified:", "Folder Copy blocked:",
             "Folder Copy stopped after", "Folder Copy uncertain after",
