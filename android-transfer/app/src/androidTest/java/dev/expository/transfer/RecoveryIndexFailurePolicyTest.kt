@@ -385,6 +385,43 @@ class RecoveryIndexFailurePolicyTest {
         }
     }
 
+    @Test fun dualFileCopyRecoveryHintIsOnlyAnEncryptedManualLocator() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "dual-copy-hint-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val digest = "d".repeat(64)
+        val hint = dev.expository.transfer.journal.ProtectedRecoveryContext(
+            "SAF_DUAL_COPY", "Synthetic file.txt", "Folder: Selected destination",
+            "synthetic.provider")
+        try {
+            val store = dev.expository.transfer.journal.ProtectedRecoveryContextStore(isolated)
+            store.recordNew(digest, hint)
+            assertEquals(hint, store.read(digest))
+            // A stopped transfer has only an uncertain neutral journal, not
+            // an executable recovery request or an automatic retry token.
+            val journal = DurableAttemptJournal(
+                dev.expository.transfer.journal.AndroidAtomicAttemptStorage(isolated, digest))
+            journal.confirm(digest)
+            journal.beginAttempt(digest, "dual_copy_attempt_01")
+            val recovered = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, recovered.requiresReview)
+            assertEquals(hint, recovered.reviewReferences.single().context)
+            assertEquals(JournalState.ATTEMPT_RECORDED, journal.current()?.state)
+            assertTrue(runCatching {
+                journal.beginAttempt(digest, "dual_copy_attempt_02")
+            }.isFailure)
+            assertTrue(runCatching {
+                store.recordNew(digest, hint)
+            }.isFailure)
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
     @Test fun encryptedRecoveryHintIsOnlyManualContextForUncertainJournal() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val sandbox = File(app.cacheDir, "review-hint-test-" + UUID.randomUUID())
