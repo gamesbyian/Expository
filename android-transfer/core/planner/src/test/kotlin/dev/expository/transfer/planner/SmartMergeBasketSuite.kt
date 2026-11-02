@@ -154,6 +154,14 @@ object SmartMergeBasketSuite {
             key = observed[0].location.key.copy(grantId = "new-tree-grant")))
         check(checkBasket.inspectFresh(listOf(alteredGrant, observed[1]), 200L, NOW).first() ==
             SmartMergeReobservation.AUTHORITY_OR_GRANT_CHANGED)
+        val remoteSessionChanged = observed[1].copy(location =
+            observed[1].location.copy(verifiedNamespace = "new-auth-session"))
+        check(checkBasket.inspectFresh(listOf(observed[0], remoteSessionChanged),
+            200L, NOW)[1] == SmartMergeReobservation.AUTHORITY_OR_GRANT_CHANGED)
+        val remoteUntrusted = observed[1].copy(location =
+            observed[1].location.copy(verifiedNamespace = null))
+        check(checkBasket.inspectFresh(listOf(observed[0], remoteUntrusted),
+            200L, NOW)[1] == SmartMergeReobservation.UNAUTHORIZED_OR_EXPIRED)
         val alteredVersion = observed[0].copy(key =
             observed[0].key.copy(version = "different-file-version"))
         check(checkBasket.inspectFresh(listOf(alteredVersion, observed[1]), 200L, NOW).first() ==
