@@ -181,18 +181,29 @@ class DualRecursiveRealPickerCopyUiTest {
         // down the Activity. This marker distinguishes a Compose lifecycle
         // regression at teardown from failed transfer-byte acceptance.
         Log.i("EXPO_DUAL_E2", "END_TO_END_ASSERTIONS_COMPLETE")
-        // Exercise a real post-transfer navigation transition, rather than
-        // leaving a still-attached Dual movable-content subtree to be torn
-        // down by the instrumentation rule. This is a user-visible lifecycle
-        // check: teardown itself must no longer throw stale Material3 child
-        // semantics. Navigating never alters the copied destination or
-        // reauthorizes a past Copy.
-        compose.onNodeWithTag("transfer-workspace-scroll")
-            .performScrollToNode(androidx.compose.ui.test.hasText(
-                "Single view", substring = true))
-        compose.onNodeWithText("Single view", substring = true)
-            .assertIsDisplayed().assertIsEnabled().performClick()
-        compose.waitForIdle()
+        // Exercise post-transfer navigation using actual Android touch and
+        // accessibility, not a Compose test semantics traversal during the
+        // Material3 review subtree's lifetime transition. An underlying UI
+        // crash must still fail instrumentation rather than being suppressed.
+        var singleControl = device.wait(
+            Until.findObject(By.text("Single view")), 1_000L)
+        for (attempt in 0 until 8) {
+            if (singleControl != null) break
+            // Move from the verified outcome below the fold back toward the
+            // top-level view selector. These are ordinary human-style swipes.
+            device.swipe(device.displayWidth / 2,
+                device.displayHeight / 5,
+                device.displayWidth / 2,
+                device.displayHeight * 4 / 5, 18)
+            singleControl = device.wait(
+                Until.findObject(By.text("Single view")), 1_000L)
+        }
+        assertTrue("Post-Copy Single view control not visible after normal scroll",
+            singleControl != null)
+        Log.i("EXPO_DUAL_E2", "POST_COPY_SINGLE_NAV_BEGIN")
+        singleControl!!.click()
+        assertTrue("Post-Copy Single view did not become selected",
+            device.wait(Until.hasObject(By.textContains("✓ Single view")), 5_000L))
         Log.i("EXPO_DUAL_E2", "POST_COPY_SINGLE_NAVIGATION_COMPLETE")
     }
 }
