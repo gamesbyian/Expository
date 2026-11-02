@@ -162,6 +162,8 @@ object SmartMergePreviewPlanner {
             destination.revision.isBlank() ||
             destination.folder.any { !validName(it) })
             errors += "DESTINATION_IDENTITY_UNVERIFIED"
+        if (destination.capabilities[Capability.READ]?.valid(nowMillis) != true)
+            errors += "DESTINATION_PARENT_READ_EXPIRED"
         if (destination.capabilities[Capability.WRITE]?.valid(nowMillis) != true ||
             destination.capabilities[Capability.CREATE_CHILD]?.valid(nowMillis) != true)
             errors += "DESTINATION_CREATE_NOT_AUTHORIZED"
@@ -225,11 +227,11 @@ object SmartMergePreviewPlanner {
                     it.source.location.key.rootId != origin.location.key.rootId
                 }) {
                 errors += "SOURCE_TREE_INCOMPLETE_OR_STALE"
-                verifiedTrees += emptyList()
+                verifiedTrees.add(emptyList())
             } else {
                 parts += inventory.manifest.digest
                 suppliedCount += inventory.manifest.entries.size
-                verifiedTrees += inventory.manifest.entries
+                verifiedTrees.add(inventory.manifest.entries)
             }
         }
         if (suppliedCount > MAX_PREVIEW_ENTRIES)
@@ -295,7 +297,8 @@ object SmartMergePreviewPlanner {
                     val frozen = entry.source.copy(parent = entry.source.parent.toList(),
                         location = entry.source.location.copy(
                             folder = entry.source.location.folder.toList(),
-                            capabilities = entry.source.location.capabilities.toMap()))
+                            capabilities = Collections.unmodifiableMap(
+                                entry.source.location.capabilities.toMap())))
                     planned += SmartMergePreviewEntry(index, frozen,
                         Collections.unmodifiableList(original.toList()),
                         Collections.unmodifiableList(mapped.toList()), shared, collision)
