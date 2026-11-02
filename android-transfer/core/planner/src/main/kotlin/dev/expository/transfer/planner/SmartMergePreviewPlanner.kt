@@ -127,7 +127,7 @@ object SmartMergePreviewPlanner {
      * file into an otherwise plausible, 64-hex-digest preview.
      */
     private fun structurallyConsistent(
-        origin: ItemRef, manifest: RecursiveFolderManifest
+        origin: ItemRef, manifest: RecursiveFolderManifest, nowMillis: Long
     ): Boolean {
         val entries = manifest.entries
         if (origin.kind != ItemKind.DIRECTORY ||
@@ -174,7 +174,13 @@ object SmartMergePreviewPlanner {
                 item.location.verifiedStorageDomain == root.verifiedStorageDomain &&
                 item.key.opaqueItemId.isNotBlank() &&
                 item.key.version.isNotBlank() &&
-                item.location.revision.isNotBlank()
+                item.location.revision.isNotBlank() &&
+                // A complete folder listing alone does not imply that each
+                // returned file can still be read. In particular an old
+                // manifest may carry child-specific expired/unsupported READ
+                // proofs while the basket root remains readable. Refuse a
+                // seemingly actionable preview rather than hiding this gap.
+                item.location.capabilities[Capability.READ]?.valid(nowMillis) == true
         }
     }
 
@@ -282,7 +288,7 @@ object SmartMergePreviewPlanner {
             if (inventory == null || inventory.collected !== selected ||
                 !inventory.manifest.reviewable ||
                 !Regex("[0-9a-f]{64}").matches(inventory.manifest.digest) ||
-                !structurallyConsistent(origin, inventory.manifest)) {
+                !structurallyConsistent(origin, inventory.manifest, nowMillis)) {
                 errors += "SOURCE_TREE_INCOMPLETE_OR_STALE"
                 verifiedTrees.add(emptyList())
             } else {
