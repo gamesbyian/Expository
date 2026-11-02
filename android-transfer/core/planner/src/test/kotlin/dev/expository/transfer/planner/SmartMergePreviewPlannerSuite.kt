@@ -153,6 +153,36 @@ object SmartMergePreviewPlannerSuite {
         check(twentyPlan.digest == plan(twentyBasket, twentyInventory).digest)
         check(twentyPlan.entries.map { it.sourceIndex }.toSet().size == 20)
 
+        // A public preview value must not accept a fabricated subtree simply
+        // because its blocker list is empty and its digest looks like SHA-256.
+        fun rejected(fake: RecursiveFolderManifest) {
+            val result = plan(sources, listOf(
+                SmartMergeInventory(a, fake), trees[1]))
+            check(!result.reviewable && result.entries.isEmpty())
+            check("SOURCE_TREE_INCOMPLETE_OR_STALE" in result.blockers)
+        }
+        val validA = trees[0].manifest
+        rejected(validA.copy(files = 0, directories = 2))
+        rejected(validA.copy(entries = validA.entries + aFile,
+            files = 2, directories = 1)) // duplicate path/opaque ID
+        rejected(validA.copy(entries = listOf(validA.entries.first(),
+            aFile.copy(relativePath = listOf("A", "wrong.txt")))))
+        rejected(validA.copy(entries = listOf(validA.entries.first(),
+            aFile.copy(source = aFile.source.copy(parent = listOf("other"))))))
+        rejected(validA.copy(entries = listOf(validA.entries.first(),
+            aFile.copy(source = aFile.source.copy(location =
+                aFile.source.location.copy(key =
+                    aFile.source.location.key.copy(grantId = "unrelated")))))))
+        rejected(validA.copy(entries = listOf(validA.entries.first(),
+            aFile.copy(relativePath = listOf("A", "missing-folder", "report.txt")))))
+        rejected(validA.copy(entries = listOf(validA.entries.first(),
+            aFile.copy(source = aFile.source.copy(key =
+                aFile.source.key.copy(opaqueItemId = ""))))))
+        val strayScope = aFile.source.copy(location =
+            aFile.source.location.copy(verifiedNamespace = "different-session"))
+        rejected(validA.copy(entries = listOf(validA.entries.first(),
+            aFile.copy(source = strayScope))))
+
         // Honest upper bound: large partial previews never imply readiness.
         val manyItems = (0 until 10_000).map { i ->
             entry(a.source, listOf("item-" + i + ".txt"))
