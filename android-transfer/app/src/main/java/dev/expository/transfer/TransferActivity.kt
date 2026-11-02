@@ -586,8 +586,16 @@ private fun DeveloperPreview(
             val outcome = recursiveReceipt
             copyStatus = if (outcome == null || dispatched == null) {
                 "Copy outcome cannot be observed. Inspect the selected destination and durable recovery records before retrying."
-            } else if (outcome.result == RecursiveCopyResult.COMPLETE_VERIFIED &&
-                !dispatched.complete) {
+            } else if (when (outcome.result) {
+                RecursiveCopyResult.COMPLETE_VERIFIED -> !dispatched.complete
+                RecursiveCopyResult.BLOCKED ->
+                    dispatched.state != CopyOutcomeState.BLOCKED
+                RecursiveCopyResult.STOPPED_PARTIAL,
+                RecursiveCopyResult.UNCERTAIN ->
+                    dispatched.state != CopyOutcomeState.REVIEW_REQUIRED
+            }) {
+                // A contradictory high-level receipt must never override the
+                // stricter shared ledger or be displayed as clean completion.
                 "Folder Copy receipt mismatch. Inspect destination and journal; no verified completion is claimed."
             } else when (outcome.result) {
                 RecursiveCopyResult.COMPLETE_VERIFIED ->
