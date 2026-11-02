@@ -471,8 +471,16 @@ private fun Modifier.retainInvisible(hidden: Boolean): Modifier =
                 if (hidden) constraints.copy(minWidth = 0, minHeight = 0)
                 else constraints
             )
-            if (hidden) layout(0, 0) { }
-            else layout(child.width, child.height) {
+            if (hidden) layout(0, 0) {
+                // Keep this child PLACED but entirely outside its zero-size
+                // accessibility/hit-test parent. A measured-but-unplaced
+                // subtree can leave Material3 ChildSemanticsNode observers
+                // attached to no ancestor after A/B tab transitions. That
+                // caused a detached-node exception at Activity teardown.
+                // Preserve remote session composition without ever exposing
+                // the inactive pane as an on-screen touch target.
+                child.placeRelative(-child.width - 1, -child.height - 1)
+            } else layout(child.width, child.height) {
                 child.placeRelative(0, 0)
             }
         }
