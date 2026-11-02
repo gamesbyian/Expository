@@ -173,7 +173,13 @@ class DualRecursiveRealPickerCopyUiTest {
         val copiedFile = DocumentsContract.buildDocumentUriUsingTree(targetTree, file.documentId)
         assertArrayEquals(fixtureBytes,
             resolver.openInputStream(copiedFile)!!.use { it.readBytes() })
+        Log.i("EXPO_DUAL_E2", "TARGET_EXACT_BYTES_VERIFIED")
         assertArrayEquals("Copy must preserve original bytes", fixtureBytes,
             resolver.openInputStream(originalFile)!!.use { it.readBytes() })
+        Log.i("EXPO_DUAL_E2", "SOURCE_ORIGINAL_BYTES_PRESERVED")
+        // All assertions are complete before the instrumentation rule tears
+        // down the Activity. This marker distinguishes a Compose lifecycle
+        // regression at teardown from failed transfer-byte acceptance.
+        Log.i("EXPO_DUAL_E2", "END_TO_END_ASSERTIONS_COMPLETE")
     }
 }
