@@ -12,7 +12,12 @@ data class RecoveryReviewReference(
     /** Separate encrypted, non-executable human-readable context if present. */
     val context: ProtectedRecoveryContext? = null,
     val contextWarning: String? = null
-)
+) {
+    // Never serialize a decrypted display hint, private record suffix or
+    // provider-returned context into incidental Kotlin debug output.
+    override fun toString(): String =
+        "RecoveryReviewReference(hasContext=${context != null},hasWarning=${contextWarning != null})"
+}
 
 data class RecoveryCounts(
     val requiresReview: Int,
