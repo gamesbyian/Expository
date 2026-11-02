@@ -54,6 +54,7 @@ import dev.expository.transfer.saf.SafRecursiveTreeCopy
 import dev.expository.transfer.saf.ScopedRecursiveSourceRequest
 import dev.expository.transfer.engine.RecursiveCopyResult
 import dev.expository.transfer.engine.RecursiveCopyProgress
+import dev.expository.transfer.engine.toDispatchCopyReceipt
 import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.engine.ClaimedCopyDispatch
 import dev.expository.transfer.engine.CopyOutcomeState
@@ -527,7 +528,18 @@ private fun DeveloperPreview(
             copyStatus = "Folder approval invalidated by selection, navigation or incoming share. No Copy attempted."
             return
         }
+        // Consume the already reviewed Single source/destination decision
+        // exactly once. The recursive SAF adapter still independently
+        // rescans the full tree before any step is journaled or created.
+        val dispatch = ClaimedCopyDispatch.claim {
+            singleFolderReview === pending &&
+                currentShareEpoch() == pending.shareEpoch
+        }
         singleFolderReview = null
+        if (dispatch == null) {
+            copyStatus = "Folder Copy review expired before confirmation; no write attempted."
+            return
+        }
         val permit = AtomicBoolean(true)
         copyPermit = permit
         copyBusy = true
@@ -535,27 +547,48 @@ private fun DeveloperPreview(
         scope.launch {
             val owningJob = kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]
             try {
-            val outcome = withContext(Dispatchers.IO) {
+            var recursiveReceipt: dev.expository.transfer.engine.RecursiveCopyRunReceipt? = null
+            val dispatched = withContext(Dispatchers.IO) {
                 runCatching {
-                    SafRecursiveTreeCopy(context.applicationContext,
-                        context.contentResolver).execute(
-                            pending.request, pending.manifest,
-                            onVerifiedStep = { verified ->
-                                // Never mutate Compose state from the IO thread.
-                                // A late callback from an old copy must not
-                                // overwrite the next review or final receipt.
-                                scope.launch {
-                                    if (copyBusy && copyPermit === permit &&
-                                        foregroundCopyAllowed(permit, owningJob) &&
-                                        model.view == WorkspaceView.SINGLE)
-                                        copyStatus = verifiedFolderProgress(verified)
-                                }
-                            }) { foregroundCopyAllowed(permit, owningJob) }
+                    dispatch.run(
+                        expectedItems = 1,
+                        continueRequested = {
+                            foregroundCopyAllowed(permit, owningJob)
+                        },
+                        prepare = { index ->
+                            if (index != 0) null
+                            else ClaimedCopyDispatch.Prepared(pending.manifest.digest) {
+                                val observed = SafRecursiveTreeCopy(
+                                    context.applicationContext,
+                                    context.contentResolver).execute(
+                                    pending.request, pending.manifest,
+                                    onVerifiedStep = { verified ->
+                                        // Never mutate Compose state from IO.
+                                        // Late progress cannot cross a new
+                                        // operation token or a stopped Job.
+                                        scope.launch {
+                                            if (copyBusy && copyPermit === permit &&
+                                                foregroundCopyAllowed(permit, owningJob) &&
+                                                model.view == WorkspaceView.SINGLE)
+                                                copyStatus = verifiedFolderProgress(verified)
+                                        }
+                                    }) {
+                                        foregroundCopyAllowed(permit, owningJob)
+                                    }
+                                recursiveReceipt = observed
+                                observed.toDispatchCopyReceipt()
+                            }
+                        }
+                    ).outcome
                 }.getOrNull()
             }
             if (copyPermit !== permit) return@launch
-            copyStatus = if (outcome == null) {
+            val outcome = recursiveReceipt
+            copyStatus = if (outcome == null || dispatched == null) {
                 "Copy outcome cannot be observed. Inspect the selected destination and durable recovery records before retrying."
+            } else if (outcome.result == RecursiveCopyResult.COMPLETE_VERIFIED &&
+                !dispatched.complete) {
+                "Folder Copy receipt mismatch. Inspect destination and journal; no verified completion is claimed."
             } else when (outcome.result) {
                 RecursiveCopyResult.COMPLETE_VERIFIED ->
                     "Whole-folder Copy verified: " + outcome.verifiedDirectories +
