@@ -257,6 +257,9 @@ object SmartMergePreviewPlanner {
             if (validName(rootName) && isNestedDestination(origin, destination, rootName))
                 errors += "DESTINATION_INSIDE_SOURCE"
             val inventory = inventories.getOrNull(index)
+            if (inventory != null &&
+                inventory.manifest.entries.size > MAX_PREVIEW_ENTRIES)
+                errors += "MERGE_PREVIEW_ENTRY_LIMIT"
             if (inventory == null || inventory.collected !== selected ||
                 !inventory.manifest.reviewable ||
                 !Regex("[0-9a-f]{64}").matches(inventory.manifest.digest) ||
