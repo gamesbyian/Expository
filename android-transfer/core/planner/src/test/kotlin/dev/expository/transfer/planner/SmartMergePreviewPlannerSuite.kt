@@ -162,6 +162,36 @@ object SmartMergePreviewPlannerSuite {
         check(twentyPlan.digest == plan(twentyBasket, twentyInventory).digest)
         check(twentyPlan.entries.map { it.sourceIndex }.toSet().size == 20)
 
+        // The first-free suffix policy must account for original numbered names.
+        val c = source("C", "saf-C")
+        val occupied = plan(basket(a, b, c), listOf(
+            inventory(a, aFile, entry(a.source, listOf("report (2).txt"))),
+            inventory(b, bFile),
+            inventory(c, entry(c.source, listOf("report.txt")))
+        ))
+        check(occupied.reviewable)
+        check(occupied.entries.map { it.targetPath.single() } ==
+            listOf("report (2).txt", "report.txt",
+                "report (3).txt", "report (4).txt"))
+        check(occupied.collisionRenames == 2)
+
+        // Sixty-four independent folders, 96 collisions per filename:
+        // the planner must still preserve all source entries and names.
+        val bulk = (0 until SmartMergeBasket.MAX_SOURCES).map {
+            source("Bulk" + it, "bulk-" + it)
+        }
+        val allInventories = bulk.map { folder ->
+            inventory(folder, *(0 until 96).map { index ->
+                entry(folder.source, listOf("part-" + index + ".bin"))
+            }.toTypedArray())
+        }
+        val large = plan(basket(*bulk.toTypedArray()), allInventories)
+        check(large.reviewable && large.entries.size == 96 * bulk.size)
+        check(large.collisionRenames == 96 * (bulk.size - 1))
+        check(large.entries.last().targetPath == listOf("part-95 (64).bin"))
+        check(large.entries.map { it.targetPath }.toSet().size == large.entries.size)
+        check(large.digest == plan(basket(*bulk.toTypedArray()), allInventories).digest)
+
         // A public preview value must not accept a fabricated subtree simply
         // because its blocker list is empty and its digest looks like SHA-256.
         fun rejected(fake: RecursiveFolderManifest) {
