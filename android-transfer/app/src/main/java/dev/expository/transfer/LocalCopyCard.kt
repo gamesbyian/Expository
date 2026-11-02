@@ -31,7 +31,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import dev.expository.transfer.engine.CopyProof
-import dev.expository.transfer.engine.CopyOutcomeLedger
+import dev.expository.transfer.engine.ClaimedCopyDispatch
 import dev.expository.transfer.engine.CopyOutcomeState
 import dev.expository.transfer.engine.CopyReceipt
 import dev.expository.transfer.planner.BrowseEndpoint
@@ -241,13 +241,18 @@ fun LocalCopyCard(
         // followed by a new selection, Share or reentrant launcher event.
         pendingSaveApproval = null
         val targetUri = result.data?.data
+        val dispatch = if (result.resultCode == Activity.RESULT_OK &&
+            targetUri != null) approval?.let { owner ->
+            ClaimedCopyDispatch.claim {
+                owner.claimOnce(selected, selectionRevision, currentShareEpoch())
+            }
+        } else null
         if (result.resultCode != Activity.RESULT_OK || targetUri == null) {
             status = "Save As canceled. No transfer started."
-        } else if (approval?.claimOnce(
-                selected, selectionRevision, currentShareEpoch()) != true) {
+        } else if (dispatch == null) {
             status = "Source selection changed while Save As was open. No copy started. The picker may have created an empty document."
         } else {
-            val sourceUri = approval.sourceUri
+            val sourceUri = requireNotNull(approval).sourceUri
             val permit = AtomicBoolean(true)
             continueCopy = permit
             busy = true
@@ -256,35 +261,50 @@ fun LocalCopyCard(
             receipt = null
             scope.launch {
                 try {
-                val copyReceipt = withContext(Dispatchers.IO) {
+                val executed = withContext(Dispatchers.IO) {
                     val job = coroutineContext[Job]
-                    var lastProgress = 0L
-                    service.copy(sourceUri, targetUri,
+                    dispatch.run(
+                        expectedItems = 1,
                         continueRequested = { foregroundCopyAllowed(permit, job) },
-                        onProgress = { bytes ->
-                            if (bytes - lastProgress >= 1024L * 1024L) {
-                                lastProgress = bytes
-                                // Return to Compose's main scope instead of
-                                // updating a mutable UI snapshot on IO. A late
-                                // packet after Stop or a newer selection does
-                                // not overwrite a later receipt.
-                                scope.launch {
-                                    if (activeLocalCopyProgress(
-                                            continueCopy, permit, busy
-                                        ) && bytes >= transferred)
-                                        transferred = bytes
-                                }
+                        prepare = { index ->
+                            check(index == 0)
+                            // ACTION_CREATE_DOCUMENT's selected URI has a real
+                            // OS grant; this adapter alone rechecks its plan,
+                            // journals and independently reads back bytes.
+                            ClaimedCopyDispatch.Prepared(null) {
+                                var lastProgress = 0L
+                                service.copy(sourceUri, targetUri,
+                                    continueRequested = {
+                                        foregroundCopyAllowed(permit, job)
+                                    },
+                                    onProgress = { bytes ->
+                                        if (bytes - lastProgress >= 1024L * 1024L) {
+                                            lastProgress = bytes
+                                            scope.launch {
+                                                if (activeLocalCopyProgress(
+                                                        continueCopy, permit, busy
+                                                    ) && bytes >= transferred)
+                                                    transferred = bytes
+                                            }
+                                        }
+                                    })
                             }
                         })
+                }
+                if (continueCopy !== permit) return@launch
+                val copyReceipt = executed.receipts.singleOrNull()
+                if (copyReceipt == null) {
+                    status = "Copy stopped before starting. The picker may have created an empty document."
+                    return@launch
                 }
                 val observedTarget = withContext(Dispatchers.IO) {
                     runCatching { service.observe(targetUri).displayName }.getOrNull()
                 }
                 if (continueCopy !== permit) return@launch
                 destinationName = observedTarget ?: "Selected destination"
-                // Single and Dual consume one verified-only receipt policy.
-                // An invalid receipt can never be displayed as verified.
-                val outcome = CopyOutcomeLedger.begin(1).accept(copyReceipt)
+                // The same foreground dispatcher and verified-only outcome
+                // owner now govern Single Save As and Dual provider Copy.
+                val outcome = executed.outcome
                 // stopProof is exported from another module; capture the
                 // immutable value locally before Kotlin's nullable check.
                 val finalStop = outcome.stopProof

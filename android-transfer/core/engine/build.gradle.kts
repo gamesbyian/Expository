@@ -50,8 +50,16 @@ tasks.register<JavaExec>("recursiveCopyScenarios") {
     mainClass.set("dev.expository.transfer.engine.RecursiveFolderCopyEngineSuite")
 }
 
+tasks.register<JavaExec>("claimedCopyDispatchScenarios") {
+    group = "verification"
+    description = "One-shot foreground Single/Dual Copy dispatch and receipt safety E1"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.engine.ClaimedCopyDispatchSuite")
+}
+
 // These main()-based suites are not automatically discovered by Gradle's test task.
 // Keep the standard check lifecycle honest for local developers and CI.
 tasks.named("check") {
-    dependsOn("scenarios", "journalScenarios", "journaledCopyScenarios", "batchQueueScenarios", "renameScenarios", "recursiveCopyScenarios")
+    dependsOn("scenarios", "journalScenarios", "journaledCopyScenarios", "batchQueueScenarios", "renameScenarios", "recursiveCopyScenarios", "claimedCopyDispatchScenarios")
 }

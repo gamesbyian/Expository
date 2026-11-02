@@ -55,7 +55,7 @@ import dev.expository.transfer.saf.ScopedRecursiveSourceRequest
 import dev.expository.transfer.engine.RecursiveCopyResult
 import dev.expository.transfer.engine.RecursiveCopyProgress
 import dev.expository.transfer.engine.CopyProof
-import dev.expository.transfer.engine.CopyOutcomeLedger
+import dev.expository.transfer.engine.ClaimedCopyDispatch
 import dev.expository.transfer.engine.CopyOutcomeState
 import dev.expository.transfer.sftp.SftpAndroidCompat
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
@@ -842,10 +842,17 @@ private fun DeveloperPreview(
         val pending = proposedCopy ?: return
         if (copyBusy || model.view != WorkspaceView.DUAL || pending.isEmpty()) return
         val approval = proposedCopyApproval
-        if (approval == null || pending.size != approval.selectedIds.size ||
-            pending.map { it.request.sourceDocumentId }.toSet() != approval.selectedIds ||
-            !approval.claimOnce(model, tree(approval.sourcePane),
-                tree(approval.destinationPane), currentShareEpoch())) {
+        val dispatch = approval?.takeIf { reviewed ->
+            pending.size == reviewed.selectedIds.size &&
+                pending.map { it.request.sourceDocumentId }.toSet() ==
+                    reviewed.selectedIds
+        }?.let { reviewed ->
+            ClaimedCopyDispatch.claim {
+                reviewed.claimOnce(model, tree(reviewed.sourcePane),
+                    tree(reviewed.destinationPane), currentShareEpoch())
+            }
+        }
+        if (approval == null || dispatch == null) {
             proposedCopy = null
             proposedCopyApproval = null
             recursiveProposal = null
@@ -865,65 +872,63 @@ private fun DeveloperPreview(
         scope.launch {
             val owningJob = kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]
             try {
-            var outcome = CopyOutcomeLedger.begin(pending.size)
-            for ((index, plan) in pending.withIndex()) {
-                if (!foregroundCopyAllowed(permit, owningJob)) {
-                    outcome = outcome.halt(CopyProof.UNCERTAIN)
-                    break
-                }
-                // A verified earlier file has necessarily changed the
-                // destination listing revision. For subsequent approved items,
-                // obtain a fresh exclusive-create plan rather than attempting
-                // to replay a stale digest. Keep the *reviewed source version*,
-                // filename, MIME and scoped endpoints immutable. The executor
-                // independently revalidates the newly issued plan before I/O.
-                val current = if (index == 0) plan else withContext(Dispatchers.IO) {
-                    SafTreeToTreeCopy(context.contentResolver) { digest ->
-                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
-                    }.prepare(plan.request)
-                }
-                if (current == null || current.request != plan.request ||
-                    current.sourceName != plan.sourceName ||
-                    current.sourceMime != plan.sourceMime ||
-                    current.sourceRevision.isBlank() ||
-                    current.sourceRevision != plan.sourceRevision) {
-                    outcome = outcome.halt(CopyProof.BLOCKED)
-                    break
-                }
-                val receipt = withContext(Dispatchers.IO) {
-                    SafTreeToTreeCopy(context.contentResolver,
-                        storageForPlan = { digest ->
-                            AndroidAtomicAttemptStorage(context.applicationContext, digest)
-                        },
-                        recordRecoveryContext = { digest, sourceName, targetName, provider ->
-                            ProtectedRecoveryContextStore(context.applicationContext)
-                                .recordNew(digest, ProtectedRecoveryContext(
-                                    "SAF_DUAL_COPY", sourceName, targetName, provider))
-                        }).copy(current,
-                        continueRequested = { foregroundCopyAllowed(permit, owningJob) },
-                        onProgress = { bytes ->
-                            val now = System.nanoTime()
-                            val prev = lastReportNs.get()
-                            if ((prev == 0L || now - prev >= 250_000_000L) &&
-                                lastReportNs.compareAndSet(prev, now)) {
-                                scope.launch {
-                                    if (copyBusy && copyPermit === permit &&
-                                        foregroundCopyAllowed(permit, owningJob))
-                                        copyStatus = "Copying file " + (index + 1) +
-                                            "/" + pending.size + ": " + bytes +
-                                            " bytes written. Originals untouched."
-                                }
-                            }
-                        })
-                }
-                // The same immutable receipt reducer used by Single keeps
-                // duplicate/malformed receipts out of the verified count and
-                // forbids a later file after any uncertain result.
-                outcome = outcome.accept(receipt, current.plan.digest)
-                if (outcome.state != CopyOutcomeState.ACTIVE &&
-                    outcome.state != CopyOutcomeState.COMPLETE_VERIFIED)
-                    break
-            }
+            val outcome = withContext(Dispatchers.IO) {
+                // Both Single Save As and Dual use the same claimed, once-only
+                // foreground dispatcher. Route-specific SAF code remains the
+                // sole authority for provider preflight, durable journals
+                // and independent content-byte verification.
+                dispatch.run(
+                    expectedItems = pending.size,
+                    continueRequested = {
+                        foregroundCopyAllowed(permit, owningJob)
+                    },
+                    prepare = { index ->
+                        val plan = pending[index]
+                        // Earlier verified destinations change the parent
+                        // listing revision. Recheck all subsequent sources
+                        // and destination CREATE authority before attempting
+                        // another journaled output. Never reuse stale digests.
+                        val current = if (index == 0) plan else
+                            SafTreeToTreeCopy(context.contentResolver) { digest ->
+                                AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                            }.prepare(plan.request)
+                        if (current == null || current.request != plan.request ||
+                            current.sourceName != plan.sourceName ||
+                            current.sourceMime != plan.sourceMime ||
+                            current.sourceRevision.isBlank() ||
+                            current.sourceRevision != plan.sourceRevision) null
+                        else ClaimedCopyDispatch.Prepared(current.plan.digest) {
+                            SafTreeToTreeCopy(context.contentResolver,
+                                storageForPlan = { digest ->
+                                    AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                                },
+                                recordRecoveryContext = {
+                                    digest, sourceName, targetName, provider ->
+                                    ProtectedRecoveryContextStore(context.applicationContext)
+                                        .recordNew(digest, ProtectedRecoveryContext(
+                                            "SAF_DUAL_COPY", sourceName, targetName, provider))
+                                }).copy(current,
+                                continueRequested = {
+                                    foregroundCopyAllowed(permit, owningJob)
+                                },
+                                onProgress = { bytes ->
+                                    val now = System.nanoTime()
+                                    val prev = lastReportNs.get()
+                                    if ((prev == 0L ||
+                                        now - prev >= 250_000_000L) &&
+                                        lastReportNs.compareAndSet(prev, now)) {
+                                        scope.launch {
+                                            if (copyBusy && copyPermit === permit &&
+                                                foregroundCopyAllowed(permit, owningJob))
+                                                copyStatus = "Copying file " + (index + 1) +
+                                                    "/" + pending.size + ": " + bytes +
+                                                    " bytes written. Originals untouched."
+                                        }
+                                    }
+                                })
+                        }
+                    })
+            }.outcome
             if (copyPermit !== permit) return@launch
             copyStatus = if (outcome.complete) {
                 "Copy verified: " + outcome.verifiedItems + "/" + pending.size +
