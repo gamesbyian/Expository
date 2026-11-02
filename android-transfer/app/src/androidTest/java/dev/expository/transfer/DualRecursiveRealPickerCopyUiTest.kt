@@ -90,6 +90,10 @@ class DualRecursiveRealPickerCopyUiTest {
 
         compose.onNodeWithText("Dual view", substring = true)
             .performScrollTo().assertIsEnabled().performClick()
+        // Dual starts as Local/SFTP. Make both panes independent scoped
+        // Android roots before any picker or review begins.
+        compose.onNodeWithText("Device ↔ Device")
+            .performScrollTo().assertIsEnabled().performClick()
         pickRoot("dual-root-picker-A", "Expository Source Lab")
         val originalFile = DocumentsContract.buildDocumentUriUsingTree(sourceTree, "clip")
         assertArrayEquals(fixtureBytes,
