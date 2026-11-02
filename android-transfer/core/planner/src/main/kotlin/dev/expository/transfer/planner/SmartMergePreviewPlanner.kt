@@ -132,7 +132,12 @@ object SmartMergePreviewPlanner {
         val entries = manifest.entries
         if (origin.kind != ItemKind.DIRECTORY ||
             entries.isEmpty() ||
-            entries.size > MAX_PREVIEW_ENTRIES ||
+            // A genuine recursive planner cannot produce more than these
+            // per-tree bounds, even if the aggregate N-source preview allows
+            // more items. A fabricated review value must not expand the
+            // scanner's independently qualified coverage.
+            entries.size > RecursiveFolderCopyPlanner.MAX_ITEMS ||
+            manifest.directories > RecursiveFolderCopyPlanner.MAX_DIRECTORIES ||
             entries.first().source != origin ||
             entries.first().relativePath != listOf(origin.name) ||
             manifest.files != entries.count { it.source.kind == ItemKind.FILE } ||
