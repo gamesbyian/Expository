@@ -51,6 +51,10 @@ data class TreeCopyPreflight(
  */
 class SafTreeToTreeCopy(
     private val resolver: ContentResolver,
+    // Keep the single-argument storage factory last: existing callers use
+    // SafTreeToTreeCopy(resolver) { digest -> ... } trailing Kotlin lambdas.
+    // The optional context callback is always explicitly named.
+    private val recordRecoveryContext: ((String, String, String, String) -> Unit)? = null,
     private val storageForPlan: (String) -> AtomicAttemptStorage
 ) {
     private val observer = SafSingleDocumentCopy(resolver)
@@ -193,6 +197,26 @@ class SafTreeToTreeCopy(
             return CopyReceipt(initial.digest, CopyProof.BLOCKED, 0,
                 "UNAPPROVED_OR_UNSUPPORTED_PLAN")
         val request = confirmed.request
+        // Commit a bounded encrypted user-readable hint *before* the durable
+        // attempt can record a destination mutation. If the protected store
+        // is inaccessible, fail closed without starting a Copy. This contains
+        // no URI grant, opaque document ID, credential or executable intent.
+        if (recordRecoveryContext != null) {
+            try {
+                fun label(value: String): String = value.map { ch ->
+                    if (ch.code < 32 || ch.code == 127) ' ' else ch
+                }.joinToString("").trim().take(180).ifBlank { "Selected document" }
+                val folder = observer.observe(document(request.targetTree,
+                    request.targetFolderId)).displayName
+                recordRecoveryContext.invoke(initial.digest,
+                    label(confirmed.sourceName), label("Folder: " + folder),
+                    label(request.targetTree.authority.orEmpty()
+                        .ifBlank { "Android document provider" }))
+            } catch (_: Exception) {
+                return CopyReceipt(initial.digest, CopyProof.BLOCKED, 0,
+                    "RECOVERY_CONTEXT_UNAVAILABLE")
+            }
+        }
         val journal = try {
             DurableAttemptJournal(storageForPlan(initial.digest))
         } catch (_: Exception) {

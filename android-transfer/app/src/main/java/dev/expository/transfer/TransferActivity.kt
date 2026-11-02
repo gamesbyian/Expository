@@ -59,6 +59,8 @@ import dev.expository.transfer.engine.CopyOutcomeLedger
 import dev.expository.transfer.engine.CopyOutcomeState
 import dev.expository.transfer.sftp.SftpAndroidCompat
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
+import dev.expository.transfer.journal.ProtectedRecoveryContext
+import dev.expository.transfer.journal.ProtectedRecoveryContextStore
 
 /** A button-owned Boolean is not sufficient authorization after a coroutine is cancelled. */
 internal fun foregroundCopyAllowed(
@@ -889,9 +891,15 @@ private fun DeveloperPreview(
                     break
                 }
                 val receipt = withContext(Dispatchers.IO) {
-                    SafTreeToTreeCopy(context.contentResolver) { digest ->
-                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
-                    }.copy(current,
+                    SafTreeToTreeCopy(context.contentResolver,
+                        storageForPlan = { digest ->
+                            AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                        },
+                        recordRecoveryContext = { digest, sourceName, targetName, provider ->
+                            ProtectedRecoveryContextStore(context.applicationContext)
+                                .recordNew(digest, ProtectedRecoveryContext(
+                                    "SAF_DUAL_COPY", sourceName, targetName, provider))
+                        }).copy(current,
                         continueRequested = { foregroundCopyAllowed(permit, owningJob) },
                         onProgress = { bytes ->
                             val now = System.nanoTime()
