@@ -64,7 +64,7 @@ test('automatic expensive suites cancel superseded PRs but not manual runs', () 
     const workflow = read(name);
     assert.match(workflow, /^concurrency:\s*$/m, name);
     assert.match(workflow, /cancel-in-progress: \${{ github\.event_name == 'pull_request' }}/, name);
-  assert.ok(workflow.includes("github.event.comment.user.login == 'gamesbyian'"));
+    assert.ok(workflow.includes('github.event.pull_request.number || github.run_id'), name);
   }
   assert.match(read('transfer-plain-ftp-loopback.yml'), /^  workflow_dispatch:\s*$/m);
   assert.match(read('validate.yml'), /^  workflow_dispatch:\s*$/m);
@@ -125,7 +125,7 @@ test('required native check contexts fail on selector failure, without unnecessa
 
 test('isolated Single real-picker E2 methods stay behind exact owner-only allowlist', () => {
   const workflow = read('transfer-pr-emulator.yml');
-  assert.match(workflow, /github\\.event\\.comment\\.user\\.login == 'gamesbyian'/);
+  assert.ok(workflow.includes("github.event.comment.user.login == 'gamesbyian'"));
   assert.match(workflow, /Fork or ambiguous PR source forbidden/);
   for (const method of [
     'LocalPickerPositiveCopyTest#selectAndSaveNewDocumentWithByteVerifiedReadback',
