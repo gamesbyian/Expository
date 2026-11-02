@@ -110,6 +110,56 @@ object SmartMergePreviewPlanner {
     }
 
     /**
+     * Structural validation is defense in depth, never a substitute for
+     * adapter-authenticated COMPLETE pages or a fresh execution preflight.
+     * RecursiveFolderManifest is a public review value, so a caller must
+     * not be able to smuggle a fabricated path, detached child or duplicated
+     * file into an otherwise plausible, 64-hex-digest preview.
+     */
+    private fun structurallyConsistent(
+        origin: ItemRef, manifest: RecursiveFolderManifest
+    ): Boolean {
+        val entries = manifest.entries
+        if (origin.kind != ItemKind.DIRECTORY ||
+            entries.isEmpty() ||
+            entries.size > MAX_PREVIEW_ENTRIES ||
+            entries.first().source != origin ||
+            entries.first().relativePath != listOf(origin.name) ||
+            manifest.files != entries.count { it.source.kind == ItemKind.FILE } ||
+            manifest.directories != entries.count { it.source.kind == ItemKind.DIRECTORY })
+            return false
+        val directoryPaths = entries.filter { it.source.kind == ItemKind.DIRECTORY }
+            .map { it.relativePath }.toSet()
+        val paths = hashSetOf<List<String>>()
+        val identities = hashSetOf<Pair<String, String>>()
+        val root = origin.location
+        return entries.all { entry ->
+            val item = entry.source
+            val path = entry.relativePath
+            path.isNotEmpty() &&
+                path.size <= RecursiveFolderCopyPlanner.MAX_DEPTH &&
+                path.first() == origin.name &&
+                path.last() == item.name &&
+                path.all(::validName) &&
+                paths.add(path) &&
+                identities.add(item.key.authorityId to item.key.opaqueItemId) &&
+                (path.size == 1 || path.dropLast(1) in directoryPaths) &&
+                item.parent == origin.parent + path.dropLast(1) &&
+                item.location.folder == item.parent &&
+                item.key.authorityId == root.key.authorityId &&
+                item.location.key.authorityId == root.key.authorityId &&
+                item.location.key.kind == root.key.kind &&
+                item.location.key.rootId == root.key.rootId &&
+                item.location.key.grantId == root.key.grantId &&
+                item.location.verifiedNamespace == root.verifiedNamespace &&
+                item.location.verifiedStorageDomain == root.verifiedStorageDomain &&
+                item.key.opaqueItemId.isNotBlank() &&
+                item.key.version.isNotBlank() &&
+                item.location.revision.isNotBlank()
+        }
+    }
+
+    /**
      * [inventories] are aligned to the ordered M1 basket. Each manifest is
      * a FULL, previously reviewed source-tree observation, never a page, a
      * depth-limited partial traversal or a guessed provider-folder listing.
@@ -210,22 +260,7 @@ object SmartMergePreviewPlanner {
             if (inventory == null || inventory.collected !== selected ||
                 !inventory.manifest.reviewable ||
                 !Regex("[0-9a-f]{64}").matches(inventory.manifest.digest) ||
-                inventory.manifest.entries.firstOrNull()?.let {
-                    it.source == origin && it.relativePath == listOf(origin.name)
-                } != true ||
-                inventory.manifest.entries.size !=
-                    inventory.manifest.files + inventory.manifest.directories ||
-                inventory.manifest.entries.drop(1).any {
-                    it.relativePath.size < 2
-                } ||
-                inventory.manifest.entries.any {
-                    it.relativePath.isEmpty() ||
-                    it.relativePath.first() != origin.name ||
-                    it.relativePath.any { part -> !validName(part) } ||
-                    it.source.key.authorityId != origin.key.authorityId ||
-                    it.source.location.key.kind != origin.location.key.kind ||
-                    it.source.location.key.rootId != origin.location.key.rootId
-                }) {
+                !structurallyConsistent(origin, inventory.manifest)) {
                 errors += "SOURCE_TREE_INCOMPLETE_OR_STALE"
                 verifiedTrees.add(emptyList())
             } else {
