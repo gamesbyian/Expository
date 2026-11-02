@@ -91,6 +91,13 @@ object SmartMergePreviewPlannerSuite {
             listOf(trees[1], trees[0])).digest)
         check(!first.toString().contains("report"))
         check(!first.toString().contains("saf-A"))
+        val privateInventory = trees.first().toString()
+        check(privateInventory == "SmartMergeInventory(redacted)")
+        val entryDisplay = first.entries.first().toString()
+        check(entryDisplay.contains("sourceIndex=0"))
+        check(!entryDisplay.contains("report.txt"))
+        check(!entryDisplay.contains("saf-A"))
+        check(!entryDisplay.contains("Pictures"))
 
         val aFolder = entry(a.source, listOf("Album"), ItemKind.DIRECTORY)
         val bFolder = entry(b.source, listOf("Album"), ItemKind.DIRECTORY)
