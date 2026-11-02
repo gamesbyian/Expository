@@ -35,8 +35,10 @@ abstract class RecursivePickerBaseProvider extends DocumentsProvider {
 
     private String rootId() { return isSource() ? "lab-source-root" : "lab-target-root"; }
     private File bytes(String id) {
+        // Multiple independently installed test DocumentsProviders must
+        // not share an on-disk payload just because their opaque IDs match.
         return new File(getContext().getCacheDir(),
-            (isSource() ? "real-picker-src-" : "real-picker-dst-") + id);
+            getClass().getSimpleName() + "-" + id);
     }
 
     @Override public boolean onCreate() {
