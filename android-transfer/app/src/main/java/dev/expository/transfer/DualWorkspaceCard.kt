@@ -444,9 +444,16 @@ internal fun DualWorkspaceCard(
                 }
             }
         }
-        if (busy) Button(onClick = onStopCopy, modifier = Modifier.heightIn(min = 48.dp)) {
-            Text("Cancel transfer")
-        }
+        // Do not detach this Material3 button while verified Copy updates
+        // are still invalidating semantics. The one-shot review Card above is
+        // already retained for the same reason. Keep Stop composed, but
+        // entirely unplaced, inaccessible and disabled outside an active
+        // operation; it cannot revive consumed approval or cancel a new job.
+        Button(
+            onClick = onStopCopy,
+            enabled = busy,
+            modifier = Modifier.heightIn(min = 48.dp).retainInvisible(!busy)
+        ) { Text("Cancel transfer") }
         Text(copyStatus, modifier = Modifier.testTag("dual-copy-feedback"),
             style = MaterialTheme.typography.bodySmall)
         Text("Device-to-Device and Local-to-SFTP Copy support 1–12 selected files. SFTP-to-SFTP Copy relays 1–12 selected files between independently authenticated servers with exclusive create, durable journaling and independent destination readback. Whole-folder Android provider Copy requires two distinctly scoped providers, a fresh review and a foreground transfer; same-provider recursive Copy, remaining remote routes and cross-pane Move are still unavailable.",
