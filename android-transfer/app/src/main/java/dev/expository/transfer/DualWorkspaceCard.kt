@@ -402,37 +402,44 @@ internal fun DualWorkspaceCard(
                 }
             }
         }
-        if (recursiveProposal != null) {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Review whole-folder Copy",
-                        style = MaterialTheme.typography.titleMedium)
-                    Text("Source: pane " + recursiveProposal.sourcePane.name +
-                        " · " + recursiveProposal.request.expectedName)
-                    Text("Destination: pane " + recursiveProposal.destinationPane.name +
-                        " · user-picked Android folder")
-                    Text("Contents: " + recursiveProposal.manifest.directories +
-                        " folder(s) including empty folders, " +
-                        recursiveProposal.manifest.files + " file(s)")
-                    Text("Review digest: " +
-                        recursiveProposal.manifest.digest.take(12) +
-                        "… · expires after one minute")
-                    Text("Copy only. Recheck every source and destination; create new items with durable per-step journals and independent file readback. A failed or interrupted step stops with remaining items unattempted. Originals are never deleted. Requires independently picked different Android provider authorities.",
-                        style = MaterialTheme.typography.bodySmall)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Button(enabled = !workspaceBusy,
-                            modifier = Modifier.heightIn(min = 48.dp)
-                                .testTag("dual-recursive-confirm"),
-                            onClick = onConfirmRecursive) {
-                            Text("Confirm folder Copy")
-                        }
-                        Button(enabled = !workspaceBusy,
-                            modifier = Modifier.heightIn(min = 48.dp),
-                            onClick = onCancelRecursive) {
-                            Text("Cancel folder proposal")
-                        }
+        // Keep the Material3 review controls attached across the one-shot
+        // approval -> verified-status transition. Removing a conditional Card
+        // while its child semantics are being invalidated produced the real
+        // API35 "visitAncestors called on an unattached node" crash AFTER
+        // successfully verified Copy. Reuse the same unplaced/inaccessible
+        // retention modifier as the independently owned A/B pane subtrees.
+        // No stale approval remains actionable: null proposals disable both
+        // controls, and the one-shot dispatcher still enforces ownership.
+        Card(Modifier.fillMaxWidth().retainInvisible(recursiveProposal == null)) {
+            Column(Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Review whole-folder Copy",
+                    style = MaterialTheme.typography.titleMedium)
+                Text("Source: pane " + (recursiveProposal?.sourcePane?.name ?: "") +
+                    " · " + (recursiveProposal?.request?.expectedName ?: ""))
+                Text("Destination: pane " +
+                    (recursiveProposal?.destinationPane?.name ?: "") +
+                    " · user-picked Android folder")
+                Text("Contents: " + (recursiveProposal?.manifest?.directories ?: 0) +
+                    " folder(s) including empty folders, " +
+                    (recursiveProposal?.manifest?.files ?: 0) + " file(s)")
+                Text("Review digest: " +
+                    (recursiveProposal?.manifest?.digest?.take(12) ?: "") +
+                    "… · expires after one minute")
+                Text("Copy only. Recheck every source and destination; create new items with durable per-step journals and independent file readback. A failed or interrupted step stops with remaining items unattempted. Originals are never deleted. Requires independently picked different Android provider authorities.",
+                    style = MaterialTheme.typography.bodySmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Button(enabled = !workspaceBusy && recursiveProposal != null,
+                        modifier = Modifier.heightIn(min = 48.dp)
+                            .testTag("dual-recursive-confirm"),
+                        onClick = onConfirmRecursive) {
+                        Text("Confirm folder Copy")
+                    }
+                    Button(enabled = !workspaceBusy && recursiveProposal != null,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        onClick = onCancelRecursive) {
+                        Text("Cancel folder proposal")
                     }
                 }
             }
