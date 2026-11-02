@@ -44,6 +44,7 @@ class DualRecursiveRealPickerCopyUiTest {
         // Material3 ChildSemanticsNode previously received invalidations
         // against a detached hierarchy during that final transition.
         val before = previousAccessibilityFlags ?: return
+        previousAccessibilityFlags = null
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
         automation.serviceInfo?.let { info ->
             info.flags = before
@@ -198,9 +199,16 @@ class DualRecursiveRealPickerCopyUiTest {
         // down the Activity. This marker distinguishes a Compose lifecycle
         // regression at teardown from failed transfer-byte acceptance.
         Log.i("EXPO_DUAL_E2", "END_TO_END_ASSERTIONS_COMPLETE")
-        // The verified Copy journey ends at its real, user-visible result.
-        // Android lifecycle/navigation regressions remain independently
-        // tracked in B14; they must not be masked by a speculative extra
-        // post-Copy accessibility gesture in this scoped E2 scenario.
+        // Close the real Activity while the Compose instrumentation clock is
+        // still owned by the test. Automatic rule teardown previously deferred
+        // semantic invalidations until ActivityScenario disposal, then raised
+        // Material3's detached ChildSemanticsNode error. Explicitly drain
+        // pending Compose frames first. No lifecycle failure is suppressed:
+        // an exception from idle or close still fails the exact E2 test.
+        restorePickerAccessibilityConfiguration()
+        compose.waitForIdle()
+        Log.i("EXPO_DUAL_E2", "ACTIVITY_CLOSE_BEGIN")
+        compose.activityRule.scenario.close()
+        Log.i("EXPO_DUAL_E2", "ACTIVITY_CLOSE_COMPLETED")
     }
 }
