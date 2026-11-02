@@ -80,12 +80,13 @@ class DualRecursiveRealPickerCopyUiTest {
             Log.i("EXPO_DUAL_E2", "PICKER_BEGIN_" + tag)
             press(tag)
             assertTrue("Genuine OS picker not foreground for " + tag, pickerVisible())
-            // On API35 an OS picker can be resumed before its interactive
-            // accessibility window is attached. Wait for actual DocumentsUI
-            // semantics rather than guessing a toolbar icon or URI grant.
-            assertTrue("SYSTEM_PICKER_ACCESSIBILITY_NOT_ATTACHED_" + tag,
-                device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")), 15_000L) ||
-                    device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 8_000L))
+            // API35 can report the real DocumentsUI activity as resumed while
+            // UiAutomator exposes no PACKAGE-root accessibility node. That
+            // node is neither the operator's actionable root nor proof of a
+            // tree grant. The shared picker navigator requires actual named
+            // OS controls and a real "Use this folder"/"Allow" interaction;
+            // it fails closed if those never attach. Do not reject an otherwise
+            // usable picker solely because By.pkg() is temporarily absent.
             RecursivePickerUi.chooseFixtureRoot(device, title)
             Log.i("EXPO_DUAL_E2", "PICKER_ROOT_SELECTED_" + tag)
             compose.waitUntil(30_000L) {
