@@ -90,9 +90,13 @@ object SmartMergePreviewPlanner {
         source: ItemRef, destination: LocationRef, rootName: String
     ): Boolean {
         val a = source.location
+        val sameIdentity = a.key.authorityId == destination.key.authorityId ||
+            (!a.verifiedNamespace.isNullOrBlank() &&
+                a.verifiedNamespace == destination.verifiedNamespace &&
+                !a.verifiedStorageDomain.isNullOrBlank() &&
+                a.verifiedStorageDomain == destination.verifiedStorageDomain)
         if (a.key.kind != destination.key.kind ||
-            a.key.authorityId != destination.key.authorityId ||
-            a.key.rootId != destination.key.rootId) return false
+            !sameIdentity || a.key.rootId != destination.key.rootId) return false
         // An apparently different remote profile can alias the same storage.
         // Even if the grant differs, matching verified authority/root/path
         // cannot be treated as evidence that a descendant is independent.
@@ -132,6 +136,9 @@ object SmartMergePreviewPlanner {
             destination.verifiedStorageDomain.orEmpty(),
             destination.revision, destination.casePolicy.name,
             destination.folder.joinToString("\u0000"))
+        parts += destination.capabilities.toSortedMap(compareBy { it.name })
+            .flatMap { (cap, proof) -> listOf(cap.name, proof.support.name,
+                proof.observationId, proof.expiresAtMillis.toString()) }
         if (!basket.hasMinimumSources) errors += "MERGE_REQUIRES_TWO_SOURCES"
         if (inventories.size != basket.folders.size)
             errors += "SOURCE_INVENTORY_COUNT_MISMATCH"
@@ -165,7 +172,7 @@ object SmartMergePreviewPlanner {
             parent.destinationListing() == null)
             errors += "DESTINATION_PARENT_INCOMPLETE"
         else {
-            parts += parent.snapshotId
+            parts += parent.snapshotId.orEmpty()
             parts += parent.children.sortedBy { it.key.opaqueItemId }.flatMap {
                 listOf(it.name, it.key.opaqueItemId, it.key.version, it.kind.name)
             }
@@ -190,6 +197,9 @@ object SmartMergePreviewPlanner {
                 origin.location.verifiedNamespace.orEmpty(),
                 origin.location.verifiedStorageDomain.orEmpty(),
                 origin.location.revision, origin.parent.joinToString("\u0000"))
+            parts += origin.location.capabilities.toSortedMap(compareBy { it.name })
+                .flatMap { (cap, proof) -> listOf(cap.name, proof.support.name,
+                    proof.observationId, proof.expiresAtMillis.toString()) }
             if (origin.location.capabilities[Capability.READ]?.valid(nowMillis) != true)
                 errors += "SOURCE_READ_PROOF_EXPIRED"
             if (validName(rootName) && isNestedDestination(origin, destination, rootName))
@@ -203,6 +213,9 @@ object SmartMergePreviewPlanner {
                 } != true ||
                 inventory.manifest.entries.size !=
                     inventory.manifest.files + inventory.manifest.directories ||
+                inventory.manifest.entries.drop(1).any {
+                    it.relativePath.size < 2
+                } ||
                 inventory.manifest.entries.any {
                     it.relativePath.isEmpty() ||
                     it.relativePath.first() != origin.name ||
