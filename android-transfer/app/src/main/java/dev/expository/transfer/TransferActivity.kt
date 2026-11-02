@@ -771,8 +771,9 @@ private fun DeveloperPreview(
         // URIs. An endpoint or provider switch cannot inherit old approval.
         val sourceVisit = model.pane(sourcePane).current?.location
         val targetVisit = model.pane(targetPane).current?.location
-        if (sourceVisit?.key?.grantId != sourceTree.toString() ||
-            targetVisit?.key?.grantId != targetTree.toString()) {
+        if (sourceVisit == null || targetVisit == null ||
+            sourceVisit.key.grantId != sourceTree.toString() ||
+            targetVisit.key.grantId != targetTree.toString()) {
             copyStatus = "Folder Copy blocked: Android grant and browsed pane disagree."
             return
         }
@@ -833,8 +834,8 @@ private fun DeveloperPreview(
             model.pane(pending.destinationPane).endpoint != pending.destinationEndpoint ||
             sourceLocation?.key != pending.sourceKey ||
             targetLocation?.key != pending.destinationKey ||
-            sourceLocation.revision != pending.sourceRevision ||
-            targetLocation.revision != pending.destinationRevision ||
+            sourceLocation?.revision != pending.sourceRevision ||
+            targetLocation?.revision != pending.destinationRevision ||
             source.generation != pending.sourceGeneration ||
             target.generation != pending.destinationGeneration ||
             source.treeUri != request.sourceTree ||
