@@ -51,9 +51,11 @@ data class TreeCopyPreflight(
  */
 class SafTreeToTreeCopy(
     private val resolver: ContentResolver,
-    private val storageForPlan: (String) -> AtomicAttemptStorage,
-    // Optional app-private encrypted context, never part of the neutral journal.
-    private val recordRecoveryContext: ((String, String, String, String) -> Unit)? = null
+    // Keep the single-argument storage factory last: existing callers use
+    // SafTreeToTreeCopy(resolver) { digest -> ... } trailing Kotlin lambdas.
+    // The optional context callback is always explicitly named.
+    private val recordRecoveryContext: ((String, String, String, String) -> Unit)? = null,
+    private val storageForPlan: (String) -> AtomicAttemptStorage
 ) {
     private val observer = SafSingleDocumentCopy(resolver)
 
