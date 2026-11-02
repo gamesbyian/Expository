@@ -1,5 +1,10 @@
 # Expository Transfer: current product and execution contract
 
+## Planned optional Chunks integration (not implemented)
+
+Native Expository Transfer may pair an exact remote endpoint/root with a Chunks rTorrent environment to show read-only torrent membership and status on FTP/FTPS/SFTP entries, searchable association filters and contextual warnings before mutations including Smart Merge. Follow [torrent-aware file contract](TORRENT-AWARE-FILES.md): no server-file modification for markings, no per-file RPC on browse, no automatic destructive action, no inferred safety from incomplete inventory, and no coupling to the read-only Pages explorer. Queue dependency is after core operation correctness and recovery.
+
+
 **Reconciled:** 29 October 2026 UTC. **Status:** binding product requirements, not evidence that the requirements have shipped. Read [the dependency-first execution plan](EXECUTION-DEPENDENCIES.md) for sequencing and architecture, [native work queue](../../android-transfer/WORK-QUEUE.md) for *next tasks* and [release ledger](RELEASE-READINESS.md) for *verified gate evidence*. This document supersedes conflicting **future-intent/status summaries**, not the detailed protocol, security, rename, Drive and UX acceptance specifications linked below.
 
 ## Architecture integrity and truthful-operation contract (2026-10-30 audit)
