@@ -74,7 +74,8 @@ test('all PRs reach a fail-closed native selector before the expensive lanes', (
   const native = read('transfer-native.yml');
   assert.match(native, /^  pull_request:\s*$/m);
   assert.match(native, /^  merge_group:\s*$/m);
-  assert.doesNotMatch(native, /^\s+paths:\s*$/m, 'native prefilter would hide rename origins');
+  const prTrigger = native.slice(native.indexOf('  pull_request:'), native.indexOf('  merge_group:'));
+  assert.doesNotMatch(prTrigger, /^\s+paths:\s*$/m, 'native PR prefilter would hide rename origins');
   assert.match(native, /^  select:\s*$/m);
   assert.match(native, /Native change-selection integrity/);
   assert.match(native, /github\.event\.pull_request\.base\.sha/);
@@ -225,3 +226,22 @@ test('PR emulator receipts fail closed for missing selectors and missing reports
   }
 });
 
+test('trusted main alone seeds Gradle dependency caches for Android PR and emulator consumers', () => {
+  const workflow = read('transfer-native.yml');
+  assert.match(workflow, /^  push:\s*$/m);
+  assert.match(workflow, /branches: \[main\]/);
+  assert.match(workflow, /android-transfer\/\*\*\/\*\.gradle\.kts/);
+  const start = workflow.indexOf('  warm-gradle-cache:');
+  const end = workflow.indexOf('  select:', start);
+  assert.ok(start > 0 && end > start, 'cache seed must be a distinct, conditioned job');
+  const seed = workflow.slice(start, end);
+  assert.match(seed, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/);
+  assert.match(seed, /cache-read-only: false/);
+  assert.match(seed, /persist-credentials: false/);
+  assert.match(seed, /:app:compileDebugAndroidTestKotlin :app:lintDebug --no-daemon/);
+  assert.doesNotMatch(seed, /android-emulator-runner|workflow_call|secrets:|curl .*http/);
+  const pr = workflow.slice(end);
+  assert.match(pr, /cache-read-only: true/);
+  assert.match(read('transfer-pr-emulator.yml'), /cache-read-only: true/);
+  assert.match(read('transfer-emulator-ui.yml'), /cache-read-only: true/);
+});
