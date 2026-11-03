@@ -101,19 +101,13 @@ internal data class LocalTreeBrowseState(
      * never carries names across authorities.
      */
     fun beginRead(uri: Uri, path: List<TreeCrumb>, writable: Boolean,
-        limit: Int, readGeneration: Long,
-        holdCompleteUnderBusyLock: Boolean = false): LocalTreeBrowseState {
+        limit: Int, readGeneration: Long): LocalTreeBrowseState {
         val sameFolder = treeUri == uri && crumbs == path
         return copy(
             treeUri = uri, crumbs = path,
             entries = if (sameFolder) entries else emptyList(),
             selected = emptySet(), canWrite = writable,
-            // Only the verified-Copy caller can keep the previous shape:
-            // the operation remains busy until the asynchronous scan finishes.
-            // Unlocked refreshes revoke completeness immediately.
-            loading = true,
-            complete = if (sameFolder && holdCompleteUnderBusyLock) complete else false,
-            hasMore = if (sameFolder && holdCompleteUnderBusyLock) hasMore else false,
+            loading = true, complete = false, hasMore = false,
             visibleLimit = limit, generation = readGeneration,
             status = if (sameFolder && entries.isNotEmpty())
                 "Refreshing Android folder… previous names are read-only until rechecked."
