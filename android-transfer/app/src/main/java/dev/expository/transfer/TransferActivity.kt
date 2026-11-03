@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import dev.expository.transfer.planner.*
 import dev.expository.transfer.journal.RecoveryStatusCard
@@ -1241,7 +1242,10 @@ private fun DeveloperPreview(
             treeSingle = LocalTreeBrowseState()
         }
     }
-    Scaffold { padding ->
+    // Native UiAutomator tests can address the same real, accessible controls
+    // without installing a Compose test snapshot observer. Android officially
+    // exposes testTag as a resource ID only when the ancestor opts in.
+    Scaffold(modifier = Modifier.semantics { testTagsAsResourceId = true }) { padding ->
         // One outer scroll owner. Only the active connection form is composed;
         // switching away disposes its ephemeral session and credentials.
         LazyColumn(
@@ -1268,7 +1272,8 @@ private fun DeveloperPreview(
                                     .invalidate(WorkspacePane.SINGLE)
                             model = model.view(WorkspaceView.SINGLE)
                         },
-                        modifier = Modifier.heightIn(min = 48.dp).semantics {
+                        modifier = Modifier.heightIn(min = 48.dp)
+                            .testTag("workspace-single-view").semantics {
                             stateDescription = if (model.view == WorkspaceView.SINGLE)
                                 "Selected" else "Not selected"
                         }) { Text(if (model.view == WorkspaceView.SINGLE)
@@ -1282,7 +1287,8 @@ private fun DeveloperPreview(
                                     .invalidate(WorkspacePane.SINGLE)
                             model = model.view(WorkspaceView.DUAL)
                         },
-                        modifier = Modifier.heightIn(min = 48.dp).semantics {
+                        modifier = Modifier.heightIn(min = 48.dp)
+                            .testTag("workspace-dual-view").semantics {
                             stateDescription = if (model.view == WorkspaceView.DUAL)
                                 "Selected" else "Not selected"
                         }) { Text(if (model.view == WorkspaceView.DUAL)
