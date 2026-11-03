@@ -430,30 +430,32 @@ internal fun DualWorkspaceCard(
                     style = MaterialTheme.typography.bodySmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Button(enabled = !workspaceBusy && recursiveProposal != null,
-                        modifier = Modifier.heightIn(min = 48.dp)
-                            .testTag("dual-recursive-confirm"),
-                        onClick = onConfirmRecursive) {
-                        Text("Confirm folder Copy")
-                    }
-                    Button(enabled = !workspaceBusy && recursiveProposal != null,
-                        modifier = Modifier.heightIn(min = 48.dp),
-                        onClick = onCancelRecursive) {
-                        Text("Cancel folder proposal")
-                    }
+                    // These review actions change accessibility state when
+                    // the one-shot proposal is consumed. Foundation clickable
+                    // semantics avoid Material3's traversable child-semantics
+                    // node during the verified Copy -> refresh transition.
+                    FolderActionControl(
+                        label = "Confirm folder Copy",
+                        enabled = !workspaceBusy && recursiveProposal != null,
+                        modifier = Modifier.testTag("dual-recursive-confirm"),
+                        onClick = onConfirmRecursive
+                    )
+                    FolderActionControl(
+                        label = "Cancel folder proposal",
+                        enabled = !workspaceBusy && recursiveProposal != null,
+                        onClick = onCancelRecursive
+                    )
                 }
             }
         }
-        // Do not detach this Material3 button while verified Copy updates
-        // are still invalidating semantics. The one-shot review Card above is
-        // already retained for the same reason. Keep Stop composed, but
-        // entirely unplaced, inaccessible and disabled outside an active
-        // operation; it cannot revive consumed approval or cancel a new job.
-        Button(
-            onClick = onStopCopy,
+        // Keep Stop composed without Material3 child-semantics traversal;
+        // invisible and disabled outside an operation, never a stale permit.
+        FolderActionControl(
+            label = "Cancel transfer",
             enabled = busy,
-            modifier = Modifier.heightIn(min = 48.dp).retainInvisible(!busy)
-        ) { Text("Cancel transfer") }
+            modifier = Modifier.retainInvisible(!busy),
+            onClick = onStopCopy
+        )
         Text(copyStatus, modifier = Modifier.testTag("dual-copy-feedback"),
             style = MaterialTheme.typography.bodySmall)
         Text("Device-to-Device and Local-to-SFTP Copy support 1–12 selected files. SFTP-to-SFTP Copy relays 1–12 selected files between independently authenticated servers with exclusive create, durable journaling and independent destination readback. Whole-folder Android provider Copy requires two distinctly scoped providers, a fresh review and a foreground transfer; same-provider recursive Copy, remaining remote routes and cross-pane Move are still unavailable.",

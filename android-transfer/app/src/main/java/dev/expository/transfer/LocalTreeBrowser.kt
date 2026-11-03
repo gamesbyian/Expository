@@ -509,7 +509,7 @@ internal fun LocalTreePane(
  * semantic node with a genuine Button role and a >=48dp touch target.
  */
 @Composable
-private fun FolderActionControl(
+internal fun FolderActionControl(
     label: String, enabled: Boolean, modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
