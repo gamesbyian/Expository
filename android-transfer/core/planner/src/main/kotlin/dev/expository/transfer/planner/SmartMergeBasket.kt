@@ -112,7 +112,12 @@ fun SmartMergeFolder.inspectFresh(
     generation: Long,
     nowMillis: Long
 ): SmartMergeReobservation {
-    if (observed == null) return SmartMergeReobservation.MISSING_OR_UNOBSERVED
+    if (observed == null || generation <= browseGeneration)
+        // A cached pane observation cannot certify itself as a fresh provider
+        // read even if every old identity, label, revision and proof matches.
+        // Require a strictly newer observed browse generation; same/older
+        // generations remain unobserved for this read-only status gate.
+        return SmartMergeReobservation.MISSING_OR_UNOBSERVED
     val fresh = SmartMergeFolder.capture(collectedFrom, observed, generation, nowMillis)
         ?: return SmartMergeReobservation.UNAUTHORIZED_OR_EXPIRED
     val old = source

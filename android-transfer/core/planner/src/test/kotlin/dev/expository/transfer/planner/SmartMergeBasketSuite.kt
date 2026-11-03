@@ -178,6 +178,19 @@ object SmartMergeBasketSuite {
         check(checkBasket.inspectFresh(observed, 200L, NOW) ==
             listOf(SmartMergeReobservation.CURRENT_SNAPSHOT,
                 SmartMergeReobservation.CURRENT_SNAPSHOT))
+        // Identical old browser values, including a still-valid READ proof,
+        // are NOT an independent provider reobservation if their generation
+        // has not advanced. This must fail closed without changing the basket.
+        val oldest = chosen.maxOf { it.browseGeneration }
+        check(checkBasket.inspectFresh(observed, oldest, NOW) ==
+            listOf(SmartMergeReobservation.MISSING_OR_UNOBSERVED,
+                SmartMergeReobservation.MISSING_OR_UNOBSERVED))
+        check(checkBasket.inspectFresh(observed, oldest - 1L, NOW) ==
+            listOf(SmartMergeReobservation.MISSING_OR_UNOBSERVED,
+                SmartMergeReobservation.MISSING_OR_UNOBSERVED))
+        check(checkBasket.inspectFresh(observed, oldest + 1L, NOW) ==
+            listOf(SmartMergeReobservation.CURRENT_SNAPSHOT,
+                SmartMergeReobservation.CURRENT_SNAPSHOT))
         check(checkBasket.folders.first() === chosen.first()) // no mutation
         check(checkBasket.inspectFresh(listOf(null, observed[1]), 200L, NOW).first() ==
             SmartMergeReobservation.MISSING_OR_UNOBSERVED)
