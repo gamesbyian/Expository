@@ -165,7 +165,7 @@ class DualRecursiveRealPickerCopyUiTest {
 
         // The provider-root folder button is available only after complete
         // browse observations and the independently writable second root.
-        press(device, "Copy folder: Shows")
+        press(device, "Copy folder Shows")
         assertTrue("Reviewed one-shot folder approval not visible",
             findVisibleWithScroll(device, "Review whole-folder Copy") != null)
         press(device, "Confirm folder Copy")
