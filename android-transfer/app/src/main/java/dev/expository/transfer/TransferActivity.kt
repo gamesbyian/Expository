@@ -14,7 +14,6 @@ import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withTimeoutOrNull
-import androidx.compose.runtime.snapshots.Snapshot
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.activity.ComponentActivity
@@ -376,27 +375,29 @@ private fun DeveloperPreview(
 
         val listing = outcome?.getOrNull()
         val generation = treeReadGeneration.incrementAndGet()
-        Snapshot.withMutableSnapshot {
-            proposedCopy = null
-            recursiveProposal = null
-            val cleared = model.pane(which).clearSelection()
-            // Refresh the actual observed destination in the same authenticated
-            // location; no diagnostic bypass or stale visible listing.
-            replaceTree(which, latest.afterCopyObservation(listing, generation))
-            model = model.update(which, cleared)
-            if (listing != null) {
-                val location = LocationRef(
-                    LocationKey(LocationKind.LOCAL_SAF,
-                        request.destinationTree.authority.orEmpty(),
-                        LocalTreeReader.rootId(request.destinationTree),
-                        request.destinationParentId,
-                        request.destinationTree.toString()),
-                    originalCrumbs.map { it.title },
-                    "preview-only-" + generation,
-                    emptyMap()
-                )
-                model = model.update(which, model.pane(which).visit(location))
-            }
+        // This is one non-suspending main-thread turn while the Copy permit
+        // still freezes all mutations. Do not force a synchronous
+        // Snapshot.apply here: API35 observed Material3 child semantics being
+        // invalidated during the immediate apply while nodes were detaching.
+        // Ordinary Compose writes settle in the next frame after the entire
+        // consistent destination observation and model update are recorded.
+        proposedCopy = null
+        recursiveProposal = null
+        val cleared = model.pane(which).clearSelection()
+        replaceTree(which, latest.afterCopyObservation(listing, generation))
+        model = model.update(which, cleared)
+        if (listing != null) {
+            val location = LocationRef(
+                LocationKey(LocationKind.LOCAL_SAF,
+                    request.destinationTree.authority.orEmpty(),
+                    LocalTreeReader.rootId(request.destinationTree),
+                    request.destinationParentId,
+                    request.destinationTree.toString()),
+                originalCrumbs.map { it.title },
+                "preview-only-" + generation,
+                emptyMap()
+            )
+            model = model.update(which, model.pane(which).visit(location))
         }
         if (listing == null)
             copyStatus += " Destination could not be refreshed; inspect it before another operation."
