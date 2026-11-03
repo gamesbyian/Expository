@@ -380,7 +380,12 @@ private fun DeveloperPreview(
             proposedCopy = null
             recursiveProposal = null
             val cleared = model.pane(which).clearSelection()
-            replaceTree(which, latest.afterCopyObservation(listing, generation))
+            // DIAGNOSTIC ONLY, intentionally NOT mergeable: isolate whether
+            // the browse-row subtree replacement (rather than pane model
+            // revision/selection clearing) triggers Material3 semantics
+            // invalidation. Preserve the provider read, status, one-shot
+            // authority and full exact-byte E2 assertions. Revert after test.
+            // replaceTree(which, latest.afterCopyObservation(listing, generation))
             model = model.update(which, cleared)
             if (listing != null) {
                 val location = LocationRef(
