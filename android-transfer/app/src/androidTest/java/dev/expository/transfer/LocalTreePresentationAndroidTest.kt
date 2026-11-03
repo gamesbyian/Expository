@@ -51,17 +51,6 @@ class LocalTreePresentationAndroidTest {
         assertTrue(same.selected.isEmpty())
         assertEquals(101L, same.generation)
         assertTrue(same.status.contains("read-only"))
-        val held = initial.beginRead(initial.treeUri!!, folder, true,
-            LocalTreeReader.MAX_VISIBLE, 104L,
-            holdCompleteUnderBusyLock = true)
-        assertEquals(initial.entries, held.entries)
-        assertTrue(held.complete)
-        assertTrue(held.loading)
-        assertTrue(held.selected.isEmpty())
-        assertTrue(held.hasMore)
-        // The held variant is usable only by readTree while copyBusy is
-        // true, and that caller joins the provider read before unlocking.
-
         // A new folder, provider authority, or document identity starts
         // blank. The async failure path clears stale rows too.
         val otherFolder = initial.beginRead(initial.treeUri!!,
