@@ -14,7 +14,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -48,8 +48,9 @@ import org.junit.runner.RunWith
  *
  * Passing does NOT qualify #401. A failure with the detached-child stack
  * isolates a Compose/lifecycle fault independently of the Copy dispatcher.
- * The two cases distinguish conditional removal from retained-but-unplaced
- * semantics, mirroring the two UI arrangements already tried in #401.
+ * A 2x2 matrix independently varies conditional removal vs retained-but-
+ * unplaced semantics and Compose click vs live accessibility observation.
+ * This avoids confounding the two suspected causes in one comparison.
  */
 @RunWith(AndroidJUnit4::class)
 class ComposeSemanticsLifecycleUiTest {
@@ -69,11 +70,19 @@ class ComposeSemanticsLifecycleUiTest {
     }
 
     @Test
-    fun removedMaterial3ReviewSurvivesActivityDisposal() =
+    fun removedReviewComposeClickDisposesCleanly() =
         exerciseLifecycle(retainReview = false, accessibilityClick = false)
 
     @Test
-    fun retainedUnplacedReviewSurvivesAccessibilityAndDisposal() =
+    fun removedReviewAccessibilityClickDisposesCleanly() =
+        exerciseLifecycle(retainReview = false, accessibilityClick = true)
+
+    @Test
+    fun retainedReviewComposeClickDisposesCleanly() =
+        exerciseLifecycle(retainReview = true, accessibilityClick = false)
+
+    @Test
+    fun retainedReviewAccessibilityClickDisposesCleanly() =
         exerciseLifecycle(retainReview = true, accessibilityClick = true)
 
     private fun exerciseLifecycle(retainReview: Boolean, accessibilityClick: Boolean) {
@@ -115,6 +124,7 @@ class ComposeSemanticsLifecycleUiTest {
         }
         compose.waitForIdle()
         compose.onNodeWithTag("probe-terminal-status").assertIsDisplayed()
+        compose.onNodeWithText("Folder Copy verified: no I/O performed").assertIsDisplayed()
         Log.i("EXPO_SEM_PROBE", case + "_VERIFIED_STATUS")
 
         // Deliberately exercise actual Activity disposal and the Compose rule
