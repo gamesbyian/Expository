@@ -26,11 +26,13 @@ APK naming policy: distributable Android artifacts must include the literal `exp
 
 ## Build and verify
 
-From `android-transfer/`, using JDK 17 and Gradle 8.13:
+From `android-transfer/`, use JDK 17 and the **repository-pinned Gradle 8.13 wrapper** (`./gradlew` on macOS/Linux, `gradlew.bat` on Windows). The examples below show the Unix invocation; substitute `gradlew.bat` on Windows. CI may continue using its separately pinned Gradle 8.13 setup until the wrapper is qualified as a trusted build entrypoint.
+
+The committed `gradle-wrapper.jar` is byte-for-byte the [official Gradle 8.13 wrapper JAR](https://gradle.org/release-checksums/) (SHA-256 `81a82aaea5abcc8ff68b3dfcb58b3c3c429378efd98e7433460610fecd7ae45f`), independently cross-checked against Gradle's published checksum. The distribution URL uses HTTPS and `distributionSha256Sum=20f1b1176237254a6fc204d8434196fa11a4cfb387567519c61556e8710aed78`. The regular no-dependency Node suite checks the committed JAR bytes and properties. This does **not** establish transitive dependency locking/verification, a cacheless Android reproduction or a negative live Gradle checksum test; see [issue #326](https://github.com/gamesbyian/Expository/issues/326).
 
 ```sh
-gradle :core:planner:scenarios :core:planner:locationScenarios :core:planner:directoryScenarios :core:planner:moveScenarios :core:planner:workspaceScenarios :core:planner:sessionAccessScenarios :core:engine:scenarios :core:engine:journalScenarios :core:engine:journaledCopyScenarios :core:engine:renameScenarios :adapter:ftps:scenarios :adapter:sftp:scenarios :testing:fake-endpoints:scenarios --no-daemon
-gradle -PwithAndroid=true :app:assembleDebug --no-daemon
+./gradlew :core:planner:scenarios :core:planner:locationScenarios :core:planner:directoryScenarios :core:planner:moveScenarios :core:planner:workspaceScenarios :core:planner:sessionAccessScenarios :core:engine:scenarios :core:engine:journalScenarios :core:engine:journaledCopyScenarios :core:engine:renameScenarios :adapter:ftps:scenarios :adapter:sftp:scenarios :testing:fake-endpoints:scenarios --no-daemon
+./gradlew -PwithAndroid=true :app:assembleDebug --no-daemon
 ```
 
 Android compilation additionally requires Android SDK platform 36, build tools 36.0.0 and Google Maven dependencies. Current baseline: AGP 8.11.1, Kotlin 2.2.20, Compose BOM 2025.12.00, minimum Android API 26, target 36. Don't infer target-37 Android 17 LAN permission acceptance from target 36.
