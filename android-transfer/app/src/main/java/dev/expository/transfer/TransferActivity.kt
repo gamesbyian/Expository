@@ -1060,10 +1060,16 @@ private fun DeveloperPreview(
                     current.treeUri == request.destinationTree &&
                     current.folderId == request.destinationParentId) {
                     android.util.Log.i("EXPO_DUAL_E2", "APP_REFRESH_BEGIN")
-                    // The same-folder provider read is asynchronous, with
-                    // no transient replacement of Material3 semantics nodes.
-                    // Apply the final browse state in one snapshot while Copy
-                    // remains busy; timeouts revoke stale browse authority.
+                    // Measured API35 failure: completion status and immediate
+                    // browse refresh can invalidate a Material3 child semantics
+                    // node before Compose has processed the first update.
+                    // Yield exactly one UI frame before committing provider
+                    // observation. The Copy permit stays held, and the usual
+                    // frozen authority/revision checks still run on both sides
+                    // of the read. This changes no engine/receipt semantics.
+                    androidx.compose.runtime.withFrameNanos { }
+                    android.util.Log.i("EXPO_DUAL_E2", "APP_REFRESH_FRAME_OBSERVED")
+                    // Reobserve the provider; never retain a stale destination.
                     refreshAfterCopy(pending, permit)
                     android.util.Log.i("EXPO_DUAL_E2", "APP_REFRESH_JOINED")
                 }
