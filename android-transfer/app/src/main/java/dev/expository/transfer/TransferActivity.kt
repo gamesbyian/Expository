@@ -12,6 +12,9 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withTimeoutOrNull
+import androidx.compose.runtime.snapshots.Snapshot
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.activity.ComponentActivity
@@ -253,9 +256,7 @@ private fun DeveloperPreview(
 
     fun readTree(which: WorkspacePane, uri: Uri, crumbs: List<TreeCrumb>,
         writeGranted: Boolean = tree(which).canWrite,
-        maxVisible: Int = LocalTreeReader.MAX_VISIBLE,
-        holdCompleteUnderBusyCopy: Boolean = false): kotlinx.coroutines.Job? {
-        if (holdCompleteUnderBusyCopy && !copyBusy) return null
+        maxVisible: Int = LocalTreeReader.MAX_VISIBLE): kotlinx.coroutines.Job? {
         if (!LocalTreeReader.validTree(uri) || crumbs.isEmpty() ||
             maxVisible !in LocalTreeReader.MAX_VISIBLE..LocalTreeReader.MAX_BROWSE ||
             maxVisible % LocalTreeReader.MAX_VISIBLE != 0 ||
@@ -274,11 +275,8 @@ private fun DeveloperPreview(
         // denying stale selection and mutation authority until a fresh scan.
         // Navigating to another folder/provider still starts with empty rows.
         replaceTree(which, tree(which).beginRead(
-            uri, crumbs, writeGranted, maxVisible, nextGeneration,
-            holdCompleteUnderBusyLock = holdCompleteUnderBusyCopy
+            uri, crumbs, writeGranted, maxVisible, nextGeneration
         ))
-        val refreshShareEpoch = if (holdCompleteUnderBusyCopy) currentShareEpoch()
-            else -1L
         return scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching { LocalTreeReader.list(
@@ -290,8 +288,6 @@ private fun DeveloperPreview(
             // selected tree, endpoint, pane or newer folder visit.
             if (current.generation != nextGeneration || current.treeUri != uri ||
                 current.crumbs != crumbs ||
-                (holdCompleteUnderBusyCopy &&
-                    currentShareEpoch() != refreshShareEpoch) ||
                 !model.pane(which).endpoint.isSaf) return@launch
             result.onSuccess { listing ->
                 replaceTree(which, current.copy(
@@ -326,6 +322,91 @@ private fun DeveloperPreview(
                 model = model.update(which, model.pane(which).clearSelection())
             }
         }
+    }
+
+    /**
+     * Post-Copy destination reobservation is read-only. Avoid changing the
+     * Compose browse/semantics tree while the provider query is in flight.
+     * The Copy permit keeps every user mutation control disabled meanwhile.
+     * An unresponsive provider cannot hold the interface forever; on timeout,
+     * clear the old listing and require a new manual refresh.
+     */
+    suspend fun refreshAfterCopy(
+        approved: RecursiveCopyReview, permit: AtomicBoolean
+    ) {
+        val which = approved.destinationPane
+        val request = approved.request
+        val before = tree(which)
+        val oldLocation = model.pane(which).current?.location
+        if (!copyBusy || copyPermit !== permit ||
+            oldLocation?.key != approved.destinationKey ||
+            oldLocation.revision != approved.destinationRevision ||
+            before.generation != approved.destinationGeneration ||
+            before.treeUri != request.destinationTree ||
+            before.folderId != request.destinationParentId ||
+            before.crumbs.isEmpty()) return
+
+        val originalCrumbs = before.crumbs
+        val limit = before.visibleLimit
+        val read = scope.async(Dispatchers.IO) {
+            runCatching { LocalTreeReader.list(
+                context.contentResolver, request.destinationTree,
+                request.destinationParentId, limit) }
+        }
+        val outcome = withTimeoutOrNull(15_000L) { read.await() }
+        if (outcome == null) read.cancel()
+
+        // Even after readback, never attach a result to a changed pane, new
+        // Share epoch, different grant, or replaced permit. No user names,
+        // URIs, or provider metadata are logged by this route.
+        val latest = tree(which)
+        val latestVisit = model.pane(which).current?.location
+        if (!copyBusy || copyPermit !== permit ||
+            model.view != WorkspaceView.DUAL ||
+            currentShareEpoch() != approved.shareEpoch ||
+            model.pane(which).endpoint != approved.destinationEndpoint ||
+            latestVisit?.key != approved.destinationKey ||
+            latestVisit.revision != approved.destinationRevision ||
+            latest.generation != approved.destinationGeneration ||
+            latest.treeUri != request.destinationTree ||
+            latest.crumbs != originalCrumbs) return
+
+        val listing = outcome?.getOrNull()
+        val generation = treeReadGeneration.incrementAndGet()
+        Snapshot.withMutableSnapshot {
+            proposedCopy = null
+            recursiveProposal = null
+            val cleared = model.pane(which).clearSelection()
+            val updated = latest.copy(
+                selected = emptySet(), loading = false, generation = generation,
+                entries = listing?.children ?: emptyList(),
+                complete = listing?.complete == true,
+                hasMore = listing?.hasMore == true,
+                status = if (listing == null)
+                    "Destination listing needs a new Refresh; Copy receipt is separate."
+                else if (listing.complete)
+                    "Folder opened. Scoped Android browser; " +
+                        listing.children.size + " visible items."
+                else "Destination listing incomplete; no write authorized."
+            )
+            replaceTree(which, updated)
+            model = model.update(which, cleared)
+            if (listing != null) {
+                val location = LocationRef(
+                    LocationKey(LocationKind.LOCAL_SAF,
+                        request.destinationTree.authority.orEmpty(),
+                        LocalTreeReader.rootId(request.destinationTree),
+                        request.destinationParentId,
+                        request.destinationTree.toString()),
+                    originalCrumbs.map { it.title },
+                    "preview-only-" + generation,
+                    emptyMap()
+                )
+                model = model.update(which, model.pane(which).visit(location))
+            }
+        }
+        if (listing == null)
+            copyStatus += " Destination could not be refreshed; inspect it before another operation."
     }
 
     fun pickerResult(which: WorkspacePane,
@@ -976,15 +1057,11 @@ private fun DeveloperPreview(
                     current.treeUri == request.destinationTree &&
                     current.folderId == request.destinationParentId) {
                     android.util.Log.i("EXPO_DUAL_E2", "APP_REFRESH_BEGIN")
-                    // Hold all transfer UI actions disabled through the
-                    // fresh provider response. Preserving the old complete
-                    // row structure is safe only while this lock is held.
-                    val refresh = readTree(pending.destinationPane,
-                        request.destinationTree, current.crumbs,
-                        maxVisible = current.visibleLimit,
-                        holdCompleteUnderBusyCopy = true)
-                    android.util.Log.i("EXPO_DUAL_E2", "APP_REFRESH_SCHEDULED")
-                    refresh?.join()
+                    // The same-folder provider read is asynchronous, with
+                    // no transient replacement of Material3 semantics nodes.
+                    // Apply the final browse state in one snapshot while Copy
+                    // remains busy; timeouts revoke stale browse authority.
+                    refreshAfterCopy(pending, permit)
                     android.util.Log.i("EXPO_DUAL_E2", "APP_REFRESH_JOINED")
                 }
             } finally {
