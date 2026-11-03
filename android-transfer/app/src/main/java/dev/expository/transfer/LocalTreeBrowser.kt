@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -319,16 +318,15 @@ internal fun LocalTreePane(
             // squeezing Refresh outside the available touchable viewport.
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Button(
+                FolderActionControl(
+                    label = if (state.treeUri == null) "Choose folder" else "Change folder",
                     enabled = enabled && !state.loading,
-                    modifier = Modifier.heightIn(min = 48.dp)
-                        .testTag("saf-root-picker"),
+                    modifier = Modifier.testTag("saf-root-picker"),
                     onClick = onPick
-                ) { Text(if (state.treeUri == null) "Choose folder" else "Change folder") }
+                )
                 if (state.treeUri != null) {
-                    Button(enabled = enabled && !state.loading,
-                        modifier = Modifier.heightIn(min = 48.dp),
-                        onClick = onRefresh) { Text("Refresh") }
+                    FolderActionControl(label = "Refresh",
+                        enabled = enabled && !state.loading, onClick = onRefresh)
                 }
             }
             Text(
@@ -337,18 +335,15 @@ internal fun LocalTreePane(
                 style = MaterialTheme.typography.bodySmall
             )
             if (state.crumbs.size > 1) {
-                Button(enabled = enabled && !state.loading,
-                    modifier = Modifier.heightIn(min = 48.dp),
-                    onClick = onParent) { Text("Parent folder") }
+                FolderActionControl(label = "Parent folder",
+                    enabled = enabled && !state.loading, onClick = onParent)
             }
             if (state.crumbs.size > 2) {
                 Box {
-                    Button(enabled = enabled && !state.loading,
-                        modifier = Modifier.heightIn(min = 48.dp)
-                            .testTag("saf-ancestor-menu"),
-                        onClick = { ancestorMenuExpanded = true }) {
-                        Text("Jump to ancestor…")
-                    }
+                    FolderActionControl(label = "Jump to ancestor…",
+                        enabled = enabled && !state.loading,
+                        modifier = Modifier.testTag("saf-ancestor-menu"),
+                        onClick = { ancestorMenuExpanded = true })
                     DropdownMenu(
                         expanded = ancestorMenuExpanded,
                         onDismissRequest = { ancestorMenuExpanded = false }
@@ -389,11 +384,8 @@ internal fun LocalTreePane(
                     style = MaterialTheme.typography.bodySmall
                 )
                 if (state.hasMore && state.visibleLimit < LocalTreeReader.MAX_BROWSE) {
-                    Button(enabled = enabled,
-                        modifier = Modifier.heightIn(min = 48.dp),
-                        onClick = onLoadMore) {
-                        Text("Show next 200 (clears selection)")
-                    }
+                    FolderActionControl(label = "Show next 200 (clears selection)",
+                        enabled = enabled, onClick = onLoadMore)
                 } else if (state.hasMore) {
                     Text("2000-item browse safety limit reached. Choose a smaller folder.",
                         style = MaterialTheme.typography.bodySmall)
@@ -439,8 +431,15 @@ internal fun LocalTreePane(
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 LocalTreeSort.entries.forEach { choice ->
-                    Button(enabled = enabled,
-                        modifier = Modifier.heightIn(min = 48.dp),
+                    FolderActionControl(
+                        label = (if (sortMode == choice) "✓ " else "") +
+                            when (choice) {
+                                LocalTreeSort.NAME -> "Name"
+                                LocalTreeSort.SIZE -> "Size"
+                                LocalTreeSort.TYPE -> "Type"
+                                LocalTreeSort.NEWEST -> "Newest"
+                            },
+                        enabled = enabled,
                         onClick = {
                             if (sortMode != choice) {
                                 ui.sortMode = choice
@@ -448,22 +447,13 @@ internal fun LocalTreePane(
                                 // all other sort modes start ascending.
                                 ui.descending = choice == LocalTreeSort.NEWEST
                             }
-                        }) {
-                        Text((if (sortMode == choice) "✓ " else "") +
-                            when (choice) {
-                                LocalTreeSort.NAME -> "Name"
-                                LocalTreeSort.SIZE -> "Size"
-                                LocalTreeSort.TYPE -> "Type"
-                                LocalTreeSort.NEWEST -> "Newest"
-                            })
-                    }
+                        })
                 }
-                Button(enabled = enabled,
-                    modifier = Modifier.heightIn(min = 48.dp)
-                        .testTag("saf-sort-direction"),
-                    onClick = { ui.descending = !descending }) {
-                    Text(if (descending) "Descending ↓" else "Ascending ↑")
-                }
+                FolderActionControl(
+                    label = if (descending) "Descending ↓" else "Ascending ↑",
+                    enabled = enabled,
+                    modifier = Modifier.testTag("saf-sort-direction"),
+                    onClick = { ui.descending = !descending })
             }
             Text("Showing " + visibleEntries.size + " of " + state.entries.size +
                 " observed item(s)" +

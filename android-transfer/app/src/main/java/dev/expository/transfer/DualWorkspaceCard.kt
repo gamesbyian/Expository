@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -167,17 +166,17 @@ internal fun DualWorkspaceCard(
                 DualPairing.LOCAL_REMOTE to "Device ↔ Server",
                 DualPairing.REMOTE_REMOTE to "Server ↔ Server"
             )) {
-                Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !workspaceBusy,
+                FolderActionControl(label = title, enabled = !workspaceBusy,
                     onClick = {
                         selectedRemoteA = null
                         selectedRemoteB = null
                         selectedRemoteBatchA = null
                         selectedRemoteBatchB = null
                         onPreset(pairing)
-                    }) { Text(title) }
+                    })
             }
         }
-        Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !workspaceBusy,
+        FolderActionControl(label = "Swap A and B", enabled = !workspaceBusy,
             onClick = {
                 // Move the remembered remote connection together with its
                 // endpoint and the owner's independently navigated state.
@@ -189,17 +188,17 @@ internal fun DualWorkspaceCard(
                 selectedRemoteBatchA = selectedRemoteBatchB
                 selectedRemoteBatchB = priorBatchA
                 onSwap()
-            }) { Text("Swap A and B") }
+            })
         // Keep a direct scoped folder-picker action visible near the top of
         // dual mode. On a phone the chosen local pane's own Browse card can
         // sit far below the outer scrolling toolbar and controls.
         if (workspace.pane(workspace.activeDual).endpoint.isSaf) {
-            Button(
-                modifier = Modifier.heightIn(min = 48.dp)
-                    .testTag("dual-root-picker-" + workspace.activeDual.name),
+            FolderActionControl(
+                label = "Choose Pane " + workspace.activeDual.name + " folder…",
+                modifier = Modifier.testTag("dual-root-picker-" + workspace.activeDual.name),
                 enabled = !workspaceBusy,
                 onClick = { onPick(workspace.activeDual) }
-            ) { Text("Choose Pane " + workspace.activeDual.name + " folder…") }
+            )
         }
 
         @Composable
@@ -212,11 +211,12 @@ internal fun DualWorkspaceCard(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     for (endpoint in BrowseEndpoint.entries) {
-                        Button(
+                        FolderActionControl(
+                            label = (if (pane.endpoint == endpoint) "✓ " else "") +
+                                endpoint.name,
                             enabled = !workspaceBusy,
-                            modifier = Modifier.heightIn(min = 48.dp)
-                                .testTag("endpoint-" + which.name + "-" + endpoint.name)
-                                .semantics {
+                            modifier = Modifier.testTag("endpoint-" + which.name + "-" +
+                                endpoint.name).semantics {
                                 stateDescription = if (pane.endpoint == endpoint)
                                     "Selected" else "Not selected"
                             },
@@ -232,8 +232,7 @@ internal fun DualWorkspaceCard(
                                 }
                                 onEndpoint(which, endpoint)
                             }
-                        ) { Text(if (pane.endpoint == endpoint) "✓ " + endpoint.name
-                            else endpoint.name) }
+                        )
                     }
                 }
                 if (pane.endpoint.isSaf) {
@@ -342,20 +341,19 @@ internal fun DualWorkspaceCard(
                 if (compact) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for (pane in listOf(WorkspacePane.A, WorkspacePane.B)) {
-                            Button(
+                            val paneName = workspace.pane(pane).endpoint.name
+                            FolderActionControl(
+                                label = (if (workspace.activeDual == pane) "✓ " else "") +
+                                    "Pane " + pane.name + " · " + paneName,
                                 enabled = !workspaceBusy,
-                                modifier = Modifier.heightIn(min = 48.dp)
-                                    .testTag("dual-pane-tab-" + pane.name).semantics {
-                                    stateDescription =
-                                        if (workspace.activeDual == pane) "Selected"
-                                        else "Not selected"
-                                },
+                                modifier = Modifier.testTag("dual-pane-tab-" + pane.name)
+                                    .semantics {
+                                        stateDescription =
+                                            if (workspace.activeDual == pane) "Selected"
+                                            else "Not selected"
+                                    },
                                 onClick = { onFocus(pane) }
-                            ) {
-                                val name = workspace.pane(pane).endpoint.name
-                                Text((if (workspace.activeDual == pane) "✓ " else "") +
-                                    "Pane " + pane.name + " · " + name)
-                            }
+                            )
                         }
                     }
                 }
@@ -392,12 +390,12 @@ internal fun DualWorkspaceCard(
             a.treeUri != null && a.canWrite && a.complete && b.complete
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Button(enabled = !workspaceBusy && proposedCopy == null && readyA,
-                modifier = Modifier.heightIn(min = 48.dp),
-                onClick = { onCopy(WorkspacePane.A) }) { Text("Copy A → B…") }
-            Button(enabled = !workspaceBusy && proposedCopy == null && readyB,
-                modifier = Modifier.heightIn(min = 48.dp),
-                onClick = { onCopy(WorkspacePane.B) }) { Text("Copy B → A…") }
+            FolderActionControl(label = "Copy A → B…",
+                enabled = !workspaceBusy && proposedCopy == null && readyA,
+                onClick = { onCopy(WorkspacePane.A) })
+            FolderActionControl(label = "Copy B → A…",
+                enabled = !workspaceBusy && proposedCopy == null && readyB,
+                onClick = { onCopy(WorkspacePane.B) })
         }
         if (proposedCopy != null) {
             Card(Modifier.fillMaxWidth()) {
@@ -412,10 +410,10 @@ internal fun DualWorkspaceCard(
                     Text("Each file has a fresh provider preflight, a pinned original source version, a separate durable journal and independent byte verification. Later destination snapshots are refreshed after verified earlier files. The batch stops at the first uncertain result; prior verified files remain. No overwrite or automatic retry.",
                         style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(enabled = !workspaceBusy, modifier = Modifier.heightIn(min = 48.dp),
-                            onClick = onConfirmCopy) { Text("Confirm Copy") }
-                        Button(enabled = !workspaceBusy, modifier = Modifier.heightIn(min = 48.dp),
-                            onClick = onCancelCopy) { Text("Cancel proposal") }
+                        FolderActionControl(label = "Confirm Copy",
+                            enabled = !workspaceBusy, onClick = onConfirmCopy)
+                        FolderActionControl(label = "Cancel proposal",
+                            enabled = !workspaceBusy, onClick = onCancelCopy)
                     }
                 }
             }

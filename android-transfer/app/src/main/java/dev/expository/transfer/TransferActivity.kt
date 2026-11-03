@@ -1261,7 +1261,13 @@ private fun DeveloperPreview(
             item {
                 FlowRow(modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(enabled = !copyBusy && !remoteRelayBusy,
+                    // These controls remain actual 48dp-accessible buttons,
+                    // but use Foundation semantics to avoid Material3's detached
+                    // ChildSemanticsNode during Copy status/model transitions.
+                    FolderActionControl(
+                        label = if (model.view == WorkspaceView.SINGLE)
+                            "✓ Single view" else "Single view",
+                        enabled = !copyBusy && !remoteRelayBusy,
                         onClick = {
                             proposedCopy = null
                             recursiveProposal = null
@@ -1272,13 +1278,14 @@ private fun DeveloperPreview(
                                     .invalidate(WorkspacePane.SINGLE)
                             model = model.view(WorkspaceView.SINGLE)
                         },
-                        modifier = Modifier.heightIn(min = 48.dp)
-                            .testTag("workspace-single-view").semantics {
+                        modifier = Modifier.testTag("workspace-single-view").semantics {
                             stateDescription = if (model.view == WorkspaceView.SINGLE)
                                 "Selected" else "Not selected"
-                        }) { Text(if (model.view == WorkspaceView.SINGLE)
-                            "✓ Single view" else "Single view") }
-                    Button(enabled = !copyBusy && !remoteRelayBusy,
+                        })
+                    FolderActionControl(
+                        label = if (model.view == WorkspaceView.DUAL)
+                            "✓ Dual view" else "Dual view",
+                        enabled = !copyBusy && !remoteRelayBusy,
                         onClick = {
                             pendingSingleFolderPicker = null
                             singleFolderReview = null
@@ -1287,12 +1294,10 @@ private fun DeveloperPreview(
                                     .invalidate(WorkspacePane.SINGLE)
                             model = model.view(WorkspaceView.DUAL)
                         },
-                        modifier = Modifier.heightIn(min = 48.dp)
-                            .testTag("workspace-dual-view").semantics {
+                        modifier = Modifier.testTag("workspace-dual-view").semantics {
                             stateDescription = if (model.view == WorkspaceView.DUAL)
                                 "Selected" else "Not selected"
-                        }) { Text(if (model.view == WorkspaceView.DUAL)
-                            "✓ Dual view" else "Dual view") }
+                        })
                 }
             }
             if (model.view == WorkspaceView.SINGLE) {
