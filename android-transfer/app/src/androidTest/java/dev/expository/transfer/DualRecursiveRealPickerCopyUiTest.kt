@@ -135,6 +135,14 @@ class DualRecursiveRealPickerCopyUiTest {
 
         press("dual-pane-tab-B")
         pickRoot("dual-root-picker-B", "Expository Dual Target Lab")
+        // The extra UiAutomation window/view flags are needed only to
+        // navigate the real OS picker. Restore the ordinary accessibility
+        // observer *before* the review/verified-result recompositions,
+        // rather than disposing the Activity while enhanced observation
+        // remains enabled. The no-Copy two-picker controls passed E2.
+        // This is a test-harness lifecycle hypothesis, not an app fix.
+        restorePickerAccessibilityConfiguration()
+        Log.i("EXPO_DUAL_E2", "PICKER_ACCESSIBILITY_RESTORED_BEFORE_COPY")
         press("dual-pane-tab-A")
         press("saf-root-copy-matching-folder")
         Log.i("EXPO_DUAL_E2", "PROPOSAL_WAIT")
