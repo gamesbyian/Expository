@@ -77,7 +77,8 @@ class DualRecursiveRealPickerCopyUiTest {
         device.findObject(By.textContains(label)) ?: device.findObject(By.descContains(label))
 
     private fun swipe(device: UiDevice, upward: Boolean) {
-        val x = device.displayWidth * 94 / 100
+        // Stay away from Android's edge-back gesture zone.
+        val x = device.displayWidth * 84 / 100
         val top = device.displayHeight * 24 / 100
         val bottom = device.displayHeight * 81 / 100
         device.swipe(x, if (upward) bottom else top,
