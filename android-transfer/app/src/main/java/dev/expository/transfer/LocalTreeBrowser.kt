@@ -115,6 +115,25 @@ internal data class LocalTreeBrowseState(
         )
     }
 
+    /** Atomic post-Copy read result, with no inherited selection authority. */
+    fun afterCopyObservation(
+        observed: TreeListing?, readGeneration: Long
+    ): LocalTreeBrowseState = copy(
+        entries = observed?.children ?: emptyList(),
+        selected = emptySet(), loading = false,
+        complete = observed?.complete == true,
+        hasMore = observed?.hasMore == true,
+        generation = readGeneration,
+        status = when {
+            observed == null ->
+                "Destination listing needs a new Refresh; Copy receipt is separate."
+            observed.complete ->
+                "Folder opened. Scoped Android browser; " +
+                    observed.children.size + " visible items."
+            else -> "Destination listing incomplete; no write authorized."
+        }
+    )
+
     /**
      * An ancestor must be an exact prefix of the currently selected provider
      * document IDs. Never reconstruct an ancestor from a display path, decoded
