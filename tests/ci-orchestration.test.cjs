@@ -219,6 +219,13 @@ test('PR emulator receipts fail closed for missing selectors and missing reports
     fs.writeFileSync(path.join(location, 'TEST-second.xml'),
       '<testsuite tests="1"><testcase classname="' + b + '" name="copy"/></testsuite>');
     assert.equal(run(a + ',' + b).status, 0, 'both batch classes are present');
+    fs.writeFileSync(path.join(location, 'TEST-second.xml'),
+      '<testsuite tests="1"><testcase classname="' + b + '" name="copy"><skipped/></testcase></testsuite>');
+    assert.notEqual(run(a + ',' + b).status, 0, 'skipped batch class is not executed evidence');
+    assert.notEqual(run(b).status, 0, 'all-skipped class is not a passing receipt');
+    fs.writeFileSync(path.join(location, 'TEST-second.xml'),
+      '<testsuite tests="1"><testcase classname="' + b + '" name="copy"><failure>sanitized</failure></testcase></testsuite>');
+    assert.notEqual(run(a + ',' + b).status, 0, 'failed class is not passing evidence');
     fs.writeFileSync(path.join(location, 'TEST-second.xml'), '<broken>');
     assert.notEqual(run(a + ',' + b).status, 0, 'malformed report cannot pass');
   } finally {
