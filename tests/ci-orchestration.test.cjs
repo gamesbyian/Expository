@@ -252,3 +252,12 @@ test('trusted main alone seeds Gradle dependency caches for Android PR and emula
   assert.match(read('transfer-pr-emulator.yml'), /cache-read-only: true/);
   assert.match(read('transfer-emulator-ui.yml'), /cache-read-only: true/);
 });
+
+test('targeted emulator shares Gradle daemon across two invocations', () => {
+  const line = read('transfer-pr-emulator.yml').split('\n').find((value) =>
+    value.trim().startsWith('script: cd android-transfer'));
+  assert.ok(line);
+  assert.equal(line.split(' --daemon').length, 3);
+  assert.equal(line.includes('--no-daemon'), false);
+  assert.ok(line.includes('&& adb install -r'));
+});

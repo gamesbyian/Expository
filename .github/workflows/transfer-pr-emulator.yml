@@ -132,7 +132,9 @@ jobs:
           # APK. Providers inside androidTest are not reliably discoverable
           # as DocumentsUI roots. For other scoped classes, skip the fixture.
           # Keep this as one shell command with AND-chain failure propagation.
-          script: cd android-transfer && ( ( [ -n "$TARGET_TEST_CLASS" ] && [ "$TARGET_TEST_CLASS" != "dev.expository.transfer.RecursiveRealPickerCopyUiTest" ] && [ "$TARGET_TEST_CLASS" != "dev.expository.transfer.DualRecursiveRealPickerCopyUiTest" ] && [ "$TARGET_TEST_CLASS" != "dev.expository.transfer.DualPickerLifecycleIsolationUiTest" ] ) || ( gradle -PwithAndroid=true -PwithPickerFixture=true :testing:documents-provider-fixture:assembleDebug --no-daemon && adb install -r testing/documents-provider-fixture/build/outputs/apk/debug/documents-provider-fixture-debug.apk ) ) && gradle -PwithAndroid=true ${TARGET_TEST_CLASS:+-Pandroid.testInstrumentationRunnerArguments.class=$TARGET_TEST_CLASS} :app:connectedDebugAndroidTest --no-daemon
+          # Reuse one Gradle daemon for the fixture and instrumented app build
+          # inside this ephemeral job instead of forking two single-use JVMs.
+          script: cd android-transfer && ( ( [ -n "$TARGET_TEST_CLASS" ] && [ "$TARGET_TEST_CLASS" != "dev.expository.transfer.RecursiveRealPickerCopyUiTest" ] && [ "$TARGET_TEST_CLASS" != "dev.expository.transfer.DualRecursiveRealPickerCopyUiTest" ] && [ "$TARGET_TEST_CLASS" != "dev.expository.transfer.DualPickerLifecycleIsolationUiTest" ] ) || ( gradle -PwithAndroid=true -PwithPickerFixture=true :testing:documents-provider-fixture:assembleDebug --daemon && adb install -r testing/documents-provider-fixture/build/outputs/apk/debug/documents-provider-fixture-debug.apk ) ) && gradle -PwithAndroid=true ${TARGET_TEST_CLASS:+-Pandroid.testInstrumentationRunnerArguments.class=$TARGET_TEST_CLASS} :app:connectedDebugAndroidTest --daemon
       - name: Require executed instrumentation receipts
         if: success()
         shell: bash
