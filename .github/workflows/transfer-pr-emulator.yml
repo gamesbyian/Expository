@@ -136,8 +136,6 @@ jobs:
       - name: Require executed instrumentation receipts
         if: success()
         shell: bash
-        env:
-          REQUESTED_CLASSES: ${{ env.TARGET_TEST_CLASS }}
         run: |
           # Avoid a green check from a missing/empty or mismatched test report.
           # Paths and class identifiers are synthetic; never print provider data.
@@ -161,7 +159,7 @@ jobs:
           if not cases:
               print("ERROR: No executed Android instrumentation testcases", file=sys.stderr)
               sys.exit(2)
-          selectors = [s for s in os.environ.get("REQUESTED_CLASSES", "").split(",") if s]
+          selectors = [s for s in os.environ.get("TARGET_TEST_CLASS", "").split(",") if s]
           for selector in selectors:
               classname, _, method = selector.partition("#")
               if not any(c == classname and (not method or name == method) for c, name in cases):
