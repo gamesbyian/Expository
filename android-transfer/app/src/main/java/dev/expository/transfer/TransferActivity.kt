@@ -268,11 +268,11 @@ private fun DeveloperPreview(
         }
         model = model.update(which, model.pane(which).clearSelection())
         val nextGeneration = treeReadGeneration.incrementAndGet()
-        replaceTree(which, LocalTreeBrowseState(
-            treeUri = uri, crumbs = crumbs, loading = true,
-            canWrite = writeGranted,
-            visibleLimit = maxVisible,
-            generation = nextGeneration, status = "Reading this Android folder…"
+        // Keep the same-folder UI subtree attached during a refresh while
+        // denying stale selection and mutation authority until a fresh scan.
+        // Navigating to another folder/provider still starts with empty rows.
+        replaceTree(which, tree(which).beginRead(
+            uri, crumbs, writeGranted, maxVisible, nextGeneration
         ))
         scope.launch {
             val result = withContext(Dispatchers.IO) {
