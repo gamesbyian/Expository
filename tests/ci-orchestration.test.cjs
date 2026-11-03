@@ -281,3 +281,18 @@ test('scoped emulator cleanup stalls are bounded without hiding failing tests', 
   assert.ok(after.includes('actions/upload-artifact@'));
   assert.ok(!emulator.includes('continue-on-error:'), 'timeouts must remain red');
 });
+
+
+test('Gradle task-output cache stays enabled with a trusted-main writer', () => {
+  const properties = fs.readFileSync(path.resolve(__dirname, '..', 'android-transfer', 'gradle.properties'), 'utf8');
+  const entries = properties.split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith('#'));
+  assert.equal(entries.filter((line) => line === 'org.gradle.caching=true').length, 1);
+  assert.ok(!entries.some((line) => line.startsWith('org.gradle.configuration-cache=')),
+    'configuration cache needs its own compatibility proof');
+  const native = read('transfer-native.yml');
+  const seed = native.slice(native.indexOf('  warm-gradle-cache:'), native.indexOf('  select:'));
+  assert.ok(seed.includes("github.event_name == 'push' && github.ref == 'refs/heads/main'"));
+  assert.ok(seed.includes('cache-read-only: false'), 'only trusted main publishes reusable outputs');
+  assert.ok(read('transfer-pr-emulator.yml').includes('cache-read-only: true'));
+  assert.ok(native.slice(native.indexOf('  select:')).includes('cache-read-only: true'));
+});
