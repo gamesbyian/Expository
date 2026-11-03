@@ -383,21 +383,28 @@ private fun DeveloperPreview(
         // consistent destination observation and model update are recorded.
         proposedCopy = null
         recursiveProposal = null
-        val cleared = model.pane(which).clearSelection()
         replaceTree(which, latest.afterCopyObservation(listing, generation))
-        model = model.update(which, cleared)
-        if (listing != null) {
-            val location = LocationRef(
-                LocationKey(LocationKind.LOCAL_SAF,
-                    request.destinationTree.authority.orEmpty(),
-                    LocalTreeReader.rootId(request.destinationTree),
-                    request.destinationParentId,
-                    request.destinationTree.toString()),
-                originalCrumbs.map { it.title },
-                "preview-only-" + generation,
-                emptyMap()
-            )
-            model = model.update(which, model.pane(which).visit(location))
+        // DIAGNOSTIC ONLY, DO NOT MERGE: contrast the previous red test
+        // without replaceTree. This preserves the real provider read and
+        // browser-row refresh, but TEMPORARILY skips the second state family:
+        // workspace selection and location-revision updates. A green E2 would
+        // isolate a model-semantic invalidation; it would NOT qualify the app.
+        if (false) {
+            val cleared = model.pane(which).clearSelection()
+            model = model.update(which, cleared)
+            if (listing != null) {
+                val location = LocationRef(
+                    LocationKey(LocationKind.LOCAL_SAF,
+                        request.destinationTree.authority.orEmpty(),
+                        LocalTreeReader.rootId(request.destinationTree),
+                        request.destinationParentId,
+                        request.destinationTree.toString()),
+                    originalCrumbs.map { it.title },
+                    "preview-only-" + generation,
+                    emptyMap()
+                )
+                model = model.update(which, model.pane(which).visit(location))
+            }
         }
         if (listing == null)
             copyStatus += " Destination could not be refreshed; inspect it before another operation."
