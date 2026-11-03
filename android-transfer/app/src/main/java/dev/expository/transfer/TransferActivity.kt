@@ -253,11 +253,13 @@ private fun DeveloperPreview(
 
     fun readTree(which: WorkspacePane, uri: Uri, crumbs: List<TreeCrumb>,
         writeGranted: Boolean = tree(which).canWrite,
-        maxVisible: Int = LocalTreeReader.MAX_VISIBLE) {
+        maxVisible: Int = LocalTreeReader.MAX_VISIBLE,
+        holdCompleteUnderBusyCopy: Boolean = false): kotlinx.coroutines.Job? {
+        if (holdCompleteUnderBusyCopy && !copyBusy) return null
         if (!LocalTreeReader.validTree(uri) || crumbs.isEmpty() ||
             maxVisible !in LocalTreeReader.MAX_VISIBLE..LocalTreeReader.MAX_BROWSE ||
             maxVisible % LocalTreeReader.MAX_VISIBLE != 0 ||
-            !model.pane(which).endpoint.isSaf) return
+            !model.pane(which).endpoint.isSaf) return null
         // Refresh and every incremental load revoke both UI selection and
         // immutable planner selection before any asynchronous provider read.
         proposedCopy = null
@@ -272,9 +274,12 @@ private fun DeveloperPreview(
         // denying stale selection and mutation authority until a fresh scan.
         // Navigating to another folder/provider still starts with empty rows.
         replaceTree(which, tree(which).beginRead(
-            uri, crumbs, writeGranted, maxVisible, nextGeneration
+            uri, crumbs, writeGranted, maxVisible, nextGeneration,
+            holdCompleteUnderBusyLock = holdCompleteUnderBusyCopy
         ))
-        scope.launch {
+        val refreshShareEpoch = if (holdCompleteUnderBusyCopy) currentShareEpoch()
+            else -1L
+        return scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching { LocalTreeReader.list(
                     context.contentResolver, uri, crumbs.last().documentId,
@@ -285,6 +290,8 @@ private fun DeveloperPreview(
             // selected tree, endpoint, pane or newer folder visit.
             if (current.generation != nextGeneration || current.treeUri != uri ||
                 current.crumbs != crumbs ||
+                (holdCompleteUnderBusyCopy &&
+                    currentShareEpoch() != refreshShareEpoch) ||
                 !model.pane(which).endpoint.isSaf) return@launch
             result.onSuccess { listing ->
                 replaceTree(which, current.copy(
@@ -969,9 +976,16 @@ private fun DeveloperPreview(
                     current.treeUri == request.destinationTree &&
                     current.folderId == request.destinationParentId) {
                     android.util.Log.i("EXPO_DUAL_E2", "APP_REFRESH_BEGIN")
-                    readTree(pending.destinationPane, request.destinationTree,
-                        current.crumbs, maxVisible = current.visibleLimit)
+                    // Hold all transfer UI actions disabled through the
+                    // fresh provider response. Preserving the old complete
+                    // row structure is safe only while this lock is held.
+                    val refresh = readTree(pending.destinationPane,
+                        request.destinationTree, current.crumbs,
+                        maxVisible = current.visibleLimit,
+                        holdCompleteUnderBusyCopy = true)
                     android.util.Log.i("EXPO_DUAL_E2", "APP_REFRESH_SCHEDULED")
+                    refresh?.join()
+                    android.util.Log.i("EXPO_DUAL_E2", "APP_REFRESH_JOINED")
                 }
             } finally {
                 android.util.Log.i("EXPO_DUAL_E2", "APP_FINALLY")
