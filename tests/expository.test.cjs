@@ -757,6 +757,9 @@ test('image rotates four quarter turns without changing image bytes or leaving s
  assert.equal(blob.size,32,'source bytes remain unchanged');
 });
 
+// Byte-verify the independently reviewed Gradle wrapper and locked distribution.
+require('./gradle-wrapper-integrity.test.cjs');
+
 // Exercise standalone ZIP archive security and extraction fixtures in the regular CI entrypoint.
 require('./zip-browser.test.cjs');
 

@@ -76,8 +76,15 @@ class SmartMergeFolder private constructor(
             a.location.verifiedNamespace != b.location.verifiedNamespace ||
             a.location.verifiedStorageDomain != b.location.verifiedStorageDomain)
             return false
+        // Only fold names if at least one observation lacks a verified
+        // case-sensitive policy. On proven case-sensitive storage, "A" and
+        // "a" can be distinct siblings and should both enter an N-source
+        // basket. Unknown or conflicting policies still fail conservatively.
+        val caseSensitive = a.location.casePolicy == CasePolicy.CASE_SENSITIVE &&
+            b.location.casePolicy == CasePolicy.CASE_SENSITIVE
         fun path(item: ItemRef) = (item.parent + item.name).map {
-            Normalizer.normalize(it, Normalizer.Form.NFC).lowercase(Locale.ROOT)
+            val normalized = Normalizer.normalize(it, Normalizer.Form.NFC)
+            if (caseSensitive) normalized else normalized.lowercase(Locale.ROOT)
         }
         val first = path(a)
         val second = path(b)
@@ -105,7 +112,12 @@ fun SmartMergeFolder.inspectFresh(
     generation: Long,
     nowMillis: Long
 ): SmartMergeReobservation {
-    if (observed == null) return SmartMergeReobservation.MISSING_OR_UNOBSERVED
+    if (observed == null || generation <= browseGeneration)
+        // A cached pane observation cannot certify itself as a fresh provider
+        // read even if every old identity, label, revision and proof matches.
+        // Require a strictly newer observed browse generation; same/older
+        // generations remain unobserved for this read-only status gate.
+        return SmartMergeReobservation.MISSING_OR_UNOBSERVED
     val fresh = SmartMergeFolder.capture(collectedFrom, observed, generation, nowMillis)
         ?: return SmartMergeReobservation.UNAUTHORIZED_OR_EXPIRED
     val old = source
@@ -128,6 +140,19 @@ fun SmartMergeFolder.inspectFresh(
     if (old.location.capabilities[Capability.READ]?.valid(nowMillis) != true)
         return SmartMergeReobservation.UNAUTHORIZED_OR_EXPIRED
     return SmartMergeReobservation.CURRENT_SNAPSHOT
+}
+
+/**
+ * One independently reobserved source and its *own* provider browse generation.
+ * N folders may be read from different panes, grants or remote sessions. A
+ * single shared "latest" generation would misrepresent untouched sources as
+ * newly inspected. This is E1 read-only evidence, NEVER transfer authority.
+ */
+class SmartMergeFreshObservation(
+    val source: ItemRef?,
+    val browseGeneration: Long
+) {
+    override fun toString(): String = "SmartMergeFreshObservation(redacted)"
 }
 
 enum class SmartMergeAddStatus {
@@ -160,13 +185,16 @@ class SmartMergeBasket private constructor(val folders: List<SmartMergeFolder>) 
      * MUST be reselected/reapproved before any preview or execution. Order is
      * fixed: a different folder cannot replace a stale one by sorting.
      */
-    fun inspectFresh(observed: List<ItemRef?>, generation: Long,
+    fun inspectFresh(observations: List<SmartMergeFreshObservation>,
         nowMillis: Long): List<SmartMergeReobservation> {
-        require(observed.size == folders.size && generation >= 0) {
+        require(observations.size == folders.size &&
+            observations.all { it.browseGeneration >= 0 }) {
             "MERGE_REOBSERVATION_SCOPE_MISMATCH"
         }
         return Collections.unmodifiableList(folders.indices.map { index ->
-            folders[index].inspectFresh(observed[index], generation, nowMillis)
+            val observation = observations[index]
+            folders[index].inspectFresh(
+                observation.source, observation.browseGeneration, nowMillis)
         })
     }
 

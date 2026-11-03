@@ -127,12 +127,17 @@ object SmartMergePreviewPlanner {
      * file into an otherwise plausible, 64-hex-digest preview.
      */
     private fun structurallyConsistent(
-        origin: ItemRef, manifest: RecursiveFolderManifest
+        origin: ItemRef, manifest: RecursiveFolderManifest, nowMillis: Long
     ): Boolean {
         val entries = manifest.entries
         if (origin.kind != ItemKind.DIRECTORY ||
             entries.isEmpty() ||
-            entries.size > MAX_PREVIEW_ENTRIES ||
+            // A genuine recursive planner cannot produce more than these
+            // per-tree bounds, even if the aggregate N-source preview allows
+            // more items. A fabricated review value must not expand the
+            // scanner's independently qualified coverage.
+            entries.size > RecursiveFolderCopyPlanner.MAX_ITEMS ||
+            manifest.directories > RecursiveFolderCopyPlanner.MAX_DIRECTORIES ||
             entries.first().source != origin ||
             entries.first().relativePath != listOf(origin.name) ||
             manifest.files != entries.count { it.source.kind == ItemKind.FILE } ||
@@ -169,7 +174,13 @@ object SmartMergePreviewPlanner {
                 item.location.verifiedStorageDomain == root.verifiedStorageDomain &&
                 item.key.opaqueItemId.isNotBlank() &&
                 item.key.version.isNotBlank() &&
-                item.location.revision.isNotBlank()
+                item.location.revision.isNotBlank() &&
+                // A complete folder listing alone does not imply that each
+                // returned file can still be read. In particular an old
+                // manifest may carry child-specific expired/unsupported READ
+                // proofs while the basket root remains readable. Refuse a
+                // seemingly actionable preview rather than hiding this gap.
+                item.location.capabilities[Capability.READ]?.valid(nowMillis) == true
         }
     }
 
@@ -277,7 +288,7 @@ object SmartMergePreviewPlanner {
             if (inventory == null || inventory.collected !== selected ||
                 !inventory.manifest.reviewable ||
                 !Regex("[0-9a-f]{64}").matches(inventory.manifest.digest) ||
-                !structurallyConsistent(origin, inventory.manifest)) {
+                !structurallyConsistent(origin, inventory.manifest, nowMillis)) {
                 errors += "SOURCE_TREE_INCOMPLETE_OR_STALE"
                 verifiedTrees.add(emptyList())
             } else {
@@ -292,6 +303,12 @@ object SmartMergePreviewPlanner {
         val planned = mutableListOf<SmartMergePreviewEntry>()
         val reserved = hashMapOf<List<String>, MutableMap<String, ItemKind>>()
         val dirs = hashMapOf<Pair<Int, List<String>>, List<String>>()
+        // Remember the earliest not-yet-tried suffix for each requested
+        // name, type and target parent. Children only ever ADD reservations:
+        // a successful earlier attempt can never become available later.
+        // This preserves the original first-free-name policy but prevents
+        // 64 sources with thousands of conflicts repeatedly scanning (2)…
+        val nextSuffix = hashMapOf<Triple<List<String>, String, ItemKind>, Int>()
         var renamed = 0
         var coalesced = 0
         if (errors.isEmpty()) {
@@ -323,7 +340,8 @@ object SmartMergePreviewPlanner {
                             shared = true
                             coalesced++
                         } else {
-                            var sequence = 2
+                            val suffixKey = Triple(parentTarget, requested, kind)
+                            var sequence = nextSuffix[suffixKey] ?: 2
                             var unique = false
                             while (sequence <= MAX_PREVIEW_ENTRIES + 1) {
                                 val candidate = safeSuffix(requested, kind, sequence) ?: break
@@ -332,6 +350,7 @@ object SmartMergePreviewPlanner {
                                     name = candidate
                                     key = candidateKey
                                     unique = true
+                                    nextSuffix[suffixKey] = sequence + 1
                                     break
                                 }
                                 sequence++
@@ -360,8 +379,13 @@ object SmartMergePreviewPlanner {
                 if (errors.isNotEmpty()) break
             }
         }
-        parts += listOf("MAP", suppliedCount.toString(), planned.size.toString())
-        for (entry in planned) {
+        // A late naming/path conflict may arise after earlier sources have
+        // produced mappings. A blocked preview must not expose that partial
+        // prefix as an apparently usable merge plan or partial success count.
+        // Keep the diagnostic blockers; publish only an ALL-or-NOTHING map.
+        val published = if (errors.isEmpty()) planned else emptyList()
+        parts += listOf("MAP", suppliedCount.toString(), published.size.toString())
+        for (entry in published) {
             parts += listOf(entry.sourceIndex.toString(), entry.source.key.opaqueItemId,
                 entry.source.key.version, entry.source.kind.name,
                 entry.sourcePath.joinToString("\u0000"),
@@ -370,8 +394,9 @@ object SmartMergePreviewPlanner {
         }
         parts += errors.distinct().sorted()
         return SmartMergePreview(digest(parts),
-            Collections.unmodifiableList(planned.toList()),
+            Collections.unmodifiableList(published.toList()),
             Collections.unmodifiableList(errors.distinct()),
-            rootName, renamed, coalesced)
+            rootName, if (errors.isEmpty()) renamed else 0,
+            if (errors.isEmpty()) coalesced else 0)
     }
 }

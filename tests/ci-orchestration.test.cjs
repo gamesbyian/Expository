@@ -74,7 +74,8 @@ test('all PRs reach a fail-closed native selector before the expensive lanes', (
   const native = read('transfer-native.yml');
   assert.match(native, /^  pull_request:\s*$/m);
   assert.match(native, /^  merge_group:\s*$/m);
-  assert.doesNotMatch(native, /^\s+paths:\s*$/m, 'native prefilter would hide rename origins');
+  const prTrigger = native.slice(native.indexOf('  pull_request:'), native.indexOf('  merge_group:'));
+  assert.doesNotMatch(prTrigger, /^\s+paths:\s*$/m, 'native PR prefilter would hide rename origins');
   assert.match(native, /^  select:\s*$/m);
   assert.match(native, /Native change-selection integrity/);
   assert.match(native, /github\.event\.pull_request\.base\.sha/);
@@ -135,4 +136,163 @@ test('isolated Single real-picker E2 methods stay behind exact owner-only allowl
   }
   assert.match(workflow, /\*\) echo "Unsupported test selection"; exit 2/);
   assert.ok(workflow.includes('TARGET_TEST_CLASS=dev.expository.transfer.%s'));
+});
+
+test('owner scoped emulator accepts bounded synthetic batches, never mixes real pickers', () => {
+  const workflow = read('transfer-pr-emulator.yml');
+  const start = workflow.indexOf('      - name: Select a safe optional test class or synthetic batch');
+  const end = workflow.indexOf('      - uses: actions/checkout@', start);
+  assert.ok(start >= 0 && end > start, 'selection runs before PR checkout on trusted workflow');
+  const step = workflow.slice(start, end);
+  const raw = step.slice(step.indexOf('        run: |\n') + '        run: |\n'.length);
+  const script = raw.split('\n').map((line) => line.startsWith('          ') ? line.slice(10) : line).join('\n');
+  const { spawnSync } = require('node:child_process');
+  const os = require('node:os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'expository-emulator-select-'));
+  const environmentFile = path.join(dir, 'environment.txt');
+  const run = (request) => {
+    fs.writeFileSync(environmentFile, '');
+    const result = spawnSync('bash', ['-c', script], {
+      env: { ...process.env, REQUEST: request, GITHUB_ENV: environmentFile },
+      encoding: 'utf8',
+    });
+    return { result, selection: fs.readFileSync(environmentFile, 'utf8') };
+  };
+  try {
+    const prefix = '/transfer-native emulator-pr';
+    assert.equal(run(prefix).selection, 'TARGET_TEST_CLASS=\n');
+    assert.equal(
+      run(prefix + ' LocalPickerPositiveCopyTest#selectAndSaveNewDocumentWithByteVerifiedReadback').selection,
+      'TARGET_TEST_CLASS=dev.expository.transfer.LocalPickerPositiveCopyTest#selectAndSaveNewDocumentWithByteVerifiedReadback\n',
+    );
+    const batch = run(prefix + ' SafRecursiveScannerAndroidTest,SafRecursiveTreeCopyAndroidTest');
+    assert.equal(batch.result.status, 0, batch.result.stderr);
+    assert.equal(batch.selection,
+      'TARGET_TEST_CLASS=dev.expository.transfer.SafRecursiveScannerAndroidTest,dev.expository.transfer.SafRecursiveTreeCopyAndroidTest\n');
+    for (const invalid of [
+      prefix + ' LocalPickerPositiveCopyTest,SafRecursiveScannerAndroidTest',
+      prefix + ' RecursiveRealPickerCopyUiTest,SafRecursiveScannerAndroidTest',
+      prefix + ' SafRecursiveScannerAndroidTest,SafRecursiveScannerAndroidTest',
+      prefix + ' SafRecursiveScannerAndroidTest,',
+      prefix + ' SafRecursiveScannerAndroidTest,SomeUnreviewedTest',
+      prefix + ' SafRecursiveScannerAndroidTest,RecoveryIndexFailurePolicyTest,LocalTreePresentationAndroidTest,SafRecursiveTreeCopyAndroidTest,GithubPublicDirectoryAndroidTest,RecoveryRefreshUiTest',
+      prefix + ' SafRecursiveScannerAndroidTest, SafRecursiveTreeCopyAndroidTest',
+      prefix + ' SafRecursiveScannerAndroidTest,$(echo hacked)',
+      prefix + ' SafRecursiveScannerAndroidTest\nSafRecursiveTreeCopyAndroidTest',
+    ]) {
+      const denied = run(invalid);
+      assert.notEqual(denied.result.status, 0, invalid);
+      assert.equal(denied.selection, '', 'denied selector cannot enter GITHUB_ENV');
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('PR emulator receipts fail closed for missing selectors and missing reports', () => {
+  const workflow = read('transfer-pr-emulator.yml');
+  const start = workflow.indexOf('      - name: Require executed instrumentation receipts');
+  const end = workflow.indexOf('      - name: Summarize failed tests without disclosing provider content', start);
+  assert.ok(start >= 0 && end > start, 'receipt validation precedes artifact publication');
+  const step = workflow.slice(start, end);
+  const raw = step.slice(step.indexOf('        run: |\n') + '        run: |\n'.length);
+  const script = raw.split('\n').map((line) => line.startsWith('          ') ? line.slice(10) : line).join('\n');
+  const { spawnSync } = require('node:child_process');
+  const os = require('node:os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'expository-emulator-receipt-'));
+  const location = path.join(dir, 'android-transfer/app/build/outputs/androidTest-results/connected');
+  const run = (classes) => spawnSync('bash', ['-c', script], {
+    cwd: dir,
+    env: { ...process.env, TARGET_TEST_CLASS: classes },
+    encoding: 'utf8',
+  });
+  const a = 'dev.expository.transfer.SafRecursiveScannerAndroidTest';
+  const b = 'dev.expository.transfer.SafRecursiveTreeCopyAndroidTest';
+  try {
+    assert.notEqual(run(a).status, 0, 'no report cannot pass');
+    fs.mkdirSync(location, { recursive: true });
+    fs.writeFileSync(path.join(location, 'TEST-synthetic.xml'),
+      '<testsuite tests="1"><testcase classname="' + a + '" name="scan"/></testsuite>');
+    assert.equal(run(a).status, 0, 'present requested class passes');
+    assert.notEqual(run(a + ',' + b).status, 0, 'missing batch class cannot pass');
+    assert.notEqual(run(a + '#missingMethod').status, 0, 'missing requested method cannot pass');
+    fs.writeFileSync(path.join(location, 'TEST-second.xml'),
+      '<testsuite tests="1"><testcase classname="' + b + '" name="copy"/></testsuite>');
+    assert.equal(run(a + ',' + b).status, 0, 'both batch classes are present');
+    fs.writeFileSync(path.join(location, 'TEST-second.xml'),
+      '<testsuite tests="1"><testcase classname="' + b + '" name="copy"><skipped/></testcase></testsuite>');
+    assert.notEqual(run(a + ',' + b).status, 0, 'skipped batch class is not executed evidence');
+    assert.notEqual(run(b).status, 0, 'all-skipped class is not a passing receipt');
+    fs.writeFileSync(path.join(location, 'TEST-second.xml'),
+      '<testsuite tests="1"><testcase classname="' + b + '" name="copy"><failure>sanitized</failure></testcase></testsuite>');
+    assert.notEqual(run(a + ',' + b).status, 0, 'failed class is not passing evidence');
+    fs.writeFileSync(path.join(location, 'TEST-second.xml'), '<broken>');
+    assert.notEqual(run(a + ',' + b).status, 0, 'malformed report cannot pass');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('trusted main alone seeds Gradle dependency caches for Android PR and emulator consumers', () => {
+  const workflow = read('transfer-native.yml');
+  assert.match(workflow, /^  push:\s*$/m);
+  assert.match(workflow, /branches: \[main\]/);
+  assert.match(workflow, /android-transfer\/\*\*\/\*\.gradle\.kts/);
+  const start = workflow.indexOf('  warm-gradle-cache:');
+  const end = workflow.indexOf('  select:', start);
+  assert.ok(start > 0 && end > start, 'cache seed must be a distinct, conditioned job');
+  const seed = workflow.slice(start, end);
+  assert.match(seed, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/);
+  assert.match(seed, /cache-read-only: false/);
+  assert.match(seed, /persist-credentials: false/);
+  assert.match(seed, /:app:compileDebugAndroidTestKotlin :app:lintDebug --no-daemon/);
+  assert.doesNotMatch(seed, /android-emulator-runner|workflow_call|secrets:|curl .*http/);
+  const pr = workflow.slice(end);
+  assert.match(pr, /cache-read-only: true/);
+  assert.match(read('transfer-pr-emulator.yml'), /cache-read-only: true/);
+  assert.match(read('transfer-emulator-ui.yml'), /cache-read-only: true/);
+});
+
+test('targeted emulator shares Gradle daemon across two invocations', () => {
+  const line = read('transfer-pr-emulator.yml').split('\n').find((value) =>
+    value.trim().startsWith('script: cd android-transfer'));
+  assert.ok(line);
+  assert.equal(line.split(' --daemon').length, 3);
+  assert.equal(line.includes('--no-daemon'), false);
+  assert.ok(line.includes('&& adb install -r'));
+});
+
+
+test('scoped emulator cleanup stalls are bounded without hiding failing tests', () => {
+  const workflow = read('transfer-pr-emulator.yml');
+  const start = workflow.indexOf('      - name: Execute scoped or full synthetic Android tests against the PR');
+  const end = workflow.indexOf('      - name: Require executed instrumentation receipts', start);
+  assert.ok(start >= 0 && end > start, 'emulator and receipt steps must be present');
+  const emulator = workflow.slice(start, end);
+  const limit = 'timeout-minutes: ' +
+    "${{ github.event.comment.body == '/transfer-native emulator-pr' && 28 || 14 }}";
+  assert.ok(emulator.includes(limit), 'scoped calls get 14m; the full suite retains 28m');
+  assert.ok(emulator.includes('uses: reactivecircus/android-emulator-runner@'));
+  assert.ok(workflow.includes('timeout-minutes: 30'), 'the outer job remains bounded');
+  const after = workflow.slice(end);
+  assert.ok(after.includes('Summarize failed tests without disclosing provider content'));
+  assert.ok(after.includes('Publish synthetic report and tested SHA'));
+  assert.ok(after.includes('if: always()'), 'provenance and artifacts must survive failures');
+  assert.ok(after.includes('actions/upload-artifact@'));
+  assert.ok(!emulator.includes('continue-on-error:'), 'timeouts must remain red');
+});
+
+
+test('Gradle task-output cache stays enabled with a trusted-main writer', () => {
+  const properties = fs.readFileSync(path.resolve(__dirname, '..', 'android-transfer', 'gradle.properties'), 'utf8');
+  const entries = properties.split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith('#'));
+  assert.equal(entries.filter((line) => line === 'org.gradle.caching=true').length, 1);
+  assert.ok(!entries.some((line) => line.startsWith('org.gradle.configuration-cache=')),
+    'configuration cache needs its own compatibility proof');
+  const native = read('transfer-native.yml');
+  const seed = native.slice(native.indexOf('  warm-gradle-cache:'), native.indexOf('  select:'));
+  assert.ok(seed.includes("github.event_name == 'push' && github.ref == 'refs/heads/main'"));
+  assert.ok(seed.includes('cache-read-only: false'), 'only trusted main publishes reusable outputs');
+  assert.ok(read('transfer-pr-emulator.yml').includes('cache-read-only: true'));
+  assert.ok(native.slice(native.indexOf('  select:')).includes('cache-read-only: true'));
 });

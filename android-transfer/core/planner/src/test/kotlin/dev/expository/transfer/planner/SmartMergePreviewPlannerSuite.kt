@@ -162,6 +162,54 @@ object SmartMergePreviewPlannerSuite {
         check(twentyPlan.digest == plan(twentyBasket, twentyInventory).digest)
         check(twentyPlan.entries.map { it.sourceIndex }.toSet().size == 20)
 
+        // The first-free suffix policy must account for original numbered names.
+        val c = source("C", "saf-C")
+        val occupied = plan(basket(a, b, c), listOf(
+            inventory(a, aFile, entry(a.source, listOf("report (2).txt"))),
+            inventory(b, bFile),
+            inventory(c, entry(c.source, listOf("report.txt")))
+        ))
+        check(occupied.reviewable)
+        check(occupied.entries.map { it.targetPath.single() } ==
+            listOf("report (2).txt", "report.txt",
+                "report (3).txt", "report (4).txt"))
+        check(occupied.collisionRenames == 2)
+
+        // The first source can plan successfully before a later collision
+        // proves that no legal keep-both suffix fits the provider's 255-byte
+        // component limit. Reject the ENTIRE preview, not just the final
+        // filename: no incomplete tree mapping or misleading success counts.
+        val maximumName = "x".repeat(251) + ".txt"
+        val unresolvable = plan(sources, listOf(
+            inventory(a, entry(a.source, listOf(maximumName))),
+            inventory(b, entry(b.source, listOf(maximumName)))
+        ))
+        check("MERGE_COLLISION_NAME_UNRESOLVED" in unresolvable.blockers)
+        check(!unresolvable.reviewable)
+        check(unresolvable.entries.isEmpty())
+        check(unresolvable.collisionRenames == 0 && unresolvable.sharedDirectories == 0)
+        check(unresolvable.digest == plan(sources, listOf(
+            inventory(a, entry(a.source, listOf(maximumName))),
+            inventory(b, entry(b.source, listOf(maximumName)))
+        )).digest)
+
+        // Sixty-four independent folders, 96 collisions per filename:
+        // the planner must still preserve all source entries and names.
+        val bulk = (0 until SmartMergeBasket.MAX_SOURCES).map {
+            source("Bulk" + it, "bulk-" + it)
+        }
+        val allInventories = bulk.map { folder ->
+            inventory(folder, *(0 until 96).map { index ->
+                entry(folder.source, listOf("part-" + index + ".bin"))
+            }.toTypedArray())
+        }
+        val large = plan(basket(*bulk.toTypedArray()), allInventories)
+        check(large.reviewable && large.entries.size == 96 * bulk.size)
+        check(large.collisionRenames == 96 * (bulk.size - 1))
+        check(large.entries.last().targetPath == listOf("part-95 (64).bin"))
+        check(large.entries.map { it.targetPath }.toSet().size == large.entries.size)
+        check(large.digest == plan(basket(*bulk.toTypedArray()), allInventories).digest)
+
         // A public preview value must not accept a fabricated subtree simply
         // because its blocker list is empty and its digest looks like SHA-256.
         fun rejected(fake: RecursiveFolderManifest) {
@@ -171,7 +219,35 @@ object SmartMergePreviewPlannerSuite {
             check("SOURCE_TREE_INCOMPLETE_OR_STALE" in result.blockers)
         }
         val validA = trees[0].manifest
-        rejected(validA.copy(files = 0, directories = 2))
+        // The real recursive scanner emits at most 2,048 entries and 128
+        // directories per source. An untrusted but internally consistent
+        // review manifest cannot silently expand those scan limits merely
+        // because the N-source preview itself supports 10,000 entries.
+        val tooManyFiles = (0 until RecursiveFolderCopyPlanner.MAX_ITEMS).map {
+            entry(a.source, listOf("oversized-" + it + ".bin"))
+        }.toTypedArray()
+        rejected(inventory(a, *tooManyFiles).manifest)
+        val tooManyDirectories =
+            (0 until RecursiveFolderCopyPlanner.MAX_DIRECTORIES).map {
+                entry(a.source, listOf("folder-" + it), ItemKind.DIRECTORY)
+            }.toTypedArray()
+        rejected(inventory(a, *tooManyDirectories).manifest)
+        // Per-entry authorization matters even when the basket root itself
+        // remains readable. A stale or explicitly unsupported child READ
+        // witness cannot produce an apparently reviewable multi-source plan.
+        val expiredChildRead = aFile.copy(source = aFile.source.copy(
+            location = aFile.source.location.copy(
+                capabilities = aFile.source.location.capabilities +
+                    (Capability.READ to CapabilityProof(
+                        Support.SUPPORTED, "expired-child", NOW - 1)))))
+        rejected(inventory(a, expiredChildRead).manifest)
+        val deniedChildRead = aFile.copy(source = aFile.source.copy(
+            location = aFile.source.location.copy(
+                capabilities = aFile.source.location.capabilities +
+                    (Capability.READ to CapabilityProof(
+                        Support.UNSUPPORTED, "child-denied", NOW + 10_000)))))
+        rejected(inventory(a, deniedChildRead).manifest)
+                rejected(validA.copy(files = 0, directories = 2))
         rejected(validA.copy(entries = validA.entries + aFile,
             files = 2, directories = 1)) // duplicate path/opaque ID
         rejected(validA.copy(entries = listOf(validA.entries.first(),

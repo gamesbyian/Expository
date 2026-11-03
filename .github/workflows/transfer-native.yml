@@ -6,6 +6,18 @@ on:
   # No path filters: rename origins are invisible before workflow dispatch.
   pull_request:
   merge_group:
+  # Populate a shared Gradle User Home only when Android build inputs change.
+  # Routine source-only merges do not justify a second build on main.
+  push:
+    branches: [main]
+    paths:
+      - 'android-transfer/**/*.gradle.kts'
+      - 'android-transfer/**/*.gradle'
+      - 'android-transfer/**/*.versions.toml'
+      - 'android-transfer/**/gradle.properties'
+      - 'android-transfer/**/gradle-wrapper.properties'
+      - 'android-transfer/**/gradle.lockfile'
+      - '.github/workflows/transfer-native.yml'
   workflow_dispatch:
     inputs:
       build_apk:
@@ -28,6 +40,40 @@ concurrency:
   group: transfer-native-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  warm-gradle-cache:
+    name: Trusted-main Android dependency cache seed
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
+      - name: Install only required Android compile SDK
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        with:
+          gradle-version: '8.13'
+          # All PR/issue-comment emulator and compile jobs remain read-only.
+          # This reviewed main branch is the sole cache publisher.
+          cache-read-only: false
+      - name: Resolve and compile native/test/lint dependencies once on main
+        working-directory: android-transfer
+        run: gradle -PwithAndroid=true :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin :app:lintDebug --no-daemon
+      - name: Explain cache scope and execution evidence
+        if: always()
+        run: |
+          echo '## Trusted-main Gradle cache seed' >> "$GITHUB_STEP_SUMMARY"
+          echo "Source: \`$GITHUB_SHA\`. Android SDK 36 / Gradle 8.13, no emulator or live endpoints." >> "$GITHUB_STEP_SUMMARY"
+          echo 'The setup-gradle post-action publishes reusable Gradle Home entries only on a successful trusted-main execution.' >> "$GITHUB_STEP_SUMMARY"
   select:
     name: Native change-selection integrity
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group'

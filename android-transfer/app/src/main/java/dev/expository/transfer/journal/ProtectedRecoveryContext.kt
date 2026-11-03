@@ -32,7 +32,12 @@ data class ProtectedRecoveryContext(
     val sourceLabel: String,
     val destinationLabel: String,
     val destinationProvider: String
-)
+) {
+    // These labels are separately encrypted at rest, but their generated
+    // data-class toString previously leaked them into any incidental debug
+    // log, exception wrapper or test report. UI reads named fields directly.
+    override fun toString(): String = "ProtectedRecoveryContext(redacted)"
+}
 
 /**
  * Versioned, one-shot, device-bound AES-256-GCM context beside the EXISTING

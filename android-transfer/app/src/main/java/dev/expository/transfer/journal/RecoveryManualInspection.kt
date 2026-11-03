@@ -16,7 +16,12 @@ internal data class ManualRecoveryListing(
     val observedChildren: Int,
     val complete: Boolean,
     val sampleNames: List<String>
-)
+) {
+    // An operator can view these names inside the transient UI, but an
+    // implicit data-class toString should not disclose them to logcat.
+    override fun toString(): String =
+        "ManualRecoveryListing(observedChildren=$observedChildren,complete=$complete,redacted)"
+}
 
 internal object RecoveryManualInspection {
     fun acceptsPickerResult(uri: Uri?, flags: Int): Boolean =
