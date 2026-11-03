@@ -105,13 +105,24 @@ class DualRecursiveRealPickerCopyUiTest {
         val deadline = SystemClock.uptimeMillis() + 30_000L
         while (SystemClock.uptimeMillis() < deadline) {
             val candidate = findVisibleWithScroll(device, label)
-            if (candidate != null && candidate.isEnabled) {
+            if (candidate != null) {
+                // UIAutomator often selects a Text child of a real Material3
+                // Button. Clicking that non-clickable child returns without
+                // dispatching the action; the prior driver called it success.
+                // Activate only an actual enabled, clickable ancestor.
                 try {
-                    candidate.click()
-                    Log.i("EXPO_DUAL_E2", "CONTROL_CLICK_COMPLETED")
-                    return
+                    var control: UiObject2? = candidate
+                    repeat(5) {
+                        val node = control ?: return@repeat
+                        if (node.isClickable && node.isEnabled) {
+                            node.click()
+                            Log.i("EXPO_DUAL_E2", "CONTROL_CLICKABLE_NODE_COMPLETED")
+                            return
+                        }
+                        control = node.parent
+                    }
                 } catch (_: StaleObjectException) {
-                    // Re-observe the real accessibility node after layout.
+                    // Re-observe the full accessible ancestry after layout.
                 }
             }
             SystemClock.sleep(250L)

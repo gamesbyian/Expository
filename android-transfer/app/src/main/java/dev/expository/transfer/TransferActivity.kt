@@ -901,8 +901,15 @@ private fun DeveloperPreview(
     }
 
     fun confirmFolderCopy() {
-        val pending = recursiveProposal ?: return
-        if (copyBusy || remoteRelayBusy || model.view != WorkspaceView.DUAL) return
+        android.util.Log.i("EXPO_DUAL_E2", "APP_CONFIRM_CALLBACK_ENTERED")
+        val pending = recursiveProposal ?: run {
+            android.util.Log.i("EXPO_DUAL_E2", "APP_CONFIRM_NO_ACTIVE_REVIEW")
+            return
+        }
+        if (copyBusy || remoteRelayBusy || model.view != WorkspaceView.DUAL) {
+            android.util.Log.i("EXPO_DUAL_E2", "APP_CONFIRM_NOT_READY")
+            return
+        }
         val source = tree(pending.sourcePane)
         val target = tree(pending.destinationPane)
         val request = pending.request
@@ -928,6 +935,7 @@ private fun DeveloperPreview(
                 it.documentId == request.sourceDirectoryId &&
                     it.title == request.expectedName && it.directory
             } != 1) {
+            android.util.Log.i("EXPO_DUAL_E2", "APP_CONFIRM_FROZEN_AUTHORITY_REJECTED")
             recursiveProposal = null
             copyStatus = "Folder Copy confirmation expired after pane, grant, selection or Share change. No write attempted."
             return
@@ -940,6 +948,7 @@ private fun DeveloperPreview(
         }
         recursiveProposal = null
         if (dispatch == null) {
+            android.util.Log.i("EXPO_DUAL_E2", "APP_CONFIRM_ONE_SHOT_REJECTED")
             copyStatus = "Folder Copy review was already consumed. No write attempted."
             return
         }
