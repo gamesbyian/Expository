@@ -227,14 +227,14 @@ test('PR emulator receipts fail closed for missing selectors and missing reports
 
 test('trusted main alone seeds Gradle dependency caches for Android PR and emulator consumers', () => {
   const workflow = read('transfer-native.yml');
-  assert.match(workflow, /^  push:\\s*$/m);
-  assert.match(workflow, /branches: \\[main\\]/);
-  assert.match(workflow, /android-transfer\\/\\*\\*\\/\\*\\.gradle\\.kts/);
+  assert.match(workflow, /^  push:\s*$/m);
+  assert.match(workflow, /branches: \[main\]/);
+  assert.match(workflow, /android-transfer\/\*\*\/\*\.gradle\.kts/);
   const start = workflow.indexOf('  warm-gradle-cache:');
   const end = workflow.indexOf('  select:', start);
   assert.ok(start > 0 && end > start, 'cache seed must be a distinct, conditioned job');
   const seed = workflow.slice(start, end);
-  assert.match(seed, /github\\.event_name == 'push' && github\\.ref == 'refs\\/heads\\/main'/);
+  assert.match(seed, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/);
   assert.match(seed, /cache-read-only: false/);
   assert.match(seed, /persist-credentials: false/);
   assert.match(seed, /:app:compileDebugAndroidTestKotlin :app:lintDebug --no-daemon/);
