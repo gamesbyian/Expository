@@ -256,11 +256,11 @@ private fun DeveloperPreview(
 
     fun readTree(which: WorkspacePane, uri: Uri, crumbs: List<TreeCrumb>,
         writeGranted: Boolean = tree(which).canWrite,
-        maxVisible: Int = LocalTreeReader.MAX_VISIBLE): kotlinx.coroutines.Job? {
+        maxVisible: Int = LocalTreeReader.MAX_VISIBLE) {
         if (!LocalTreeReader.validTree(uri) || crumbs.isEmpty() ||
             maxVisible !in LocalTreeReader.MAX_VISIBLE..LocalTreeReader.MAX_BROWSE ||
             maxVisible % LocalTreeReader.MAX_VISIBLE != 0 ||
-            !model.pane(which).endpoint.isSaf) return null
+            !model.pane(which).endpoint.isSaf) return
         // Refresh and every incremental load revoke both UI selection and
         // immutable planner selection before any asynchronous provider read.
         proposedCopy = null
@@ -274,10 +274,13 @@ private fun DeveloperPreview(
         // Keep the same-folder UI subtree attached during a refresh while
         // denying stale selection and mutation authority until a fresh scan.
         // Navigating to another folder/provider still starts with empty rows.
-        replaceTree(which, tree(which).beginRead(
-            uri, crumbs, writeGranted, maxVisible, nextGeneration
+        replaceTree(which, LocalTreeBrowseState(
+            treeUri = uri, crumbs = crumbs, loading = true,
+            canWrite = writeGranted,
+            visibleLimit = maxVisible,
+            generation = nextGeneration, status = "Reading this Android folder…"
         ))
-        return scope.launch {
+        scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching { LocalTreeReader.list(
                     context.contentResolver, uri, crumbs.last().documentId,
