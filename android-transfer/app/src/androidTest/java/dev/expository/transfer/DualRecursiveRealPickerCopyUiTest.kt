@@ -200,6 +200,14 @@ class DualRecursiveRealPickerCopyUiTest {
         assertArrayEquals("Source must remain unmodified", fixtureBytes,
             resolver.openInputStream(sourceFile)!!.use { it.readBytes() })
         Log.i("EXPO_DUAL_E2", "SOURCE_ORIGINAL_BYTES_PRESERVED")
+        // The independently read-back provider bytes are necessary but not
+        // sufficient. The actual target pane must expose the freshly copied
+        // directory through the app's user-visible browser after the automatic
+        // post-Copy refresh, not merely through the test ContentResolver.
+        press(device, "Pane B · LOCAL")
+        assertTrue("Destination pane did not show the refreshed copied directory",
+            findVisibleWithScroll(device, "Shows") != null)
+        Log.i("EXPO_DUAL_E2", "TARGET_PANE_REFRESH_VISIBLE")
         Log.i("EXPO_DUAL_E2", "END_TO_END_ASSERTIONS_COMPLETE")
 
         // A real ActivityScenario closes without installing Compose's test
