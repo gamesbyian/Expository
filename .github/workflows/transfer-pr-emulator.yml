@@ -118,6 +118,11 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Execute scoped or full synthetic Android tests against the PR
+        # A real API35 test failed and 'adb emu kill' returned in run #41619692640,
+        # but emulator-runner hung for ~23 minutes afterward. Bound just this
+        # step to let diagnostics and artifacts run even if cleanup stalls.
+        # An unscoped full suite retains its longer execution allowance.
+        timeout-minutes: ${{ github.event.comment.body == '/transfer-native emulator-pr' && 28 || 14 }}
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
           api-level: 35
