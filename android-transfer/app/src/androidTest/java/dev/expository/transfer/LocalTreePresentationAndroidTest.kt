@@ -66,6 +66,26 @@ class LocalTreePresentationAndroidTest {
         assertFalse(otherProvider.complete)
     }
 
+    @Test fun copyDestinationRefreshInvalidatesSelectionAndIncompleteEvidence() {
+        val old = LocalTreeBrowseState(
+            treeUri = Uri.parse("content://provider.one/tree/root"),
+            crumbs = listOf(TreeCrumb("root", "Root")),
+            entries = listOf(TreeEntry("old", "Old.txt", false, 5L)),
+            selected = setOf("old"), complete = true, generation = 42L)
+        val listing = TreeListing(listOf(TreeEntry("new", "New.txt", false, 9L)),
+            complete = true)
+        val refreshed = old.afterCopyObservation(listing, 43L)
+        assertEquals("new", refreshed.entries.single().documentId)
+        assertTrue(refreshed.complete)
+        assertTrue(refreshed.selected.isEmpty())
+        assertEquals(43L, refreshed.generation)
+        val unavailable = old.afterCopyObservation(null, 44L)
+        assertTrue(unavailable.entries.isEmpty())
+        assertFalse(unavailable.complete)
+        assertTrue(unavailable.selected.isEmpty())
+        assertTrue(unavailable.status.contains("Refresh"))
+    }
+
     @Test fun unicodeAndCaseEquivalentProviderNamesCannotAuthorizeWrites() {
         fun list(vararg names: String): TreeListing {
             val cursor = MatrixCursor(arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID,
