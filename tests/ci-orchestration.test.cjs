@@ -74,7 +74,8 @@ test('all PRs reach a fail-closed native selector before the expensive lanes', (
   const native = read('transfer-native.yml');
   assert.match(native, /^  pull_request:\s*$/m);
   assert.match(native, /^  merge_group:\s*$/m);
-  assert.doesNotMatch(native, /^\s+paths:\s*$/m, 'native prefilter would hide rename origins');
+  const prTrigger = native.slice(native.indexOf('  pull_request:'), native.indexOf('  merge_group:'));
+  assert.doesNotMatch(prTrigger, /^\s+paths:\s*$/m, 'native PR prefilter would hide rename origins');
   assert.match(native, /^  select:\s*$/m);
   assert.match(native, /Native change-selection integrity/);
   assert.match(native, /github\.event\.pull_request\.base\.sha/);
