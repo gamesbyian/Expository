@@ -1242,9 +1242,9 @@ private fun DeveloperPreview(
             treeSingle = LocalTreeBrowseState()
         }
     }
-    // Native UiAutomator tests can address the same real, accessible controls
-    // without installing a Compose test snapshot observer. Android officially
-    // exposes testTag as a resource ID only when the ancestor opts in.
+    // Publish stable accessibility resource IDs for actual workspace controls.
+    // The same production buttons remain touch/TalkBack interactive; real
+    // UiAutomator tests no longer rely on merged child text heuristics.
     Scaffold(modifier = Modifier.semantics { testTagsAsResourceId = true }) { padding ->
         // One outer scroll owner. Only the active connection form is composed;
         // switching away disposes its ephemeral session and credentials.
