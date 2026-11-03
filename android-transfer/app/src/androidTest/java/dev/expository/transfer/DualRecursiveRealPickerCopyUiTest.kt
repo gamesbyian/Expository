@@ -105,8 +105,19 @@ class DualRecursiveRealPickerCopyUiTest {
     // visible candidate, then use its nearest REAL enabled clickable ancestor.
     // Never click an inert label or guess screen coordinates.
     private fun actionableControl(device: UiDevice, label: String): UiObject2? {
-        val candidates = device.findObjects(By.textContains(label)) +
+        // The app exposes official Compose testTagsAsResourceId on its
+        // visible workspace controls. Query that real accessible resource ID
+        // before falling back to text/description heuristics.
+        val stable = when (label) {
+            "Dual view" -> device.findObjects(By.res("workspace-dual-view"))
+            "Single view" -> device.findObjects(By.res("workspace-single-view"))
+            else -> emptyList<UiObject2>()
+        }
+        val candidates = stable + device.findObjects(By.textContains(label)) +
             device.findObjects(By.descContains(label))
+        if (label == "Dual view") Log.i("EXPO_DUAL_E2",
+            if (stable.isEmpty()) "WORKSPACE_STABLE_ID_MISSING"
+            else "WORKSPACE_STABLE_ID_PRESENT")
         for (candidate in candidates) {
             var control: UiObject2? = candidate
             repeat(12) {
@@ -184,6 +195,10 @@ class DualRecursiveRealPickerCopyUiTest {
                 .contains("package:dev.expository.transfer.fixture"))
 
         Log.i("EXPO_DUAL_E2", "ACTIVITY_SCENARIO_ONLY_BEGIN")
+        val foregroundPkg = device.currentPackageName
+        Log.i("EXPO_DUAL_E2", if (foregroundPkg ==
+                instrumentation.targetContext.packageName)
+            "APP_FOREGROUND_MATCH" else "APP_FOREGROUND_UNKNOWN_OR_MISMATCH")
         press(device, "Dual view")
         press(device, "Device ↔ Device")
         pickRoot(device, "Choose Pane A folder", "Expository Source Lab")
