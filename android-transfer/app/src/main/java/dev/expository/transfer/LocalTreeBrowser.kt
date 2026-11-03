@@ -381,13 +381,16 @@ internal fun LocalTreePane(
                 visibleEntries.filter { it.directory } else emptyList()
             if (rootMatches.size == 1) {
                 val folder = rootMatches.single()
-                Button(
+                // This action appears/disappears as a destination refresh
+                // discovers its first child directory. Keep Material3's
+                // ChildSemanticsNode out of this frequently replaced subtree.
+                FolderActionControl(
+                    label = "Copy folder: " + folder.title + "…",
                     enabled = enabled && !state.loading,
-                    modifier = Modifier.heightIn(min = 48.dp)
-                        .testTag("saf-root-copy-matching-folder")
+                    modifier = Modifier.testTag("saf-root-copy-matching-folder")
                         .semantics { contentDescription = "Copy folder " + folder.title },
                     onClick = { onCopyFolder?.invoke(folder) }
-                ) { Text("Copy folder: " + folder.title + "…") }
+                )
                 Text("Copy requires a separate destination picker and explicit review. " +
                     "The original folder is never deleted.",
                     style = MaterialTheme.typography.bodySmall)
@@ -444,30 +447,31 @@ internal fun LocalTreePane(
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
-                        Button(
+                        FolderActionControl(
+                            label = if (entry.directory) "Open"
+                                else if (entry.documentId in state.selected) "✓ Select"
+                                else "Select",
                             enabled = enabled && !state.loading,
-                            modifier = Modifier.heightIn(min = 48.dp).semantics {
+                            modifier = Modifier.semantics {
                                 stateDescription = if (!entry.directory &&
                                     entry.documentId in state.selected) "Selected" else "Not selected"
                             },
                             onClick = {
                                 if (entry.directory) onOpen(entry) else onSelect(entry)
                             }
-                        ) {
-                            Text(if (entry.directory) "Open" else if (entry.documentId in state.selected)
-                                "✓ Select" else "Select")
-                        }
+                        )
                         }
                         // A second line avoids squeezing 48dp buttons beside
                         // long file names on 320dp / high-text-scale displays.
                         if (entry.directory && state.crumbs.size == 1 &&
                             onCopyFolder != null) {
-                            Button(
+                            FolderActionControl(
+                                label = "Copy folder…",
                                 enabled = enabled && !state.loading && state.complete,
-                                modifier = Modifier.heightIn(min = 48.dp)
-                                    .testTag("saf-recursive-copy-" + entry.documentId),
+                                modifier = Modifier.testTag(
+                                    "saf-recursive-copy-" + entry.documentId),
                                 onClick = { onCopyFolder(entry) }
-                            ) { Text("Copy folder…") }
+                            )
                         }
                     }
                 }
