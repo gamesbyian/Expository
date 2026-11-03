@@ -261,3 +261,23 @@ test('targeted emulator shares Gradle daemon across two invocations', () => {
   assert.equal(line.includes('--no-daemon'), false);
   assert.ok(line.includes('&& adb install -r'));
 });
+
+
+test('scoped emulator cleanup stalls are bounded without hiding failing tests', () => {
+  const workflow = read('transfer-pr-emulator.yml');
+  const start = workflow.indexOf('      - name: Execute scoped or full synthetic Android tests against the PR');
+  const end = workflow.indexOf('      - name: Require executed instrumentation receipts', start);
+  assert.ok(start >= 0 && end > start, 'emulator and receipt steps must be present');
+  const emulator = workflow.slice(start, end);
+  const limit = 'timeout-minutes: ' +
+    "${{ github.event.comment.body == '/transfer-native emulator-pr' && 28 || 14 }}";
+  assert.ok(emulator.includes(limit), 'scoped calls get 14m; the full suite retains 28m');
+  assert.ok(emulator.includes('uses: reactivecircus/android-emulator-runner@'));
+  assert.ok(workflow.includes('timeout-minutes: 30'), 'the outer job remains bounded');
+  const after = workflow.slice(end);
+  assert.ok(after.includes('Summarize failed tests without disclosing provider content'));
+  assert.ok(after.includes('Publish synthetic report and tested SHA'));
+  assert.ok(after.includes('if: always()'), 'provenance and artifacts must survive failures');
+  assert.ok(after.includes('actions/upload-artifact@'));
+  assert.ok(!emulator.includes('continue-on-error:'), 'timeouts must remain red');
+});
