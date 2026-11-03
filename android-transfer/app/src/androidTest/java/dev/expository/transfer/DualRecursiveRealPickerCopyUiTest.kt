@@ -100,30 +100,52 @@ class DualRecursiveRealPickerCopyUiTest {
         return null
     }
 
+    // Material3's accessible Text child can be deeper than five wrappers,
+    // and the first text match need not be the clickable one. Enumerate every
+    // visible candidate, then use its nearest REAL enabled clickable ancestor.
+    // Never click an inert label or guess screen coordinates.
+    private fun actionableControl(device: UiDevice, label: String): UiObject2? {
+        val candidates = device.findObjects(By.textContains(label)) +
+            device.findObjects(By.descContains(label))
+        for (candidate in candidates) {
+            var control: UiObject2? = candidate
+            repeat(12) {
+                val node = control ?: return@repeat
+                if (node.isClickable && node.isEnabled &&
+                    node.visibleBounds.width() > 0 &&
+                    node.visibleBounds.height() > 0) return node
+                control = node.parent
+            }
+        }
+        return null
+    }
+
+    private fun actionableWithScroll(device: UiDevice, label: String): UiObject2? {
+        actionableControl(device, label)?.let { return it }
+        repeat(15) {
+            swipe(device, upward = true)
+            actionableControl(device, label)?.let { return it }
+        }
+        repeat(20) {
+            swipe(device, upward = false)
+            actionableControl(device, label)?.let { return it }
+        }
+        return null
+    }
+
     private fun press(device: UiDevice, label: String) {
         Log.i("EXPO_DUAL_E2", "CONTROL_SEARCH_BEGIN")
         val deadline = SystemClock.uptimeMillis() + 30_000L
         while (SystemClock.uptimeMillis() < deadline) {
-            val candidate = findVisibleWithScroll(device, label)
-            if (candidate != null) {
-                // UIAutomator often selects a Text child of a real Material3
-                // Button. Clicking that non-clickable child returns without
-                // dispatching the action; the prior driver called it success.
-                // Activate only an actual enabled, clickable ancestor.
-                try {
-                    var control: UiObject2? = candidate
-                    repeat(5) {
-                        val node = control ?: return@repeat
-                        if (node.isClickable && node.isEnabled) {
-                            node.click()
-                            Log.i("EXPO_DUAL_E2", "CONTROL_CLICKABLE_NODE_COMPLETED")
-                            return
-                        }
-                        control = node.parent
-                    }
-                } catch (_: StaleObjectException) {
-                    // Re-observe the full accessible ancestry after layout.
+            try {
+                val control = actionableWithScroll(device, label)
+                if (control != null) {
+                    control.click()
+                    Log.i("EXPO_DUAL_E2", "CONTROL_CLICKABLE_NODE_COMPLETED")
+                    return
                 }
+            } catch (_: StaleObjectException) {
+                // Re-enumerate all visible matches after transient layout.
             }
             SystemClock.sleep(250L)
         }
