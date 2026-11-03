@@ -956,12 +956,11 @@ private fun DeveloperPreview(
                 // A late result must not refresh an unrelated pane or inherit
                 // any Share/picker authority after the request was frozen.
                 val current = tree(pending.destinationPane)
-                // DIAGNOSTIC ONLY, MUST RESTORE/REPLACE BEFORE MERGE:
-                // isolate automatic destination readTree refresh as a cause
-                // of the post-Copy Material3 detached-child semantics crash.
-                // Never interpret a passing E2 with this gate disabled as
-                // accepted browsing freshness. The Copy writer is unchanged.
-                if (false && model.view == WorkspaceView.DUAL &&
+                // Keep destination freshness after verified Copy. The
+                // dynamic SAF browse actions now use stable accessible
+                // foundation controls rather than Material3 child-semantics
+                // wrappers when the target listing changes.
+                if (model.view == WorkspaceView.DUAL &&
                     currentShareEpoch() == pending.shareEpoch &&
                     model.pane(pending.destinationPane).endpoint == pending.destinationEndpoint &&
                     model.pane(pending.destinationPane).current?.location?.key ==
