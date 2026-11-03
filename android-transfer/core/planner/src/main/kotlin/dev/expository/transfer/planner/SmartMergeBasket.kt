@@ -142,6 +142,19 @@ fun SmartMergeFolder.inspectFresh(
     return SmartMergeReobservation.CURRENT_SNAPSHOT
 }
 
+/**
+ * One independently reobserved source and its *own* provider browse generation.
+ * N folders may be read from different panes, grants or remote sessions. A
+ * single shared "latest" generation would misrepresent untouched sources as
+ * newly inspected. This is E1 read-only evidence, NEVER transfer authority.
+ */
+class SmartMergeFreshObservation(
+    val source: ItemRef?,
+    val browseGeneration: Long
+) {
+    override fun toString(): String = "SmartMergeFreshObservation(redacted)"
+}
+
 enum class SmartMergeAddStatus {
     ADDED, DUPLICATE_SOURCE, OVERLAPPING_SOURCE, LIMIT_REACHED
 }
@@ -172,13 +185,16 @@ class SmartMergeBasket private constructor(val folders: List<SmartMergeFolder>) 
      * MUST be reselected/reapproved before any preview or execution. Order is
      * fixed: a different folder cannot replace a stale one by sorting.
      */
-    fun inspectFresh(observed: List<ItemRef?>, generation: Long,
+    fun inspectFresh(observations: List<SmartMergeFreshObservation>,
         nowMillis: Long): List<SmartMergeReobservation> {
-        require(observed.size == folders.size && generation >= 0) {
+        require(observations.size == folders.size &&
+            observations.all { it.browseGeneration >= 0 }) {
             "MERGE_REOBSERVATION_SCOPE_MISMATCH"
         }
         return Collections.unmodifiableList(folders.indices.map { index ->
-            folders[index].inspectFresh(observed[index], generation, nowMillis)
+            val observation = observations[index]
+            folders[index].inspectFresh(
+                observation.source, observation.browseGeneration, nowMillis)
         })
     }
 

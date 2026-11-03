@@ -43,6 +43,13 @@ object SmartMergeBasketSuite {
         return result
     }
 
+    // Legacy same-generation fixtures stay concise; production callers must
+    // now attach the actual fresh browse generation to EACH provider result.
+    private fun SmartMergeBasket.inspectFresh(
+        observed: List<ItemRef?>, generation: Long, nowMillis: Long
+    ): List<SmartMergeReobservation> =
+        inspectFresh(observed.map { SmartMergeFreshObservation(it, generation) }, nowMillis)
+
     @JvmStatic fun main(args: Array<String>) {
         val original = SmartMergeBasket.empty()
         check(original.folders.isEmpty() && !original.hasMinimumSources)
@@ -191,6 +198,30 @@ object SmartMergeBasketSuite {
         check(checkBasket.inspectFresh(observed, oldest + 1L, NOW) ==
             listOf(SmartMergeReobservation.CURRENT_SNAPSHOT,
                 SmartMergeReobservation.CURRENT_SNAPSHOT))
+        // N-source reobservation must not allow a fresh read of source A
+        // to launder an old cached observation of source B from another
+        // pane/provider. Each source proves its OWN browsing generation.
+        val oneFreshOneStale = listOf(
+            SmartMergeFreshObservation(observed[0], 200L),
+            SmartMergeFreshObservation(observed[1], chosen[1].browseGeneration))
+        check(checkBasket.inspectFresh(oneFreshOneStale, NOW) ==
+            listOf(SmartMergeReobservation.CURRENT_SNAPSHOT,
+                SmartMergeReobservation.MISSING_OR_UNOBSERVED))
+        val oneStaleOneFresh = listOf(
+            SmartMergeFreshObservation(observed[0], chosen[0].browseGeneration),
+            SmartMergeFreshObservation(observed[1], 200L))
+        check(checkBasket.inspectFresh(oneStaleOneFresh, NOW) ==
+            listOf(SmartMergeReobservation.MISSING_OR_UNOBSERVED,
+                SmartMergeReobservation.CURRENT_SNAPSHOT))
+        check(runCatching {
+            checkBasket.inspectFresh(oneFreshOneStale.take(1), NOW)
+        }.isFailure)
+        check(runCatching {
+            checkBasket.inspectFresh(listOf(
+                SmartMergeFreshObservation(observed[0], -1L),
+                SmartMergeFreshObservation(observed[1], 200L)), NOW)
+        }.isFailure)
+        check(oneFreshOneStale.none { it.toString().contains("android-provider") })
         check(checkBasket.folders.first() === chosen.first()) // no mutation
         check(checkBasket.inspectFresh(listOf(null, observed[1]), 200L, NOW).first() ==
             SmartMergeReobservation.MISSING_OR_UNOBSERVED)
