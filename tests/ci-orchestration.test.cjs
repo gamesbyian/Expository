@@ -143,8 +143,8 @@ test('owner scoped emulator accepts bounded synthetic batches, never mixes real 
   const end = workflow.indexOf('      - uses: actions/checkout@', start);
   assert.ok(start >= 0 && end > start, 'selection runs before PR checkout on trusted workflow');
   const step = workflow.slice(start, end);
-  const raw = step.slice(step.indexOf('        run: |\\n') + '        run: |\\n'.length);
-  const script = raw.split('\\n').map((line) => line.startsWith('          ') ? line.slice(10) : line).join('\\n');
+  const raw = step.slice(step.indexOf('        run: |\n') + '        run: |\n'.length);
+  const script = raw.split('\n').map((line) => line.startsWith('          ') ? line.slice(10) : line).join('\n');
   const { spawnSync } = require('node:child_process');
   const os = require('node:os');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'expository-emulator-select-'));
@@ -159,15 +159,15 @@ test('owner scoped emulator accepts bounded synthetic batches, never mixes real 
   };
   try {
     const prefix = '/transfer-native emulator-pr';
-    assert.equal(run(prefix).selection, 'TARGET_TEST_CLASS=\\n');
+    assert.equal(run(prefix).selection, 'TARGET_TEST_CLASS=\n');
     assert.equal(
       run(prefix + ' LocalPickerPositiveCopyTest#selectAndSaveNewDocumentWithByteVerifiedReadback').selection,
-      'TARGET_TEST_CLASS=dev.expository.transfer.LocalPickerPositiveCopyTest#selectAndSaveNewDocumentWithByteVerifiedReadback\\n',
+      'TARGET_TEST_CLASS=dev.expository.transfer.LocalPickerPositiveCopyTest#selectAndSaveNewDocumentWithByteVerifiedReadback\n',
     );
     const batch = run(prefix + ' SafRecursiveScannerAndroidTest,SafRecursiveTreeCopyAndroidTest');
     assert.equal(batch.result.status, 0, batch.result.stderr);
     assert.equal(batch.selection,
-      'TARGET_TEST_CLASS=dev.expository.transfer.SafRecursiveScannerAndroidTest,dev.expository.transfer.SafRecursiveTreeCopyAndroidTest\\n');
+      'TARGET_TEST_CLASS=dev.expository.transfer.SafRecursiveScannerAndroidTest,dev.expository.transfer.SafRecursiveTreeCopyAndroidTest\n');
     for (const invalid of [
       prefix + ' LocalPickerPositiveCopyTest,SafRecursiveScannerAndroidTest',
       prefix + ' RecursiveRealPickerCopyUiTest,SafRecursiveScannerAndroidTest',
@@ -177,7 +177,7 @@ test('owner scoped emulator accepts bounded synthetic batches, never mixes real 
       prefix + ' SafRecursiveScannerAndroidTest,RecoveryIndexFailurePolicyTest,LocalTreePresentationAndroidTest,SafRecursiveTreeCopyAndroidTest,GithubPublicDirectoryAndroidTest,RecoveryRefreshUiTest',
       prefix + ' SafRecursiveScannerAndroidTest, SafRecursiveTreeCopyAndroidTest',
       prefix + ' SafRecursiveScannerAndroidTest,$(echo hacked)',
-      prefix + ' SafRecursiveScannerAndroidTest\\nSafRecursiveTreeCopyAndroidTest',
+      prefix + ' SafRecursiveScannerAndroidTest\nSafRecursiveTreeCopyAndroidTest',
     ]) {
       const denied = run(invalid);
       assert.notEqual(denied.result.status, 0, invalid);
@@ -194,8 +194,8 @@ test('PR emulator receipts fail closed for missing selectors and missing reports
   const end = workflow.indexOf('      - name: Summarize failed tests without disclosing provider content', start);
   assert.ok(start >= 0 && end > start, 'receipt validation precedes artifact publication');
   const step = workflow.slice(start, end);
-  const raw = step.slice(step.indexOf('        run: |\\n') + '        run: |\\n'.length);
-  const script = raw.split('\\n').map((line) => line.startsWith('          ') ? line.slice(10) : line).join('\\n');
+  const raw = step.slice(step.indexOf('        run: |\n') + '        run: |\n'.length);
+  const script = raw.split('\n').map((line) => line.startsWith('          ') ? line.slice(10) : line).join('\n');
   const { spawnSync } = require('node:child_process');
   const os = require('node:os');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'expository-emulator-receipt-'));
