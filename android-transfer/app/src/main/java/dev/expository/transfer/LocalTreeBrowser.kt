@@ -250,6 +250,25 @@ internal object LocalTreeReader {
     }
 }
 
+/** In-memory only, pane-owned presentation preferences across compact A/B switches.
+ * Provider grants and actual tree/selection state remain owned by TransferActivity.
+ * Never save names/filters/URI authorities in SavedState or on disk.
+ */
+internal class LocalTreePanePresentationState {
+    private data class FilterScope(val tree: Uri?, val folder: String?, val text: String)
+    private var filterScope by mutableStateOf(FilterScope(null, null, ""))
+    var sortMode by mutableStateOf(LocalTreeSort.NAME)
+    var descending by mutableStateOf(false)
+
+    fun filterFor(tree: Uri?, folder: String?): String =
+        if (filterScope.tree == tree && filterScope.folder == folder)
+            filterScope.text else ""
+
+    fun changeFilter(tree: Uri?, folder: String?, text: String) {
+        filterScope = FilterScope(tree, folder, text)
+    }
+}
+
 /** One real independent Android SAF tree. No copying or moving is exposed yet. */
 @Composable
 internal fun LocalTreePane(
@@ -268,11 +287,14 @@ internal fun LocalTreePane(
     /** Only an explicit directory request; no implicit provider write. */
     onCopyFolder: ((TreeEntry) -> Unit)? = null,
     /** Contextual Copy feedback belongs beside the source browser control. */
-    copyFeedback: String? = null
+    copyFeedback: String? = null,
+    /** Optional in-memory state owner for the compact dual-pane presentation. */
+    presentationState: LocalTreePanePresentationState? = null
 ) {
-    var fileFilter by remember(state.treeUri, state.folderId) { mutableStateOf("") }
-    var sortMode by remember { mutableStateOf(LocalTreeSort.NAME) }
-    var descending by remember { mutableStateOf(false) }
+    val ui = presentationState ?: remember { LocalTreePanePresentationState() }
+    val fileFilter = ui.filterFor(state.treeUri, state.folderId)
+    val sortMode = ui.sortMode
+    val descending = ui.descending
     var ancestorMenuExpanded by remember(state.treeUri, state.folderId) {
         mutableStateOf(false)
     }
@@ -384,7 +406,7 @@ internal fun LocalTreePane(
                 style = MaterialTheme.typography.bodySmall)
             SafFolderCreateCard(state, enabled, onRefresh)
             OutlinedTextField(
-                value = fileFilter, onValueChange = { fileFilter = it },
+                value = fileFilter, onValueChange = { ui.changeFilter(state.treeUri, state.folderId, it) },
                 label = { Text("Filter observed names") },
                 singleLine = true, enabled = enabled,
                 modifier = Modifier.fillMaxWidth())
@@ -421,10 +443,10 @@ internal fun LocalTreePane(
                         modifier = Modifier.heightIn(min = 48.dp),
                         onClick = {
                             if (sortMode != choice) {
-                                sortMode = choice
+                                ui.sortMode = choice
                                 // Newest naturally starts with most recent;
                                 // all other sort modes start ascending.
-                                descending = choice == LocalTreeSort.NEWEST
+                                ui.descending = choice == LocalTreeSort.NEWEST
                             }
                         }) {
                         Text((if (sortMode == choice) "✓ " else "") +
@@ -439,7 +461,7 @@ internal fun LocalTreePane(
                 Button(enabled = enabled,
                     modifier = Modifier.heightIn(min = 48.dp)
                         .testTag("saf-sort-direction"),
-                    onClick = { descending = !descending }) {
+                    onClick = { ui.descending = !descending }) {
                     Text(if (descending) "Descending ↓" else "Ascending ↑")
                 }
             }

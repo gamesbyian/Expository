@@ -33,6 +33,30 @@ class LocalTreePresentationAndroidTest {
         TreeEntry("h", ".hidden", false, 0)
     )
 
+    @Test fun inMemoryDualPaneFiltersSurviveTabSwitchButNeverCrossFolderScope() {
+        val a = LocalTreePanePresentationState()
+        val b = LocalTreePanePresentationState()
+        val source = Uri.parse("content://fixture.a/tree/root")
+        val target = Uri.parse("content://fixture.b/tree/other")
+        a.changeFilter(source, "root", "alpha")
+        a.sortMode = LocalTreeSort.SIZE
+        a.descending = true
+        b.changeFilter(target, "other", "beta")
+
+        // Unmounting and reentering the phone tab keeps the same RAM owner.
+        assertEquals("alpha", a.filterFor(source, "root"))
+        assertEquals("beta", b.filterFor(target, "other"))
+        assertEquals(LocalTreeSort.SIZE, a.sortMode)
+        assertTrue(a.descending)
+        // A different folder or provider must never inherit a stale filter.
+        assertEquals("", a.filterFor(source, "sibling"))
+        assertEquals("", a.filterFor(target, "root"))
+        a.changeFilter(target, "root", "new")
+        assertEquals("new", a.filterFor(target, "root"))
+        assertEquals("", a.filterFor(source, "root"))
+        assertEquals("beta", b.filterFor(target, "other"))
+    }
+
     @Test fun copyDestinationRefreshInvalidatesSelectionAndIncompleteEvidence() {
         val old = LocalTreeBrowseState(
             treeUri = Uri.parse("content://provider.one/tree/root"),

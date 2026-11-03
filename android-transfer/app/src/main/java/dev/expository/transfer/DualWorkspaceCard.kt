@@ -39,9 +39,11 @@ import dev.expository.transfer.saf.TreeCopyPreflight
  *
  * Local trees are backed by real read-scoped Android DocumentsProviders.
  * Both panes may open independent pinned SFTP, trusted FTPS, opt-in read-only FTP or public read-only GitHub sessions.
- * The inactive phone tab stays composed: the other session is not silently
- * disconnected by changing tabs. A/B Swap moves the same remembered session
- * with its endpoint using Compose movable content, not a new connection.
+ * Inactive authenticated remote tabs stay composed (not disconnected).
+ * Inactive local SAF panes can unmount: folder grants, browse selection,
+ * and scroll remain in the outer workspace; filter/sort are held in RAM by
+ * this card. A/B Swap moves authenticated sessions with their endpoints
+ * using Compose movable content, not a new connection.
  * The separate Single view remains available. Only reviewed, journaled
  * local-to-local Copy and explicitly requested bounded Local-to-SFTP
  * uploads can run between panes. Other remote cross-pane writes remain gated.
@@ -98,6 +100,10 @@ internal fun DualWorkspaceCard(
     var selectedRemoteBatchB by remember { mutableStateOf<PeerSftpBatchSource?>(null) }
     var relayingFromSession by remember { mutableStateOf<String?>(null) }
     val workspaceBusy = busy || relayingFromSession != null
+    // Presentation preferences are private RAM state outside the inner local
+    // panes. Unmounting an inactive SAF pane never discards its filter/sort.
+    val presentationA = remember { LocalTreePanePresentationState() }
+    val presentationB = remember { LocalTreePanePresentationState() }
     val connectionA = remember {
         movableContentOf<BrowseEndpoint, RemotePeerContext> { endpoint, peer ->
             when (endpoint) {
@@ -246,6 +252,8 @@ internal fun DualWorkspaceCard(
                         state = tree,
                         scroll = scroll,
                         enabled = !workspaceBusy,
+                        presentationState = if (which == WorkspacePane.A)
+                            presentationA else presentationB,
                         onPick = { onPick(which) },
                         onOpen = { entry ->
                             onNavigate(which, tree.crumbs +
@@ -355,14 +363,24 @@ internal fun DualWorkspaceCard(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // Actual SAF tree identity/permissions/listing, scroll and
+                    // in-memory filters live above this presentation. A hidden
+                    // local view has no remote session to retain: do not leave
+                    // its Material3 child-semantics nodes in a deactivated
+                    // subcomposition while the destination refreshes. Real
+                    // SFTP/FTPS sessions still remain composed when inactive.
+                    val inactiveA = compact && workspace.activeDual != WorkspacePane.A
+                    val inactiveB = compact && workspace.activeDual != WorkspacePane.B
+                    val keepA = !inactiveA || !workspace.a.endpoint.isSaf
+                    val keepB = !inactiveB || !workspace.b.endpoint.isSaf
                     Box(
                         Modifier.fillMaxWidth(if (compact) 1f else 0.48f)
-                            .retainInvisible(compact && workspace.activeDual != WorkspacePane.A)
-                    ) { endpointPane(WorkspacePane.A) }
+                            .retainInvisible(inactiveA)
+                    ) { if (keepA) endpointPane(WorkspacePane.A) }
                     Box(
                         Modifier.fillMaxWidth(if (compact) 1f else 0.48f)
-                            .retainInvisible(compact && workspace.activeDual != WorkspacePane.B)
-                    ) { endpointPane(WorkspacePane.B) }
+                            .retainInvisible(inactiveB)
+                    ) { if (keepB) endpointPane(WorkspacePane.B) }
                 }
             }
         }
