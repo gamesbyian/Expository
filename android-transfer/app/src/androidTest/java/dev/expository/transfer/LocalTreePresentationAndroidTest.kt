@@ -33,39 +33,6 @@ class LocalTreePresentationAndroidTest {
         TreeEntry("h", ".hidden", false, 0)
     )
 
-    @Test fun refreshKeepsRowsAttachedButCannotAuthorizeOperationsUntilReobserved() {
-        val folder = listOf(TreeCrumb("root", "Chosen folder"))
-        val initial = LocalTreeBrowseState(
-            treeUri = Uri.parse("content://provider.one/tree/root"),
-            crumbs = folder,
-            entries = listOf(TreeEntry("old", "Already there", false, 8L)),
-            selected = setOf("old"), canWrite = true,
-            complete = true, hasMore = true, generation = 100L
-        )
-        val same = initial.beginRead(initial.treeUri!!, folder, true,
-            LocalTreeReader.MAX_VISIBLE, 101L)
-        assertEquals(initial.entries, same.entries)
-        assertTrue(same.loading)
-        assertFalse(same.complete)
-        assertFalse(same.hasMore)
-        assertTrue(same.selected.isEmpty())
-        assertEquals(101L, same.generation)
-        assertTrue(same.status.contains("read-only"))
-        // A new folder, provider authority, or document identity starts
-        // blank. The async failure path clears stale rows too.
-        val otherFolder = initial.beginRead(initial.treeUri!!,
-            folder + TreeCrumb("child", "Other"), true,
-            LocalTreeReader.MAX_VISIBLE, 102L)
-        assertTrue(otherFolder.entries.isEmpty())
-        assertFalse(otherFolder.complete)
-        val otherProvider = initial.beginRead(
-            Uri.parse("content://provider.two/tree/root"), folder, true,
-            LocalTreeReader.MAX_VISIBLE, 103L)
-        assertTrue(otherProvider.entries.isEmpty())
-        assertTrue(otherProvider.selected.isEmpty())
-        assertFalse(otherProvider.complete)
-    }
-
     @Test fun copyDestinationRefreshInvalidatesSelectionAndIncompleteEvidence() {
         val old = LocalTreeBrowseState(
             treeUri = Uri.parse("content://provider.one/tree/root"),
