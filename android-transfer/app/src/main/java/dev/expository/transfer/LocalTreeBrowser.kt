@@ -95,6 +95,27 @@ internal data class LocalTreeBrowseState(
     val folderId: String? get() = crumbs.lastOrNull()?.documentId
 
     /**
+     * Keep a same-folder UI subtree attached during a real provider refresh.
+     * Stale rows cannot authorize operations: selection and complete/hasMore
+     * are revoked until the new listing arrives. Changing tree or folder
+     * never carries names across authorities.
+     */
+    fun beginRead(uri: Uri, path: List<TreeCrumb>, writable: Boolean,
+        limit: Int, readGeneration: Long): LocalTreeBrowseState {
+        val sameFolder = treeUri == uri && crumbs == path
+        return copy(
+            treeUri = uri, crumbs = path,
+            entries = if (sameFolder) entries else emptyList(),
+            selected = emptySet(), canWrite = writable,
+            loading = true, complete = false, hasMore = false,
+            visibleLimit = limit, generation = readGeneration,
+            status = if (sameFolder && entries.isNotEmpty())
+                "Refreshing Android folder… previous names are read-only until rechecked."
+            else "Reading this Android folder…"
+        )
+    }
+
+    /**
      * An ancestor must be an exact prefix of the currently selected provider
      * document IDs. Never reconstruct an ancestor from a display path, decoded
      * URI or matching folder title; those are not stable SAF identities.
