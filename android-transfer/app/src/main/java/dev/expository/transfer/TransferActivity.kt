@@ -377,19 +377,7 @@ private fun DeveloperPreview(
             proposedCopy = null
             recursiveProposal = null
             val cleared = model.pane(which).clearSelection()
-            val updated = latest.copy(
-                selected = emptySet(), loading = false, generation = generation,
-                entries = listing?.children ?: emptyList(),
-                complete = listing?.complete == true,
-                hasMore = listing?.hasMore == true,
-                status = if (listing == null)
-                    "Destination listing needs a new Refresh; Copy receipt is separate."
-                else if (listing.complete)
-                    "Folder opened. Scoped Android browser; " +
-                        listing.children.size + " visible items."
-                else "Destination listing incomplete; no write authorized."
-            )
-            replaceTree(which, updated)
+            replaceTree(which, latest.afterCopyObservation(listing, generation))
             model = model.update(which, cleared)
             if (listing != null) {
                 val location = LocationRef(
