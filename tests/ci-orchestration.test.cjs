@@ -202,7 +202,7 @@ test('PR emulator receipts fail closed for missing selectors and missing reports
   const location = path.join(dir, 'android-transfer/app/build/outputs/androidTest-results/connected');
   const run = (classes) => spawnSync('bash', ['-c', script], {
     cwd: dir,
-    env: { ...process.env, REQUESTED_CLASSES: classes },
+    env: { ...process.env, TARGET_TEST_CLASS: classes },
     encoding: 'utf8',
   });
   const a = 'dev.expository.transfer.SafRecursiveScannerAndroidTest';
