@@ -339,7 +339,7 @@ private fun DeveloperPreview(
         val before = tree(which)
         val oldLocation = model.pane(which).current?.location
         if (!copyBusy || copyPermit !== permit ||
-            oldLocation?.key != approved.destinationKey ||
+            oldLocation == null || oldLocation.key != approved.destinationKey ||
             oldLocation.revision != approved.destinationRevision ||
             before.generation != approved.destinationGeneration ||
             before.treeUri != request.destinationTree ||
@@ -365,7 +365,7 @@ private fun DeveloperPreview(
             model.view != WorkspaceView.DUAL ||
             currentShareEpoch() != approved.shareEpoch ||
             model.pane(which).endpoint != approved.destinationEndpoint ||
-            latestVisit?.key != approved.destinationKey ||
+            latestVisit == null || latestVisit.key != approved.destinationKey ||
             latestVisit.revision != approved.destinationRevision ||
             latest.generation != approved.destinationGeneration ||
             latest.treeUri != request.destinationTree ||
