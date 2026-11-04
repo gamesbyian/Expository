@@ -32,6 +32,27 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 @RunWith(AndroidJUnit4::class)
 class AndroidContentProviderCopyTest {
+    @Test fun sharedSftpReviewBindsSourceToProcessShareEpochWithoutLeakingUris() {
+        val uri = Uri.parse("content://synthetic.private.provider/document/sensitive-record")
+        val observation = dev.expository.transfer.saf.SafDocumentObservation(
+            "private-record.bin", 17L, 123L, "application/octet-stream")
+        val picker = requireNotNull(PendingPickedSftpUpload.freeze(
+            listOf(uri), listOf(observation), "pinned-test-session", "/private"))
+        assertEquals(null, picker.sourceShareEpoch)
+        val shared = picker.copy(sourceShareEpoch = 19L)
+        assertEquals(19L, shared.sourceShareEpoch)
+        assertTrue(shared.stillMatches("pinned-test-session", "/private", listOf(uri)))
+        assertFalse(shared.stillMatches("different-session", "/private", listOf(uri)))
+        assertFalse(shared.stillMatches("pinned-test-session", "/", listOf(uri)))
+        assertFalse(shared.toString().contains("private-record"))
+        assertFalse(shared.toString().contains("pinned-test-session"))
+        assertFalse(shared.items.single().toString().contains("sensitive-record"))
+        // A new share epoch cannot be substituted for this original review;
+        // the UI compares against the activity's live monotonic epoch.
+        assertTrue(shared.sourceShareEpoch != 20L)
+        assertEquals(1, shared.uris.size)
+    }
+
     @Test fun newlyCreatedSafCopyMustRemainAnExactDirectChild() {
         val observed = TreeEntry("id-new", "Destination.txt", false, 12L)
         val matching = TreeListing(listOf(
