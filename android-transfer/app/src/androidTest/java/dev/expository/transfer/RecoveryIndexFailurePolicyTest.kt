@@ -19,6 +19,57 @@ import org.junit.runner.RunWith
 /** No real journal files are touched; tests input enumeration failures. */
 @RunWith(AndroidJUnit4::class)
 class RecoveryIndexFailurePolicyTest {
+
+    @Test fun hiddenReviewCountDoesNotDuplicateAnAlreadyVisibleSidecarWarning() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "hidden-recovery-count-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val digest = "d".repeat(64)
+        val journal = DurableAttemptJournal(
+            dev.expository.transfer.journal.AndroidAtomicAttemptStorage(isolated, digest))
+        try {
+            dev.expository.transfer.journal.ProtectedRecoveryContextStore(isolated)
+                .recordNew(digest, dev.expository.transfer.journal.ProtectedRecoveryContext(
+                    "SAF_DUAL_COPY", "Synthetic source", "Synthetic destination",
+                    "test.provider"))
+            journal.confirm(digest)
+            journal.beginAttempt(digest, "hidden_review_count_test")
+            // Corrupted encrypted evidence is visible as a warning on THIS
+            // attempt. It must not invent another unlisted review record.
+            File(sandbox, "transfer_source_bytes_v1_" + digest)
+                .writeBytes(byteArrayOf(1, 2, 3))
+            val shown = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, shown.requiresReview)
+            assertEquals(1, shown.damagedOrUnrecognized)
+            assertEquals(1, shown.reviewReferences.size)
+            assertEquals(0, shown.additionalReviewCount)
+            assertTrue(shown.inspectionReference(digest)?.transferredBytesWarning != null)
+
+            // An unparseable sidecar filename has no trustworthy reference,
+            // and therefore DOES contribute one undisplayed anomaly.
+            File(sandbox, "transfer_source_bytes_v1_invalid").writeBytes(byteArrayOf(4))
+            val malformed = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(2, malformed.damagedOrUnrecognized)
+            assertEquals(1, malformed.additionalReviewCount)
+
+            // An orphan with a well-formed digest gets its own displayed
+            // reference; it must not also inflate the unlisted count.
+            File(sandbox, "transfer_created_child_v1_" + "e".repeat(64))
+                .writeBytes(byteArrayOf(5))
+            val orphan = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(3, orphan.damagedOrUnrecognized)
+            assertEquals(2, orphan.reviewReferences.size)
+            assertEquals(1, orphan.additionalReviewCount)
+            assertEquals(JournalState.ATTEMPT_RECORDED, journal.current()?.state)
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
     @Test fun completedByteWitnessRemainsEncryptedReadOnlyAndNeverResolvesJournal() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val sandbox = File(app.cacheDir, "completed-bytes-evidence-" + UUID.randomUUID())
