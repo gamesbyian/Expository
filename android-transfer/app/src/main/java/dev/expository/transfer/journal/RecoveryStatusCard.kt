@@ -223,6 +223,17 @@ fun RecoveryStatusCard() {
                         entry.createdChildWarning?.let { warning ->
                             Text(warning, style = MaterialTheme.typography.bodySmall)
                         }
+                        entry.transferredBytesWarning?.let { warning ->
+                            Text(warning, style = MaterialTheme.typography.bodySmall)
+                        }
+                        entry.transferredBytes?.let { evidence ->
+                            Text("The source stream and output closed after " +
+                                evidence.byteCount + " bytes. An encrypted SHA-256 " +
+                                "of those source bytes was saved before readback. " +
+                                "This record alone does NOT verify the destination " +
+                                "after interruption or authorize replay or cleanup.",
+                                style = MaterialTheme.typography.bodySmall)
+                        }
                         if (entry.createdChild != null) {
                             Text("An encrypted post-create child identity was recorded. " +
                                 "Re-select its exact immediate parent folder to compare " +
