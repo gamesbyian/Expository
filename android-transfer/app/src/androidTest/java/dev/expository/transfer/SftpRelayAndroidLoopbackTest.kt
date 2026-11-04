@@ -6,6 +6,7 @@ import android.content.ContentValues
 import android.provider.MediaStore
 import android.net.Uri
 import dev.expository.transfer.engine.CopyProof
+import dev.expository.transfer.engine.ClaimedCopyDispatch
 import dev.expository.transfer.engine.DurableAttemptJournal
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 import dev.expository.transfer.planner.JournalState
@@ -436,8 +437,24 @@ class SftpRelayAndroidLoopbackTest {
                     context.applicationContext, reviewed.plan.digest)).current())
                 Files.delete(output)
                 assertFalse(Files.exists(output))
-                val result = uploader.copy(connected, reviewed,
-                    continueRequested = { true })
+                val dispatch = requireNotNull(ClaimedCopyDispatch.claim { true })
+                val outcome = dispatch.run(1, { true }) { index ->
+                    assertEquals(0, index)
+                    ClaimedCopyDispatch.Prepared(reviewed.plan.digest) {
+                        uploader.copy(connected, reviewed,
+                            continueRequested = { true })
+                    }
+                }
+                assertTrue("Fresh, explicitly claimed remote upload must be verified",
+                    outcome.outcome.complete)
+                assertEquals(1, outcome.outcome.verifiedItems)
+                assertEquals(bytes.size.toLong(), outcome.outcome.verifiedBytes)
+                val result = outcome.receipts.single()
+                assertTrue("One-shot approval cannot be replayed", runCatching {
+                    dispatch.run(1, { true }) {
+                        error("A consumed upload review cannot execute again")
+                    }
+                }.isFailure)
                 assertEquals("Android→SFTP receipt " + result.reason,
                     CopyProof.BYTES_VERIFIED, result.proof)
                 assertEquals(bytes.size.toLong(), result.bytesWritten)
