@@ -19,6 +19,95 @@ import org.junit.runner.RunWith
 /** No real journal files are touched; tests input enumeration failures. */
 @RunWith(AndroidJUnit4::class)
 class RecoveryIndexFailurePolicyTest {
+    @Test fun createdChildWitnessIsEncryptedBoundToOneJournalAndReadOnly() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "created-child-evidence-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val digest = UUID.randomUUID().toString().replace("-", "").repeat(2)
+        val tree = android.net.Uri.parse("content://test.copy.target.scoped/tree/target-root")
+        val wrongParent = android.net.Uri.parse(
+            "content://test.copy.target.scoped/tree/another-parent")
+        val identity = dev.expository.transfer.journal.RecoveryCreatedChildIdentity
+        val saved = identity.capture(tree, "target-root", "new-child-42",
+            "Episode.bin", directory = false)
+        fun listing(id: String) = TreeListing(
+            listOf(TreeEntry(id, "Episode.bin", false, 123L)), true)
+        try {
+            val store = dev.expository.transfer.journal.ProtectedCreatedChildWitnessStore(
+                isolated)
+            assertEquals(null, store.read(digest))
+            assertEquals(dev.expository.transfer.journal.CreatedChildRelation.NO_WITNESS,
+                identity.compare(null, tree, listing("new-child-42")))
+            store.recordNew(digest, saved)
+            assertEquals(saved, store.read(digest))
+            assertTrue(runCatching { store.recordNew(digest, saved) }.isFailure)
+            val orphan = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, orphan.damagedOrUnrecognized)
+            assertTrue(orphan.reviewReferences.single().status
+                .contains("Created-child witness has no matching attempt journal"))
+            val raw = File(sandbox, "transfer_created_child_v1_" + digest)
+            val encrypted = raw.readBytes()
+            val ciphertext = encrypted.toString(Charsets.ISO_8859_1)
+            assertTrue(!ciphertext.contains("Episode.bin") &&
+                !ciphertext.contains("new-child-42") &&
+                !ciphertext.contains(saved.childFingerprint))
+            assertTrue(!saved.toString().contains("Episode.bin"))
+            assertEquals(dev.expository.transfer.journal.CreatedChildRelation.SAME_RECORDED_CHILD_IDENTITY,
+                identity.compare(saved, tree, listing("new-child-42")))
+            assertEquals(dev.expository.transfer.journal.CreatedChildRelation.DIFFERENT_CHILD_IDENTITY,
+                identity.compare(saved, tree, listing("replaced-child")))
+            assertEquals(dev.expository.transfer.journal.CreatedChildRelation.DIFFERENT_DIRECT_PARENT,
+                identity.compare(saved, wrongParent, listing("new-child-42")))
+            assertEquals(dev.expository.transfer.journal.CreatedChildRelation.INCOMPLETE_PARENT, identity.compare(
+                saved, tree, TreeListing(emptyList(), false, true)))
+            assertEquals(dev.expository.transfer.journal.CreatedChildRelation.MISSING_OR_AMBIGUOUS_CHILD, identity.compare(
+                saved, tree, TreeListing(emptyList(), true)))
+            assertEquals(dev.expository.transfer.journal.CreatedChildRelation.MISSING_OR_AMBIGUOUS_CHILD, identity.compare(
+                saved, tree, TreeListing(listOf(
+                    TreeEntry("new-child-42", "Episode.bin", false, 123L),
+                    TreeEntry("other", "episode.bin", false, 1L)), true)))
+
+            dev.expository.transfer.journal.ProtectedRecoveryContextStore(isolated)
+                .recordNew(digest, dev.expository.transfer.journal.ProtectedRecoveryContext(
+                    "SAF_DUAL_COPY", "Private source", "Private target",
+                    "test.copy.target.scoped"))
+            val journal = DurableAttemptJournal(
+                dev.expository.transfer.journal.AndroidAtomicAttemptStorage(isolated, digest))
+            journal.confirm(digest)
+            journal.beginAttempt(digest, "created_child_test")
+            val observed = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, observed.requiresReview)
+            assertEquals(saved, observed.inspectionReference(digest)?.createdChild)
+            assertEquals(0, observed.damagedOrUnrecognized)
+            assertEquals(JournalState.ATTEMPT_RECORDED, journal.current()?.state)
+            assertArrayEquals(encrypted, raw.readBytes())
+            assertTrue(runCatching {
+                journal.beginAttempt(digest, "no_duplicate_write")
+            }.isFailure)
+
+            val sidecar = File(raw.path + ".new")
+            sidecar.writeBytes(byteArrayOf(1, 2, 3))
+            val interrupted = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(null, interrupted.inspectionReference(digest)?.createdChild)
+            assertTrue(interrupted.inspectionReference(digest)
+                ?.createdChildWarning?.contains("unreadable") == true)
+            assertArrayEquals(encrypted, raw.readBytes())
+            assertArrayEquals(byteArrayOf(1, 2, 3), sidecar.readBytes())
+            sidecar.delete()
+
+            raw.writeBytes(encrypted.copyOf().also { it[it.lastIndex] =
+                (it.last().toInt() xor 1).toByte() })
+            assertTrue(runCatching { store.read(digest) }.isFailure)
+            assertEquals(1, AttemptRecoveryIndex.recover(isolated).requiresReview)
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
     @Test fun encryptedTreeRootWitnessDistinguishesSameProviderDifferentRoot() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val sandbox = File(app.cacheDir, "root-witness-recovery-" + UUID.randomUUID())

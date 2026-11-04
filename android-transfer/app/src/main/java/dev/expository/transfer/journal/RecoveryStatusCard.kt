@@ -67,9 +67,11 @@ fun RecoveryStatusCard() {
             val revision = ticket.second
             inspectionMessage = "Reading the newly selected folder without changing any files…"
             scope.launch {
+                val reviewed = status?.inspectionReference(ticket.first)
                 val observed = withContext(Dispatchers.IO) {
                     runCatching {
-                        RecoveryManualInspection.inspect(context.contentResolver, uri)
+                        RecoveryManualInspection.inspect(context.contentResolver,
+                            uri, reviewed?.createdChild)
                     }
                 }
                 if (inspectionRevision != revision) return@launch
@@ -96,9 +98,9 @@ fun RecoveryStatusCard() {
                                 "original selection. Created children, bytes and attempt " +
                                 "outcome are NOT verified. No retry or cleanup."
                             RecoveryTreeRootRelation.DIFFERENT_RECORDED_ROOT ->
-                                "This is a different provider or tree root than the " +
-                                "encrypted original selection. Do not treat it as the " +
-                                "previous destination. No retry or cleanup."
+                                "This selection is not the original tree root; it may be " +
+                                "a nested direct parent. Only separate child identity " +
+                                "evidence can identify a created item. No retry or cleanup."
                             RecoveryTreeRootRelation.UNDETERMINED ->
                                 "Saved tree-root identity cannot be compared. " +
                                 "No retry or cleanup."
@@ -117,6 +119,28 @@ fun RecoveryStatusCard() {
                                         "This record has no comparable tree-root identity. " +
                                         "Original destination remains unproven. No retry or cleanup."
                                 }
+                        } + " " + when (inspectionListing?.createdChildRelation) {
+                            CreatedChildRelation.SAME_RECORDED_CHILD_IDENTITY ->
+                                "The freshly listed direct parent contains the SAME " +
+                                "recorded created-child ID and name. File bytes, " +
+                                "provider version and interrupted outcome remain UNVERIFIED."
+                            CreatedChildRelation.DIFFERENT_CHILD_IDENTITY ->
+                                "The name exists, but the created-child ID differs from " +
+                                "the protected post-create witness. No replay or cleanup."
+                            CreatedChildRelation.DIFFERENT_DIRECT_PARENT ->
+                                "For created-child inspection, re-select its exact direct " +
+                                "parent folder. This selection cannot establish child identity."
+                            CreatedChildRelation.MISSING_OR_AMBIGUOUS_CHILD ->
+                                "The recorded child is not uniquely identifiable in the " +
+                                "complete fresh parent listing. Its outcome remains uncertain."
+                            CreatedChildRelation.INCOMPLETE_PARENT ->
+                                "The parent listing is incomplete; absence and child identity " +
+                                "cannot be established."
+                            CreatedChildRelation.UNDETERMINED ->
+                                "The created-child witness cannot be compared safely."
+                            CreatedChildRelation.NO_WITNESS, null ->
+                                "No comparable created-child identity was saved. A create " +
+                                "might still have happened before its response was received."
                         }
                 }
             }
@@ -195,6 +219,15 @@ fun RecoveryStatusCard() {
                         }
                         entry.contextWarning?.let { warning ->
                             Text(warning, style = MaterialTheme.typography.bodySmall)
+                        }
+                        entry.createdChildWarning?.let { warning ->
+                            Text(warning, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (entry.createdChild != null) {
+                            Text("An encrypted post-create child identity was recorded. " +
+                                "Re-select its exact immediate parent folder to compare " +
+                                "the observed child ID. Matching identity is not byte proof.",
+                                style = MaterialTheme.typography.bodySmall)
                         }
                         if (entry.context != null) {
                             Button(

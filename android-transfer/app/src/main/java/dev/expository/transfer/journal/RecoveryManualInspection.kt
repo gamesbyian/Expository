@@ -15,7 +15,8 @@ import dev.expository.transfer.LocalTreeReader
 internal data class ManualRecoveryListing(
     val observedChildren: Int,
     val complete: Boolean,
-    val sampleNames: List<String>
+    val sampleNames: List<String>,
+    val createdChildRelation: CreatedChildRelation = CreatedChildRelation.NO_WITNESS
 ) {
     // An operator can view these names inside the transient UI, but an
     // implicit data-class toString should not disclose them to logcat.
@@ -29,10 +30,15 @@ internal object RecoveryManualInspection {
             flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0
 
     /** May perform slow IPC; invoke off the UI thread. */
-    fun inspect(resolver: ContentResolver, tree: Uri): ManualRecoveryListing {
+    fun inspect(resolver: ContentResolver, tree: Uri,
+        createdChild: ProtectedCreatedChildWitness? = null): ManualRecoveryListing {
         require(LocalTreeReader.validTree(tree)) { "INVALID_INSPECTION_TREE" }
+        // A created-child check requires a complete direct-parent listing:
+        // scanning only the first UI page would falsely imply absence.
+        val limit = if (createdChild == null) LocalTreeReader.MAX_VISIBLE
+            else LocalTreeReader.MAX_BROWSE
         val listing = LocalTreeReader.list(resolver, tree,
-            LocalTreeReader.rootId(tree), LocalTreeReader.MAX_VISIBLE)
+            LocalTreeReader.rootId(tree), limit)
         // Display provider-supplied names only transiently, sanitized and
         // bounded. Never infer absence from a truncated/incomplete cursor.
         val names = listing.children.take(8).map { entry ->
@@ -40,7 +46,9 @@ internal object RecoveryManualInspection {
                 if (ch.code < 32 || ch.code == 127) ' ' else ch
             }.joinToString("").trim().take(80).ifBlank { "Unnamed item" }
         }
+        val relation = RecoveryCreatedChildIdentity.compare(
+            createdChild, tree, listing)
         return ManualRecoveryListing(listing.children.size,
-            listing.complete && !listing.hasMore, names)
+            listing.complete && !listing.hasMore, names, relation)
     }
 }

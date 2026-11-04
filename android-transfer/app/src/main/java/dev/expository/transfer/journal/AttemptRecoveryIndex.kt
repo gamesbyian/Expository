@@ -13,12 +13,15 @@ data class RecoveryReviewReference(
     val context: ProtectedRecoveryContext? = null,
     val contextWarning: String? = null,
     /** Full private key for in-memory picker-result binding only. Never display it. */
-    internal val recordKey: String? = null
+    internal val recordKey: String? = null,
+    /** Post-create identity is never a replay or VERIFIED receipt. */
+    internal val createdChild: ProtectedCreatedChildWitness? = null,
+    val createdChildWarning: String? = null
 ) {
     // Never serialize a decrypted display hint, private record suffix or
     // provider-returned context into incidental Kotlin debug output.
     override fun toString(): String =
-        "RecoveryReviewReference(hasContext=${context != null},hasWarning=${contextWarning != null})"
+        "RecoveryReviewReference(hasContext=${context != null},hasWarning=${contextWarning != null},hasCreatedChild=${createdChild != null})"
 }
 
 data class RecoveryCounts(
@@ -56,6 +59,8 @@ object AttemptRecoveryIndex {
     private val filePattern = Regex("transfer_attempt_([0-9a-f]{64})(?:\\.bak|\\.new)?")
     private val contextPattern =
         Regex("transfer_recovery_context_v1_([0-9a-f]{64})(?:\\.bak|\\.new)?")
+    private val createdChildPattern =
+        Regex("transfer_created_child_v1_([0-9a-f]{64})(?:\\.bak|\\.new)?")
     private const val MAX_REVIEW_REFERENCES = 32
 
     /**
@@ -87,16 +92,33 @@ object AttemptRecoveryIndex {
                 !contextPattern.matches(it)
         }
 
+    internal fun createdChildDigests(names: List<String>): List<String> =
+        names.mapNotNull {
+            createdChildPattern.matchEntire(it)?.groupValues?.get(1)
+        }.distinct()
+
+    internal fun malformedCreatedChildCount(names: List<String>): Int =
+        names.count {
+            it.startsWith("transfer_created_child_v1_") &&
+                !createdChildPattern.matches(it)
+        }
+
     fun recover(context: Context): RecoveryCounts {
         val names = context.noBackupFilesDir.listFiles()?.map { it.name }
             ?: throw IOException("JOURNAL_DIRECTORY_UNREADABLE")
         val digests = journalDigests(names).sorted()
         val details = ArrayList<RecoveryReviewReference>(MAX_REVIEW_REFERENCES)
+        var damaged = malformedJournalCount(names) + malformedContextCount(names) +
+            malformedCreatedChildCount(names)
         fun reference(digest: String, status: String) {
             if (details.size >= MAX_REVIEW_REFERENCES) return
             val hint = runCatching {
                 ProtectedRecoveryContextStore(context).read(digest)
             }
+            val child = runCatching {
+                ProtectedCreatedChildWitnessStore(context).read(digest)
+            }
+            if (child.isFailure) damaged++
             details += RecoveryReviewReference(digest.takeLast(12), status,
                 context = hint.getOrNull(),
                 contextWarning = if (hint.isFailure)
@@ -104,23 +126,33 @@ object AttemptRecoveryIndex {
                 else if (hint.getOrNull() == null)
                     "Older record without saved destination context."
                 else null,
-                recordKey = digest)
+                recordKey = digest,
+                createdChild = child.getOrNull(),
+                createdChildWarning = if (child.isFailure)
+                    "Saved created-child identity unreadable; the destination may still exist."
+                else null)
         }
         var uncertain = 0
         var verified = 0
         var notStarted = 0
-        var damaged = malformedJournalCount(names) + malformedContextCount(names)
         val journalKeys = digests.toHashSet()
         // A protected context is committed before its neutral journal. A crash
         // between those independent writes must not masquerade as "no history".
         // Never decrypt orphan metadata or invent a missing write receipt.
-        for (orphan in contextDigests(names).filterNot { it in journalKeys }.sorted()) {
+        val orphanContexts = contextDigests(names).toSet()
+        val orphanChildren = createdChildDigests(names).toSet()
+        for (orphan in (orphanContexts + orphanChildren)
+            .filterNot { it in journalKeys }.sorted()) {
             damaged++
             if (details.size < MAX_REVIEW_REFERENCES) {
                 details += RecoveryReviewReference(
                     orphan.takeLast(12),
-                    "Protected context has no matching attempt journal",
-                    contextWarning = "No attempt record exists. Do not retry or infer destination state from this hint.",
+                    if (orphan in orphanContexts)
+                        "Protected context has no matching attempt journal"
+                    else "Created-child witness has no matching attempt journal",
+                    contextWarning = if (orphan in orphanContexts)
+                        "No attempt record exists. Do not retry or infer destination state from this hint."
+                    else "An orphan created-child witness is not a transfer receipt. No retry or cleanup.",
                     recordKey = orphan
                 )
             }

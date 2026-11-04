@@ -11,6 +11,8 @@ import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 import dev.expository.transfer.journal.ProtectedRecoveryContext
 import dev.expository.transfer.journal.ProtectedRecoveryContextStore
 import dev.expository.transfer.journal.RecoveryTreeRootIdentity
+import dev.expository.transfer.journal.RecoveryCreatedChildIdentity
+import dev.expository.transfer.journal.ProtectedCreatedChildWitnessStore
 import dev.expository.transfer.planner.*
 import java.io.FileNotFoundException
 import java.io.InputStream
@@ -121,6 +123,23 @@ internal class SafRecursiveTreeCopy(
         // This map is intentionally ephemeral and populated ONLY after independently
         // verified directory creation; a display path alone never authorizes a write.
         private val createdFolders = HashMap<List<String>, String>()
+
+        private val stepIndices = approved.entries.mapIndexed { index, item ->
+            item.relativePath to index
+        }.toMap()
+
+        private fun recordCreatedChild(entry: RecursiveCopyEntry,
+            parentId: String, childId: String, directory: Boolean) {
+            // This separate encrypted sidecar is written after the provider's
+            // create response and before a file stream can write bytes. Its
+            // digest is exactly the neutral journal's opaque step filename.
+            val index = requireNotNull(stepIndices[entry.relativePath])
+            val key = hash(listOf("SAF_RECURSIVE_STEP_V1",
+                approved.digest, index.toString()))
+            ProtectedCreatedChildWitnessStore(appContext).recordNew(key,
+                RecoveryCreatedChildIdentity.capture(request.destinationTree,
+                    parentId, childId, entry.source.name, directory))
+        }
         private val deadline: Long = approved.entries.firstOrNull()
             ?.source?.location?.capabilities?.get(Capability.READ)?.expiresAtMillis ?: 0L
 
@@ -263,7 +282,10 @@ internal class SafRecursiveTreeCopy(
                 id.isNotBlank() && id != target.id && id !in oldIds) {
                 "DIRECTORY_CREATED_IDENTITY_UNVERIFIED"
             }
-            // Record the actual opaque ID only after the provider acknowledges it.
+            // An acknowledged create may precede provider/byte verification.
+            // Preserve the observed child identity independently for later
+            // READ-only operator review; an unavailable sidecar halts UNCERTAIN.
+            recordCreatedChild(entry, target.id, id, directory = true)
             createdFolders[entry.relativePath.toList()] = id
         }
 
@@ -388,6 +410,7 @@ internal class SafRecursiveTreeCopy(
                         request.destinationTree, fresh.id, LocalTreeReader.MAX_BROWSE)
                     SafNewDocumentIdentity.requireDirectChildForReadback(
                         entry.source.name, id, membership)
+                    recordCreatedChild(entry, fresh.id, id, directory = false)
                     return resolver.openOutputStream(uri, "w")
                         ?: throw FileNotFoundException("FILE_WRITE_STREAM_MISSING")
                 }
