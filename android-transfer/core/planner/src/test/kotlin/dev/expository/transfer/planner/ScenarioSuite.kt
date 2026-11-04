@@ -54,6 +54,29 @@ object ScenarioSuite {
         var cases = 0
         fun test(id: String, work: () -> Unit) { work(); cases++; println("PASS " + id) }
 
+        test("recovery picked provider authority is a read-only clue, never an identity proof") {
+            val same = RecoveryProviderReview.compare(
+                "com.example.documents", "com.example.documents")
+            check(same == RecoveryProviderRelation.SAME_AUTHORITY_ONLY)
+            val changed = RecoveryProviderReview.compare(
+                "com.example.documents", "com.other.documents")
+            check(changed == RecoveryProviderRelation.DIFFERENT_AUTHORITY)
+            for ((saved, picked) in listOf(
+                "Android document provider" to "com.example.documents",
+                "" to "com.example.documents",
+                "com.example.documents" to "",
+                "com.example.documents" to "COM.EXAMPLE.DOCUMENTS",
+                "com.example.documents" to "com.example.documents;other",
+                "legacy" to "com.example.documents",
+                "com.example.documents" to "com.example.documents\ncontrol"
+            )) {
+                check(RecoveryProviderReview.compare(saved, picked) ==
+                    RecoveryProviderRelation.INDETERMINATE)
+            }
+            // None of the three signals is a transfer outcome or capability.
+            check(RecoveryProviderRelation.entries.size == 3)
+        }
+
         test("N08 same-server COPY does not rename") {
             val l = remote()
             val dst = remote(folder = listOf("Movies"))

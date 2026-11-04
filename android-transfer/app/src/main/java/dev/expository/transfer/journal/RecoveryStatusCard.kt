@@ -23,6 +23,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import dev.expository.transfer.LocalTreeReader
+import dev.expository.transfer.planner.RecoveryProviderRelation
+import dev.expository.transfer.planner.RecoveryProviderReview
 import kotlinx.coroutines.launch
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -77,9 +79,27 @@ fun RecoveryStatusCard() {
                     inspectionListing = null
                 } else {
                     inspectionListing = observed.getOrNull()
+                    val savedAuthority = status?.reviewReferences?.firstOrNull {
+                        it.opaqueSuffix == ticket.first
+                    }?.context?.destinationProvider
+                    // This is an advisory based on a protected *display hint*,
+                    // not a provider attestation, folder identity or retry permit.
+                    val providerRelation = RecoveryProviderReview.compare(
+                        savedAuthority, uri.authority)
                     inspectionMessage = "Manual inspection for record …" + ticket.first +
-                        " used a fresh Android tree grant. The selected folder is NOT proven " +
-                        "to be the original destination; the journal remains unchanged."
+                        " used a fresh Android tree grant. " +
+                        when (providerRelation) {
+                            RecoveryProviderRelation.DIFFERENT_AUTHORITY ->
+                                "The selected provider authority differs from the original " +
+                                "journal hint. Check your selection. No retry or cleanup."
+                            RecoveryProviderRelation.SAME_AUTHORITY_ONLY ->
+                                "The provider authority matches the hint, but this does NOT " +
+                                "prove the original folder, bytes or attempt. No retry or cleanup."
+                            RecoveryProviderRelation.INDETERMINATE ->
+                                "Provider authority correspondence is unknown. The selected " +
+                                "folder is not proven to be the original destination. " +
+                                "No retry or cleanup."
+                        }
                 }
             }
         }
