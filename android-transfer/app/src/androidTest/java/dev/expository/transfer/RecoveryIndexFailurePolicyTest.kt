@@ -19,6 +19,79 @@ import org.junit.runner.RunWith
 /** No real journal files are touched; tests input enumeration failures. */
 @RunWith(AndroidJUnit4::class)
 class RecoveryIndexFailurePolicyTest {
+    @Test fun completedByteWitnessRemainsEncryptedReadOnlyAndNeverResolvesJournal() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "completed-bytes-evidence-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val digest = UUID.randomUUID().toString().replace("-", "").repeat(2)
+        val payload = "private source bytes were closed".toByteArray()
+        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(payload)
+        val hex = hash.joinToString("") { "%02x".format(it) }
+        val expected = dev.expository.transfer.journal.ProtectedTransferredByteEvidence(
+            payload.size.toLong(), hex)
+        try {
+            val store = dev.expository.transfer.journal.ProtectedTransferredBytesEvidenceStore(isolated)
+            assertEquals(null, store.read(digest))
+            assertTrue(runCatching { store.recordNew(digest, -1, hash) }.isFailure)
+            assertTrue(runCatching { store.recordNew(digest, 0, byteArrayOf(1)) }.isFailure)
+            store.recordNew(digest, payload.size.toLong(), hash)
+            assertEquals(expected, store.read(digest))
+            assertTrue(!expected.toString().contains(hex))
+            assertTrue(runCatching {
+                store.recordNew(digest, payload.size.toLong(), hash)
+            }.isFailure)
+            val record = File(sandbox, "transfer_source_bytes_v1_" + digest)
+            val encrypted = record.readBytes()
+            val encoded = encrypted.toString(Charsets.ISO_8859_1)
+            assertTrue(!encoded.contains(hex) && !encoded.contains("private source"))
+            assertEquals(1, AttemptRecoveryIndex.recover(isolated).damagedOrUnrecognized)
+            assertEquals(0, AttemptRecoveryIndex.recover(isolated).verifiedReceipts)
+            val contextStore = dev.expository.transfer.journal.ProtectedRecoveryContextStore(
+                isolated)
+            contextStore.recordNew(digest,
+                dev.expository.transfer.journal.ProtectedRecoveryContext(
+                    "SAF_DUAL_COPY", "Source", "Destination", "test.provider"))
+            val journal = DurableAttemptJournal(
+                dev.expository.transfer.journal.AndroidAtomicAttemptStorage(isolated, digest))
+            journal.confirm(digest)
+            journal.beginAttempt(digest, "source_bytes_test")
+            val review = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, review.requiresReview)
+            assertEquals(0, review.damagedOrUnrecognized)
+            assertEquals(expected, review.inspectionReference(digest)?.transferredBytes)
+            assertEquals(JournalState.ATTEMPT_RECORDED, journal.current()?.state)
+            assertArrayEquals(encrypted, record.readBytes())
+            assertTrue(runCatching { journal.beginAttempt(digest, "blind_replay") }.isFailure)
+
+            val sidecar = File(record.path + ".new")
+            sidecar.writeBytes(byteArrayOf(9, 8, 7))
+            val concurrentScan = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, concurrentScan.requiresReview)
+            assertEquals(1, concurrentScan.damagedOrUnrecognized)
+            assertEquals(null, concurrentScan.inspectionReference(digest)?.transferredBytes)
+            assertTrue(concurrentScan.inspectionReference(digest)
+                ?.transferredBytesWarning?.contains("unreadable") == true)
+            assertArrayEquals(encrypted, record.readBytes())
+            assertArrayEquals(byteArrayOf(9, 8, 7), sidecar.readBytes())
+            sidecar.delete()
+
+            record.writeBytes(encrypted.copyOf().also { bytes ->
+                bytes[bytes.lastIndex] = (bytes.last().toInt() xor 1).toByte()
+            })
+            assertTrue(runCatching { store.read(digest) }.isFailure)
+            val tampered = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, tampered.requiresReview)
+            assertEquals(1, tampered.damagedOrUnrecognized)
+            assertEquals(JournalState.ATTEMPT_RECORDED, journal.current()?.state)
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
     @Test fun createdChildWitnessIsEncryptedBoundToOneJournalAndReadOnly() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val sandbox = File(app.cacheDir, "created-child-evidence-" + UUID.randomUUID())

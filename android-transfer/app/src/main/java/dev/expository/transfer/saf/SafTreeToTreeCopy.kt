@@ -58,6 +58,8 @@ class SafTreeToTreeCopy(
     // Post-create immutable witness, recorded only after fresh child membership
     // and before opening any byte-writing stream. Never executable authority.
     private val recordCreatedChild: ((String, Uri, String, String, String) -> Unit)? = null,
+    // Exact completed bytes, never a post-restart success or retry permit.
+    private val recordSourceBytes: ((String, Long, ByteArray) -> Unit)? = null,
     private val storageForPlan: (String) -> AtomicAttemptStorage
 ) {
     private val observer = SafSingleDocumentCopy(resolver)
@@ -228,6 +230,9 @@ class SafTreeToTreeCopy(
         }
         var created: Uri? = null
         val streams = object : CopyStreams {
+            override fun onSourceBytesClosed(bytesWritten: Long, sourceSha256: ByteArray) {
+                recordSourceBytes?.invoke(initial.digest, bytesWritten, sourceSha256)
+            }
             override fun openSource(): InputStream {
                 val uri = document(request.sourceTree, request.sourceDocumentId)
                 val input = resolver.openInputStream(uri) ?: throw FileNotFoundException()

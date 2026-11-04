@@ -13,6 +13,7 @@ import dev.expository.transfer.journal.ProtectedRecoveryContextStore
 import dev.expository.transfer.journal.RecoveryTreeRootIdentity
 import dev.expository.transfer.journal.RecoveryCreatedChildIdentity
 import dev.expository.transfer.journal.ProtectedCreatedChildWitnessStore
+import dev.expository.transfer.journal.ProtectedTransferredBytesEvidenceStore
 import dev.expository.transfer.planner.*
 import java.io.FileNotFoundException
 import java.io.InputStream
@@ -128,15 +129,18 @@ internal class SafRecursiveTreeCopy(
             item.relativePath to index
         }.toMap()
 
+        private fun stepKey(entry: RecursiveCopyEntry): String {
+            val index = requireNotNull(stepIndices[entry.relativePath])
+            return hash(listOf("SAF_RECURSIVE_STEP_V1",
+                approved.digest, index.toString()))
+        }
+
         private fun recordCreatedChild(entry: RecursiveCopyEntry,
             parentId: String, childId: String, directory: Boolean) {
             // This separate encrypted sidecar is written after the provider's
             // create response and before a file stream can write bytes. Its
             // digest is exactly the neutral journal's opaque step filename.
-            val index = requireNotNull(stepIndices[entry.relativePath])
-            val key = hash(listOf("SAF_RECURSIVE_STEP_V1",
-                approved.digest, index.toString()))
-            ProtectedCreatedChildWitnessStore(appContext).recordNew(key,
+            ProtectedCreatedChildWitnessStore(appContext).recordNew(stepKey(entry),
                 RecoveryCreatedChildIdentity.capture(request.destinationTree,
                     parentId, childId, entry.source.name, directory))
         }
@@ -377,6 +381,14 @@ internal class SafRecursiveTreeCopy(
             } ?: error("SOURCE_MIME_UNAVAILABLE")
             var created: Uri? = null
             return object : CopyStreams {
+                override fun onSourceBytesClosed(bytesWritten: Long, sourceSha256: ByteArray) {
+                    // Once the stream/output have CLOSED, seal the exact bytes
+                    // sent before attempting destination readback. No identity
+                    // or content proof is silently promoted on restart.
+                    ProtectedTransferredBytesEvidenceStore(appContext).recordNew(
+                        stepKey(entry), bytesWritten, sourceSha256)
+                }
+
                 override fun openSource(): InputStream {
                     require(sourceStillCurrent(entry)) { "SOURCE_BEFORE_OPEN_CHANGED" }
                     val input = resolver.openInputStream(source) ?: throw FileNotFoundException()

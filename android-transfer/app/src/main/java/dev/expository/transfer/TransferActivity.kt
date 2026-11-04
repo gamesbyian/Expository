@@ -68,6 +68,7 @@ import dev.expository.transfer.journal.ProtectedRecoveryContextStore
 import dev.expository.transfer.journal.RecoveryTreeRootIdentity
 import dev.expository.transfer.journal.RecoveryCreatedChildIdentity
 import dev.expository.transfer.journal.ProtectedCreatedChildWitnessStore
+import dev.expository.transfer.journal.ProtectedTransferredBytesEvidenceStore
 
 /** A button-owned Boolean is not sufficient authorization after a coroutine is cancelled. */
 internal fun foregroundCopyAllowed(
@@ -1165,6 +1166,10 @@ private fun DeveloperPreview(
                                     ProtectedCreatedChildWitnessStore(context.applicationContext)
                                         .recordNew(digest, RecoveryCreatedChildIdentity.capture(
                                             tree, parentId, childId, name, directory = false))
+                                },
+                                recordSourceBytes = { digest, bytes, sha ->
+                                    ProtectedTransferredBytesEvidenceStore(context.applicationContext)
+                                        .recordNew(digest, bytes, sha)
                                 }).copy(current,
                                 continueRequested = {
                                     foregroundCopyAllowed(permit, owningJob)
