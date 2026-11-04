@@ -625,7 +625,9 @@ class RecoveryIndexFailurePolicyTest {
             assertEquals(0, record.damagedOrUnrecognized)
             assertEquals(0, record.additionalReviewCount)
             assertEquals("123456789abc", record.reviewReferences.single().opaqueSuffix)
-            assertEquals("Requires independent destination review",
+            assertEquals(
+                "Requires independent destination review: " +
+                    "write acknowledged; destination bytes are not verified",
                 record.reviewReferences.single().status)
             assertEquals(JournalState.WRITE_ACKNOWLEDGED, journal.current()?.state)
             assertArrayEquals(acknowledgedBytes,
