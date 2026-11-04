@@ -139,6 +139,32 @@ class SafRecursiveTreeCopyAndroidTest {
         assertEquals(
             dev.expository.transfer.journal.CreatedChildRelation.SAME_RECORDED_CHILD_IDENTITY,
             childIdentity.compare(byName["Empty"], nestedTree, inside))
+        // A new READ-only observation of the exact nested direct parent can
+        // now compare independently streamed destination bytes against the
+        // encrypted source SHA sealed before the original readback.
+        val manual = dev.expository.transfer.journal.RecoveryManualInspection
+        val reviewed = manual.inspect(
+            resolver, nestedTree, byName["Episode.bin"], sealedFile.second)
+        assertEquals(dev.expository.transfer.journal.ManualDestinationBytes.CURRENT_BYTES_MATCH_RECORDED_SOURCE,
+            reviewed.byteRelation)
+        val mismatched = manual.inspect(resolver, nestedTree,
+            byName["Episode.bin"],
+            sealedFile.second.copy(sourceSha256Hex = "0".repeat(64)))
+        assertEquals(dev.expository.transfer.journal.ManualDestinationBytes.CURRENT_BYTES_DIFFER_FROM_RECORDED_SOURCE,
+            mismatched.byteRelation)
+        val wrongParent = manual.inspect(resolver, targetTree,
+            byName["Episode.bin"], sealedFile.second)
+        assertEquals(dev.expository.transfer.journal.ManualDestinationBytes.CREATED_FILE_NOT_IDENTIFIED,
+            wrongParent.byteRelation)
+        val oversized = manual.inspect(resolver, nestedTree,
+            byName["Episode.bin"], sealedFile.second.copy(
+                byteCount = dev.expository.transfer.journal.RecoveryDestinationByteInspector
+                    .MAX_MANUAL_BYTES + 1))
+        assertEquals(dev.expository.transfer.journal.ManualDestinationBytes.BOUNDED_READ_TOO_LARGE, oversized.byteRelation)
+        assertArrayEquals("Review never changed the original source",
+            fixtureBytes, original())
+        assertArrayEquals("Review never changed the copied destination",
+            fixtureBytes, resolver.openInputStream(targetUri)!!.use { it.readBytes() })
         assertArrayEquals(fixtureBytes, original())
         // Exact same frozen approval must never automatically repeat a write.
         val replay = service.execute(request(), approved)

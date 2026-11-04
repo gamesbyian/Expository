@@ -71,7 +71,7 @@ fun RecoveryStatusCard() {
                 val observed = withContext(Dispatchers.IO) {
                     runCatching {
                         RecoveryManualInspection.inspect(context.contentResolver,
-                            uri, reviewed?.createdChild)
+                            uri, reviewed?.createdChild, reviewed?.transferredBytes)
                     }
                 }
                 if (inspectionRevision != revision) return@launch
@@ -95,8 +95,8 @@ fun RecoveryStatusCard() {
                         when (rootRelation) {
                             RecoveryTreeRootRelation.SAME_RECORDED_ROOT ->
                                 "Provider and tree-root identifier match the encrypted " +
-                                "original selection. Created children, bytes and attempt " +
-                                "outcome are NOT verified. No retry or cleanup."
+                                "original selection. Root identity alone proves neither " +
+                                "created child nor bytes. No retry or cleanup."
                             RecoveryTreeRootRelation.DIFFERENT_RECORDED_ROOT ->
                                 "This selection is not the original tree root; it may be " +
                                 "a nested direct parent. Only separate child identity " +
@@ -122,8 +122,8 @@ fun RecoveryStatusCard() {
                         } + " " + when (inspectionListing?.createdChildRelation) {
                             CreatedChildRelation.SAME_RECORDED_CHILD_IDENTITY ->
                                 "The freshly listed direct parent contains the SAME " +
-                                "recorded created-child ID and name. File bytes, " +
-                                "provider version and interrupted outcome remain UNVERIFIED."
+                                "recorded created-child ID and name. Child identity alone " +
+                                "cannot establish its bytes or a completed operation."
                             CreatedChildRelation.DIFFERENT_CHILD_IDENTITY ->
                                 "The name exists, but the created-child ID differs from " +
                                 "the protected post-create witness. No replay or cleanup."
@@ -141,6 +141,31 @@ fun RecoveryStatusCard() {
                             CreatedChildRelation.NO_WITNESS, null ->
                                 "No comparable created-child identity was saved. A create " +
                                 "might still have happened before its response was received."
+                        } + " " + when (inspectionListing?.byteRelation) {
+                            ManualDestinationBytes.CURRENT_BYTES_MATCH_RECORDED_SOURCE ->
+                                "A fresh bounded readback confirms the destination CURRENTLY " +
+                                "contains exactly the source bytes recorded after the old " +
+                                "write. The previous journal remains unchanged, and source " +
+                                "version, cloud sync and future changes remain unproven. " +
+                                "No retry or cleanup."
+                            ManualDestinationBytes.CURRENT_BYTES_DIFFER_FROM_RECORDED_SOURCE ->
+                                "The current destination bytes differ from the bytes " +
+                                "sealed during the original attempt. No retry or cleanup."
+                            ManualDestinationBytes.DESTINATION_CHANGED_DURING_READ ->
+                                "The created child's parent identity or metadata changed " +
+                                "while bytes were being read. The comparison is invalid."
+                            ManualDestinationBytes.DESTINATION_READ_UNAVAILABLE ->
+                                "The selected child's bytes could not be read completely. " +
+                                "No content match was established."
+                            ManualDestinationBytes.BOUNDED_READ_TOO_LARGE ->
+                                "Manual byte comparison is limited to 64 MiB; no match is " +
+                                "claimed for larger files."
+                            ManualDestinationBytes.CREATED_FILE_NOT_IDENTIFIED ->
+                                "No byte comparison was attempted because the exact " +
+                                "created file and its direct parent were not proven."
+                            ManualDestinationBytes.NO_COMPLETED_SOURCE_EVIDENCE, null ->
+                                "No completed source-byte hash is available for independent " +
+                                "comparison. The old destination remains unresolved."
                         }
                 }
             }

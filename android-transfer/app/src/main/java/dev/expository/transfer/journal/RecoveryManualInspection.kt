@@ -16,7 +16,9 @@ internal data class ManualRecoveryListing(
     val observedChildren: Int,
     val complete: Boolean,
     val sampleNames: List<String>,
-    val createdChildRelation: CreatedChildRelation = CreatedChildRelation.NO_WITNESS
+    val createdChildRelation: CreatedChildRelation = CreatedChildRelation.NO_WITNESS,
+    val byteRelation: ManualDestinationBytes =
+        ManualDestinationBytes.NO_COMPLETED_SOURCE_EVIDENCE
 ) {
     // An operator can view these names inside the transient UI, but an
     // implicit data-class toString should not disclose them to logcat.
@@ -31,7 +33,8 @@ internal object RecoveryManualInspection {
 
     /** May perform slow IPC; invoke off the UI thread. */
     fun inspect(resolver: ContentResolver, tree: Uri,
-        createdChild: ProtectedCreatedChildWitness? = null): ManualRecoveryListing {
+        createdChild: ProtectedCreatedChildWitness? = null,
+        completedBytes: ProtectedTransferredByteEvidence? = null): ManualRecoveryListing {
         require(LocalTreeReader.validTree(tree)) { "INVALID_INSPECTION_TREE" }
         // A created-child check requires a complete direct-parent listing:
         // scanning only the first UI page would falsely imply absence.
@@ -48,7 +51,9 @@ internal object RecoveryManualInspection {
         }
         val relation = RecoveryCreatedChildIdentity.compare(
             createdChild, tree, listing)
+        val bytes = RecoveryDestinationByteInspector.inspect(
+            resolver, tree, listing, createdChild, completedBytes)
         return ManualRecoveryListing(listing.children.size,
-            listing.complete && !listing.hasMore, names, relation)
+            listing.complete && !listing.hasMore, names, relation, bytes)
     }
 }
