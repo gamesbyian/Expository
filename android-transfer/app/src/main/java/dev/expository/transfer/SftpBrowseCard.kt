@@ -371,18 +371,18 @@ internal fun SftpBrowseCard(
                 when {
                     reviewedPick != null ->
                         pendingPickedUpload === reviewedPick &&
-                            reviewedPick.stillMatches(sessionId, folder, frozenSources)
+                            reviewedPick.stillMatches(sessionId, folder, frozenSources) &&
+                            reviewedPick.shareEpochStillCurrent(
+                                (context as? TransferActivity)?.incomingShareEpoch)
                     frozenScoped != null ->
                         pendingPeerUpload?.let { review ->
                             review.sources == frozenScoped &&
                                 review.stillMatches(localPaneSources, sessionId, folder) &&
                                 frozenSources == frozenScoped.map { it.documentUri }
                         } == true
-                    else -> {
-                        val shared = incomingShare?.batch?.map { it.uri }
-                            ?: incomingShare?.payload?.let { listOf(it.uri) }
-                        shared == frozenSources
-                    }
+                    // Share source URIs must pass the SAME explicit
+                    // review/Confirm step as picker and dual-pane sources.
+                    else -> false
                 }
         }
         // A confirmation can never be tapped twice, nor resurrected after a
@@ -542,6 +542,74 @@ internal fun SftpBrowseCard(
                 publishing.set(false)
                 continueCopy = null
                 transferKind = ""
+                busy = false
+            }
+        }
+    }
+
+    /**
+     * Incoming Shares are a source selection, not permission to mutate an
+     * authenticated remote folder. Observe source versions and a complete
+     * collision-free destination, then present the existing explicit picker-
+     * style review. A new share Intent invalidates this review using the
+     * activity's monotonic process share epoch (never persisted).
+     */
+    fun reviewSharedUpload(uris: List<Uri>) {
+        val request = incomingShare
+        val currentEpoch = (context as? TransferActivity)?.incomingShareEpoch
+        val live = session
+        val opaque = sessionId
+        val directory = folder
+        val frozen = uris.toList()
+        if (request == null || currentEpoch == null || live == null ||
+            opaque.isBlank() || busy || peerRelayLocked ||
+            pendingPickedUpload != null || frozen.isEmpty() ||
+            frozen.size > ScopedUploadPicker.MAX_DOCUMENTS ||
+            frozen.distinct().size != frozen.size ||
+            frozen.any {
+                it.scheme != android.content.ContentResolver.SCHEME_CONTENT ||
+                    it.authority.isNullOrBlank()
+            } ||
+            (request.batch?.map { it.uri } ?:
+                request.payload?.let { listOf(it.uri) }) != frozen) {
+            status = "Shared upload review unavailable or stale. No remote write started."
+            return
+        }
+        busy = true
+        status = "Inspecting shared documents and SFTP destination for explicit review…"
+        scope.launch {
+            try {
+                val reviewed = withContext(Dispatchers.IO) {
+                    val observer = SafSingleDocumentCopy(context.contentResolver)
+                    val observations = frozen.map { observer.observe(it) }
+                    val selected = requireNotNull(PendingPickedSftpUpload.freeze(
+                        frozen, observations, opaque, directory)) {
+                        "SHARED_SOURCES_UNREVIEWABLE"
+                    }
+                    val listing = live.completeMutationListing(directory)
+                    require(!listing.truncated &&
+                        SftpUploadBatchNames.collisionFree(
+                            selected.items.map { it.name }, listing)) {
+                        "SHARED_DESTINATION_COLLISION_OR_INCOMPLETE_LISTING"
+                    }
+                    selected.copy(sourceShareEpoch = currentEpoch)
+                }
+                // A newer user share cannot silently replace the authority
+                // and contents of a previous foreground review.
+                if (session !== live || sessionId != opaque ||
+                    folder != directory ||
+                    (context as? TransferActivity)?.incomingShareEpoch != currentEpoch) {
+                    status = "Shared source, session or destination changed during review. No upload approved."
+                } else {
+                    pendingPickedUpload = reviewed
+                    status = "Review " + reviewed.items.size +
+                        " shared document(s) and explicitly confirm SFTP Upload. Nothing created yet."
+                }
+            } catch (_: CancellationException) {
+                status = "Shared upload review canceled; no remote document created."
+            } catch (_: Exception) {
+                status = "Shared upload review blocked: unreadable source, name conflict or incomplete server listing."
+            } finally {
                 busy = false
             }
         }
@@ -1646,16 +1714,20 @@ internal fun SftpBrowseCard(
                 }) { Text("Upload files here…") }
                 pendingPickedUpload?.let { review ->
                     val valid = session != null && !busy && !peerRelayLocked &&
-                        review.stillMatches(sessionId, folder)
+                        review.stillMatches(sessionId, folder) &&
+                        review.shareEpochStillCurrent(
+                            (context as? TransferActivity)?.incomingShareEpoch)
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Review Android Picker → SFTP Upload",
+                            Text(if (review.sourceShareEpoch != null)
+                                "Review Shared Android → SFTP Upload"
+                                else "Review Android Picker → SFTP Upload",
                                 style = MaterialTheme.typography.titleMedium)
                             Text("Files (" + review.items.size + "): " +
                                 review.items.joinToString(", ") { it.name })
                             Text("Destination: authenticated SFTP folder " + review.folder)
-                            Text("Choosing files did not upload anything. Confirm " +
+                            Text("Selecting documents did not upload anything. Confirm " +
                                 "to recheck all source versions, remote names and " +
                                 "permissions, then create each new remote document " +
                                 "exclusively with its own journal and SHA-256 readback. " +
@@ -1741,15 +1813,16 @@ internal fun SftpBrowseCard(
                     ?: incomingShare?.payload?.let { listOf(it.uri) }
                 if (!sharedFiles.isNullOrEmpty()) {
                     Text(sharedFiles.size.toString() +
-                        " Android-shared document(s) available. No upload starts until tapped.",
+                        " Android-shared document(s) available. Review and confirm before uploading.",
                         style = MaterialTheme.typography.bodySmall)
                     Button(
-                        enabled = !busy && !peerRelayLocked && session != null && sessionId.isNotBlank(),
+                        enabled = !busy && !peerRelayLocked && session != null &&
+                            sessionId.isNotBlank() && pendingPickedUpload == null,
                         modifier = Modifier.heightIn(min = 48.dp),
-                        onClick = { uploadSources(sharedFiles) }
+                        onClick = { reviewSharedUpload(sharedFiles) }
                     ) {
-                        Text(if (sharedFiles.size == 1) "Upload shared file here"
-                             else "Upload " + sharedFiles.size + " shared files here")
+                        Text(if (sharedFiles.size == 1) "Review shared file upload…"
+                             else "Review " + sharedFiles.size + " shared files for upload…")
                     }
                 }
 

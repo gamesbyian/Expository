@@ -32,6 +32,31 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 @RunWith(AndroidJUnit4::class)
 class AndroidContentProviderCopyTest {
+    @Test fun sharedSftpReviewBindsSourceToProcessShareEpochWithoutLeakingUris() {
+        val uri = Uri.parse("content://synthetic.private.provider/document/sensitive-record")
+        val observation = dev.expository.transfer.saf.SafDocumentObservation(
+            "private-record.bin", 17L, 123L, "application/octet-stream")
+        val picker = requireNotNull(PendingPickedSftpUpload.freeze(
+            listOf(uri), listOf(observation), "pinned-test-session", "/private"))
+        assertEquals(null, picker.sourceShareEpoch)
+        assertTrue("An ordinary picker needs no inbound Share epoch",
+            picker.shareEpochStillCurrent(null))
+        val shared = picker.copy(sourceShareEpoch = 19L)
+        assertEquals(19L, shared.sourceShareEpoch)
+        assertTrue(shared.shareEpochStillCurrent(19L))
+        assertFalse("A newer Share must invalidate the old reviewed source",
+            shared.shareEpochStillCurrent(20L))
+        assertFalse("No current Activity share epoch cannot reauthorize a Share",
+            shared.shareEpochStillCurrent(null))
+        assertTrue(shared.stillMatches("pinned-test-session", "/private", listOf(uri)))
+        assertFalse(shared.stillMatches("different-session", "/private", listOf(uri)))
+        assertFalse(shared.stillMatches("pinned-test-session", "/", listOf(uri)))
+        assertFalse(shared.toString().contains("private-record"))
+        assertFalse(shared.toString().contains("pinned-test-session"))
+        assertFalse(shared.items.single().toString().contains("sensitive-record"))
+        assertEquals(1, shared.uris.size)
+    }
+
     @Test fun newlyCreatedSafCopyMustRemainAnExactDirectChild() {
         val observed = TreeEntry("id-new", "Destination.txt", false, 12L)
         val matching = TreeListing(listOf(

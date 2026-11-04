@@ -11,7 +11,9 @@ internal data class PickedSftpUploadSource(
     val uri: Uri,
     val name: String,
     val revision: String
-)
+) {
+    override fun toString(): String = "PickedSftpUploadSource(redacted)"
+}
 
 /**
  * Choosing files is NOT consent to write a remote destination. The Android
@@ -21,8 +23,22 @@ internal data class PickedSftpUploadSource(
 internal data class PendingPickedSftpUpload(
     val items: List<PickedSftpUploadSource>,
     val sessionId: String,
-    val folder: String
+    val folder: String,
+    /** Process-only share epoch, null for an ordinary explicit document picker. */
+    val sourceShareEpoch: Long? = null
 ) {
+    // URI, filenames and remote folder are private process-only context.
+    override fun toString(): String = "PendingPickedSftpUpload(redacted)"
+    /**
+     * For Shares, only the exact process-wide Intent epoch can still be
+     * confirmed. A missing Activity/epoch fails closed; never treat a URI
+     * that remains readable as a fresh approval after another Share arrives.
+     * Ordinary Android picker reviews are not tied to an inbound Share.
+     */
+    fun shareEpochStillCurrent(currentEpoch: Long?): Boolean =
+        sourceShareEpoch == null ||
+            (sourceShareEpoch >= 0L && currentEpoch == sourceShareEpoch)
+
     val uris: List<Uri> get() = items.map { it.uri }
 
     fun stillMatches(liveSessionId: String, liveFolder: String,
