@@ -131,11 +131,20 @@ object AttemptRecoveryIndex {
                 when (DurableAttemptJournal(
                     AndroidReadOnlyAttemptStorage(context, digest)
                 ).current()?.state) {
-                    JournalState.ATTEMPT_RECORDED,
-                    JournalState.WRITE_ACKNOWLEDGED,
+                    JournalState.ATTEMPT_RECORDED -> {
+                        uncertain++
+                        reference(digest, "Requires independent destination review: " +
+                            "attempt recorded; whether any destination write occurred is unknown")
+                    }
+                    JournalState.WRITE_ACKNOWLEDGED -> {
+                        uncertain++
+                        reference(digest, "Requires independent destination review: " +
+                            "write acknowledged; destination bytes are not verified")
+                    }
                     JournalState.UNCERTAIN -> {
                         uncertain++
-                        reference(digest, "Requires independent destination review")
+                        reference(digest, "Requires independent destination review: " +
+                            "attempt uncertain; do not retry without independent reconciliation")
                     }
                     JournalState.VERIFIED -> verified++
                     JournalState.CONFIRMED, JournalState.DRAFT, JournalState.BLOCKED -> notStarted++
