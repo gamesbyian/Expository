@@ -36,6 +36,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.expository.transfer.engine.CopyProof
+import dev.expository.transfer.engine.ClaimedCopyDispatch
+import dev.expository.transfer.engine.CopyOutcomeState
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 import dev.expository.transfer.security.SavedSftpBookmarks
 import dev.expository.transfer.security.SavedSftpBookmark
@@ -901,13 +903,19 @@ internal fun SftpBrowseCard(
             val path = if (folder == "/") "/" + row.name else folder + "/" + row.name
             !row.directory && path == witness.remotePath
         }?.revision.orEmpty()
-        if (busy || !witness.stillMatches(activeDeviceTarget,
-            sessionId, folder, witness.remotePath, revision)) {
-            pendingPeerDownload = null
+        // The same one-shot command/receipt owner now serves authenticated
+        // SFTP → SAF and Local Single/Dual. The SFTP adapter still owns its
+        // fresh remote membership, scoped SAF create, journal and byte proof.
+        val dispatch = ClaimedCopyDispatch.claim {
+            !busy && pendingPeerDownload === pending &&
+                witness.stillMatches(activeDeviceTarget, sessionId, folder,
+                    witness.remotePath, revision)
+        }
+        pendingPeerDownload = null
+        if (dispatch == null) {
             status = "Copy approval expired. No destination document created."
             return
         }
-        pendingPeerDownload = null
         val permit = AtomicBoolean(true)
         continueCopy = permit
         transferKind = "Peer download"
@@ -916,28 +924,47 @@ internal fun SftpBrowseCard(
         status = "Copying to a new Android document after final preflight…"
         scope.launch {
             try {
-                val receipt = withContext(Dispatchers.IO) {
+                val result = withContext(Dispatchers.IO) {
                     val active = coroutineContext[Job]
-                    SftpToSafTreeCopy(context.contentResolver) { digest ->
-                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
-                    }.copy(live, pending.preflight,
-                        continueRequested = { permit.get() && active?.isActive == true },
-                        onProgress = { bytes ->
-                            publishCopyProgress(bytes, permit, live)
-                        })
+                    dispatch.run(
+                        expectedItems = 1,
+                        continueRequested = {
+                            permit.get() && active?.isActive == true
+                        },
+                        prepare = { index ->
+                            if (index != 0) null
+                            else ClaimedCopyDispatch.Prepared(
+                                pending.preflight.plan.digest) {
+                                SftpToSafTreeCopy(context.contentResolver) { digest ->
+                                    AndroidAtomicAttemptStorage(
+                                        context.applicationContext, digest)
+                                }.copy(live, pending.preflight,
+                                    continueRequested = {
+                                        permit.get() && active?.isActive == true
+                                    },
+                                    onProgress = { bytes ->
+                                        publishCopyProgress(bytes, permit, live)
+                                    })
+                            }
+                        }
+                    )
                 }
-                transferred = receipt.bytesWritten
-                status = when (receipt.proof) {
-                    CopyProof.BYTES_VERIFIED ->
+                val receipt = result.receipts.singleOrNull()
+                transferred = receipt?.bytesWritten ?: 0L
+                status = when {
+                    result.outcome.complete && receipt != null ->
                         "Copy verified: the Android document read-back matched " +
                             receipt.bytesWritten + " SFTP bytes. Refresh the other pane. " +
                             "Cloud synchronization is not confirmed."
-                    CopyProof.WRITE_ACKNOWLEDGED ->
-                        "Provider acknowledged the Copy, but matching bytes could not be verified. Inspect destination."
-                    CopyProof.UNCERTAIN ->
-                        "Copy uncertain or partial. Inspect the destination before retrying."
-                    CopyProof.BLOCKED ->
+                    result.outcome.state == CopyOutcomeState.BLOCKED ->
                         "Copy blocked by changed source, scoped permission, listing or collision. No source was deleted."
+                    result.outcome.stopProof == CopyProof.WRITE_ACKNOWLEDGED ->
+                        "Provider acknowledged the Copy, but matching bytes could not be verified. Inspect destination."
+                    receipt == null ->
+                        "Copy stopped before its destination operation. No verified receipt was produced."
+                    else ->
+                        "Copy uncertain, partial or rejected by the shared receipt check. " +
+                            "Inspect the destination before retrying."
                 }
             } catch (_: CancellationException) {
                 status = "Copy interrupted. Destination may contain partial bytes."
