@@ -225,6 +225,29 @@ object VerifiedCopyBatchSuite {
             rejected(List(13) { i -> job(('a'.code + i).toChar(), Streams()) })
         }
 
+        case("validated queue membership is frozen against caller mutation") {
+            val first = Streams()
+            val second = Streams()
+            val injected = Streams()
+            val acceptedSecond = job('b', second)
+            val callerJobs = mutableListOf(job('a', first), acceptedSecond)
+            val report = VerifiedCopyBatchQueue.run(callerJobs,
+                onItemProgress = { index, _ ->
+                    if (index == 0) {
+                        // Simulate a reactive UI replacing and then clearing its
+                        // mutable selection while the first transfer is active.
+                        callerJobs[1] = job('c', injected)
+                        callerJobs.clear()
+                    }
+                })
+            check(report.stop == VerifiedBatchStop.ALL_VERIFIED)
+            check(report.verifiedItems == 2 && report.nextUnstartedIndex == null)
+            check(report.items.map { it.planDigest } ==
+                listOf(plan('a').digest, plan('b').digest))
+            check(first.openedDestination == 1 && second.openedDestination == 1)
+            check(injected.openedSource == 0 && injected.openedDestination == 0)
+        }
+
         case("old verified journal cannot be replayed as fresh batch") {
             val disk = Disk()
             val first = Streams()

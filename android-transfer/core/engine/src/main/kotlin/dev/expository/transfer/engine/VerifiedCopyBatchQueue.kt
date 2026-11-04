@@ -51,25 +51,31 @@ object VerifiedCopyBatchQueue {
         continueRequested: () -> Boolean = { true },
         onItemProgress: (index: Int, verifiedOrSentBytes: Long) -> Unit = { _, _ -> }
     ): VerifiedBatchReceipt {
-        require(jobs.size in 1..MAX_ITEMS) { "INVALID_BATCH_SIZE" }
-        require(jobs.all { item ->
+        // Freeze the membership and reviewed plan before invoking callbacks.
+        // A UI-owned MutableList (or mutable blockers list) must never replace
+        // a validated future item while an earlier item is streaming.
+        val frozenJobs = jobs.map { item ->
+            item.copy(plan = item.plan.copy(blockers = item.plan.blockers.toList()))
+        }
+        require(frozenJobs.size in 1..MAX_ITEMS) { "INVALID_BATCH_SIZE" }
+        require(frozenJobs.all { item ->
             item.plan.executable && item.plan.operation == Operation.COPY &&
                 item.plan.route == TransferRoute.DEVICE_RELAY &&
                 digestPattern.matches(item.plan.digest) &&
                 attemptPattern.matches(item.attemptId)
         }) { "UNEXECUTABLE_BATCH_ITEM" }
-        require(jobs.map { it.plan.digest }.distinct().size == jobs.size) {
+        require(frozenJobs.map { it.plan.digest }.distinct().size == frozenJobs.size) {
             "DUPLICATE_BATCH_PLAN"
         }
-        require(jobs.map { it.attemptId }.distinct().size == jobs.size) {
+        require(frozenJobs.map { it.attemptId }.distinct().size == frozenJobs.size) {
             "DUPLICATE_BATCH_ATTEMPT"
         }
-        require(jobs.map { it.journal }.distinct().size == jobs.size) {
+        require(frozenJobs.map { it.journal }.distinct().size == frozenJobs.size) {
             "SHARED_BATCH_JOURNAL"
         }
 
-        val results = ArrayList<CopyReceipt>(jobs.size)
-        jobs.forEachIndexed { index, job ->
+        val results = ArrayList<CopyReceipt>(frozenJobs.size)
+        frozenJobs.forEachIndexed { index, job ->
             if (!runCatching { continueRequested() }.getOrDefault(false)) {
                 return VerifiedBatchReceipt(results.toList(),
                     VerifiedBatchStop.OPERATOR_STOPPED, index)
@@ -100,7 +106,7 @@ object VerifiedCopyBatchQueue {
             if (receipt.proof != CopyProof.BYTES_VERIFIED) {
                 return VerifiedBatchReceipt(results.toList(),
                     VerifiedBatchStop.ITEM_REQUIRES_REVIEW,
-                    (index + 1).takeIf { it < jobs.size })
+                    (index + 1).takeIf { it < frozenJobs.size })
             }
         }
         return VerifiedBatchReceipt(results.toList(),
