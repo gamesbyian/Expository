@@ -34,7 +34,9 @@ data class ProtectedRecoveryContext(
     val sourceLabel: String,
     val destinationLabel: String,
     val destinationProvider: String,
-    val destinationTreeRootFingerprint: String? = null
+    val destinationTreeRootFingerprint: String? = null,
+    /** Optional original provider document ID digest; never executable. */
+    val sourceDocumentFingerprint: String? = null
 ) {
     // These labels are separately encrypted at rest, but their generated
     // data-class toString previously leaked them into any incidental debug
@@ -63,6 +65,7 @@ class ProtectedRecoveryContextStore(context: Context) {
         private const val MAX_RECORD = 2048
         private const val MAX_TEXT = 180
         private val TREE_ROOT_FINGERPRINT = Regex("[0-9a-f]{64}")
+        private val SOURCE_DOCUMENT_FINGERPRINT = Regex("[0-9a-f]{64}")
         private const val IV_LENGTH = 12
         private const val TAG_LENGTH = 128
         private val LOCK = Any()
@@ -108,7 +111,9 @@ class ProtectedRecoveryContextStore(context: Context) {
                 allowed(context.destinationLabel) &&
                 allowed(context.destinationProvider) &&
                 (context.destinationTreeRootFingerprint == null ||
-                    TREE_ROOT_FINGERPRINT.matches(context.destinationTreeRootFingerprint))) {
+                    TREE_ROOT_FINGERPRINT.matches(context.destinationTreeRootFingerprint)) &&
+                (context.sourceDocumentFingerprint == null ||
+                    SOURCE_DOCUMENT_FINGERPRINT.matches(context.sourceDocumentFingerprint))) {
                 "INVALID_RECOVERY_CONTEXT"
             }
             if (targetFile.exists() || File(targetFile.path + ".bak").exists() ||
@@ -116,14 +121,16 @@ class ProtectedRecoveryContextStore(context: Context) {
                 throw IOException("RECOVERY_CONTEXT_ALREADY_RECORDED")
             val plain = ByteArrayOutputStream().also { bytes ->
                 DataOutputStream(bytes).use { out ->
-                    // V1 (four human-readable fields) remains readable.
-                    // V2 adds one optional non-reversible, encrypted root witness.
-                    out.writeByte(2)
+                    // V1 (four text fields) and V2 (optional destination
+                    // root digest) remain readable. V3 additionally seals
+                    // the original source document ID digest, if available.
+                    out.writeByte(3)
                     out.writeUTF(context.operation)
                     out.writeUTF(context.sourceLabel)
                     out.writeUTF(context.destinationLabel)
                     out.writeUTF(context.destinationProvider)
                     out.writeUTF(context.destinationTreeRootFingerprint.orEmpty())
+                    out.writeUTF(context.sourceDocumentFingerprint.orEmpty())
                 }
             }.toByteArray()
             val record = try {
@@ -206,19 +213,24 @@ class ProtectedRecoveryContextStore(context: Context) {
             try {
                 DataInputStream(ByteArrayInputStream(plaintext)).use { input ->
                     val version = input.readUnsignedByte()
-                    if (version !in 1..2)
+                    if (version !in 1..3)
                         throw IOException("RECOVERY_CONTEXT_VERSION_UNSUPPORTED")
                     val operation = input.readUTF()
                     val source = input.readUTF()
                     val destination = input.readUTF()
                     val provider = input.readUTF()
-                    val root = if (version == 2)
+                    val root = if (version >= 2)
+                        input.readUTF().takeUnless { it.isEmpty() }
+                    else null
+                    val sourceDocument = if (version >= 3)
                         input.readUTF().takeUnless { it.isEmpty() }
                     else null
                     val context = ProtectedRecoveryContext(
-                        operation, source, destination, provider, root)
+                        operation, source, destination, provider, root, sourceDocument)
                     if (input.available() != 0 ||
                         (root != null && !TREE_ROOT_FINGERPRINT.matches(root)) ||
+                        (sourceDocument != null &&
+                            !SOURCE_DOCUMENT_FINGERPRINT.matches(sourceDocument)) ||
                         context.operation !in setOf("SAF_PICKER_COPY", "SAF_RECURSIVE_COPY", "SAF_DUAL_COPY") ||
                         !allowed(context.sourceLabel) ||
                         !allowed(context.destinationLabel) ||
