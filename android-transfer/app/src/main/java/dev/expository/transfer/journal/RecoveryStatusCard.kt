@@ -52,6 +52,11 @@ fun RecoveryStatusCard() {
     var inspectionTicket by remember { mutableStateOf<Pair<String, Int>?>(null) }
     var inspectionMessage by remember { mutableStateOf<String?>(null) }
     var inspectionListing by remember { mutableStateOf<ManualRecoveryListing?>(null) }
+    // A separate OS document picker reviews current source bytes only.
+    // Neither the picker URI nor permission survives this Compose screen.
+    var sourceInspectionTicket by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    var sourceInspectionMessage by remember { mutableStateOf<String?>(null) }
+    var sourceByteRelation by remember { mutableStateOf<FreshSourceByteRelation?>(null) }
     // Owned foreground read. Hiding/refreshing a review cancels the job,
     // not merely its result display. No grant, stream or job is persisted.
     var inspectionJob by remember { mutableStateOf<Job?>(null) }
@@ -187,6 +192,79 @@ fun RecoveryStatusCard() {
             }
         }
     }
+    val pickSourceForReadOnlyCheck = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val ticket = sourceInspectionTicket
+        sourceInspectionTicket = null
+        val uri = result.data?.data
+        val flags = result.data?.flags ?: 0
+        val reference = ticket?.first?.let { status?.inspectionReference(it) }
+        if (ticket == null || ticket.second != inspectionRevision ||
+            !showReviewReferences || reference?.transferredBytes == null) {
+            sourceInspectionMessage =
+                "Source inspection selection expired. No source bytes were read or changed."
+        } else if (result.resultCode != Activity.RESULT_OK || uri == null) {
+            sourceInspectionMessage = "Source inspection canceled. No file was changed."
+        } else if (!RecoveryManualSourceInspector.acceptsPickerResult(uri, flags)) {
+            sourceInspectionMessage =
+                "The selected source has no fresh Android READ grant. No bytes were inspected."
+        } else {
+            val revision = ticket.second
+            val completed = requireNotNull(reference.transferredBytes)
+            sourceByteRelation = null
+            sourceInspectionMessage =
+                "Checking current selected source bytes (64 MiB maximum), without writing…"
+            inspectionRunning = true
+            inspectionJob = scope.launch {
+                val observed = withContext(Dispatchers.IO) {
+                    val owner = currentCoroutineContext()
+                    runCatching {
+                        RecoveryManualSourceInspector.inspect(
+                            context.contentResolver, uri, flags, completed,
+                            continueRequested = { owner.isActive })
+                    }
+                }
+                if (revision != inspectionRevision || !showReviewReferences) return@launch
+                inspectionJob = null
+                inspectionRunning = false
+                if (observed.isFailure) {
+                    sourceByteRelation = null
+                    sourceInspectionMessage =
+                        "Source inspection unavailable. The previous transfer remains unresolved."
+                } else {
+                    sourceByteRelation = observed.getOrNull()
+                    sourceInspectionMessage = "Fresh source check for record …" +
+                        ticket.first.takeLast(12) + ": " + when (sourceByteRelation) {
+                            FreshSourceByteRelation.CURRENT_SELECTION_BYTES_MATCH_RECORDED_TRANSFER ->
+                                "The selected document CURRENTLY has the same bytes as the " +
+                                "source stream recorded during the old Copy. This does not " +
+                                "prove it is the original document or that the destination " +
+                                "still exists. No retry, deletion or journal change."
+                            FreshSourceByteRelation.CURRENT_SELECTION_BYTES_DIFFER_FROM_RECORDED_TRANSFER ->
+                                "The selected document's current bytes differ from the old " +
+                                "recorded source stream. No retry or deletion."
+                            FreshSourceByteRelation.SOURCE_METADATA_CHANGED_DURING_READ ->
+                                "The provider's document metadata changed while reading. " +
+                                "The result cannot be used to establish a content match."
+                            FreshSourceByteRelation.SOURCE_READ_UNAVAILABLE ->
+                                "The provider could not supply a complete readable stream. " +
+                                "No match was established."
+                            FreshSourceByteRelation.BOUNDED_READ_TOO_LARGE ->
+                                "Source inspection is limited to 64 MiB per selection; " +
+                                "no matching claim was made."
+                            FreshSourceByteRelation.INVALID_SOURCE_GRANT ->
+                                "A usable, fresh READ-only Android document grant is required."
+                            FreshSourceByteRelation.INSPECTION_CANCELED ->
+                                "Inspection was canceled. No matching claim was made."
+                            FreshSourceByteRelation.NO_COMPLETED_TRANSFER_BYTES, null ->
+                                "The old attempt has no comparable successfully closed " +
+                                "source-byte evidence. No matching claim was made."
+                        }
+                }
+            }
+        }
+    }
     LaunchedEffect(context, refreshSerial) {
         inspectionJob?.cancel()
         inspectionJob = null
@@ -195,6 +273,9 @@ fun RecoveryStatusCard() {
         inspectionTicket = null
         inspectionListing = null
         inspectionMessage = null
+        sourceInspectionTicket = null
+        sourceByteRelation = null
+        sourceInspectionMessage = null
         status = null
         unreadable = false
         val result = withContext(Dispatchers.IO) {
@@ -240,6 +321,9 @@ fun RecoveryStatusCard() {
                             inspectionTicket = null
                             inspectionListing = null
                             inspectionMessage = null
+                            sourceInspectionTicket = null
+                            sourceByteRelation = null
+                            sourceInspectionMessage = null
                         }
                         showReviewReferences = !showReviewReferences
                     }) {
@@ -291,6 +375,7 @@ fun RecoveryStatusCard() {
                             Button(
                                 modifier = Modifier.heightIn(min = 48.dp),
                                 enabled = inspectionTicket == null &&
+                                    sourceInspectionTicket == null &&
                                     !inspectionRunning && entry.recordKey != null,
                                 onClick = {
                                     inspectionJob?.cancel()
@@ -300,6 +385,8 @@ fun RecoveryStatusCard() {
                                     inspectionTicket = requireNotNull(entry.recordKey) to inspectionRevision
                                     inspectionListing = null
                                     inspectionMessage = null
+                                    sourceByteRelation = null
+                                    sourceInspectionMessage = null
                                     try {
                                         inspector.launch(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
                                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -323,9 +410,12 @@ fun RecoveryStatusCard() {
                                 inspectionRevision++
                                 inspectionTicket = null
                                 inspectionListing = null
-                                inspectionMessage =
-                                    "Folder inspection stopped. No transfer was changed."
-                            }) { Text("Cancel folder inspection") }
+                                inspectionMessage = null
+                                sourceInspectionTicket = null
+                                sourceByteRelation = null
+                                sourceInspectionMessage =
+                                    "Read-only inspection stopped. No transfer was changed."
+                            }) { Text("Cancel inspection") }
                     }
                     val hidden = review.additionalReviewCount +
                         (review.reviewReferences.size - 12).coerceAtLeast(0)
@@ -333,6 +423,11 @@ fun RecoveryStatusCard() {
                         "not shown. No automatic cleanup or retry is available.",
                         style = MaterialTheme.typography.bodySmall)
                 }
+            }
+            if (showReviewReferences) sourceInspectionMessage?.let {
+                Text(it, modifier = Modifier.semantics {
+                    liveRegion = LiveRegionMode.Polite
+                }, style = MaterialTheme.typography.bodySmall)
             }
             if (showReviewReferences) inspectionMessage?.let {
                 Text(it, modifier = Modifier.semantics {
@@ -364,6 +459,9 @@ fun RecoveryStatusCard() {
                     inspectionTicket = null
                     inspectionListing = null
                     inspectionMessage = null
+                    sourceInspectionTicket = null
+                    sourceByteRelation = null
+                    sourceInspectionMessage = null
                     refreshSerial++
                 }
             ) { Text("Refresh transfer status") }
