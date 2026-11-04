@@ -66,6 +66,8 @@ import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 import dev.expository.transfer.journal.ProtectedRecoveryContext
 import dev.expository.transfer.journal.ProtectedRecoveryContextStore
 import dev.expository.transfer.journal.RecoveryTreeRootIdentity
+import dev.expository.transfer.journal.RecoveryCreatedChildIdentity
+import dev.expository.transfer.journal.ProtectedCreatedChildWitnessStore
 
 /** A button-owned Boolean is not sufficient authorization after a coroutine is cancelled. */
 internal fun foregroundCopyAllowed(
@@ -1157,6 +1159,12 @@ private fun DeveloperPreview(
                                             "SAF_DUAL_COPY", sourceName, targetName, provider,
                                             RecoveryTreeRootIdentity.fingerprint(
                                                 current.request.targetTree)))
+                                },
+                                recordCreatedChild = {
+                                    digest, tree, parentId, childId, name ->
+                                    ProtectedCreatedChildWitnessStore(context.applicationContext)
+                                        .recordNew(digest, RecoveryCreatedChildIdentity.capture(
+                                            tree, parentId, childId, name, directory = false))
                                 }).copy(current,
                                 continueRequested = {
                                     foregroundCopyAllowed(permit, owningJob)
