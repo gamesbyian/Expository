@@ -26,12 +26,15 @@ import javax.crypto.spec.GCMParameterSpec
  * document selection. Provider-returned labels can be personal information,
  * therefore the entire record is protected at rest. No URI, document ID,
  * username, path, credential, source bytes, grant or access token is retained.
+ * A nullable version-2 SHA-256 fingerprint of a previously selected SAF tree
+ * root is encrypted with the labels; it is not an access grant or item receipt.
  */
 data class ProtectedRecoveryContext(
     val operation: String,
     val sourceLabel: String,
     val destinationLabel: String,
-    val destinationProvider: String
+    val destinationProvider: String,
+    val destinationTreeRootFingerprint: String? = null
 ) {
     // These labels are separately encrypted at rest, but their generated
     // data-class toString previously leaked them into any incidental debug
@@ -59,6 +62,7 @@ class ProtectedRecoveryContextStore(context: Context) {
         private const val KEY_ALIAS = "expository-transfer-recovery-context-v1"
         private const val MAX_RECORD = 2048
         private const val MAX_TEXT = 180
+        private val TREE_ROOT_FINGERPRINT = Regex("[0-9a-f]{64}")
         private const val IV_LENGTH = 12
         private const val TAG_LENGTH = 128
         private val LOCK = Any()
@@ -102,7 +106,9 @@ class ProtectedRecoveryContextStore(context: Context) {
             require(context.operation in setOf("SAF_PICKER_COPY", "SAF_RECURSIVE_COPY", "SAF_DUAL_COPY") &&
                 allowed(context.sourceLabel) &&
                 allowed(context.destinationLabel) &&
-                allowed(context.destinationProvider)) {
+                allowed(context.destinationProvider) &&
+                (context.destinationTreeRootFingerprint == null ||
+                    TREE_ROOT_FINGERPRINT.matches(context.destinationTreeRootFingerprint))) {
                 "INVALID_RECOVERY_CONTEXT"
             }
             if (targetFile.exists() || File(targetFile.path + ".bak").exists() ||
@@ -110,11 +116,14 @@ class ProtectedRecoveryContextStore(context: Context) {
                 throw IOException("RECOVERY_CONTEXT_ALREADY_RECORDED")
             val plain = ByteArrayOutputStream().also { bytes ->
                 DataOutputStream(bytes).use { out ->
-                    out.writeByte(1)
+                    // V1 (four human-readable fields) remains readable.
+                    // V2 adds one optional non-reversible, encrypted root witness.
+                    out.writeByte(2)
                     out.writeUTF(context.operation)
                     out.writeUTF(context.sourceLabel)
                     out.writeUTF(context.destinationLabel)
                     out.writeUTF(context.destinationProvider)
+                    out.writeUTF(context.destinationTreeRootFingerprint.orEmpty())
                 }
             }.toByteArray()
             val record = try {
@@ -196,11 +205,20 @@ class ProtectedRecoveryContextStore(context: Context) {
                 bytes.size - MAGIC.size - IV_LENGTH)
             try {
                 DataInputStream(ByteArrayInputStream(plaintext)).use { input ->
-                    if (input.readUnsignedByte() != 1)
+                    val version = input.readUnsignedByte()
+                    if (version !in 1..2)
                         throw IOException("RECOVERY_CONTEXT_VERSION_UNSUPPORTED")
+                    val operation = input.readUTF()
+                    val source = input.readUTF()
+                    val destination = input.readUTF()
+                    val provider = input.readUTF()
+                    val root = if (version == 2)
+                        input.readUTF().takeUnless { it.isEmpty() }
+                    else null
                     val context = ProtectedRecoveryContext(
-                        input.readUTF(), input.readUTF(), input.readUTF(), input.readUTF())
+                        operation, source, destination, provider, root)
                     if (input.available() != 0 ||
+                        (root != null && !TREE_ROOT_FINGERPRINT.matches(root)) ||
                         context.operation !in setOf("SAF_PICKER_COPY", "SAF_RECURSIVE_COPY", "SAF_DUAL_COPY") ||
                         !allowed(context.sourceLabel) ||
                         !allowed(context.destinationLabel) ||
