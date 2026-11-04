@@ -372,9 +372,8 @@ internal fun SftpBrowseCard(
                     reviewedPick != null ->
                         pendingPickedUpload === reviewedPick &&
                             reviewedPick.stillMatches(sessionId, folder, frozenSources) &&
-                            (reviewedPick.sourceShareEpoch == null ||
-                                (context as? TransferActivity)?.incomingShareEpoch ==
-                                    reviewedPick.sourceShareEpoch)
+                            reviewedPick.shareEpochStillCurrent(
+                                (context as? TransferActivity)?.incomingShareEpoch)
                     frozenScoped != null ->
                         pendingPeerUpload?.let { review ->
                             review.sources == frozenScoped &&
@@ -1716,9 +1715,8 @@ internal fun SftpBrowseCard(
                 pendingPickedUpload?.let { review ->
                     val valid = session != null && !busy && !peerRelayLocked &&
                         review.stillMatches(sessionId, folder) &&
-                        (review.sourceShareEpoch == null ||
-                            (context as? TransferActivity)?.incomingShareEpoch ==
-                                review.sourceShareEpoch)
+                        review.shareEpochStillCurrent(
+                            (context as? TransferActivity)?.incomingShareEpoch)
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)) {
