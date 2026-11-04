@@ -1,5 +1,8 @@
 # Expository Transfer: controlled live-server validation (2026-10-24)
 
+**Status of this document:** historical initial live-server research and permissions checklist. For executable current authorized tests use [EXTERNAL-SMOKE-OPERATIONS.md](EXTERNAL-SMOKE-OPERATIONS.md), [the native work queue](../../android-transfer/WORK-QUEUE.md), and [the release ledger](RELEASE-READINESS.md). Do not treat the original S60 discovery steps below as the current next blocker: the existing trusted-main workflow already pins the historical S60 connection tuple and uses the separately supplied `FTP_PASSWORD` secret when present. No secret presence or renewed owner-server write permission is inferred from this file. Retain its restrictions on pre-existing media and external shared demo servers.
+
+
 ## Authority and source
 The product owner authorized using their FTP server for testing. The S60 repository README identifies a Seedhost server and existing `/downloads/S60/DVD`, `/downloads/S60/1080p`, and `/downloads/S60/720p` media trees. These **are not test fixtures**. Do not alter, rename, move, overwrite, or delete their contents. The Expository repository reportedly has a newly created password secret; the existence, name and available workflow injection **have not been independently verified**.
 
@@ -38,4 +41,5 @@ These public demo credentials are intentionally published by their operators. Va
 * Treat real Google Drive/Docs tests as separately scoped OAuth/provider checks; none of the FTP credentials grants permission for them.
 
 ## Next verification gate
-Confirm S60 connection configuration and precise Actions secret identifier privately, demonstrate read-only listing with TLS/host-key verification, and only then enable isolated write-fixture tests in a designated test directory. If any prerequisite is missing, report it as blocked rather than inferring access or claiming a network pass.
+
+Use the currently implemented owner-authorized [manual secure smoke workflow](EXTERNAL-SMOKE-OPERATIONS.md) for one intentional, bounded read-only check when new external interoperability evidence is needed; do not repeat the historic configuration-discovery task as though the workflow did not exist. Its immutable owner tuple and secret reference are specified there. The Rebex 425 result remains a server-specific compatibility problem under [#54](https://github.com/gamesbyian/Expository/issues/54); no TLS trust downgrade, speculative retry storm, or write against shared public demos. A controlled disposable write fixture requires independently verified exact sandbox authority. A green desktop/JVM smoke test does not qualify Android network E2 or real-device E4.
