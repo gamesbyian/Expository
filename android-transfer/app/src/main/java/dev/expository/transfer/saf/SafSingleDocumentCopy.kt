@@ -33,6 +33,10 @@ data class SafDocumentObservation(
  */
 class SafSingleDocumentCopy(private val resolver: ContentResolver,
     private val recordRecoveryContext: ((String, String, String, String) -> Unit)? = null,
+    /** New scoped caller can also record the source's provider document ID
+     * fingerprint in the encrypted recovery context. Legacy callback remains. */
+    private val recordRecoveryContextWithSource:
+        ((String, String, String, String, Uri) -> Unit)? = null,
     // Keep the existing single-argument storage factory as the LAST lambda
     // parameter: older callers may use SafSingleDocumentCopy(resolver) { ... }.
     private val storageForPlan: ((String) -> AtomicAttemptStorage)? = null
@@ -135,12 +139,19 @@ class SafSingleDocumentCopy(private val resolver: ContentResolver,
         // The operator needs a bounded, encrypted context after process death.
         // This independent record is committed before the attempt journal can
         // record a possible destination write. No URI or grant is persisted.
-        if (recordRecoveryContext != null) {
+        if (recordRecoveryContext != null || recordRecoveryContextWithSource != null) {
             try {
-                recordRecoveryContext.invoke(initialPlan.digest,
-                    reviewLabel(observe(source).displayName),
-                    reviewLabel(observe(destination).displayName),
-                    reviewLabel(destination.authority ?: "Android document provider"))
+                val sourceLabel = reviewLabel(observe(source).displayName)
+                val destinationLabel = reviewLabel(observe(destination).displayName)
+                val provider = reviewLabel(destination.authority
+                    ?: "Android document provider")
+                if (recordRecoveryContextWithSource != null) {
+                    recordRecoveryContextWithSource.invoke(initialPlan.digest,
+                        sourceLabel, destinationLabel, provider, source)
+                } else {
+                    recordRecoveryContext?.invoke(initialPlan.digest,
+                        sourceLabel, destinationLabel, provider)
+                }
             } catch (_: Exception) {
                 return CopyReceipt(initialPlan.digest, CopyProof.BLOCKED, 0,
                     "RECOVERY_CONTEXT_UNAVAILABLE")
