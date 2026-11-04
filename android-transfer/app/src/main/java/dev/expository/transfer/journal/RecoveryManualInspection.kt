@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.content.Intent
 import android.net.Uri
 import dev.expository.transfer.LocalTreeReader
+import java.util.concurrent.CancellationException
 
 /**
  * A bounded, read-only inspection of a FRESH user-picked Android tree.
@@ -34,7 +35,9 @@ internal object RecoveryManualInspection {
     /** May perform slow IPC; invoke off the UI thread. */
     fun inspect(resolver: ContentResolver, tree: Uri,
         createdChild: ProtectedCreatedChildWitness? = null,
-        completedBytes: ProtectedTransferredByteEvidence? = null): ManualRecoveryListing {
+        completedBytes: ProtectedTransferredByteEvidence? = null,
+        continueRequested: () -> Boolean = { true }): ManualRecoveryListing {
+        if (!continueRequested()) throw CancellationException("INSPECTION_STOPPED")
         require(LocalTreeReader.validTree(tree)) { "INVALID_INSPECTION_TREE" }
         // A created-child check requires a complete direct-parent listing:
         // scanning only the first UI page would falsely imply absence.
@@ -42,6 +45,7 @@ internal object RecoveryManualInspection {
             else LocalTreeReader.MAX_BROWSE
         val listing = LocalTreeReader.list(resolver, tree,
             LocalTreeReader.rootId(tree), limit)
+        if (!continueRequested()) throw CancellationException("INSPECTION_STOPPED")
         // Display provider-supplied names only transiently, sanitized and
         // bounded. Never infer absence from a truncated/incomplete cursor.
         val names = listing.children.take(8).map { entry ->
@@ -51,8 +55,12 @@ internal object RecoveryManualInspection {
         }
         val relation = RecoveryCreatedChildIdentity.compare(
             createdChild, tree, listing)
+        if (!continueRequested()) throw CancellationException("INSPECTION_STOPPED")
         val bytes = RecoveryDestinationByteInspector.inspect(
-            resolver, tree, listing, createdChild, completedBytes)
+            resolver, tree, listing, createdChild, completedBytes, continueRequested)
+        if (!continueRequested() ||
+            bytes == ManualDestinationBytes.INSPECTION_CANCELED)
+            throw CancellationException("INSPECTION_STOPPED")
         return ManualRecoveryListing(listing.children.size,
             listing.complete && !listing.hasMore, names, relation, bytes)
     }
