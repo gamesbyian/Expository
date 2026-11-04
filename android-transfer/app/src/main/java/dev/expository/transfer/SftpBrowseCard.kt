@@ -1038,103 +1038,138 @@ internal fun SftpBrowseCard(
      */
     fun executePeerBatch(pending: PendingPeerSftpBatchDownload) {
         val live = session ?: return
-        if (busy || peerRelayLocked || !pending.stillMatches(
-            sessionId, folder, activeDeviceTarget, peerBatchSelection, page)) {
-            pendingPeerBatch = null
+        // Claim this exact immutable review once, before any provider work.
+        // Single and Dual now use the same verified-only dispatcher; a late
+        // second tap cannot start another batch using the old approval.
+        val dispatch = ClaimedCopyDispatch.claim {
+            !busy && !peerRelayLocked && pendingPeerBatch === pending &&
+                pending.stillMatches(sessionId, folder, activeDeviceTarget,
+                    peerBatchSelection, page)
+        }
+        pendingPeerBatch = null
+        if (dispatch == null) {
             status = "Multi-file Copy approval expired. No destination created."
             return
         }
-        pendingPeerBatch = null
+        val sources = pending.selection.files.toList()
         val permit = AtomicBoolean(true)
         continueCopy = permit
         transferKind = "SFTP → Device batch"
         transferred = 0L
         busy = true
-        // Freeze the peer's Android folder controls and both workspace modes
-        // until the last journaled operation settles or cancellation returns.
+        // Keep peer controls frozen until the last per-file journal resolves.
         onRelaySourceActive(sessionId)
         status = "Copying selected remote files to the picked Android folder…"
         scope.launch {
-            var verified = 0
-            var verifiedBytes = 0L
+            var observedVerified = 0
+            var observedVerifiedBytes = 0L
+            // A queued main-thread status label must never overwrite an
+            // already settled batch result after the IO dispatcher exits.
+            val publishing = AtomicBoolean(true)
             try {
-                val selection = pending.selection
-                for ((index, chosen) in selection.files.withIndex()) {
-                    if (!permit.get() || !coroutineContext.isActive) {
-                        status = "Canceled after " + verified + " verified file(s). " +
-                            "Review any partial Android document before retrying."
-                        break
+                val run = withContext(Dispatchers.IO) {
+                    val active = coroutineContext[Job]
+                    val credited = hashSetOf<String>()
+                    val stillRunning = {
+                        permit.get() && active?.isActive == true
                     }
-                    status = "Copying remote file " + (index + 1) + " of " +
-                        selection.files.size + " after fresh scoped preflight…"
-                    val receipt = withContext(Dispatchers.IO) {
-                        val active = coroutineContext[Job]
-                        val remote = live.completeMutationListing(pending.folder)
-                        if (!SftpBatchSelection(listOf(chosen))
-                                .matchesPage(pending.folder, remote)) {
-                            null
-                        } else {
-                            val adapter = SftpToSafTreeCopy(context.contentResolver) { digest ->
-                                AndroidAtomicAttemptStorage(context.applicationContext, digest)
-                            }
-                            // A fresh destination witness is necessary because
-                            // each verified earlier file changed its siblings.
-                            val next = adapter.prepare(live, SftpTreeCopyRequest(
-                                pending.sessionId, chosen.absolutePath,
-                                chosen.revision, pending.target))
-                            next?.let { reviewed ->
-                                var lastDisplayed = 0L
-                                adapter.copy(live, reviewed,
-                                    continueRequested = {
-                                        permit.get() && active?.isActive == true
-                                    },
-                                    onProgress = { bytes ->
-                                        if (bytes - lastDisplayed >= 256L * 1024L) {
-                                            lastDisplayed = bytes
-                                            publishCopyProgress(bytes, permit, live,
-                                                verifiedBytes)
+                    dispatch.run(
+                        expectedItems = sources.size,
+                        continueRequested = stillRunning,
+                        prepare = { index ->
+                            val chosen = sources[index]
+                            // Each previously verified file changes the
+                            // destination folder revision. Never execute
+                            // one of the initial review's stale plans.
+                            val pageNow = live.completeMutationListing(pending.folder)
+                            if (!SftpBatchSelection(listOf(chosen))
+                                    .matchesPage(pending.folder, pageNow)) {
+                                null
+                            } else {
+                                val adapter = SftpToSafTreeCopy(context.contentResolver) {
+                                        digest ->
+                                    AndroidAtomicAttemptStorage(
+                                        context.applicationContext, digest)
+                                }
+                                val fresh = adapter.prepare(live, SftpTreeCopyRequest(
+                                    pending.sessionId, chosen.absolutePath,
+                                    chosen.revision, pending.target))
+                                fresh?.let { reviewed ->
+                                    val verifiedBeforeFile = observedVerifiedBytes
+                                    scope.launch {
+                                        if (publishing.get() && busy &&
+                                            continueCopy === permit && permit.get() &&
+                                            session === live) {
+                                            status = "Copying remote file " + (index + 1) +
+                                                " of " + sources.size +
+                                                " after fresh scoped preflight…"
                                         }
-                                    })
+                                    }
+                                    ClaimedCopyDispatch.Prepared(reviewed.plan.digest) {
+                                        var lastDisplayed = 0L
+                                        val receipt = adapter.copy(live, reviewed,
+                                            continueRequested = stillRunning,
+                                            onProgress = { bytes ->
+                                                if (bytes - lastDisplayed >= 256L * 1024L) {
+                                                    lastDisplayed = bytes
+                                                    publishCopyProgress(bytes, permit, live,
+                                                        verifiedBeforeFile)
+                                                }
+                                            })
+                                        // This running total is advisory for
+                                        // in-flight progress only. It follows
+                                        // the shared ledger's digest/bytes/no-
+                                        // duplicate proof constraints. Final
+                                        // success uses ONLY run.outcome.
+                                        if (receipt.proof == CopyProof.BYTES_VERIFIED &&
+                                            receipt.planDigest == reviewed.plan.digest &&
+                                            receipt.bytesWritten >= 0L &&
+                                            credited.add(receipt.planDigest)) {
+                                            observedVerified++
+                                            observedVerifiedBytes = Math.addExact(
+                                                observedVerifiedBytes, receipt.bytesWritten)
+                                        }
+                                        receipt
+                                    }
+                                }
                             }
                         }
-                    }
-                    if (receipt == null) {
-                        status = "Stopped after " + verified + " verified file(s): " +
-                            "the next source or destination no longer passes preflight. " +
-                            "No overwrite or automatic retry."
-                        break
-                    }
-                    transferred = Math.addExact(verifiedBytes, receipt.bytesWritten)
-                    if (receipt.proof != CopyProof.BYTES_VERIFIED) {
-                        status = when (receipt.proof) {
-                            CopyProof.BLOCKED ->
-                                "Stopped after " + verified + " verified file(s): " +
-                                    "a changed source, collision or scoped permission blocked the next Copy."
-                            CopyProof.WRITE_ACKNOWLEDGED ->
-                                "Stopped after " + verified + " verified file(s): " +
-                                    "the next Android document is acknowledged but not byte-verified."
-                            CopyProof.UNCERTAIN ->
-                                "Stopped after " + verified + " verified file(s): " +
-                                    "an uncertain or partial Android document may remain. Inspect before retry."
-                            CopyProof.BYTES_VERIFIED -> error("unreachable")
-                        }
-                        break
-                    }
-                    verified++
-                    verifiedBytes = Math.addExact(verifiedBytes, receipt.bytesWritten)
-                    if (verified == selection.files.size) {
-                        status = "All " + verified + " SFTP files independently byte-verified " +
-                            "in the selected Android folder (" + verifiedBytes + " bytes). " +
+                    )
+                }
+                publishing.set(false)
+                val confirmed = run.outcome
+                transferred = confirmed.verifiedBytes
+                status = when {
+                    confirmed.complete ->
+                        "All " + confirmed.verifiedItems +
+                            " SFTP files independently byte-verified in the selected " +
+                            "Android folder (" + confirmed.verifiedBytes + " bytes). " +
                             "Original remote files remain unchanged. Cloud sync is not confirmed."
-                    }
+                    confirmed.state == CopyOutcomeState.BLOCKED ->
+                        "Stopped after " + confirmed.verifiedItems +
+                            " verified file(s): the next source or destination no longer " +
+                            "passes fresh preflight. No overwrite or automatic retry."
+                    confirmed.stopProof == CopyProof.WRITE_ACKNOWLEDGED ->
+                        "Stopped after " + confirmed.verifiedItems +
+                            " verified file(s): the next Android document is acknowledged " +
+                            "but not byte-verified. Inspect before retry."
+                    run.receipts.size == confirmed.verifiedItems ->
+                        "Stopped after " + confirmed.verifiedItems +
+                            " verified file(s), before another destination operation. " +
+                            "No automatic retry."
+                    else ->
+                        "Stopped after " + confirmed.verifiedItems +
+                            " verified file(s): an uncertain, partial or mismatched " +
+                            "destination needs inspection before retry."
                 }
             } catch (_: CancellationException) {
-                status = "Multi-file Copy interrupted after " + verified +
-                    " verified file(s). Inspect possible partial destination."
+                status = "Multi-file Copy interrupted after " + observedVerified +
+                    " independently verified file(s). Inspect possible partial destination."
             } catch (_: Exception) {
-                status = "Multi-file Copy uncertain after " + verified +
-                    " verified file(s). Inspect the destination before retry."
+                status = "Multi-file Copy uncertain after " + observedVerified +
+                    " independently verified file(s). Inspect destination before retry."
             } finally {
+                publishing.set(false)
                 onRelaySourceActive(null)
                 continueCopy = null
                 transferKind = ""
