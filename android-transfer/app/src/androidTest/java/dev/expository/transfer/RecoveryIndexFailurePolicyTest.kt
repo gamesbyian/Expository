@@ -36,17 +36,16 @@ class RecoveryIndexFailurePolicyTest {
             "content://different.identity.provider/tree/account%3ARoot-One")
         val invalid = android.net.Uri.parse("content://synthetic.identity.provider/document/not-a-tree")
         val identity = dev.expository.transfer.journal.RecoveryTreeRootIdentity
-        val relation = dev.expository.transfer.journal.RecoveryTreeRootRelation
         val fingerprint = identity.fingerprint(original)
         assertEquals(64, fingerprint.length)
-        assertEquals(relation.SAME_RECORDED_ROOT, identity.compare(fingerprint, same))
-        assertEquals(relation.DIFFERENT_RECORDED_ROOT,
+        assertEquals(dev.expository.transfer.journal.RecoveryTreeRootRelation.SAME_RECORDED_ROOT, identity.compare(fingerprint, same))
+        assertEquals(dev.expository.transfer.journal.RecoveryTreeRootRelation.DIFFERENT_RECORDED_ROOT,
             identity.compare(fingerprint, otherRoot))
-        assertEquals(relation.DIFFERENT_RECORDED_ROOT,
+        assertEquals(dev.expository.transfer.journal.RecoveryTreeRootRelation.DIFFERENT_RECORDED_ROOT,
             identity.compare(fingerprint, otherAuthority))
-        assertEquals(relation.NO_SAVED_ROOT, identity.compare(null, original))
-        assertEquals(relation.UNDETERMINED, identity.compare("invalid", original))
-        assertEquals(relation.UNDETERMINED, identity.compare(fingerprint, invalid))
+        assertEquals(dev.expository.transfer.journal.RecoveryTreeRootRelation.NO_SAVED_ROOT, identity.compare(null, original))
+        assertEquals(dev.expository.transfer.journal.RecoveryTreeRootRelation.UNDETERMINED, identity.compare("invalid", original))
+        assertEquals(dev.expository.transfer.journal.RecoveryTreeRootRelation.UNDETERMINED, identity.compare(fingerprint, invalid))
 
         val digest = "c".repeat(64)
         val hint = dev.expository.transfer.journal.ProtectedRecoveryContext(
