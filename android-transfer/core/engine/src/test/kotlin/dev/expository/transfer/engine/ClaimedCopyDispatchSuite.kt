@@ -109,6 +109,22 @@ object ClaimedCopyDispatchSuite {
             afterOneAck.outcome.verifiedItems == 1 &&
             afterOneAck.outcome.verifiedBytes == 64L)
 
+        // A second pinned SFTP server returning a receipt for a different
+        // plan cannot advance the reviewed relay or launch item three.
+        val relayPrepared = mutableListOf<Int>()
+        val relayMismatch = claimed().run(3, { true }) { index ->
+            relayPrepared += index
+            ClaimedCopyDispatch.Prepared(if (index == 0) a else b) {
+                if (index == 0) verified(a, 12L) else verified(c, 14L)
+            }
+        }
+        check(relayPrepared == listOf(0, 1))
+        check(relayMismatch.receipts.size == 2 &&
+            relayMismatch.outcome.state == CopyOutcomeState.REVIEW_REQUIRED &&
+            relayMismatch.outcome.verifiedItems == 1 &&
+            relayMismatch.outcome.verifiedBytes == 12L &&
+            relayMismatch.outcome.stopProof == CopyProof.UNCERTAIN)
+
         var extraPreflight = 0
         val uncertain = claimed().run(3, { true }) { index ->
             extraPreflight++
