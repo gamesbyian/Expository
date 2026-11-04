@@ -44,6 +44,7 @@ internal object RecoveryManualSourceInspector {
     fun inspect(
         resolver: ContentResolver,
         pickedSource: Uri,
+        pickerResultFlags: Int,
         completedBytes: ProtectedTransferredByteEvidence?,
         continueRequested: () -> Boolean = { true }
     ): FreshSourceByteRelation {
@@ -51,7 +52,9 @@ internal object RecoveryManualSourceInspector {
         if (completedBytes == null || completedBytes.byteCount < 0L ||
             !SHA256_HEX.matches(completedBytes.sourceSha256Hex))
             return FreshSourceByteRelation.NO_COMPLETED_TRANSFER_BYTES
-        if (!acceptsPickerResult(pickedSource, Intent.FLAG_GRANT_READ_URI_PERMISSION))
+        // A URI that happens to be readable is not a substitute for the
+        // actual READ-granted ACTION_OPEN_DOCUMENT result from the operator.
+        if (!acceptsPickerResult(pickedSource, pickerResultFlags))
             return FreshSourceByteRelation.INVALID_SOURCE_GRANT
         if (completedBytes.byteCount > MAX_MANUAL_BYTES)
             return FreshSourceByteRelation.BOUNDED_READ_TOO_LARGE
@@ -59,7 +62,9 @@ internal object RecoveryManualSourceInspector {
         val observer = SafSingleDocumentCopy(resolver)
         val before = try { observer.observe(pickedSource) }
             catch (_: Exception) {
-                return FreshSourceByteRelation.SOURCE_READ_UNAVAILABLE
+                return if (continueRequested())
+                    FreshSourceByteRelation.SOURCE_READ_UNAVAILABLE
+                else FreshSourceByteRelation.INSPECTION_CANCELED
             }
         if (!continueRequested()) return FreshSourceByteRelation.INSPECTION_CANCELED
         if (before.size != null && before.size > MAX_MANUAL_BYTES)
@@ -96,14 +101,18 @@ internal object RecoveryManualSourceInspector {
                 bytes to hash.digest()
             }
         } catch (_: Exception) {
-            return FreshSourceByteRelation.SOURCE_READ_UNAVAILABLE
+            return if (continueRequested())
+                FreshSourceByteRelation.SOURCE_READ_UNAVAILABLE
+            else FreshSourceByteRelation.INSPECTION_CANCELED
         }
         if (!continueRequested()) return FreshSourceByteRelation.INSPECTION_CANCELED
         // Reobserve metadata after the entire source input and its close.
         // Different version/name/size means any hash comparison is stale.
         val after = try { observer.observe(pickedSource) }
             catch (_: Exception) {
-                return FreshSourceByteRelation.SOURCE_METADATA_CHANGED_DURING_READ
+                return if (continueRequested())
+                    FreshSourceByteRelation.SOURCE_METADATA_CHANGED_DURING_READ
+                else FreshSourceByteRelation.INSPECTION_CANCELED
             }
         if (!continueRequested()) return FreshSourceByteRelation.INSPECTION_CANCELED
         if (before != after)
