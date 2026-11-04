@@ -43,6 +43,7 @@ import dev.expository.transfer.saf.SafSingleDocumentCopy
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 import dev.expository.transfer.journal.ProtectedRecoveryContext
 import dev.expository.transfer.journal.ProtectedRecoveryContextStore
+import dev.expository.transfer.journal.RecoveryOriginalSourceIdentity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -125,9 +126,15 @@ fun LocalCopyCard(
             storageForPlan = { digest ->
                 AndroidAtomicAttemptStorage(app, digest)
             },
-            recordRecoveryContext = { digest, sourceName, destinationName, provider ->
+            recordRecoveryContextWithSource = {
+                    digest, sourceName, destinationName, provider, source ->
+                // Only a recognized Android provider document URI can
+                // produce a historical source-reference fingerprint.
+                // Other content URIs remain unknown, never guessed by name.
                 recovery.recordNew(digest, ProtectedRecoveryContext(
-                    "SAF_PICKER_COPY", sourceName, destinationName, provider))
+                    "SAF_PICKER_COPY", sourceName, destinationName, provider,
+                    sourceDocumentFingerprint =
+                        RecoveryOriginalSourceIdentity.capture(source)))
             })
     }
     var selected by remember { mutableStateOf<Uri?>(null) }
