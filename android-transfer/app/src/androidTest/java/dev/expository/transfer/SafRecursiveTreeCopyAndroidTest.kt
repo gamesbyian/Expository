@@ -106,6 +106,25 @@ class SafRecursiveTreeCopyAndroidTest {
         assertEquals(setOf("Shows", "Empty", "Episode.bin"),
             witnesses.map { it.createdName }.toSet())
         val byName = witnesses.associateBy { it.createdName }
+        val transferred = dev.expository.transfer.journal.ProtectedTransferredBytesEvidenceStore(app)
+        val captured = stepKeys.mapNotNull { key ->
+            transferred.read(key)?.let { key to it }
+        }
+        // Directory creates have metadata verification, but only the file
+        // has a completed source-byte digest. This was sealed BEFORE the
+        // destination readback already asserted above.
+        assertEquals(1, captured.size)
+        val sealedFile = captured.single()
+        val childStore = dev.expository.transfer.journal.ProtectedCreatedChildWitnessStore(app)
+        assertEquals("Episode.bin", childStore.read(sealedFile.first)?.createdName)
+        assertEquals(fixtureBytes.size.toLong(), sealedFile.second.byteCount)
+        val actualSourceSha = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(fixtureBytes).joinToString("") { "%02x".format(it) }
+        assertEquals(actualSourceSha, sealedFile.second.sourceSha256Hex)
+        val sealedDisk = java.io.File(app.noBackupFilesDir,
+            "transfer_source_bytes_v1_" + sealedFile.first).readBytes()
+        assertTrue(!sealedDisk.toString(Charsets.ISO_8859_1)
+            .contains(actualSourceSha))
         val childIdentity = dev.expository.transfer.journal.RecoveryCreatedChildIdentity
         assertEquals(
             dev.expository.transfer.journal.CreatedChildRelation.SAME_RECORDED_CHILD_IDENTITY,
