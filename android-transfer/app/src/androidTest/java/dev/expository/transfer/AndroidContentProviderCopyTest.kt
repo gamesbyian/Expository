@@ -39,17 +39,21 @@ class AndroidContentProviderCopyTest {
         val picker = requireNotNull(PendingPickedSftpUpload.freeze(
             listOf(uri), listOf(observation), "pinned-test-session", "/private"))
         assertEquals(null, picker.sourceShareEpoch)
+        assertTrue("An ordinary picker needs no inbound Share epoch",
+            picker.shareEpochStillCurrent(null))
         val shared = picker.copy(sourceShareEpoch = 19L)
         assertEquals(19L, shared.sourceShareEpoch)
+        assertTrue(shared.shareEpochStillCurrent(19L))
+        assertFalse("A newer Share must invalidate the old reviewed source",
+            shared.shareEpochStillCurrent(20L))
+        assertFalse("No current Activity share epoch cannot reauthorize a Share",
+            shared.shareEpochStillCurrent(null))
         assertTrue(shared.stillMatches("pinned-test-session", "/private", listOf(uri)))
         assertFalse(shared.stillMatches("different-session", "/private", listOf(uri)))
         assertFalse(shared.stillMatches("pinned-test-session", "/", listOf(uri)))
         assertFalse(shared.toString().contains("private-record"))
         assertFalse(shared.toString().contains("pinned-test-session"))
         assertFalse(shared.items.single().toString().contains("sensitive-record"))
-        // A new share epoch cannot be substituted for this original review;
-        // the UI compares against the activity's live monotonic epoch.
-        assertTrue(shared.sourceShareEpoch != 20L)
         assertEquals(1, shared.uris.size)
     }
 
