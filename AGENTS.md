@@ -15,7 +15,7 @@ This is a **small enduring router**, not a dated work diary. For what to do next
 | Security, private repos, token or API changes | This guide's invariants, browser network/API logic and relevant regression tests |
 | CI or performance | [CI engineering standard](docs/CI-ENGINEERING-STANDARD.md), [lean validation policy](docs/quality/VALIDATION.md), `tests/ci-orchestration.test.cjs`, workflow YAML |
 | Repo housekeeping | [work queue](docs/WORK-QUEUE.md), ownership notes, current source/tests |
-| Android-native Expository Transfer **independent app under development** | [native agent guide](android-transfer/AGENTS.md), [ranked native queue](android-transfer/WORK-QUEUE.md), [current native contract](docs/android-transfer/CURRENT-CONTRACT.md), [G0–G9 ledger](docs/android-transfer/RELEASE-READINESS.md). Native code is scoped to `android-transfer/`; NEVER port writer behaviors into the read-only Pages explorer |
+| Android-native Expository Transfer **independent app under development** | [native agent guide](android-transfer/AGENTS.md), [release blocker workstream crosswalk](docs/android-transfer/RELEASE-BLOCKER-CONSOLIDATION-2026-11-03.md), [ranked native queue](android-transfer/WORK-QUEUE.md), [current native contract](docs/android-transfer/CURRENT-CONTRACT.md), [G0–G9 ledger](docs/android-transfer/RELEASE-READINESS.md). Native code is scoped to `android-transfer/`; NEVER port writer behaviors into the read-only Pages explorer |
 
 ## Non-negotiable product and security rules
 
