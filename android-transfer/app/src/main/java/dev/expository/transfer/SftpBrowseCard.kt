@@ -1063,6 +1063,9 @@ internal fun SftpBrowseCard(
         scope.launch {
             var observedVerified = 0
             var observedVerifiedBytes = 0L
+            // A queued main-thread status label must never overwrite an
+            // already settled batch result after the IO dispatcher exits.
+            val publishing = AtomicBoolean(true)
             try {
                 val run = withContext(Dispatchers.IO) {
                     val active = coroutineContext[Job]
@@ -1094,8 +1097,9 @@ internal fun SftpBrowseCard(
                                 fresh?.let { reviewed ->
                                     val verifiedBeforeFile = observedVerifiedBytes
                                     scope.launch {
-                                        if (busy && continueCopy === permit &&
-                                            permit.get() && session === live) {
+                                        if (publishing.get() && busy &&
+                                            continueCopy === permit && permit.get() &&
+                                            session === live) {
                                             status = "Copying remote file " + (index + 1) +
                                                 " of " + sources.size +
                                                 " after fresh scoped preflight…"
@@ -1132,6 +1136,7 @@ internal fun SftpBrowseCard(
                         }
                     )
                 }
+                publishing.set(false)
                 val confirmed = run.outcome
                 transferred = confirmed.verifiedBytes
                 status = when {
@@ -1164,6 +1169,7 @@ internal fun SftpBrowseCard(
                 status = "Multi-file Copy uncertain after " + observedVerified +
                     " independently verified file(s). Inspect destination before retry."
             } finally {
+                publishing.set(false)
                 onRelaySourceActive(null)
                 continueCopy = null
                 transferKind = ""
