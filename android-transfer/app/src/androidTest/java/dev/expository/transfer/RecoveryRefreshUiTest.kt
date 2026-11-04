@@ -53,6 +53,8 @@ class RecoveryRefreshUiTest {
         val journalFile = File(context.noBackupFilesDir, "transfer_attempt_" + digest)
         val hintFile = File(context.noBackupFilesDir,
             "transfer_recovery_context_v1_" + digest)
+        val sourceBytesFile = File(context.noBackupFilesDir,
+            "transfer_source_bytes_v1_" + digest)
         val journal = DurableAttemptJournal(
             AndroidAtomicAttemptStorage(context, digest))
         try {
@@ -62,6 +64,12 @@ class RecoveryRefreshUiTest {
                     "test.android.provider"))
             journal.confirm(digest)
             journal.beginAttempt(digest, "manual_review_fixture_01")
+            val closedBytes = "synthetic sealed source".toByteArray()
+            val closedHash = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(closedBytes)
+            dev.expository.transfer.journal.ProtectedTransferredBytesEvidenceStore(context)
+                .recordNew(digest, closedBytes.size.toLong(), closedHash)
+            val evidenceBefore = sourceBytesFile.readBytes()
             rule.setContent { MaterialTheme { RecoveryStatusCard() } }
             rule.waitUntil(10_000L) {
                 rule.onAllNodesWithText("Show review references")
@@ -70,9 +78,16 @@ class RecoveryRefreshUiTest {
             rule.onNodeWithText("Show review references").performClick()
             rule.onNodeWithText("Inspect folder for record 1 …" + digest.takeLast(12))
                 .assertExists()
+            rule.onNodeWithText("Compare current source for record 1 …" +
+                digest.takeLast(12)).assertExists()
             rule.onNodeWithText("Hide review references").performClick()
             rule.onNodeWithText("Inspect folder for record 1 …" + digest.takeLast(12))
                 .assertDoesNotExist()
+            rule.onNodeWithText("Compare current source for record 1 …" +
+                digest.takeLast(12)).assertDoesNotExist()
+            org.junit.Assert.assertArrayEquals(
+                "Showing/hiding read-only source action must preserve sealed evidence",
+                evidenceBefore, sourceBytesFile.readBytes())
             // Hiding a private review record must not mutate its journal.
             // Displaying this action never changes an active journal,
             // issues an Android picker grant or claims a verified receipt.
@@ -80,6 +95,7 @@ class RecoveryRefreshUiTest {
         } finally {
             AtomicFile(journalFile).delete()
             AtomicFile(hintFile).delete()
+            AtomicFile(sourceBytesFile).delete()
         }
     }
 
