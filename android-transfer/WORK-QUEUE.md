@@ -2,6 +2,20 @@
 
 **Reconciled 2026-11-03 (latest E2: 2026-11-04 UTC) against live `main` `956e7a4`.** Zero open PRs; **11 substantive issues remain open**. [#401](https://github.com/gamesbyian/Expository/pull/401) was exact-head accepted and merged after [native/JVM+Android compile #41742963617](https://github.com/gamesbyian/Expository/actions/runs/41742963617), [web #41742963620](https://github.com/gamesbyian/Expository/actions/runs/41742963620) and **genuine API35 real-picker E2 1/1 [#41743237522](https://github.com/gamesbyian/Expository/actions/runs/41743237522)** (artifact `13282857871`). The artifact proves both independently user-selected provider grants, three verified recursive steps, exact 137,119-byte independent destination readback, unchanged source, live refreshed destination pane and clean Activity teardown. Material3's earlier detached child-semantics crash is resolved **for that E2 route** with accessible Foundation controls and intact automatic refresh; older red experiments remain historical evidence. [#430](https://github.com/gamesbyian/Expository/pull/430) merged the checksum-verified official Gradle 8.13 wrapper; #326 still needs dependency locking and transitive verification. [#426](https://github.com/gamesbyian/Expository/pull/426) per-source Smart Merge E1 freshness is accepted, but executable N-source Merge #384 is still unimplemented. Keep physical/third-party **E4**, signed **E5**, remote directions, Rename Apply and durable reconciliation unaccepted.
 
+## Consolidated blocker workstreams (delivery routing)
+
+The 45-item release audit contains overlapping symptoms, **not 45 independently owned tasks**. Use the [release-blocker consolidation map](../docs/android-transfer/RELEASE-BLOCKER-CONSOLIDATION-2026-11-03.md) to assign concerns to shared workstreams:
+
+- **T1 common action and consent:** W01 + W02 (#324/#28).
+- **T2 per-item queue, recovery and receipts:** W05 (#325), reused by Copy, Move, Rename, Merge and Drive.
+- **T3 adapter capabilities and file/folder route matrix:** W03 + W04 + W07 (#28/#54), with one consent for Move and source deletion after verified Copy.
+- **T4 Rename Apply and N-source Smart Merge:** W06 + W14 (#26/#384), reusing T1–T3 rather than independent journals.
+- **T5 genuine Drive/Docs and optional new locations:** W08 (#27), with Drive originals P0 and additional GitHub/Chunks integrations tracked separately.
+- **T6 authentication, security and dependency integrity:** W10 + W13 (#25/#326/#327).
+- **T7 coordinated device, accessibility, performance and signed acceptance:** W11 + W09 (#327 and route issues), retaining each required proof class.
+
+**Execution:** one proven vertical route through T1+T2+T3, then reuse for other directions, Move, Rename Apply, Smart Merge and Drive. Run independent adapters, credentials, build trust and Drive capability research in parallel. Reuse compatible test fixtures, not other routes' acceptance claims. One owner per overlapping production file; no requirement is dropped by grouping it.
+
 ## Immediate decision board
 
 | Lane | Established, accepted | Current gate / next useful independent step |
@@ -38,7 +52,7 @@ Implemented developer-preview foundations (not feature-complete): default Single
 | **W13 – parallel, dependency security** | Official [#430](https://github.com/gamesbyian/Expository/pull/430) merged checksum-verified Gradle 8.13 wrapper (JAR + HTTPS distribution), with fast regression tests. [#326](https://github.com/gamesbyian/Expository/issues/326) remains OPEN for reproducible transitive Maven/Kotlin/AGP locks, artifact checksum metadata, true cacheless wrapper boot and intentional wrong-checksum negative, SBOM/update plan. | Separate build trust from E2/E4/E5 app evidence; coordinate workflow edits, keep PR cache writes trusted-main-only. |
 | **W09 — final release gate** | E4 owner-approved handset and actual remote/Drive/provider interoperability, threat/permission review, clean install/upgrade/backups, signed E5 provenance and release decision. | P01–P12 proven, no stop-ship defects. Debug CI APK is not a release artifact. Do not advance G9 on synthetic-only evidence. |
 
-**Fast path:** Isolate the #401 Compose lifecycle defect in a small installed test without repeating picker IO, then qualify the existing Dual recursive writer without changing the safety engine. In parallel tackle #325 protected operator reconciliation in independent files and #326 Gradle provenance. The route matrix, Smart Merge M3 and Rename Apply follow their actual dependency gates; Drive authority and FTPS controlled fixture research can proceed now.
+**Current fast path:** #401's genuine Dual recursive E2 is accepted and the old Compose crash is historical. Extend the accepted SAF command seam to one authenticated remote route (T1/T3), integrate protected per-item reconciliation and queue (T2), and verify accurate receipts. In parallel tackle controlled FTPS/SFTP, real Drive writable-parent feasibility, optional auth enforcement and remaining Gradle locks/checksums (T3/T5/T6). Connect guarded Move, Rename Apply and Smart Merge to the same dispatcher and recovery envelope; retain their distinct failure tests and E4/E5 gates.
 
 ## Scope and review discipline
 
