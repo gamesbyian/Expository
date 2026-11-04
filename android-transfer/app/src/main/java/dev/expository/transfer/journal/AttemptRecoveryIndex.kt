@@ -146,6 +146,10 @@ object AttemptRecoveryIndex {
             val sourceBytes = runCatching {
                 ProtectedTransferredBytesEvidenceStore(context).read(digest)
             }
+            // A failed authenticated context read is corrupted evidence too,
+            // even when its warning is attached to an existing review row.
+            // Do not conflate damaged sidecars with *additional hidden* rows.
+            if (hint.isFailure) damaged++
             if (child.isFailure) damaged++
             if (sourceBytes.isFailure) damaged++
             details += RecoveryReviewReference(digest.takeLast(12), status,
