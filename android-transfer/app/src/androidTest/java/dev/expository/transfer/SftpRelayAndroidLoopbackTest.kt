@@ -405,10 +405,39 @@ class SftpRelayAndroidLoopbackTest {
                     AndroidAtomicAttemptStorage(context.applicationContext, digest)
                 }
                 val output = root.resolve("uploads").resolve(filename)
-                assertFalse("No upload or journal before explicit execution",
+                val reviewed = requireNotNull(uploader.prepare(
+                    connected, "e2-pinned-upload-session", source, "/uploads"))
+                assertFalse("Read-only upload preparation created a remote file",
                     Files.exists(output))
-                val result = uploader.copy(connected, "e2-pinned-upload-session",
-                    source, "/uploads", continueRequested = { true })
+                assertEquals("Plan review never commits a journal", null,
+                    DurableAttemptJournal(AndroidAtomicAttemptStorage(
+                        context.applicationContext, reviewed.plan.digest)).current())
+                assertEquals("SftpUploadPreflight(redacted)", reviewed.toString())
+                // A different authenticated session object cannot adopt this
+                // reviewed command, even if its verified host is identical.
+                SecureSftp.connect(target, "test-account",
+                    "disposable-test-secret".toCharArray()).use { other ->
+                    val wrongSession = uploader.copy(other, reviewed,
+                        continueRequested = { true })
+                    assertEquals(CopyProof.BLOCKED, wrongSession.proof)
+                    assertFalse(Files.exists(output))
+                }
+                // A new remote collision after explicit review must refuse
+                // before any attempt journal or exclusive create; never
+                // overwrite someone else's bytes to satisfy an old review.
+                val foreign = ByteArray(149) { 0x5a.toByte() }
+                Files.write(output, foreign)
+                val stale = uploader.copy(connected, reviewed,
+                    continueRequested = { true })
+                assertEquals("Stale reviewed destination cannot write",
+                    CopyProof.BLOCKED, stale.proof)
+                assertArrayEquals(foreign, Files.readAllBytes(output))
+                assertEquals(null, DurableAttemptJournal(AndroidAtomicAttemptStorage(
+                    context.applicationContext, reviewed.plan.digest)).current())
+                Files.delete(output)
+                assertFalse(Files.exists(output))
+                val result = uploader.copy(connected, reviewed,
+                    continueRequested = { true })
                 assertEquals("Android→SFTP receipt " + result.reason,
                     CopyProof.BYTES_VERIFIED, result.proof)
                 assertEquals(bytes.size.toLong(), result.bytesWritten)
@@ -419,6 +448,8 @@ class SftpRelayAndroidLoopbackTest {
                 assertEquals(JournalState.VERIFIED, DurableAttemptJournal(
                     AndroidAtomicAttemptStorage(context.applicationContext, result.planDigest)
                 ).recoverAfterRestart()?.state)
+                assertEquals("Review and committed receipt bind to same plan",
+                    reviewed.plan.digest, result.planDigest)
                 // No-overwrite and no auto-retry, even when an earlier upload
                 // is fully verified and the remote name remains occupied.
                 val again = uploader.copy(connected, "e2-pinned-upload-session",
