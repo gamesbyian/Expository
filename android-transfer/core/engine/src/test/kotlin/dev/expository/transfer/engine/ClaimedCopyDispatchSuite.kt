@@ -81,6 +81,34 @@ object ClaimedCopyDispatchSuite {
         check(batch.outcome.verifiedBytes == 300L)
         check(planned == listOf(0, 1) && completed == listOf(0, 1))
 
+        // A remote batch re-prepares every selected file only after the
+        // preceding journaled item has supplied independent byte proof.
+        // A stale second provider listing cannot execute a third mutation,
+        // while the first file's committed progress remains truthful.
+        val reached = mutableListOf<Int>()
+        val afterOneStale = claimed().run(3, { true }) { index ->
+            reached += index
+            if (index == 1) null
+            else ClaimedCopyDispatch.Prepared(a) { verified(a, 64L) }
+        }
+        check(reached == listOf(0, 1))
+        check(afterOneStale.receipts.size == 1 &&
+            afterOneStale.outcome.state == CopyOutcomeState.BLOCKED &&
+            afterOneStale.outcome.verifiedItems == 1 &&
+            afterOneStale.outcome.verifiedBytes == 64L)
+        val afterOneAck = claimed().run(3, { true }) { index ->
+            if (index == 2) error("Unverified batch item must stop later preparation")
+            ClaimedCopyDispatch.Prepared(if (index == 0) a else b) {
+                if (index == 0) verified(a, 64L)
+                else CopyReceipt(b, CopyProof.WRITE_ACKNOWLEDGED, 128L,
+                    "ANDROID_PROVIDER_ACK_ONLY")
+            }
+        }
+        check(afterOneAck.receipts.size == 2 &&
+            afterOneAck.outcome.state == CopyOutcomeState.REVIEW_REQUIRED &&
+            afterOneAck.outcome.verifiedItems == 1 &&
+            afterOneAck.outcome.verifiedBytes == 64L)
+
         var extraPreflight = 0
         val uncertain = claimed().run(3, { true }) { index ->
             extraPreflight++
