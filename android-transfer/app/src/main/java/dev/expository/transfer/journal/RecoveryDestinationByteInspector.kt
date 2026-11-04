@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets
 
 /** Always observational: never alters an existing attempt, provider or receipt. */
 internal enum class ManualDestinationBytes {
+    INSPECTION_CANCELED,
     NO_COMPLETED_SOURCE_EVIDENCE,
     CREATED_FILE_NOT_IDENTIFIED,
     BOUNDED_READ_TOO_LARGE,
@@ -42,8 +43,12 @@ internal object RecoveryDestinationByteInspector {
         newlyPickedParent: Uri,
         firstListing: TreeListing,
         created: ProtectedCreatedChildWitness?,
-        sent: ProtectedTransferredByteEvidence?
+        sent: ProtectedTransferredByteEvidence?,
+        continueRequested: () -> Boolean = { true }
     ): ManualDestinationBytes {
+        // A canceled foreground review cannot return a content match, even
+        // if its source hash and provider metadata would otherwise agree.
+        if (!continueRequested()) return ManualDestinationBytes.INSPECTION_CANCELED
         if (sent == null) return ManualDestinationBytes.NO_COMPLETED_SOURCE_EVIDENCE
         if (sent.byteCount < 0L || !SHA.matches(sent.sourceSha256Hex))
             return ManualDestinationBytes.NO_COMPLETED_SOURCE_EVIDENCE
@@ -58,6 +63,7 @@ internal object RecoveryDestinationByteInspector {
         val before = firstListing.children.singleOrNull {
             it.title == created.createdName && !it.directory
         } ?: return ManualDestinationBytes.CREATED_FILE_NOT_IDENTIFIED
+        if (!continueRequested()) return ManualDestinationBytes.INSPECTION_CANCELED
         val childUri = try {
             DocumentsContract.buildDocumentUriUsingTree(
                 newlyPickedParent, before.documentId)
@@ -73,7 +79,11 @@ internal object RecoveryDestinationByteInspector {
                 var bytes = 0L
                 var emptyReads = 0
                 while (true) {
+                    if (!continueRequested()) return ManualDestinationBytes.INSPECTION_CANCELED
                     val count = input.read(buffer)
+                    // A provider may block across operator Stop. Never hash
+                    // or publish results from a read that outlived cancellation.
+                    if (!continueRequested()) return ManualDestinationBytes.INSPECTION_CANCELED
                     if (count == -1) break
                     if (count == 0) {
                         if (++emptyReads >= MAX_EMPTY_READS)
@@ -92,6 +102,7 @@ internal object RecoveryDestinationByteInspector {
             return ManualDestinationBytes.DESTINATION_READ_UNAVAILABLE
         }
 
+        if (!continueRequested()) return ManualDestinationBytes.INSPECTION_CANCELED
         // An ID/name read before streaming can become false while its content
         // is being hashed. Repeat the full direct-parent listing afterwards.
         val fresh = try {
@@ -100,6 +111,7 @@ internal object RecoveryDestinationByteInspector {
         } catch (_: Exception) {
             return ManualDestinationBytes.DESTINATION_CHANGED_DURING_READ
         }
+        if (!continueRequested()) return ManualDestinationBytes.INSPECTION_CANCELED
         if (RecoveryCreatedChildIdentity.compare(created,
                 newlyPickedParent, fresh) !=
             CreatedChildRelation.SAME_RECORDED_CHILD_IDENTITY)
@@ -111,6 +123,7 @@ internal object RecoveryDestinationByteInspector {
         }
         if (after == null || before != after)
             return ManualDestinationBytes.DESTINATION_CHANGED_DURING_READ
+        if (!continueRequested()) return ManualDestinationBytes.INSPECTION_CANCELED
         val digestHex = read.second.joinToString("") { "%02x".format(it) }
         return if (read.first == sent.byteCount &&
             MessageDigest.isEqual(

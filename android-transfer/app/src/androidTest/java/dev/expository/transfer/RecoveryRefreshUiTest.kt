@@ -17,6 +17,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import java.util.UUID
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -25,6 +26,26 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class RecoveryRefreshUiTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test fun canceledManualInspectionNeverReadsAProviderOrClaimsBytes() {
+        val resolver = InstrumentationRegistry.getInstrumentation().targetContext
+            .contentResolver
+        // Deliberately no registered provider. Cancellation must be checked
+        // before any SAF IPC or new content read, using a valid tree syntax.
+        val fakeTree = android.net.Uri.parse(
+            "content://unregistered.recovery.fixture/tree/synthetic-root")
+        val canceled = runCatching {
+            dev.expository.transfer.journal.RecoveryManualInspection.inspect(
+                resolver, fakeTree, continueRequested = { false })
+        }.exceptionOrNull()
+        assertTrue(canceled is java.util.concurrent.CancellationException)
+        val byteResult = dev.expository.transfer.journal.RecoveryDestinationByteInspector
+            .inspect(resolver, fakeTree, TreeListing(emptyList(), true),
+                created = null, sent = null, continueRequested = { false })
+        assertEquals(
+            dev.expository.transfer.journal.ManualDestinationBytes.INSPECTION_CANCELED,
+            byteResult)
+    }
 
     @Test fun uncertainAttemptShowsNonExecutableManualInspectionAction() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

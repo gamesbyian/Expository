@@ -26,6 +26,9 @@ import dev.expository.transfer.LocalTreeReader
 import dev.expository.transfer.planner.RecoveryProviderRelation
 import dev.expository.transfer.planner.RecoveryProviderReview
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -49,6 +52,10 @@ fun RecoveryStatusCard() {
     var inspectionTicket by remember { mutableStateOf<Pair<String, Int>?>(null) }
     var inspectionMessage by remember { mutableStateOf<String?>(null) }
     var inspectionListing by remember { mutableStateOf<ManualRecoveryListing?>(null) }
+    // Owned foreground read. Hiding/refreshing a review cancels the job,
+    // not merely its result display. No grant, stream or job is persisted.
+    var inspectionJob by remember { mutableStateOf<Job?>(null) }
+    var inspectionRunning by remember { mutableStateOf(false) }
     val inspector = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -66,15 +73,22 @@ fun RecoveryStatusCard() {
         } else {
             val revision = ticket.second
             inspectionMessage = "Reading the newly selected folder without changing any files…"
-            scope.launch {
+            inspectionRunning = true
+            inspectionJob = scope.launch {
                 val reviewed = status?.inspectionReference(ticket.first)
                 val observed = withContext(Dispatchers.IO) {
+                    // Blocking provider reads do not automatically respond to
+                    // Job.cancel(). Check ownership at every read boundary.
+                    val owner = currentCoroutineContext()
                     runCatching {
                         RecoveryManualInspection.inspect(context.contentResolver,
-                            uri, reviewed?.createdChild, reviewed?.transferredBytes)
+                            uri, reviewed?.createdChild, reviewed?.transferredBytes,
+                            continueRequested = { owner.isActive })
                     }
                 }
                 if (inspectionRevision != revision) return@launch
+                inspectionJob = null
+                inspectionRunning = false
                 if (observed.isFailure) {
                     inspectionMessage = "Unable to inspect the selected folder. It remains unresolved; no retry was made."
                     inspectionListing = null
@@ -142,6 +156,8 @@ fun RecoveryStatusCard() {
                                 "No comparable created-child identity was saved. A create " +
                                 "might still have happened before its response was received."
                         } + " " + when (inspectionListing?.byteRelation) {
+                            ManualDestinationBytes.INSPECTION_CANCELED ->
+                                "The manual inspection was stopped. No byte match was established."
                             ManualDestinationBytes.CURRENT_BYTES_MATCH_RECORDED_SOURCE ->
                                 "A fresh bounded readback confirms the destination CURRENTLY " +
                                 "contains exactly the source bytes recorded after the old " +
@@ -172,6 +188,9 @@ fun RecoveryStatusCard() {
         }
     }
     LaunchedEffect(context, refreshSerial) {
+        inspectionJob?.cancel()
+        inspectionJob = null
+        inspectionRunning = false
         inspectionRevision++
         inspectionTicket = null
         inspectionListing = null
@@ -212,8 +231,11 @@ fun RecoveryStatusCard() {
                 Button(modifier = Modifier.heightIn(min = 48.dp),
                     onClick = {
                         if (showReviewReferences) {
-                            // Hiding sensitive labels also drops any manual
-                            // picker result and transient provider inventory.
+                            // Hiding sensitive labels stops a pending provider
+                            // read, not just the display of its late result.
+                            inspectionJob?.cancel()
+                            inspectionJob = null
+                            inspectionRunning = false
                             inspectionRevision++
                             inspectionTicket = null
                             inspectionListing = null
@@ -268,8 +290,12 @@ fun RecoveryStatusCard() {
                         if (entry.context != null) {
                             Button(
                                 modifier = Modifier.heightIn(min = 48.dp),
-                                enabled = inspectionTicket == null && entry.recordKey != null,
+                                enabled = inspectionTicket == null &&
+                                    !inspectionRunning && entry.recordKey != null,
                                 onClick = {
+                                    inspectionJob?.cancel()
+                                    inspectionJob = null
+                                    inspectionRunning = false
                                     inspectionRevision++
                                     inspectionTicket = requireNotNull(entry.recordKey) to inspectionRevision
                                     inspectionListing = null
@@ -287,6 +313,19 @@ fun RecoveryStatusCard() {
                             ) { Text("Inspect folder for record " + (index + 1) +
                                 " …" + entry.opaqueSuffix) }
                         }
+                    }
+                    if (inspectionRunning) {
+                        Button(modifier = Modifier.heightIn(min = 48.dp),
+                            onClick = {
+                                inspectionJob?.cancel()
+                                inspectionJob = null
+                                inspectionRunning = false
+                                inspectionRevision++
+                                inspectionTicket = null
+                                inspectionListing = null
+                                inspectionMessage =
+                                    "Folder inspection stopped. No transfer was changed."
+                            }) { Text("Cancel folder inspection") }
                     }
                     val hidden = review.additionalReviewCount +
                         (review.reviewReferences.size - 12).coerceAtLeast(0)
@@ -318,6 +357,9 @@ fun RecoveryStatusCard() {
                 onClick = {
                     // Revoke a pending manual inspection synchronously, before
                     // the refresh effect can run or an OS callback can arrive.
+                    inspectionJob?.cancel()
+                    inspectionJob = null
+                    inspectionRunning = false
                     inspectionRevision++
                     inspectionTicket = null
                     inspectionListing = null
