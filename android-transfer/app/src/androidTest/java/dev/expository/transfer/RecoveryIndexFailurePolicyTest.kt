@@ -65,6 +65,58 @@ class RecoveryIndexFailurePolicyTest {
         }
     }
 
+    @Test fun recoveryBoardDescribesEachUnverifiedJournalStageWithoutMutatingIt() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "journal-stage-review-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val states = listOf(JournalState.ATTEMPT_RECORDED,
+            JournalState.WRITE_ACKNOWLEDGED, JournalState.UNCERTAIN)
+        val keys = List(states.size) {
+            UUID.randomUUID().toString().replace("-", "").repeat(2)
+        }
+        try {
+            val journals = keys.mapIndexed { index, key ->
+                DurableAttemptJournal(
+                    dev.expository.transfer.journal.AndroidAtomicAttemptStorage(isolated, key)
+                ).also { journal ->
+                    journal.confirm(key)
+                    journal.beginAttempt(key, "stage_review_attempt_$index")
+                    when (states[index]) {
+                        JournalState.WRITE_ACKNOWLEDGED ->
+                            journal.markWriteAcknowledged(key)
+                        JournalState.UNCERTAIN -> journal.markUncertain(key)
+                        else -> Unit
+                    }
+                }
+            }
+            val summary = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(3, summary.requiresReview)
+            assertEquals(0, summary.verifiedReceipts)
+            assertEquals(3, summary.reviewReferences.size)
+            val status = keys.map { key ->
+                summary.reviewReferences.single {
+                    it.opaqueSuffix == key.takeLast(12)
+                }.status
+            }
+            assertTrue(status.all {
+                it.contains("Requires independent destination review")
+            })
+            assertTrue(status[0].contains("whether any destination write occurred is unknown"))
+            assertTrue(status[1].contains("write acknowledged") &&
+                status[1].contains("bytes are not verified"))
+            assertTrue(status[2].contains("do not retry"))
+            // A status refresh must be purely observational. In particular,
+            // neither the ACK nor the started state is silently rewritten.
+            assertEquals(states, journals.map { it.current()?.state })
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
     @Test fun privateRecoveryDisplayObjectsNeverPrintUserContent() {
         val source = "PRIVATE SOURCE 40977"
         val destination = "PRIVATE DESTINATION 80412"
