@@ -331,6 +331,12 @@ internal fun SftpBrowseCard(
      * journaled, exclusive-create and read-back-verified operation.
      * This is deliberately not an atomic multi-file transaction.
      */
+    /**
+     * The reviewed picker, peer Local pane and explicitly tapped Share input
+     * all enter the SAME one-shot confirmed Copy dispatcher. An individual
+     * upload still owns its fresh SFTP plan/journal/exclusive create/readback.
+     * The command stores no credentials, grants, paths or durable resume.
+     */
     fun uploadSources(
         sources: List<Uri>, scopedSources: List<LocalPaneUploadSource>? = null,
         reviewedPick: PendingPickedSftpUpload? = null
@@ -338,28 +344,53 @@ internal fun SftpBrowseCard(
         val live = session
         val directory = folder
         val opaque = sessionId
-        if (live == null || opaque.isBlank()) {
-            busy = false
-            status = "SFTP session expired. Reconnect to upload."
+        val frozenSources = sources.toList()
+        val frozenScoped = scopedSources?.toList()
+        if (live == null || opaque.isBlank() || busy || peerRelayLocked) {
+            status = "SFTP session busy or expired. Reconnect or finish the current operation."
             return
         }
-        if (reviewedPick != null && !reviewedPick.stillMatches(
-            sessionId, folder, sources)) {
-            status = "Picker upload approval changed. No remote write started."
-            return
-        }
-        if (scopedSources != null &&
-            (scopedSources.isEmpty() ||
-                sources != scopedSources.map { it.documentUri } ||
-                localPaneSources != scopedSources)) {
-            status = "Opposite pane selection changed. No upload started."
-            return
-        }
-        if (sources.isEmpty() || sources.size > ScopedUploadPicker.MAX_DOCUMENTS ||
-            sources.any { it.scheme != android.content.ContentResolver.SCHEME_CONTENT } ||
-            sources.distinct().size != sources.size) {
-            busy = false
+        if (frozenSources.isEmpty() ||
+            frozenSources.size > ScopedUploadPicker.MAX_DOCUMENTS ||
+            frozenSources.any {
+                it.scheme != android.content.ContentResolver.SCHEME_CONTENT ||
+                    it.authority.isNullOrBlank()
+            } || frozenSources.distinct().size != frozenSources.size ||
+            reviewedPick != null && frozenScoped != null) {
             status = "Select 1–12 distinct Android documents. No remote upload started."
+            return
+        }
+        // A picker result alone was NOT approval. The UI review is still
+        // current only while its exact object remains the pending command.
+        // Peer Local selection needs its own frozen, pane-scoped witness.
+        // The Share button itself is an explicit click, still subject to
+        // complete batch and per-item provider preflight before any write.
+        val dispatch = ClaimedCopyDispatch.claim {
+            session === live && sessionId == opaque && folder == directory &&
+                !busy && !peerRelayLocked &&
+                when {
+                    reviewedPick != null ->
+                        pendingPickedUpload === reviewedPick &&
+                            reviewedPick.stillMatches(sessionId, folder, frozenSources)
+                    frozenScoped != null ->
+                        pendingPeerUpload?.let { review ->
+                            review.sources == frozenScoped &&
+                                review.stillMatches(localPaneSources, sessionId, folder) &&
+                                frozenSources == frozenScoped.map { it.documentUri }
+                        } == true
+                    else -> {
+                        val shared = incomingShare?.batch?.map { it.uri }
+                            ?: incomingShare?.payload?.let { listOf(it.uri) }
+                        shared == frozenSources
+                    }
+                }
+        }
+        // A confirmation can never be tapped twice, nor resurrected after a
+        // stale provider callback. This clears only the command for this path.
+        if (reviewedPick != null) pendingPickedUpload = null
+        if (frozenScoped != null) pendingPeerUpload = null
+        if (dispatch == null) {
+            status = "Upload approval expired. No remote file created."
             return
         }
         val permit = AtomicBoolean(true)
@@ -367,125 +398,148 @@ internal fun SftpBrowseCard(
         transferKind = "Upload"
         transferred = 0L
         busy = true
-        status = "Checking all selected documents and remote filename collisions."
+        status = "Checking every selected document and SFTP filename collision…"
         scope.launch {
-            var verified = 0
-            var verifiedBytes = 0L
+            var observedVerified = 0
+            var observedVerifiedBytes = 0L
+            val publishing = AtomicBoolean(true)
             try {
-                // Batch-wide safety check first. Per-file copy then revalidates
-                // under its existing write-ahead journal before opening a
-                // destination with exclusive-create semantics.
                 val ready = withContext(Dispatchers.IO) {
                     runCatching {
-                        if (scopedSources != null) require(
-                            scopedSources.all {
-                                it.membershipStillVerified(context.contentResolver)
-                            }
-                        ) { "SCOPED_SOURCE_MEMBERSHIP_UNVERIFIED" }
-                        val observer = dev.expository.transfer.saf.SafSingleDocumentCopy(
-                            context.contentResolver)
-                        val names = sources.mapIndexed { index, uri ->
-                            val observed = observer.observe(uri)
-                            val name = observed.displayName
+                        if (frozenScoped != null) require(frozenScoped.all {
+                            it.membershipStillVerified(context.contentResolver)
+                        }) { "SCOPED_SOURCE_MEMBERSHIP_UNVERIFIED" }
+                        val observer = SafSingleDocumentCopy(context.contentResolver)
+                        val names = frozenSources.mapIndexed { index, uri ->
+                            val current = observer.observe(uri)
                             if (reviewedPick != null) require(
-                                observed.revision == reviewedPick.items[index].revision &&
-                                name == reviewedPick.items[index].name
+                                current.revision == reviewedPick.items[index].revision &&
+                                current.displayName == reviewedPick.items[index].name
                             ) { "PICKER_REVIEWED_SOURCE_CHANGED" }
-                            if (scopedSources != null) require(
-                                name == scopedSources[index].expectedName
+                            if (frozenScoped != null) require(
+                                current.displayName == frozenScoped[index].expectedName
                             ) { "SCOPED_SOURCE_NAME_CHANGED" }
-                            SftpPath.validateChild(name)
+                            SftpPath.validateChild(current.displayName)
                         }
                         val listing = live.completeMutationListing(directory)
-                        require(!listing.truncated) { "TRUNCATED_LISTING" }
-                        // Batch-wide Unicode/case-equivalent collisions block
-                        // before even the first separately journaled upload.
-                        require(SftpUploadBatchNames.collisionFree(names, listing)) {
-                            "UPLOAD_BATCH_NAME_COLLISION_OR_INCOMPLETE_LISTING"
+                        require(!listing.truncated &&
+                            SftpUploadBatchNames.collisionFree(names, listing)) {
+                            "UPLOAD_BATCH_COLLISION_OR_INCOMPLETE_LISTING"
                         }
                     }.isSuccess
                 }
                 if (!ready) {
-                    status = "Upload blocked before writing: unreadable source, duplicate filename, occupied destination or incomplete remote listing."
+                    status = "Upload blocked before writing: source changed, occupied destination or incomplete listing. Nothing uploaded."
                     return@launch
                 }
-                val uploader = SafToSftpUpload(context.contentResolver) { digest ->
-                    AndroidAtomicAttemptStorage(context.applicationContext, digest)
-                }
-                for ((index, source) in sources.withIndex()) {
-                    if (!permit.get()) {
-                        status = "Upload canceled after " + verified +
-                            " verified file(s). Inspect any partial destination."
-                        break
+                val outcome = withContext(Dispatchers.IO) {
+                    val active = coroutineContext[Job]
+                    val stillRunning = {
+                        permit.get() && active?.isActive == true
                     }
-                    status = "Uploading document " + (index + 1) + " of " +
-                        sources.size + " with independent remote read-back."
-                    if (reviewedPick != null) {
-                        val fresh = withContext(Dispatchers.IO) {
-                            runCatching {
+                    val credited = hashSetOf<String>()
+                    val uploader = SafToSftpUpload(context.contentResolver) { digest ->
+                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                    }
+                    dispatch.run(
+                        expectedItems = frozenSources.size,
+                        continueRequested = stillRunning,
+                        prepare = { index ->
+                            val selected = frozenSources[index]
+                            // An already reviewed picker version must remain
+                            // unchanged even if a later independent plan would
+                            // otherwise accept the document's new identity.
+                            val current = runCatching {
                                 SafSingleDocumentCopy(context.contentResolver)
-                                    .observe(source)
+                                    .observe(selected)
                             }.getOrNull()
-                        }
-                        if (fresh == null ||
-                            fresh.revision != reviewedPick.items[index].revision ||
-                            fresh.displayName != reviewedPick.items[index].name) {
-                            status = "Stopped after " + verified + " verified file(s): " +
-                                "the reviewed Android document changed. No blind retry."
-                            break
-                        }
-                    }
-                    val receipt = withContext(Dispatchers.IO) {
-                        val active = coroutineContext[Job]
-                        var lastDisplayed = 0L
-                        uploader.copy(live, opaque, source, directory,
-                            scopedSource = scopedSources?.get(index),
-                            continueRequested = {
-                                permit.get() && active?.isActive == true
-                            },
-                            onProgress = { bytes ->
-                                if (bytes - lastDisplayed >= 256L * 1024L) {
-                                    lastDisplayed = bytes
-                                    publishCopyProgress(bytes, permit, live,
-                                        verifiedBytes)
+                            if (current == null ||
+                                reviewedPick != null &&
+                                (current.revision != reviewedPick.items[index].revision ||
+                                    current.displayName != reviewedPick.items[index].name))
+                                null
+                            else {
+                                val prepared = uploader.prepare(
+                                    live, opaque, selected, directory,
+                                    frozenScoped?.get(index))
+                                prepared?.let { reviewed ->
+                                    val verifiedBeforeFile = observedVerifiedBytes
+                                    scope.launch {
+                                        if (publishing.get() && busy &&
+                                            continueCopy === permit && permit.get() &&
+                                            session === live) {
+                                            status = "Uploading document " + (index + 1) +
+                                                " of " + frozenSources.size +
+                                                " with independent remote readback…"
+                                        }
+                                    }
+                                    ClaimedCopyDispatch.Prepared(reviewed.plan.digest) {
+                                        var lastDisplayed = 0L
+                                        val receipt = uploader.copy(live, reviewed,
+                                            continueRequested = stillRunning,
+                                            onProgress = { bytes ->
+                                                if (bytes - lastDisplayed >= 256L * 1024L) {
+                                                    lastDisplayed = bytes
+                                                    publishCopyProgress(bytes, permit, live,
+                                                        verifiedBeforeFile)
+                                                }
+                                            })
+                                        // Advisory partial progress only; final
+                                        // claims use the common receipt ledger.
+                                        if (receipt.proof == CopyProof.BYTES_VERIFIED &&
+                                            receipt.planDigest == reviewed.plan.digest &&
+                                            receipt.bytesWritten >= 0L &&
+                                            credited.add(receipt.planDigest)) {
+                                            observedVerified++
+                                            observedVerifiedBytes = Math.addExact(
+                                                observedVerifiedBytes, receipt.bytesWritten)
+                                        }
+                                        receipt
+                                    }
                                 }
                             }
-                        )
-                    }
-                    transferred = verifiedBytes + receipt.bytesWritten
-                    if (receipt.proof != CopyProof.BYTES_VERIFIED) {
-                        status = when (receipt.proof) {
-                            CopyProof.WRITE_ACKNOWLEDGED ->
-                                "Stopped after " + verified + " verified file(s): the current upload was acknowledged but not byte-verified. Inspect it before retrying."
-                            CopyProof.UNCERTAIN ->
-                                "Stopped after " + verified + " verified file(s): an uncertain or partial remote file may remain. Do not retry blindly."
-                            CopyProof.BLOCKED ->
-                                "Stopped after " + verified + " verified file(s): the next upload was blocked by changed names, permissions or preflight."
-                            CopyProof.BYTES_VERIFIED -> error("unreachable")
                         }
-                        break
-                    }
-                    verified++
-                    verifiedBytes += receipt.bytesWritten
-                    if (verified == sources.size)
-                        status = "All " + verified + " document(s) byte-verified by independent SFTP read-back. Original sources remain untouched."
+                    )
+                }
+                publishing.set(false)
+                transferred = outcome.outcome.verifiedBytes
+                status = when {
+                    outcome.outcome.complete ->
+                        "All " + outcome.outcome.verifiedItems +
+                            " document(s) byte-verified by independent SFTP readback (" +
+                            outcome.outcome.verifiedBytes + " bytes). Original sources remain untouched."
+                    outcome.outcome.state == CopyOutcomeState.BLOCKED ->
+                        "Upload stopped after " + outcome.outcome.verifiedItems +
+                            " verified file(s): a changed source, collision or permission " +
+                            "blocked the next file. No remote overwrite or automatic retry."
+                    outcome.outcome.stopProof == CopyProof.WRITE_ACKNOWLEDGED ->
+                        "Upload stopped after " + outcome.outcome.verifiedItems +
+                            " verified file(s): the next remote write was acknowledged " +
+                            "without matching byte proof. Inspect before retry."
+                    outcome.receipts.size == outcome.outcome.verifiedItems ->
+                        "Upload stopped after " + outcome.outcome.verifiedItems +
+                            " verified file(s), before another remote write."
+                    else ->
+                        "Upload stopped after " + outcome.outcome.verifiedItems +
+                            " verified file(s): uncertain, partial or mismatched " +
+                            "remote content must be inspected before retry."
                 }
                 if (session === live) {
-                    val refreshed = withContext(Dispatchers.IO) {
+                    withContext(Dispatchers.IO) {
                         runCatching { live.browse(directory) }
-                    }
-                    refreshed.onSuccess {
+                    }.onSuccess {
                         page = it
                         browseLimit = SftpBrowseBounds.INITIAL
                     }
                 }
             } catch (_: CancellationException) {
-                status = "Upload interrupted after " + verified +
-                    " verified file(s). Review the remote destination before retrying."
+                status = "Upload interrupted after " + observedVerified +
+                    " verified file(s). Inspect remote destination before retrying."
             } catch (_: Exception) {
-                status = "Upload outcome uncertain after " + verified +
-                    " verified file(s). Inspect the remote destination."
+                status = "Upload uncertain after " + observedVerified +
+                    " verified file(s). Inspect remote destination before retrying."
             } finally {
+                publishing.set(false)
                 continueCopy = null
                 transferKind = ""
                 busy = false
@@ -1615,7 +1669,6 @@ internal fun SftpBrowseCard(
                                 Button(enabled = valid,
                                     modifier = Modifier.heightIn(min = 48.dp),
                                     onClick = {
-                                        pendingPickedUpload = null
                                         uploadSources(review.uris, reviewedPick = review)
                                     }) { Text("Confirm selected Upload") }
                                 Button(enabled = !busy && !peerRelayLocked,
@@ -1671,7 +1724,6 @@ internal fun SftpBrowseCard(
                                 Button(enabled = !busy && !peerRelayLocked && valid,
                                     modifier = Modifier.heightIn(min = 48.dp),
                                     onClick = {
-                                        pendingPeerUpload = null
                                         uploadSources(
                                             review.sources.map { it.documentUri },
                                             scopedSources = review.sources)
