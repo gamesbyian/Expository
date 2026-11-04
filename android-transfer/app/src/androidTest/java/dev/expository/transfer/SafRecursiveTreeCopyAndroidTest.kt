@@ -50,6 +50,9 @@ class SafRecursiveTreeCopyAndroidTest {
 
     @Test fun scopedNestedAndEmptyDirectoriesCopyExactFileBytesAndPreserveSource() {
         reset()
+        val app = targetContext
+        val beforeKeys = dev.expository.transfer.journal.AttemptRecoveryIndex.journalDigests(
+            app.noBackupFilesDir.listFiles()?.map { it.name }).toSet()
         val service = SafRecursiveTreeCopy(targetContext, resolver)
         val approved = requireNotNull(service.prepare(request()))
         assertEquals(2, approved.directories)
@@ -88,6 +91,36 @@ class SafRecursiveTreeCopyAndroidTest {
         val creates = resolver.call(targetTree, "fixture-stats", null, null)!!
             .getInt("creates")
         assertEquals(3, creates)
+
+        // Every provider-acknowledged create captures its exact child identity
+        // in a separate encrypted write-once sidecar before follow-on writes.
+        val afterKeys = dev.expository.transfer.journal.AttemptRecoveryIndex.journalDigests(
+            app.noBackupFilesDir.listFiles()?.map { it.name }).toSet()
+        val stepKeys = afterKeys - beforeKeys
+        assertEquals(3, stepKeys.size)
+        val witnesses = stepKeys.map { key ->
+            requireNotNull(
+                dev.expository.transfer.journal.ProtectedCreatedChildWitnessStore(app)
+                    .read(key))
+        }
+        assertEquals(setOf("Shows", "Empty", "Episode.bin"),
+            witnesses.map { it.createdName }.toSet())
+        val byName = witnesses.associateBy { it.createdName }
+        val childIdentity = dev.expository.transfer.journal.RecoveryCreatedChildIdentity
+        assertEquals(
+            dev.expository.transfer.journal.CreatedChildRelation.SAME_RECORDED_CHILD_IDENTITY,
+            childIdentity.compare(byName["Shows"], targetTree, root))
+        // A freshly picked exact parent can correspond to a nested folder,
+        // even when it is different from the original selected tree root.
+        val nestedTree = DocumentsContract.buildTreeDocumentUri(
+            "test.copy.target.scoped", shows.documentId)
+        assertEquals(
+            dev.expository.transfer.journal.CreatedChildRelation.SAME_RECORDED_CHILD_IDENTITY,
+            childIdentity.compare(byName["Episode.bin"], nestedTree, inside))
+        assertEquals(
+            dev.expository.transfer.journal.CreatedChildRelation.SAME_RECORDED_CHILD_IDENTITY,
+            childIdentity.compare(byName["Empty"], nestedTree, inside))
+        assertArrayEquals(fixtureBytes, original())
         // Exact same frozen approval must never automatically repeat a write.
         val replay = service.execute(request(), approved)
         assertTrue(replay.result != RecursiveCopyResult.COMPLETE_VERIFIED)
