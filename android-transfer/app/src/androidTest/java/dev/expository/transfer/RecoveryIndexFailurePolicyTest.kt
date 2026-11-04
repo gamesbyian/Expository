@@ -9,6 +9,7 @@ import dev.expository.transfer.planner.JournalState
 import java.io.File
 import java.util.UUID
 import dev.expository.transfer.journal.AttemptRecoveryIndex
+import dev.expository.transfer.journal.inspectionReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertTrue
@@ -18,6 +19,52 @@ import org.junit.runner.RunWith
 /** No real journal files are touched; tests input enumeration failures. */
 @RunWith(AndroidJUnit4::class)
 class RecoveryIndexFailurePolicyTest {
+    @Test fun identicalDisplaySuffixesCannotBindPickerToTheWrongJournal() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "same-suffix-recovery-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        // The visible suffix is intentionally identical. Neither a picker
+        // ticket nor the protected destination hint may use it as identity.
+        val suffix = "deadbeef0123"
+        val firstKey = "a".repeat(52) + suffix
+        val secondKey = "b".repeat(52) + suffix
+        val firstHint = dev.expository.transfer.journal.ProtectedRecoveryContext(
+            "SAF_DUAL_COPY", "First source", "First target", "first.provider")
+        val secondHint = dev.expository.transfer.journal.ProtectedRecoveryContext(
+            "SAF_DUAL_COPY", "Second source", "Second target", "second.provider")
+        try {
+            val hints = dev.expository.transfer.journal.ProtectedRecoveryContextStore(isolated)
+            hints.recordNew(firstKey, firstHint)
+            hints.recordNew(secondKey, secondHint)
+            for (key in listOf(firstKey, secondKey)) {
+                val journal = DurableAttemptJournal(
+                    dev.expository.transfer.journal.AndroidAtomicAttemptStorage(isolated, key))
+                journal.confirm(key)
+                journal.beginAttempt(key, "same_suffix_test_" + key.take(8))
+            }
+            val recovery = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(2, recovery.requiresReview)
+            assertEquals(2, recovery.reviewReferences.size)
+            assertEquals(setOf(suffix),
+                recovery.reviewReferences.map { it.opaqueSuffix }.toSet())
+            assertEquals(firstHint, recovery.inspectionReference(firstKey)?.context)
+            assertEquals(secondHint, recovery.inspectionReference(secondKey)?.context)
+            // A display suffix and a fabricated otherwise-valid key are not
+            // authorized to inspect either context.
+            assertEquals(null, recovery.inspectionReference(suffix))
+            assertEquals(null,
+                recovery.inspectionReference("c".repeat(52) + suffix))
+            assertTrue(!recovery.toString().contains(firstKey))
+            assertTrue(!recovery.toString().contains(secondKey))
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
     @Test fun privateRecoveryDisplayObjectsNeverPrintUserContent() {
         val source = "PRIVATE SOURCE 40977"
         val destination = "PRIVATE DESTINATION 80412"
