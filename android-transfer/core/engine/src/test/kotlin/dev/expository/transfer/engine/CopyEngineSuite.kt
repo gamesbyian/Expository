@@ -126,6 +126,32 @@ object CopyEngineSuite {
             })
             check(outBytes > 0 && receipt.proof == CopyProof.UNCERTAIN)
         }
+        scenario("partial source failure never supplies completed-byte evidence") {
+            var evidenceCalls = 0
+            var outputBytes = 0
+            val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
+                override fun openSource(): InputStream =
+                    object : ByteArrayInputStream(bytes) {
+                        override fun read(b: ByteArray, off: Int, len: Int): Int {
+                            if (pos >= 65536) throw IOException("synthetic partial EOF failure")
+                            return super.read(b, off, len.coerceAtMost(65536 - pos))
+                        }
+                    }
+                override fun openNewDestination(): OutputStream =
+                    object : ByteArrayOutputStream() {
+                        override fun write(b: ByteArray, off: Int, len: Int) {
+                            outputBytes += len
+                            super.write(b, off, len)
+                        }
+                    }
+                override fun onSourceBytesClosed(bytesWritten: Long, sourceSha256: ByteArray) {
+                    evidenceCalls++
+                }
+                override fun openDestinationReadBack(): InputStream? = null
+            })
+            check(outputBytes > 0 && evidenceCalls == 0 &&
+                receipt.proof == CopyProof.UNCERTAIN)
+        }
         scenario("source open denied means no mutation") {
             var touched = false
             val receipt = ForegroundCopyEngine.copy(p, { p }, object : CopyStreams {
