@@ -748,85 +748,128 @@ internal fun SftpBrowseCard(
 
     /** Sequential journaled relays; no later item starts after an uncertain result. */
     fun executeRelayBatch(approved: PendingSftpRelayBatch) {
-        val destination = session
-        if (busy || peerRelayLocked ||
-            !approved.stillMatches(remotePaneBatchSource, destination,
-                sessionId, folder)) {
-            pendingRelayBatch = null
+        val destination = session ?: return
+        // Claim the exact frozen cross-session review once. Reopening an
+        // expired or previously consumed confirmation is never a retry.
+        val dispatch = ClaimedCopyDispatch.claim {
+            !busy && !peerRelayLocked && pendingRelayBatch === approved &&
+                approved.stillMatches(remotePaneBatchSource, destination,
+                    sessionId, folder)
+        }
+        pendingRelayBatch = null
+        if (dispatch == null) {
             status = "SFTP batch approval expired. No remote write started."
             return
         }
-        pendingRelayBatch = null
         val source = approved.source
+        val files = source.selection.files.toList()
         val permit = AtomicBoolean(true)
         continueCopy = permit
         transferKind = "SFTP → SFTP batch"
         transferred = 0L
         busy = true
         onRelaySourceActive(source.sessionId)
+        status = "Relaying reviewed files between pinned SFTP sessions…"
         scope.launch {
-            var verified = 0
-            var verifiedBytes = 0L
+            var observedVerified = 0
+            var observedVerifiedBytes = 0L
+            val publishing = AtomicBoolean(true)
             try {
-                val total = source.selection.files.size
-                for (file in source.selection.files) {
-                    if (!permit.get()) {
-                        status = "Stopped after " + verified +
-                            " verified remote file(s). Inspect any partial destination."
-                        break
+                val run = withContext(Dispatchers.IO) {
+                    val active = coroutineContext[Job]
+                    val credited = hashSetOf<String>()
+                    val stillRunning = {
+                        permit.get() && active?.isActive == true
                     }
-                    status = "Relaying SFTP file " + (verified + 1) +
-                        " of " + total + " with independent SHA-256 readback…"
-                    val receipt = withContext(Dispatchers.IO) {
-                        val active = coroutineContext[Job]
-                        val relay = SftpRelayCopy { digest ->
-                            AndroidAtomicAttemptStorage(context.applicationContext, digest)
+                    dispatch.run(
+                        expectedItems = files.size,
+                        continueRequested = stillRunning,
+                        prepare = { index ->
+                            val file = files[index]
+                            val relay = SftpRelayCopy { digest ->
+                                AndroidAtomicAttemptStorage(
+                                    context.applicationContext, digest)
+                            }
+                            // Every verified earlier relay has changed the
+                            // destination namespace. Reprepare from the live
+                            // pinned endpoints, never an initial stale plan.
+                            val fresh = relay.prepare(SftpRelayRequest(
+                                source.session, source.sessionId, source.folder,
+                                file.absolutePath, file.revision,
+                                approved.destination, approved.destinationSessionId,
+                                approved.destinationFolder))
+                            if (fresh == null || fresh.bytes != file.size) null
+                            else {
+                                val verifiedBeforeFile = observedVerifiedBytes
+                                scope.launch {
+                                    if (publishing.get() && busy &&
+                                        continueCopy === permit && permit.get() &&
+                                        session === destination) {
+                                        status = "Relaying SFTP file " + (index + 1) +
+                                            " of " + files.size +
+                                            " with independent SHA-256 readback…"
+                                    }
+                                }
+                                ClaimedCopyDispatch.Prepared(fresh.plan.digest) {
+                                    val receipt = relay.copy(fresh,
+                                        continueRequested = stillRunning,
+                                        onProgress = { bytes ->
+                                            publishCopyProgress(bytes, permit, destination,
+                                                verifiedBeforeFile)
+                                        })
+                                    // Advisory progress only; the final
+                                    // committed total comes from the shared
+                                    // ledger after digest and outcome checks.
+                                    if (receipt.proof == CopyProof.BYTES_VERIFIED &&
+                                        receipt.planDigest == fresh.plan.digest &&
+                                        receipt.bytesWritten >= 0L &&
+                                        credited.add(receipt.planDigest)) {
+                                        observedVerified++
+                                        observedVerifiedBytes = Math.addExact(
+                                            observedVerifiedBytes, receipt.bytesWritten)
+                                    }
+                                    receipt
+                                }
+                            }
                         }
-                        // Destination listing changes after each created file.
-                        // A brand-new plan, not one of the initial plans, is
-                        // required for each subsequent independently journaled Copy.
-                        val fresh = relay.prepare(SftpRelayRequest(
-                            source.session, source.sessionId, source.folder,
-                            file.absolutePath, file.revision, approved.destination,
-                            approved.destinationSessionId, approved.destinationFolder))
-                        if (fresh == null || fresh.bytes != file.size) null else
-                            relay.copy(fresh,
-                                continueRequested = {
-                                    permit.get() && active?.isActive == true
-                                },
-                                onProgress = { bytes ->
-                                    publishCopyProgress(bytes, permit, destination,
-                                        verifiedBytes)
-                                })
-                    }
-                    if (receipt?.proof != CopyProof.BYTES_VERIFIED) {
-                        status = "Stopped after " + verified + " verified file(s): " +
-                            (if (receipt == null) "source, destination or plan changed."
-                            else "the next Copy was not byte-verified.") +
-                            " Inspect the remote destination before retrying."
-                        break
-                    }
-                    verified++
-                    verifiedBytes = Math.addExact(verifiedBytes,
-                        requireNotNull(receipt).bytesWritten)
-                    transferred = verifiedBytes
+                    )
                 }
-                if (verified == source.selection.files.size) {
-                    status = "SFTP batch complete: " + verified +
-                        " files independently SHA-256 verified. Originals preserved."
+                publishing.set(false)
+                transferred = run.outcome.verifiedBytes
+                status = when {
+                    run.outcome.complete ->
+                        "SFTP batch complete: " + run.outcome.verifiedItems +
+                            " files independently SHA-256 verified (" +
+                            run.outcome.verifiedBytes + " bytes). Originals preserved."
+                    run.outcome.state == CopyOutcomeState.BLOCKED ->
+                        "Stopped after " + run.outcome.verifiedItems +
+                            " verified remote file(s): fresh source or destination " +
+                            "preflight blocked the next relay. No automatic retry."
+                    run.outcome.stopProof == CopyProof.WRITE_ACKNOWLEDGED ->
+                        "Stopped after " + run.outcome.verifiedItems +
+                            " verified file(s): the next remote write was acknowledged " +
+                            "but lacks independent byte proof. Inspect before retry."
+                    run.receipts.size == run.outcome.verifiedItems ->
+                        "Stopped after " + run.outcome.verifiedItems +
+                            " verified file(s), before another remote write."
+                    else ->
+                        "Stopped after " + run.outcome.verifiedItems +
+                            " verified file(s): an uncertain, partial or mismatched " +
+                            "remote destination requires inspection before retry."
                 }
-                if (session === destination && destination != null) {
+                if (session === destination) {
                     withContext(Dispatchers.IO) {
                         runCatching { destination.browse(folder) }
                     }.onSuccess { page = it; browseLimit = SftpBrowseBounds.INITIAL }
                 }
             } catch (_: CancellationException) {
-                status = "SFTP relay interrupted after " + verified +
-                    " verified file(s); inspect the destination before retrying."
+                status = "SFTP relay interrupted after " + observedVerified +
+                    " verified file(s); inspect the destination before retry."
             } catch (_: Exception) {
-                status = "SFTP relay stopped after " + verified +
+                status = "SFTP relay stopped after " + observedVerified +
                     " verified file(s), destination outcome may be uncertain."
             } finally {
+                publishing.set(false)
                 onRelaySourceActive(null)
                 continueCopy = null
                 transferKind = ""
