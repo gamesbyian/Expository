@@ -29,7 +29,7 @@ import javax.crypto.spec.GCMParameterSpec
  * The provider's raw parent/child document IDs and grant are not persisted.
  * Encrypted name and salted-by-scope hashes only guide a fresh READ-only review.
  */
-internal data class ProtectedCreatedChildWitness(
+data class ProtectedCreatedChildWitness(
     val parentFingerprint: String,
     val childFingerprint: String,
     val createdName: String,
