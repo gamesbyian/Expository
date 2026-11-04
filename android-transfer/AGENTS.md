@@ -5,7 +5,7 @@ Expository Transfer is the **Android-native file-transfer** app under `android-t
 ## Read and reconcile in this order
 
 1. Inspect live `main`, open PRs/issues, relevant CI failures and the exact implementation/tests. Do not rely on dated checkpoints.
-2. [Ranked native workboard](WORK-QUEUE.md): immediate jobs and known blockers; [dependency-first execution plan](../docs/android-transfer/EXECUTION-DEPENDENCIES.md): sequencing, architecture seams, parallel lanes and acceptance boundaries. Highest-ranked runnable **unowned** slice first.
+2. [Ranked native workboard](WORK-QUEUE.md) and [consolidated release-blocker workstreams](../docs/android-transfer/RELEASE-BLOCKER-CONSOLIDATION-2026-11-03.md): immediate jobs, shared dependencies and known blockers; [dependency-first execution plan](../docs/android-transfer/EXECUTION-DEPENDENCIES.md): sequencing, architecture seams, parallel lanes and acceptance boundaries. Highest-ranked runnable **unowned** slice first.
 3. [Current product contract](../docs/android-transfer/CURRENT-CONTRACT.md): beta P01–P12 commitments and operation matrix.
 4. [Release-readiness ledger](../docs/android-transfer/RELEASE-READINESS.md): only authoritative G0–G9 state/evidence. [Hardened architecture](../docs/android-transfer/HARDENED-IMPLEMENTATION-PLAN.md), [workspace and rename](../docs/android-transfer/WORKSPACE-AND-BULK-RENAME.md), [Drive/Docs](../docs/android-transfer/GOOGLE-DRIVE-INTEGRATION.md) and [security](SECURITY.md) define detailed contracts.
 5. Read [matrix](../docs/android-transfer/TEST-AND-EVIDENCE-MATRIX.md) and [external operations](../docs/android-transfer/EXTERNAL-SMOKE-OPERATIONS.md) only when applicable.
