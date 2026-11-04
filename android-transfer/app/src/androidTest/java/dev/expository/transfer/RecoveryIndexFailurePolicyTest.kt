@@ -19,6 +19,58 @@ import org.junit.runner.RunWith
 /** No real journal files are touched; tests input enumeration failures. */
 @RunWith(AndroidJUnit4::class)
 class RecoveryIndexFailurePolicyTest {
+    @Test fun freshReadOnlySourceByteCheckNeverAuthorizesAnOldAttempt() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = app.contentResolver
+        val name = "expository-recovery-source-" + UUID.randomUUID() + ".bin"
+        val original = ByteArray(137_119) { ((it * 17 + 11) and 255).toByte() }
+        val uri = requireNotNull(resolver.insert(
+            android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE,
+                    "application/octet-stream")
+                put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+            }))
+        val inspector = dev.expository.transfer.journal.RecoveryManualSourceInspector
+        val relation = dev.expository.transfer.journal.FreshSourceByteRelation
+        try {
+            resolver.openOutputStream(uri, "wt")!!.use { it.write(original) }
+            val hash = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(original).joinToString("") { "%02x".format(it) }
+            val evidence = dev.expository.transfer.journal.ProtectedTransferredByteEvidence(
+                original.size.toLong(), hash)
+            assertTrue(inspector.acceptsPickerResult(uri,
+                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            assertTrue(!inspector.acceptsPickerResult(uri, 0))
+            assertTrue(!inspector.acceptsPickerResult(
+                android.net.Uri.parse("file:///private/stale.bin"),
+                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            assertEquals(relation.CURRENT_SELECTION_BYTES_MATCH_RECORDED_TRANSFER,
+                inspector.inspect(resolver, uri, evidence))
+            assertEquals(relation.INSPECTION_CANCELED,
+                inspector.inspect(resolver, uri, evidence,
+                    continueRequested = { false }))
+            assertEquals(relation.NO_COMPLETED_TRANSFER_BYTES,
+                inspector.inspect(resolver, uri, null))
+            assertEquals(relation.BOUNDED_READ_TOO_LARGE,
+                inspector.inspect(resolver, uri, evidence.copy(
+                    byteCount = inspector.MAX_MANUAL_BYTES + 1)))
+            assertEquals(relation.CURRENT_SELECTION_BYTES_DIFFER_FROM_RECORDED_TRANSFER,
+                inspector.inspect(resolver, uri, evidence.copy(
+                    sourceSha256Hex = "0".repeat(64))))
+            assertEquals(relation.INVALID_SOURCE_GRANT,
+                inspector.inspect(resolver,
+                    android.net.Uri.parse("file:///private/stale.bin"), evidence))
+            assertArrayEquals("Fresh READ-only inspection must preserve source bytes",
+                original, resolver.openInputStream(uri)!!.use { it.readBytes() })
+            assertTrue("An observational hash is not source identity or replay authority",
+                evidence.toString() == "ProtectedTransferredByteEvidence(redacted)")
+        } finally {
+            runCatching { resolver.delete(uri, null, null) }
+        }
+    }
+
 
     @Test fun hiddenReviewCountDoesNotDuplicateAnAlreadyVisibleSidecarWarning() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
