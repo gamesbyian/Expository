@@ -19,6 +19,114 @@ import org.junit.runner.RunWith
 /** No real journal files are touched; tests input enumeration failures. */
 @RunWith(AndroidJUnit4::class)
 class RecoveryIndexFailurePolicyTest {
+    @Test fun encryptedTreeRootWitnessDistinguishesSameProviderDifferentRoot() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "root-witness-recovery-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val original = android.net.Uri.parse(
+            "content://synthetic.identity.provider/tree/account%3ARoot-One")
+        val same = android.net.Uri.parse(
+            "content://synthetic.identity.provider/tree/account%3ARoot-One")
+        val otherRoot = android.net.Uri.parse(
+            "content://synthetic.identity.provider/tree/account%3ARoot-Two")
+        val otherAuthority = android.net.Uri.parse(
+            "content://different.identity.provider/tree/account%3ARoot-One")
+        val invalid = android.net.Uri.parse("content://synthetic.identity.provider/document/not-a-tree")
+        val identity = dev.expository.transfer.journal.RecoveryTreeRootIdentity
+        val relation = dev.expository.transfer.journal.RecoveryTreeRootRelation
+        val fingerprint = identity.fingerprint(original)
+        assertEquals(64, fingerprint.length)
+        assertEquals(relation.SAME_RECORDED_ROOT, identity.compare(fingerprint, same))
+        assertEquals(relation.DIFFERENT_RECORDED_ROOT,
+            identity.compare(fingerprint, otherRoot))
+        assertEquals(relation.DIFFERENT_RECORDED_ROOT,
+            identity.compare(fingerprint, otherAuthority))
+        assertEquals(relation.NO_SAVED_ROOT, identity.compare(null, original))
+        assertEquals(relation.UNDETERMINED, identity.compare("invalid", original))
+        assertEquals(relation.UNDETERMINED, identity.compare(fingerprint, invalid))
+
+        val digest = "c".repeat(64)
+        val hint = dev.expository.transfer.journal.ProtectedRecoveryContext(
+            "SAF_DUAL_COPY", "Source", "Selected Android root",
+            "synthetic.identity.provider", fingerprint)
+        try {
+            val store = dev.expository.transfer.journal.ProtectedRecoveryContextStore(isolated)
+            store.recordNew(digest, hint)
+            assertEquals(hint, store.read(digest))
+            val opaque = File(sandbox, "transfer_recovery_context_v1_" + digest)
+                .readBytes().toString(Charsets.ISO_8859_1)
+            assertTrue(!opaque.contains("account:Root-One") &&
+                !opaque.contains("synthetic.identity.provider") &&
+                !opaque.contains(fingerprint))
+            val journal = DurableAttemptJournal(
+                dev.expository.transfer.journal.AndroidAtomicAttemptStorage(isolated, digest))
+            journal.confirm(digest)
+            journal.beginAttempt(digest, "root_witness_test")
+            val recovered = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, recovered.requiresReview)
+            assertEquals(fingerprint,
+                recovered.inspectionReference(digest)?.context?.destinationTreeRootFingerprint)
+            assertEquals(JournalState.ATTEMPT_RECORDED, journal.current()?.state)
+            // Same recorded tree root is only a correspondence signal.
+            // Neither the original bytes nor a retry authorization exist.
+            assertTrue(runCatching {
+                journal.beginAttempt(digest, "replay_attempt_blocked")
+            }.isFailure)
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
+    @Test fun legacyEncryptedV1ContextRemainsReadableWithoutAnInventedRoot() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "legacy-root-hint-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val bootstrapKey = "a".repeat(64)
+        val legacyKey = "b".repeat(64)
+        val store = dev.expository.transfer.journal.ProtectedRecoveryContextStore(isolated)
+        val original = dev.expository.transfer.journal.ProtectedRecoveryContext(
+            "SAF_PICKER_COPY", "Legacy source", "Legacy target", "legacy.provider")
+        try {
+            // Create the same app-private Keystore key as a genuine V2 write.
+            store.recordNew(bootstrapKey, original)
+            val keystore = java.security.KeyStore.getInstance("AndroidKeyStore")
+                .apply { load(null) }
+            val key = keystore.getKey(
+                "expository-transfer-recovery-context-v1", null) as javax.crypto.SecretKey
+            val plain = java.io.ByteArrayOutputStream().also { buffer ->
+                java.io.DataOutputStream(buffer).use { out ->
+                    out.writeByte(1)
+                    out.writeUTF(original.operation)
+                    out.writeUTF(original.sourceLabel)
+                    out.writeUTF(original.destinationLabel)
+                    out.writeUTF(original.destinationProvider)
+                }
+            }.toByteArray()
+            val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, key)
+            val aad = ("ExpositoryTransfer.RecoveryContext.V1" + 0.toChar() +
+                app.packageName + 0.toChar() + legacyKey).toByteArray(Charsets.UTF_8)
+            cipher.updateAAD(aad)
+            val record = "EXPRCTX1".toByteArray(Charsets.US_ASCII) +
+                cipher.iv + cipher.doFinal(plain)
+            File(sandbox, "transfer_recovery_context_v1_" + legacyKey)
+                .writeBytes(record)
+            plain.fill(0)
+            assertEquals(original, store.read(legacyKey))
+            assertEquals(null, store.read(legacyKey)?.destinationTreeRootFingerprint)
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
     @Test fun identicalDisplaySuffixesCannotBindPickerToTheWrongJournal() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val sandbox = File(app.cacheDir, "same-suffix-recovery-" + UUID.randomUUID())
