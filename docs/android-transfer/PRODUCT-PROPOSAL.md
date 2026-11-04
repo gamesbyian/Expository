@@ -271,6 +271,8 @@ Additional required beta acceptance cases **A21–A32** for all location combina
 
 **Phase 2: beta-complete three-mode workspace and renamer.** All Local/Local, Local/Remote and Remote/Remote pairings with adaptive panes, long-press selection, drag/drop in either direction, precise server-side move vs streamed-copy UX, keyboard/TalkBack alternatives and a compact live-preview **P0 bulk renamer**. Complete A01–A32 before beta. Advanced regex/presets can follow P0 with separate acceptance.
 
+**Planned P1 Website Preview (cross-app contract).** In a chosen local/SAF or FTP/FTPS/SFTP location, opening an HTML document should optionally show an isolated, navigable website preview with relative images, CSS and links resolved lazily against accessible files in that same environment. Keep Source inspection available; sandbox HTML, default JavaScript off, and do not expose remote/session credentials to a WebView. This is not required for the current P0 beta. See [Website Preview specification](../WEBSITE-PREVIEW.md). 
+
 **Phase 3: remote-native ecosystem.** DocumentsProvider, previews/streaming where safe, one-way backup with dry-run, Wi-Fi/metered policies, WebDAV/SMB capability adapters. Optional Expository-brand image gallery extras last.
 
 Suggested clean ownership:
