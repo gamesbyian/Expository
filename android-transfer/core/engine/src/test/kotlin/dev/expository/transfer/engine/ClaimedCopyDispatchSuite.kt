@@ -39,6 +39,32 @@ object ClaimedCopyDispatchSuite {
         }.isFailure)
         check(singleWrites == 1)
 
+        // An authenticated remote Single route must bind the returned
+        // provider receipt to the exact reviewed digest, even with one item.
+        // An ACK or unrelated well-formed digest must never show green.
+        val remoteOk = claimed().run(1, { true }) { index ->
+            check(index == 0)
+            ClaimedCopyDispatch.Prepared(a) { verified(a, 4096L) }
+        }
+        check(remoteOk.outcome.complete &&
+            remoteOk.outcome.verifiedBytes == 4096L)
+        val remoteWrong = claimed().run(1, { true }) {
+            ClaimedCopyDispatch.Prepared(a) { verified(b, 4096L) }
+        }
+        check(!remoteWrong.outcome.complete &&
+            remoteWrong.outcome.state == CopyOutcomeState.REVIEW_REQUIRED &&
+            remoteWrong.outcome.verifiedBytes == 0L)
+        val remoteAck = claimed().run(1, { true }) {
+            ClaimedCopyDispatch.Prepared(a) {
+                CopyReceipt(a, CopyProof.WRITE_ACKNOWLEDGED, 4096L,
+                    "DESTINATION_READBACK_UNAVAILABLE")
+            }
+        }
+        check(!remoteAck.outcome.complete &&
+            remoteAck.outcome.state == CopyOutcomeState.REVIEW_REQUIRED &&
+            remoteAck.outcome.verifiedBytes == 0L &&
+            remoteAck.outcome.stopProof == CopyProof.WRITE_ACKNOWLEDGED)
+
         // Reviewed multi-item copies must receive fresh per-item preflights
         // AFTER the prior file's independently verified journal/readback.
         val completed = mutableListOf<Int>()
