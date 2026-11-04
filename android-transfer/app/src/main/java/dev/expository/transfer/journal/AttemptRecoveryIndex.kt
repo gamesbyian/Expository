@@ -11,7 +11,9 @@ data class RecoveryReviewReference(
     val status: String,
     /** Separate encrypted, non-executable human-readable context if present. */
     val context: ProtectedRecoveryContext? = null,
-    val contextWarning: String? = null
+    val contextWarning: String? = null,
+    /** Full private key for in-memory picker-result binding only. Never display it. */
+    internal val recordKey: String? = null
 ) {
     // Never serialize a decrypted display hint, private record suffix or
     // provider-returned context into incidental Kotlin debug output.
@@ -27,6 +29,16 @@ data class RecoveryCounts(
     val reviewReferences: List<RecoveryReviewReference> = emptyList(),
     val additionalReviewCount: Int = 0
 )
+
+/**
+ * Picker results must bind to the entire private journal key, never the
+ * abbreviated display suffix. Fail closed if the record is absent, ambiguous,
+ * or lacks separately protected human-readable context.
+ */
+internal fun RecoveryCounts.inspectionReference(recordKey: String): RecoveryReviewReference? =
+    reviewReferences.singleOrNull {
+        it.recordKey != null && it.recordKey == recordKey && it.context != null
+    }
 
 /**
  * Read-only reconciliation of private attempt records, on startup or refresh. This cannot inspect
@@ -91,7 +103,8 @@ object AttemptRecoveryIndex {
                     "Saved destination context unreadable; independently inspect the destination."
                 else if (hint.getOrNull() == null)
                     "Older record without saved destination context."
-                else null)
+                else null,
+                recordKey = digest)
         }
         var uncertain = 0
         var verified = 0
@@ -107,7 +120,8 @@ object AttemptRecoveryIndex {
                 details += RecoveryReviewReference(
                     orphan.takeLast(12),
                     "Protected context has no matching attempt journal",
-                    contextWarning = "No attempt record exists. Do not retry or infer destination state from this hint."
+                    contextWarning = "No attempt record exists. Do not retry or infer destination state from this hint.",
+                    recordKey = orphan
                 )
             }
         }

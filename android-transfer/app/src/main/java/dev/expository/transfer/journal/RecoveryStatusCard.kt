@@ -42,8 +42,9 @@ fun RecoveryStatusCard() {
     var refreshSerial by remember { mutableIntStateOf(0) }
     var showReviewReferences by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    // A one-shot, display-only review ticket. Never persist a picked tree URI,
-    // reauthorize a journal or infer that a matching name is the old target.
+    // A one-shot, display-only review ticket bound to the full PRIVATE
+    // journal key, not its potentially colliding 12-character display suffix.
+    // Never persist a picked tree URI, reauthorize a journal, or infer a target.
     var inspectionRevision by remember { mutableIntStateOf(0) }
     var inspectionTicket by remember { mutableStateOf<Pair<String, Int>?>(null) }
     var inspectionMessage by remember { mutableStateOf<String?>(null) }
@@ -55,9 +56,7 @@ fun RecoveryStatusCard() {
         inspectionTicket = null
         val uri = result.data?.data
         if (ticket == null || ticket.second != inspectionRevision ||
-            status?.reviewReferences?.any {
-                it.opaqueSuffix == ticket.first && it.context != null
-            } != true) {
+            status?.inspectionReference(ticket.first) == null) {
             inspectionMessage = "Inspection selection is no longer current. Re-open the review reference."
         } else if (result.resultCode != Activity.RESULT_OK || uri == null) {
             inspectionMessage = "Folder inspection canceled. No transfer was changed."
@@ -79,14 +78,14 @@ fun RecoveryStatusCard() {
                     inspectionListing = null
                 } else {
                     inspectionListing = observed.getOrNull()
-                    val savedAuthority = status?.reviewReferences?.firstOrNull {
-                        it.opaqueSuffix == ticket.first
-                    }?.context?.destinationProvider
+                    val savedAuthority = status?.inspectionReference(ticket.first)
+                        ?.context?.destinationProvider
                     // This is an advisory based on a protected *display hint*,
                     // not a provider attestation, folder identity or retry permit.
                     val providerRelation = RecoveryProviderReview.compare(
                         savedAuthority, uri.authority)
-                    inspectionMessage = "Manual inspection for record …" + ticket.first +
+                    inspectionMessage = "Manual inspection for record …" +
+                        ticket.first.takeLast(12) +
                         " used a fresh Android tree grant. " +
                         when (providerRelation) {
                             RecoveryProviderRelation.DIFFERENT_AUTHORITY ->
@@ -181,10 +180,10 @@ fun RecoveryStatusCard() {
                         if (entry.context != null) {
                             Button(
                                 modifier = Modifier.heightIn(min = 48.dp),
-                                enabled = inspectionTicket == null,
+                                enabled = inspectionTicket == null && entry.recordKey != null,
                                 onClick = {
                                     inspectionRevision++
-                                    inspectionTicket = entry.opaqueSuffix to inspectionRevision
+                                    inspectionTicket = requireNotNull(entry.recordKey) to inspectionRevision
                                     inspectionListing = null
                                     inspectionMessage = null
                                     try {
@@ -197,7 +196,8 @@ fun RecoveryStatusCard() {
                                             "Android folder picker unavailable. No inspection or transfer attempted."
                                     }
                                 }
-                            ) { Text("Inspect folder for record …" + entry.opaqueSuffix) }
+                            ) { Text("Inspect folder for record " + (index + 1) +
+                                " …" + entry.opaqueSuffix) }
                         }
                     }
                     val hidden = review.additionalReviewCount +
