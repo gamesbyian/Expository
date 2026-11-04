@@ -198,7 +198,10 @@ class SafRecursiveTreeCopyAndroidTest {
                 hint?.operation == "SAF_RECURSIVE_COPY" &&
                     hint.sourceLabel == "Shows" &&
                     hint.destinationLabel == "Selected Android folder / Shows" &&
-                    hint.destinationProvider == "test.copy.target.scoped"
+                    hint.destinationProvider == "test.copy.target.scoped" &&
+                    hint.destinationTreeRootFingerprint ==
+                        dev.expository.transfer.journal.RecoveryTreeRootIdentity
+                            .fingerprint(targetTree)
             })
         val matchedKey = hints.first { it.second?.operation == "SAF_RECURSIVE_COPY" }.first
         val ciphertext = java.io.File(app.noBackupFilesDir,
