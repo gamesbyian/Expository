@@ -28,4 +28,19 @@ test -n "$(find "$GRADLE_USER_HOME/caches/modules-2/files-2.1" \
   -mindepth 2 -type d -print -quit)"
 test -n "$(find "$GRADLE_USER_HOME/wrapper/dists" \
   -name 'gradle-launcher-8.13.jar' -print -quit)"
-echo 'PASS: JVM scenarios plus Android app/test compile/lint resolved from a fresh Gradle home.'
+# A cold online run alone does not establish that the downloaded transitive
+# graph can be used without the network. Re-execute real compile and scenario
+# tasks with Gradle explicitly offline, tasks forced to run, and build-cache
+# reuse disabled. This is SAME-SNAPSHOT, warm-isolated-cache evidence only;
+# it is not dependency locking, checksum verification or a portable offline
+# build from an empty cache.
+(
+  cd "$root/android-transfer"
+  bash ./gradlew --no-daemon --offline --rerun-tasks --no-build-cache \
+    -PwithAndroid=true \
+    :core:planner:check :core:engine:check \
+    :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin \
+    :app:lintDebug
+)
+
+echo 'PASS: clean JVM/Android dependency download plus forced same-snapshot offline rebuild from the isolated cache.'
