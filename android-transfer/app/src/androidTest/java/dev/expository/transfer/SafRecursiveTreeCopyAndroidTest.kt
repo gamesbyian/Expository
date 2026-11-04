@@ -237,6 +237,12 @@ class SafRecursiveTreeCopyAndroidTest {
                             .fingerprint(targetTree)
             })
         val matchedKey = hints.first { it.second?.operation == "SAF_RECURSIVE_COPY" }.first
+        // The provider created a directory but deliberately lost its return
+        // value. No child ID could have been captured. Absence of a witness
+        // must NOT be treated as proof that nothing was created.
+        assertEquals(null,
+            dev.expository.transfer.journal.ProtectedCreatedChildWitnessStore(app)
+                .read(matchedKey))
         val ciphertext = java.io.File(app.noBackupFilesDir,
             "transfer_recovery_context_v1_" + matchedKey).readBytes()
                 .toString(Charsets.ISO_8859_1)
