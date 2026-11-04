@@ -33,6 +33,8 @@ data class RecoveryCounts(
     val notStarted: Int,
     val damagedOrUnrecognized: Int,
     val reviewReferences: List<RecoveryReviewReference> = emptyList(),
+    // Count of unlisted attempt/anomaly records only, not corrupt evidence
+    // already reported in a visible review reference's warning.
     val additionalReviewCount: Int = 0
 )
 
@@ -126,8 +128,15 @@ object AttemptRecoveryIndex {
         val details = ArrayList<RecoveryReviewReference>(MAX_REVIEW_REFERENCES)
         var damaged = malformedJournalCount(names) + malformedContextCount(names) +
             malformedCreatedChildCount(names) + malformedSourceByteCount(names)
+        // Malformed filenames cannot be represented by a trustworthy record
+        // key. A damaged sidecar on an already displayed attempt CAN: it is
+        // a warning on that reference, not another hidden record.
+        var unlisted = damaged
         fun reference(digest: String, status: String) {
-            if (details.size >= MAX_REVIEW_REFERENCES) return
+            if (details.size >= MAX_REVIEW_REFERENCES) {
+                unlisted++
+                return
+            }
             val hint = runCatching {
                 ProtectedRecoveryContextStore(context).read(digest)
             }
@@ -182,6 +191,8 @@ object AttemptRecoveryIndex {
                     else "An orphan created-child or byte witness is not a transfer receipt. No retry or cleanup.",
                     recordKey = orphan
                 )
+            } else {
+                unlisted++
             }
         }
 
@@ -220,6 +231,6 @@ object AttemptRecoveryIndex {
             }
         }
         return RecoveryCounts(uncertain, verified, notStarted, damaged,
-            details.toList(), (uncertain + damaged - details.size).coerceAtLeast(0))
+            details.toList(), unlisted)
     }
 }
