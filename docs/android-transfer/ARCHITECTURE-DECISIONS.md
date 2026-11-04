@@ -22,7 +22,7 @@ Index failure is UNREADABLE or REVIEW_REQUIRED, never an empty successful histor
 
 ## ADR-AT-04: Small capability-specific adapters, not a fake universal filesystem
 
-Use a bounded List/Stat/Read and explicit conditional CreateChildNoReplace, readback, Rename/Move/Delete when *proved* by each authority. Unknown/unsupported stops. SFTP exclusive create and SSH host pin, FTPS TLS/control/data checks, SAF per-tree grant and identity/membership drift checks are preserved. Plain FTP remains separately consented **read-only**. Generic SAF `createDocument` is not atomic no-replace; detect competing creation/rename and return UNCERTAIN. Never convert Copy into rename; cross-authority Move requires independently verified Copy and separately authorized source deletion.
+Use a bounded List/Stat/Read and explicit conditional CreateChildNoReplace, readback, Rename/Move/Delete when *proved* by each authority. Unknown/unsupported stops. SFTP exclusive create and SSH host pin, FTPS TLS/control/data checks, SAF per-tree grant and identity/membership drift checks are preserved. Plain FTP remains separately consented **read-only**. Generic SAF `createDocument` is not atomic no-replace; detect competing creation/rename and return UNCERTAIN. Never convert Copy into rename; cross-authority Move requires independently verified Copy followed by source deletion already authorized within the explicit, frozen Move approval. Require fresh exact-source identity/capability before deletion, but no redundant second confirmation unless the scope changes.
 
 ## ADR-AT-05: Safe lifecycle restoration and background policy
 
