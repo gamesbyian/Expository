@@ -365,6 +365,47 @@ fun RecoveryStatusCard() {
                                 "after interruption or authorize replay or cleanup.",
                                 style = MaterialTheme.typography.bodySmall)
                         }
+                        if (entry.transferredBytes != null && entry.recordKey != null) {
+                            Text("Optional: compare a newly selected Android document's " +
+                                "current bytes with this record's sealed source-stream " +
+                                "hash (64 MiB limit). This cannot establish original " +
+                                "source identity, destination state, replay or deletion.",
+                                style = MaterialTheme.typography.bodySmall)
+                            Button(modifier = Modifier.heightIn(min = 48.dp),
+                                enabled = inspectionTicket == null &&
+                                    sourceInspectionTicket == null &&
+                                    !inspectionRunning,
+                                onClick = {
+                                    inspectionJob?.cancel()
+                                    inspectionJob = null
+                                    inspectionRunning = false
+                                    inspectionRevision++
+                                    sourceInspectionTicket =
+                                        requireNotNull(entry.recordKey) to inspectionRevision
+                                    inspectionTicket = null
+                                    inspectionListing = null
+                                    inspectionMessage = null
+                                    sourceByteRelation = null
+                                    sourceInspectionMessage =
+                                        "Select a current Android source for a READ-only comparison. " +
+                                        "No journal or transfer will be changed."
+                                    try {
+                                        pickSourceForReadOnlyCheck.launch(
+                                            Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                                                type = "*/*"
+                                                addCategory(Intent.CATEGORY_OPENABLE)
+                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            })
+                                    } catch (_: Exception) {
+                                        sourceInspectionTicket = null
+                                        sourceInspectionMessage =
+                                            "Android document picker unavailable. No file was accessed."
+                                    }
+                                }) {
+                                Text("Compare current source for record " + (index + 1) +
+                                    " …" + entry.opaqueSuffix)
+                            }
+                        }
                         if (entry.createdChild != null) {
                             Text("An encrypted post-create child identity was recorded. " +
                                 "Re-select its exact immediate parent folder to compare " +
