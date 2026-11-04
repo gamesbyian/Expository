@@ -16,12 +16,15 @@ data class RecoveryReviewReference(
     internal val recordKey: String? = null,
     /** Post-create identity is never a replay or VERIFIED receipt. */
     internal val createdChild: ProtectedCreatedChildWitness? = null,
-    val createdChildWarning: String? = null
+    val createdChildWarning: String? = null,
+    /** Completed source bytes, not destination proof or replay authority. */
+    internal val transferredBytes: ProtectedTransferredByteEvidence? = null,
+    val transferredBytesWarning: String? = null
 ) {
     // Never serialize a decrypted display hint, private record suffix or
     // provider-returned context into incidental Kotlin debug output.
     override fun toString(): String =
-        "RecoveryReviewReference(hasContext=${context != null},hasWarning=${contextWarning != null},hasCreatedChild=${createdChild != null})"
+        "RecoveryReviewReference(hasContext=${context != null},hasWarning=${contextWarning != null},hasCreatedChild=${createdChild != null},hasSourceBytes=${transferredBytes != null})"
 }
 
 data class RecoveryCounts(
@@ -61,6 +64,8 @@ object AttemptRecoveryIndex {
         Regex("transfer_recovery_context_v1_([0-9a-f]{64})(?:\\.bak|\\.new)?")
     private val createdChildPattern =
         Regex("transfer_created_child_v1_([0-9a-f]{64})(?:\\.bak|\\.new)?")
+    private val sourceBytesPattern =
+        Regex("transfer_source_bytes_v1_([0-9a-f]{64})(?:\\.bak|\\.new)?")
     private const val MAX_REVIEW_REFERENCES = 32
 
     /**
@@ -103,13 +108,24 @@ object AttemptRecoveryIndex {
                 !createdChildPattern.matches(it)
         }
 
+    internal fun sourceByteDigests(names: List<String>): List<String> =
+        names.mapNotNull {
+            sourceBytesPattern.matchEntire(it)?.groupValues?.get(1)
+        }.distinct()
+
+    internal fun malformedSourceByteCount(names: List<String>): Int =
+        names.count {
+            it.startsWith("transfer_source_bytes_v1_") &&
+                !sourceBytesPattern.matches(it)
+        }
+
     fun recover(context: Context): RecoveryCounts {
         val names = context.noBackupFilesDir.listFiles()?.map { it.name }
             ?: throw IOException("JOURNAL_DIRECTORY_UNREADABLE")
         val digests = journalDigests(names).sorted()
         val details = ArrayList<RecoveryReviewReference>(MAX_REVIEW_REFERENCES)
         var damaged = malformedJournalCount(names) + malformedContextCount(names) +
-            malformedCreatedChildCount(names)
+            malformedCreatedChildCount(names) + malformedSourceByteCount(names)
         fun reference(digest: String, status: String) {
             if (details.size >= MAX_REVIEW_REFERENCES) return
             val hint = runCatching {
@@ -118,7 +134,11 @@ object AttemptRecoveryIndex {
             val child = runCatching {
                 ProtectedCreatedChildWitnessStore(context).read(digest)
             }
+            val sourceBytes = runCatching {
+                ProtectedTransferredBytesEvidenceStore(context).read(digest)
+            }
             if (child.isFailure) damaged++
+            if (sourceBytes.isFailure) damaged++
             details += RecoveryReviewReference(digest.takeLast(12), status,
                 context = hint.getOrNull(),
                 contextWarning = if (hint.isFailure)
@@ -130,6 +150,10 @@ object AttemptRecoveryIndex {
                 createdChild = child.getOrNull(),
                 createdChildWarning = if (child.isFailure)
                     "Saved created-child identity unreadable; the destination may still exist."
+                else null,
+                transferredBytes = sourceBytes.getOrNull(),
+                transferredBytesWarning = if (sourceBytes.isFailure)
+                    "Saved completed-byte evidence unreadable; never infer destination verification."
                 else null)
         }
         var uncertain = 0
@@ -141,7 +165,8 @@ object AttemptRecoveryIndex {
         // Never decrypt orphan metadata or invent a missing write receipt.
         val orphanContexts = contextDigests(names).toSet()
         val orphanChildren = createdChildDigests(names).toSet()
-        for (orphan in (orphanContexts + orphanChildren)
+        val orphanBytes = sourceByteDigests(names).toSet()
+        for (orphan in (orphanContexts + orphanChildren + orphanBytes)
             .filterNot { it in journalKeys }.sorted()) {
             damaged++
             if (details.size < MAX_REVIEW_REFERENCES) {
@@ -149,10 +174,12 @@ object AttemptRecoveryIndex {
                     orphan.takeLast(12),
                     if (orphan in orphanContexts)
                         "Protected context has no matching attempt journal"
-                    else "Created-child witness has no matching attempt journal",
+                    else if (orphan in orphanChildren)
+                        "Created-child witness has no matching attempt journal"
+                    else "Completed-byte evidence has no matching attempt journal",
                     contextWarning = if (orphan in orphanContexts)
                         "No attempt record exists. Do not retry or infer destination state from this hint."
-                    else "An orphan created-child witness is not a transfer receipt. No retry or cleanup.",
+                    else "An orphan created-child or byte witness is not a transfer receipt. No retry or cleanup.",
                     recordKey = orphan
                 )
             }
