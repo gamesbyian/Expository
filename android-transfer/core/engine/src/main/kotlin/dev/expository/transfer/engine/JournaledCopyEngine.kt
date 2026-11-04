@@ -46,6 +46,8 @@ object JournaledCopyEngine {
                 streams.openNewDestination()
             override fun openDestinationReadBack(): InputStream? =
                 streams.openDestinationReadBack()
+            override fun onSourceBytesClosed(bytesWritten: Long, sourceSha256: ByteArray) =
+                streams.onSourceBytesClosed(bytesWritten, sourceSha256)
         }
         val observed = ForegroundCopyEngine.copy(
             plan, currentPlan, journalled, continueRequested, onProgress

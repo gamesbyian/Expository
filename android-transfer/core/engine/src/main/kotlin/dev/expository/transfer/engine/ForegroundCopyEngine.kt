@@ -18,6 +18,15 @@ interface CopyStreams {
     fun openNewDestination(): OutputStream
     /** Return null when the destination cannot be independently read back. */
     fun openDestinationReadBack(): InputStream?
+
+    /**
+     * Optional bounded, fail-closed sink after the entire source stream and
+     * destination output are closed, BEFORE destination readback. A caller may
+     * persist only an authenticated/encrypted source-byte digest and length.
+     * This callback is NOT content verification, an approval, or replay authority.
+     * An exception makes the possible write UNCERTAIN. Never log the digest.
+     */
+    fun onSourceBytesClosed(bytesWritten: Long, sourceSha256: ByteArray) {}
 }
 
 enum class CopyProof {
@@ -114,6 +123,17 @@ object ForegroundCopyEngine {
             return result(if (destinationAttempted) CopyProof.UNCERTAIN else CopyProof.BLOCKED,
                 transferred, if (destinationAttempted) "PARTIAL_OR_UNCERTAIN_WRITE" else "STREAM_OPEN_FAILED")
         }
+        // The output/source close completed. Give an opted-in, app-private
+        // evidence writer one bounded opportunity to seal the exact source
+        // bytes that were handed to this destination. A crash or failure at
+        // this boundary cannot be promoted into a verified outcome.
+        val completedSourceHash = sourceDigest.digest()
+        try {
+            streams.onSourceBytesClosed(transferred, completedSourceHash.copyOf())
+        } catch (_: Exception) {
+            return result(CopyProof.UNCERTAIN, transferred,
+                "SOURCE_BYTE_EVIDENCE_NOT_DURABLE")
+        }
         // A stop during the final source close must not turn into green
         // verification (nor into an apparent clean preflight rejection).
         if (!runCatching { continueRequested() }.getOrDefault(false))
@@ -159,7 +179,7 @@ object ForegroundCopyEngine {
         // Checking here would erase a valid SHA-256 proof and misclassify
         // a fully committed item as UNCERTAIN (see VerifiedCopyBatchSuite).
         return if (verifiedBytes == transferred &&
-            destinationDigest.digest().contentEquals(sourceDigest.digest())) {
+            destinationDigest.digest().contentEquals(completedSourceHash)) {
             result(CopyProof.BYTES_VERIFIED, transferred, "READBACK_SHA256_MATCH")
         } else result(CopyProof.UNCERTAIN, transferred, "READBACK_MISMATCH")
     }

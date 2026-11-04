@@ -148,6 +148,74 @@ object JournaledCopySuite {
             check(receipt.proof == CopyProof.BLOCKED)
             check(disk.commits == 0 && streams.destinationOpened == 0)
         }
+        checkCase("completed source digest precedes readback and remains scoped to one attempt") {
+            val disk = AtomicDisk()
+            val journal = DurableAttemptJournal(disk)
+            val payload = "synthetic source with an exact digest".toByteArray()
+            val output = object : ByteArrayOutputStream() {
+                var closed = false
+                override fun close() {
+                    closed = true
+                    super.close()
+                }
+            }
+            var observed = 0
+            var expectedBytes = -1L
+            var expectedSha: ByteArray? = null
+            val streams = object : CopyStreams {
+                override fun openSource(): InputStream = ByteArrayInputStream(payload)
+                override fun openNewDestination(): OutputStream = output
+                override fun onSourceBytesClosed(bytesWritten: Long, sourceSha256: ByteArray) {
+                    observed++
+                    check(output.closed)
+                    check(journal.current()?.state == JournalState.ATTEMPT_RECORDED)
+                    expectedBytes = bytesWritten
+                    expectedSha = sourceSha256.copyOf()
+                }
+                override fun openDestinationReadBack(): InputStream {
+                    check(observed == 1)
+                    return ByteArrayInputStream(output.toByteArray())
+                }
+            }
+            val receipt = JournaledCopyEngine.copy(plan, { plan }, streams,
+                journal, "digest_evidence_attempt")
+            check(receipt.proof == CopyProof.BYTES_VERIFIED)
+            check(observed == 1 && expectedBytes == payload.size.toLong())
+            check(expectedSha!!.contentEquals(
+                java.security.MessageDigest.getInstance("SHA-256").digest(payload)))
+            check(journal.current()?.state == JournalState.VERIFIED)
+        }
+        checkCase("failed source evidence persistence stops before readback and never replays") {
+            val disk = AtomicDisk()
+            val journal = DurableAttemptJournal(disk)
+            val output = ByteArrayOutputStream()
+            var attempted = 0
+            var readback = false
+            val streams = object : CopyStreams {
+                override fun openSource(): InputStream =
+                    ByteArrayInputStream("fixture".toByteArray())
+                override fun openNewDestination(): OutputStream = output
+                override fun onSourceBytesClosed(bytesWritten: Long, sourceSha256: ByteArray) {
+                    attempted++
+                    check(bytesWritten == output.size().toLong())
+                    check(sourceSha256.size == 32)
+                    throw IOException("isolated encrypted sink could not commit")
+                }
+                override fun openDestinationReadBack(): InputStream {
+                    readback = true
+                    return ByteArrayInputStream(output.toByteArray())
+                }
+            }
+            val receipt = JournaledCopyEngine.copy(plan, { plan }, streams,
+                journal, "failed_digest_evidence")
+            check(receipt.proof == CopyProof.UNCERTAIN &&
+                receipt.reason == "SOURCE_BYTE_EVIDENCE_NOT_DURABLE")
+            check(attempted == 1 && !readback && output.size() > 0)
+            check(journal.current()?.state == JournalState.UNCERTAIN)
+            val retry = JournaledCopyEngine.copy(plan, { plan }, Streams(), journal,
+                "no_automatic_replay")
+            check(retry.proof == CopyProof.BLOCKED)
+        }
         println("PASS JOURNALED_COPY total=" + passed + " evidence=injected-stream-and-crash")
     }
 }
