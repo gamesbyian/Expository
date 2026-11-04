@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.activity.ComponentActivity
@@ -147,7 +149,14 @@ internal data class RecursiveCopyReview(
     val request: ScopedRecursiveSourceRequest,
     val manifest: RecursiveFolderManifest,
     val sourceGeneration: Long,
-    val destinationGeneration: Long
+    val destinationGeneration: Long,
+    val sourceEndpoint: BrowseEndpoint,
+    val destinationEndpoint: BrowseEndpoint,
+    val sourceKey: LocationKey,
+    val destinationKey: LocationKey,
+    val sourceRevision: String,
+    val destinationRevision: String,
+    val shareEpoch: Long
 )
 
 /** Exact Single-mode source identity captured BEFORE launching Android's target picker. */
@@ -262,6 +271,9 @@ private fun DeveloperPreview(
         }
         model = model.update(which, model.pane(which).clearSelection())
         val nextGeneration = treeReadGeneration.incrementAndGet()
+        // Keep the same-folder UI subtree attached during a refresh while
+        // denying stale selection and mutation authority until a fresh scan.
+        // Navigating to another folder/provider still starts with empty rows.
         replaceTree(which, LocalTreeBrowseState(
             treeUri = uri, crumbs = crumbs, loading = true,
             canWrite = writeGranted,
@@ -313,6 +325,83 @@ private fun DeveloperPreview(
                 model = model.update(which, model.pane(which).clearSelection())
             }
         }
+    }
+
+    /**
+     * Post-Copy destination reobservation is read-only. Avoid changing the
+     * Compose browse/semantics tree while the provider query is in flight.
+     * The Copy permit keeps every user mutation control disabled meanwhile.
+     * An unresponsive provider cannot hold the interface forever; on timeout,
+     * clear the old listing and require a new manual refresh.
+     */
+    suspend fun refreshAfterCopy(
+        approved: RecursiveCopyReview, permit: AtomicBoolean
+    ) {
+        val which = approved.destinationPane
+        val request = approved.request
+        val before = tree(which)
+        val oldLocation = model.pane(which).current?.location
+        if (!copyBusy || copyPermit !== permit ||
+            oldLocation == null || oldLocation.key != approved.destinationKey ||
+            oldLocation.revision != approved.destinationRevision ||
+            before.generation != approved.destinationGeneration ||
+            before.treeUri != request.destinationTree ||
+            before.folderId != request.destinationParentId ||
+            before.crumbs.isEmpty()) return
+
+        val originalCrumbs = before.crumbs
+        val limit = before.visibleLimit
+        val read = scope.async(Dispatchers.IO) {
+            runCatching { LocalTreeReader.list(
+                context.contentResolver, request.destinationTree,
+                request.destinationParentId, limit) }
+        }
+        val outcome = withTimeoutOrNull(15_000L) { read.await() }
+        if (outcome == null) read.cancel()
+
+        // Even after readback, never attach a result to a changed pane, new
+        // Share epoch, different grant, or replaced permit. No user names,
+        // URIs, or provider metadata are logged by this route.
+        val latest = tree(which)
+        val latestVisit = model.pane(which).current?.location
+        if (!copyBusy || copyPermit !== permit ||
+            model.view != WorkspaceView.DUAL ||
+            currentShareEpoch() != approved.shareEpoch ||
+            model.pane(which).endpoint != approved.destinationEndpoint ||
+            latestVisit == null || latestVisit.key != approved.destinationKey ||
+            latestVisit.revision != approved.destinationRevision ||
+            latest.generation != approved.destinationGeneration ||
+            latest.treeUri != request.destinationTree ||
+            latest.crumbs != originalCrumbs) return
+
+        val listing = outcome?.getOrNull()
+        val generation = treeReadGeneration.incrementAndGet()
+        // This is one non-suspending main-thread turn while the Copy permit
+        // still freezes all mutations. Do not force a synchronous
+        // Snapshot.apply here: API35 observed Material3 child semantics being
+        // invalidated during the immediate apply while nodes were detaching.
+        // Ordinary Compose writes settle in the next frame after the entire
+        // consistent destination observation and model update are recorded.
+        proposedCopy = null
+        recursiveProposal = null
+        val cleared = model.pane(which).clearSelection()
+        replaceTree(which, latest.afterCopyObservation(listing, generation))
+        model = model.update(which, cleared)
+        if (listing != null) {
+            val location = LocationRef(
+                LocationKey(LocationKind.LOCAL_SAF,
+                    request.destinationTree.authority.orEmpty(),
+                    LocalTreeReader.rootId(request.destinationTree),
+                    request.destinationParentId,
+                    request.destinationTree.toString()),
+                originalCrumbs.map { it.title },
+                "preview-only-" + generation,
+                emptyMap()
+            )
+            model = model.update(which, model.pane(which).visit(location))
+        }
+        if (listing == null)
+            copyStatus += " Destination could not be refreshed; inspect it before another operation."
     }
 
     fun pickerResult(which: WorkspacePane,
@@ -761,8 +850,21 @@ private fun DeveloperPreview(
             sourceTree, source.folderId ?: return, folder.documentId,
             folder.title, targetTree, target.folderId ?: return, target.canWrite
         )
+        // Freeze the *actual* two browsed authorities as well as the tree
+        // URIs. An endpoint or provider switch cannot inherit old approval.
+        val sourceVisit = model.pane(sourcePane).current?.location
+        val targetVisit = model.pane(targetPane).current?.location
+        if (sourceVisit == null || targetVisit == null ||
+            sourceVisit.key.grantId != sourceTree.toString() ||
+            targetVisit.key.grantId != targetTree.toString()) {
+            copyStatus = "Folder Copy blocked: Android grant and browsed pane disagree."
+            return
+        }
+        val sourceEndpoint = model.pane(sourcePane).endpoint
+        val targetEndpoint = model.pane(targetPane).endpoint
         val sourceGen = source.generation
         val targetGen = target.generation
+        val shareEpoch = currentShareEpoch()
         copyBusy = true
         copyStatus = "Checking the complete nested source and target folder before review…"
         scope.launch {
@@ -773,8 +875,11 @@ private fun DeveloperPreview(
                 }.getOrNull()
             }
             if (model.view != WorkspaceView.DUAL ||
-                !model.pane(sourcePane).endpoint.isSaf ||
-                !model.pane(targetPane).endpoint.isSaf ||
+                currentShareEpoch() != shareEpoch ||
+                model.pane(sourcePane).endpoint != sourceEndpoint ||
+                model.pane(targetPane).endpoint != targetEndpoint ||
+                model.pane(sourcePane).current?.location != sourceVisit ||
+                model.pane(targetPane).current?.location != targetVisit ||
                 tree(sourcePane).generation != sourceGen ||
                 tree(targetPane).generation != targetGen ||
                 tree(sourcePane).treeUri != sourceTree ||
@@ -788,7 +893,9 @@ private fun DeveloperPreview(
                 copyStatus = "Folder Copy refused: incomplete tree, changed provider, expired grant, directory limit or name collision. No write occurred."
             } else {
                 recursiveProposal = RecursiveCopyReview(
-                    sourcePane, targetPane, frozen, manifest, sourceGen, targetGen)
+                    sourcePane, targetPane, frozen, manifest, sourceGen, targetGen,
+                    sourceEndpoint, targetEndpoint, sourceVisit.key, targetVisit.key,
+                    sourceVisit.revision, targetVisit.revision, shareEpoch)
                 copyStatus = "Review " + manifest.directories +
                     " folders and " + manifest.files +
                     " files, including empty directories; no write has started."
@@ -798,79 +905,177 @@ private fun DeveloperPreview(
     }
 
     fun confirmFolderCopy() {
-        val pending = recursiveProposal ?: return
-        if (copyBusy || remoteRelayBusy || model.view != WorkspaceView.DUAL) return
+        android.util.Log.i("EXPO_DUAL_E2", "APP_CONFIRM_CALLBACK_ENTERED")
+        val pending = recursiveProposal ?: run {
+            android.util.Log.i("EXPO_DUAL_E2", "APP_CONFIRM_NO_ACTIVE_REVIEW")
+            return
+        }
+        if (copyBusy || remoteRelayBusy || model.view != WorkspaceView.DUAL) {
+            android.util.Log.i("EXPO_DUAL_E2", "APP_CONFIRM_NOT_READY")
+            return
+        }
         val source = tree(pending.sourcePane)
         val target = tree(pending.destinationPane)
         val request = pending.request
-        if (!model.pane(pending.sourcePane).endpoint.isSaf ||
-            !model.pane(pending.destinationPane).endpoint.isSaf ||
+        val sourceLocation = model.pane(pending.sourcePane).current?.location
+        val targetLocation = model.pane(pending.destinationPane).current?.location
+        if (currentShareEpoch() != pending.shareEpoch ||
+            model.pane(pending.sourcePane).endpoint != pending.sourceEndpoint ||
+            model.pane(pending.destinationPane).endpoint != pending.destinationEndpoint ||
+            sourceLocation?.key != pending.sourceKey ||
+            targetLocation?.key != pending.destinationKey ||
+            sourceLocation?.revision != pending.sourceRevision ||
+            targetLocation?.revision != pending.destinationRevision ||
             source.generation != pending.sourceGeneration ||
             target.generation != pending.destinationGeneration ||
             source.treeUri != request.sourceTree ||
             target.treeUri != request.destinationTree ||
             source.folderId != request.sourceParentId ||
             target.folderId != request.destinationParentId ||
-            !source.complete || !target.complete || !target.canWrite) {
+            source.crumbs.size != 1 || target.crumbs.size != 1 ||
+            !source.complete || !target.complete || !target.canWrite ||
+            source.loading || target.loading ||
+            source.entries.count {
+                it.documentId == request.sourceDirectoryId &&
+                    it.title == request.expectedName && it.directory
+            } != 1) {
+            android.util.Log.i("EXPO_DUAL_E2", "APP_CONFIRM_FROZEN_AUTHORITY_REJECTED")
             recursiveProposal = null
-            copyStatus = "Folder Copy confirmation expired or pane changed; no write attempted."
+            copyStatus = "Folder Copy confirmation expired after pane, grant, selection or Share change. No write attempted."
             return
         }
+        // One-shot claim BEFORE running IO. The SAF engine still performs
+        // independent fresh observations, per-step journals and byte readback.
+        val dispatch = ClaimedCopyDispatch.claim {
+            recursiveProposal === pending &&
+                currentShareEpoch() == pending.shareEpoch
+        }
         recursiveProposal = null
+        if (dispatch == null) {
+            android.util.Log.i("EXPO_DUAL_E2", "APP_CONFIRM_ONE_SHOT_REJECTED")
+            copyStatus = "Folder Copy review was already consumed. No write attempted."
+            return
+        }
         val permit = AtomicBoolean(true)
         copyPermit = permit
         copyBusy = true
-        copyStatus = "Running reviewed folder Copy with durable per-item receipts. Keep Expository open."
+        copyStatus = "Running reviewed folder Copy through the shared foreground dispatcher. Keep Expository open."
         scope.launch {
             val owningJob = kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]
             try {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    SafRecursiveTreeCopy(context.applicationContext,
-                        context.contentResolver).execute(request, pending.manifest,
-                        onVerifiedStep = { verified ->
-                            scope.launch {
-                                if (copyBusy && copyPermit === permit &&
-                                    foregroundCopyAllowed(permit, owningJob) &&
-                                    model.view == WorkspaceView.DUAL)
-                                    copyStatus = verifiedFolderProgress(verified)
+                // Fixed, non-sensitive API35 diagnostic stages. No provider
+                // names, paths, URIs, credentials, source bytes or digests.
+                android.util.Log.i("EXPO_DUAL_E2", "APP_DISPATCH_BEGIN")
+                var recursiveReceipt: dev.expository.transfer.engine.RecursiveCopyRunReceipt? = null
+                val dispatched = withContext(Dispatchers.IO) {
+                    runCatching {
+                        dispatch.run(
+                            expectedItems = 1,
+                            continueRequested = {
+                                foregroundCopyAllowed(permit, owningJob)
+                            },
+                            prepare = { index ->
+                                if (index != 0) null
+                                else ClaimedCopyDispatch.Prepared(pending.manifest.digest) {
+                                    val observed = SafRecursiveTreeCopy(
+                                        context.applicationContext,
+                                        context.contentResolver).execute(
+                                        request, pending.manifest,
+                                        onVerifiedStep = { verified ->
+                                            android.util.Log.i("EXPO_DUAL_E2",
+                                                "APP_STEP_VERIFIED_" + verified.completedSteps)
+                                            scope.launch {
+                                                if (copyBusy && copyPermit === permit &&
+                                                    foregroundCopyAllowed(permit, owningJob) &&
+                                                    model.view == WorkspaceView.DUAL &&
+                                                    currentShareEpoch() == pending.shareEpoch)
+                                                    copyStatus = verifiedFolderProgress(verified)
+                                            }
+                                        }) {
+                                            foregroundCopyAllowed(permit, owningJob)
+                                        }
+                                    android.util.Log.i("EXPO_DUAL_E2",
+                                        "APP_ENGINE_RESULT_" + observed.result.name)
+                                    recursiveReceipt = observed
+                                    observed.toDispatchCopyReceipt()
+                                }
                             }
-                        }) { foregroundCopyAllowed(permit, owningJob) }
-                }.getOrNull()
-            }
-            if (copyPermit !== permit) return@launch
-            copyStatus = if (result == null)
-                "Folder Copy outcome unavailable. Inspect the destination and recovery records before any retry. Sources were not deleted."
-            else when (result.result) {
-                RecursiveCopyResult.COMPLETE_VERIFIED ->
-                    "Folder Copy verified: " + result.verifiedDirectories +
-                        " directories, " + result.verifiedFiles + " files, " +
-                        result.verifiedBytes +
-                        " bytes independently read back. Sources unchanged; cloud sync unverified."
-                RecursiveCopyResult.BLOCKED ->
-                    "Folder Copy blocked before destination mutation: " +
-                        result.reason + ". Review a new proposal."
-                RecursiveCopyResult.STOPPED_PARTIAL ->
-                    "Folder Copy stopped after " + result.verifiedDirectories +
-                        " directories and " + result.verifiedFiles +
-                        " verified files. " + result.reason +
-                        ". Inspect destination before new approval."
-                RecursiveCopyResult.UNCERTAIN ->
-                    "Folder Copy uncertain after " + result.verifiedDirectories +
-                        " directories and " + result.verifiedFiles +
-                        " verified files. " + result.reason +
-                        ". Do not retry without inspection."
-            }
-            // Refresh the currently selected destination without inventing a
-            // new grant. A changed pane is never silently repopulated.
-            val current = tree(pending.destinationPane)
-            if (current.treeUri == request.destinationTree &&
-                current.folderId == request.destinationParentId &&
-                model.pane(pending.destinationPane).endpoint.isSaf) {
-                readTree(pending.destinationPane, request.destinationTree,
-                    current.crumbs, maxVisible = current.visibleLimit)
-            }
+                        ).outcome
+                    }.getOrNull()
+                }
+                if (copyPermit !== permit) return@launch
+                val observed = recursiveReceipt
+                android.util.Log.i("EXPO_DUAL_E2", "APP_DISPATCH_RETURNED_" +
+                    (dispatched?.state?.name ?: "NO_RECEIPT"))
+                val proof = observed?.toDispatchCopyReceipt()
+                copyStatus = if (observed == null || dispatched == null || proof == null) {
+                    "Folder Copy outcome unavailable. Inspect the destination and recovery records before any retry. Sources were not deleted."
+                } else if (when (proof.proof) {
+                    CopyProof.BYTES_VERIFIED ->
+                        !dispatched.complete || dispatched.verifiedItems != 1 ||
+                            dispatched.verifiedBytes != observed.verifiedBytes
+                    CopyProof.BLOCKED ->
+                        dispatched.state != CopyOutcomeState.BLOCKED
+                    CopyProof.UNCERTAIN, CopyProof.WRITE_ACKNOWLEDGED ->
+                        dispatched.state != CopyOutcomeState.REVIEW_REQUIRED
+                }) {
+                    "Folder Copy receipt mismatch. Inspect destination and journal; no verified completion is claimed."
+                } else when (observed.result) {
+                    RecursiveCopyResult.COMPLETE_VERIFIED ->
+                        "Folder Copy verified: " + observed.verifiedDirectories +
+                            " directories, " + observed.verifiedFiles + " files, " +
+                            observed.verifiedBytes +
+                            " bytes independently read back. Sources unchanged; cloud sync unverified."
+                    RecursiveCopyResult.BLOCKED ->
+                        if (proof.proof == CopyProof.BLOCKED)
+                            "Folder Copy blocked: " + observed.reason +
+                                ". No verified bytes written; review a new proposal."
+                        else
+                            "Folder Copy stopped after partial verified progress: " +
+                                observed.reason + ". Inspect the destination before any retry."
+                    RecursiveCopyResult.STOPPED_PARTIAL ->
+                        "Folder Copy stopped after " + observed.verifiedDirectories +
+                            " directories and " + observed.verifiedFiles +
+                            " verified files. " + observed.reason +
+                            ". Inspect destination before new approval."
+                    RecursiveCopyResult.UNCERTAIN ->
+                        "Folder Copy uncertain after " + observed.verifiedDirectories +
+                            " directories and " + observed.verifiedFiles +
+                            " verified files. " + observed.reason +
+                            ". Do not retry without inspection."
+                }
+                android.util.Log.i("EXPO_DUAL_E2", "APP_STATUS_RENDER_REQUESTED")
+                // A late result must not refresh an unrelated pane or inherit
+                // any Share/picker authority after the request was frozen.
+                val current = tree(pending.destinationPane)
+                // Keep destination freshness after verified Copy. The
+                // dynamic SAF browse actions now use stable accessible
+                // foundation controls rather than Material3 child-semantics
+                // wrappers when the target listing changes.
+                if (model.view == WorkspaceView.DUAL &&
+                    currentShareEpoch() == pending.shareEpoch &&
+                    model.pane(pending.destinationPane).endpoint == pending.destinationEndpoint &&
+                    model.pane(pending.destinationPane).current?.location?.key ==
+                        pending.destinationKey &&
+                    current.generation == pending.destinationGeneration &&
+                    current.treeUri == request.destinationTree &&
+                    current.folderId == request.destinationParentId) {
+                    android.util.Log.i("EXPO_DUAL_E2", "APP_REFRESH_BEGIN")
+                    // Measured API35 failure: completion status and immediate
+                    // browse refresh can invalidate a Material3 child semantics
+                    // node before Compose has processed the first update.
+                    // Yield exactly one UI frame before committing provider
+                    // observation. The Copy permit stays held, and the usual
+                    // frozen authority/revision checks still run on both sides
+                    // of the read. This changes no engine/receipt semantics.
+                    androidx.compose.runtime.withFrameNanos { }
+                    android.util.Log.i("EXPO_DUAL_E2", "APP_REFRESH_FRAME_OBSERVED")
+                    // Reobserve the provider; never retain a stale destination.
+                    refreshAfterCopy(pending, permit)
+                    android.util.Log.i("EXPO_DUAL_E2", "APP_REFRESH_JOINED")
+                }
             } finally {
+                android.util.Log.i("EXPO_DUAL_E2", "APP_FINALLY")
                 permit.set(false)
                 if (copyPermit === permit) {
                     copyPermit = null
@@ -1056,7 +1261,13 @@ private fun DeveloperPreview(
             item {
                 FlowRow(modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(enabled = !copyBusy && !remoteRelayBusy,
+                    // These controls remain actual 48dp-accessible buttons,
+                    // but use Foundation semantics to avoid Material3's detached
+                    // ChildSemanticsNode during Copy status/model transitions.
+                    FolderActionControl(
+                        label = if (model.view == WorkspaceView.SINGLE)
+                            "✓ Single view" else "Single view",
+                        enabled = !copyBusy && !remoteRelayBusy,
                         onClick = {
                             proposedCopy = null
                             recursiveProposal = null
@@ -1067,13 +1278,14 @@ private fun DeveloperPreview(
                                     .invalidate(WorkspacePane.SINGLE)
                             model = model.view(WorkspaceView.SINGLE)
                         },
-                        modifier = Modifier.heightIn(min = 48.dp)
-                            .testTag("workspace-single-view").semantics {
+                        modifier = Modifier.testTag("workspace-single-view").semantics {
                             stateDescription = if (model.view == WorkspaceView.SINGLE)
                                 "Selected" else "Not selected"
-                        }) { Text(if (model.view == WorkspaceView.SINGLE)
-                            "✓ Single view" else "Single view") }
-                    Button(enabled = !copyBusy && !remoteRelayBusy,
+                        })
+                    FolderActionControl(
+                        label = if (model.view == WorkspaceView.DUAL)
+                            "✓ Dual view" else "Dual view",
+                        enabled = !copyBusy && !remoteRelayBusy,
                         onClick = {
                             pendingSingleFolderPicker = null
                             singleFolderReview = null
@@ -1082,12 +1294,10 @@ private fun DeveloperPreview(
                                     .invalidate(WorkspacePane.SINGLE)
                             model = model.view(WorkspaceView.DUAL)
                         },
-                        modifier = Modifier.heightIn(min = 48.dp)
-                            .testTag("workspace-dual-view").semantics {
+                        modifier = Modifier.testTag("workspace-dual-view").semantics {
                             stateDescription = if (model.view == WorkspaceView.DUAL)
                                 "Selected" else "Not selected"
-                        }) { Text(if (model.view == WorkspaceView.DUAL)
-                            "✓ Dual view" else "Dual view") }
+                        })
                 }
             }
             if (model.view == WorkspaceView.SINGLE) {

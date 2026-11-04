@@ -52,172 +52,6 @@ class RecursiveRealPickerCopyUiTest {
     private val fixtureBytes =
         ByteArray(137_119) { ((it * 19 + 7) and 255).toByte() }
 
-    private fun chooseFixtureRoot(device: UiDevice, title: String) {
-        fun visible(name: String, wait: Long = 1_500L) =
-            device.wait(Until.hasObject(By.text(name)), wait)
-        fun click(label: String, stage: String) {
-            repeat(7) {
-                val node = device.wait(Until.findObject(By.text(label)), 2_000L)
-                if (node != null) {
-                    try { node.click(); return }
-                    catch (_: StaleObjectException) { device.waitForIdle(250L) }
-                }
-            }
-            error("DOCUMENTSUI_" + stage + "_NOT_FOUND")
-        }
-        assertTrue("Expected real DocumentsUI folder picker",
-            device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")), 8_000L) ||
-            device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 3_000L) ||
-            visible("Recent", 3_000L) || device.currentPackageName == "android" ||
-            // A system picker can be foreground even while UiAutomator's
-            // accessibility tree has not attached (API35 emulator race).
-            device.executeShellCommand("dumpsys activity activities")
-                .contains("com.android.documentsui.picker.PickActivity"))
-        // A system-owned picker may be resumed while API35 UiAutomator has
-        // not attached an accessibility window. Verify the resumed SYSTEM
-        // activity independently, without accepting a generic Android package
-        // or inventing a grant. Never press an unlabeled toolbar image: on
-        // some picker versions that is Back, which exits the actual picker.
-        fun pickerResumed(): Boolean =
-            device.executeShellCommand("dumpsys activity activities")
-                .lineSequence().any { line ->
-                    (line.contains("mResumedActivity") ||
-                        line.contains("topResumedActivity")) &&
-                        line.contains("documentsui", ignoreCase = true)
-                }
-        val packages = listOf("com.google.android.documentsui", "com.android.documentsui")
-        fun pickerForeground(): Boolean =
-            device.currentPackageName in packages ||
-                packages.any { device.hasObject(By.pkg(it)) } || pickerResumed()
-        val drawerDescriptions = listOf("Show roots", "Open navigation drawer",
-            "Show navigation drawer", "Show locations")
-        fun openLabeledRoots(): Boolean {
-            for (description in drawerDescriptions) {
-                val button = device.findObject(By.desc(description)) ?: continue
-                if (!pickerForeground()) return false
-                try {
-                    button.click()
-                    return true
-                } catch (_: StaleObjectException) { }
-            }
-            return false
-        }
-        // First prefer an already visible, exact synthetic root. Some API35
-        // DocumentsUI builds do not expose CTS's internal roots_list IDs, and
-        // scrolling an unidentified container can dismiss the OS picker.
-        // Use only a real visible system widget, never injected URI authority.
-        var selectedRoot = false
-        val alreadyVisible = if (pickerForeground())
-            device.wait(Until.findObject(By.text(title)), 2_000L) else null
-        if (alreadyVisible != null && pickerForeground()) {
-            try {
-                alreadyVisible.click()
-                selectedRoot = true
-            } catch (_: StaleObjectException) { }
-        }
-        if (!selectedRoot && pickerForeground() && openLabeledRoots()) {
-            val newlyVisible = device.wait(Until.findObject(By.text(title)), 6_000L)
-            if (newlyVisible != null && pickerForeground()) {
-                try {
-                    newlyVisible.click()
-                    selectedRoot = true
-                } catch (_: StaleObjectException) { }
-            }
-        }
-        // CTS's roots_list remains a bounded fallback only if this exact,
-        // genuinely exposed system navigation surface is found.
-        var rootsListFound = false
-        for (pkg in packages) {
-            if (selectedRoot) break
-            val listIds = listOf("$pkg:id/roots_list", "android:id/list")
-            for (listId in listIds) {
-                if (selectedRoot) break
-                val rootsList = UiSelector().resourceId("$pkg:id/container_roots")
-                    .childSelector(UiSelector().resourceId(listId))
-                var list = device.findObject(rootsList)
-                if (!list.waitForExists(1_000L) && pickerForeground()) {
-                    // Explicitly labeled OS navigation only. A generic
-                    // toolbar ImageButton may be the Back affordance.
-                    openLabeledRoots()
-                }
-                list = device.findObject(rootsList)
-                if (!list.waitForExists(3_000L)) continue
-                rootsListFound = true
-                try {
-                    val scroller = UiScrollable(rootsList).setAsVerticalList()
-                    scroller.setMaxSearchSwipes(12)
-                    if (scroller.scrollIntoView(UiSelector().text(title))) {
-                        val root = device.findObject(rootsList.childSelector(
-                            UiSelector().text(title)))
-                        if (root.waitForExists(2_000L)) {
-                            root.click()
-                            selectedRoot = true
-                        }
-                    }
-                } catch (_: UiObjectNotFoundException) {
-                    // Try the alternate roots-list ID before failing closed.
-                }
-            }
-        }
-        if (!selectedRoot) {
-            // Google DocumentsUI on the API35 emulator may expose a valid
-            // roots drawer through accessibility without CTS's AOSP
-            // container_roots/roots_list resource IDs. Never let a missing
-            // private view ID masquerade as missing provider permission.
-            assertTrue(
-                "SYSTEM_PICKER_EXITED_DURING_ROOT_DISCOVERY_NO_GRANT",
-                pickerForeground())
-            if (!device.hasObject(By.text(title))) {
-                openLabeledRoots()
-                device.wait(Until.hasObject(By.text(title)), 1_000L)
-            }
-            // Never guess at an unlabeled top-left icon or edge-swipe:
-            // both can invoke Back and close the real picker. Only the
-            // known, explicitly labeled OS drawer controls above may open it.
-            // If the fixture root remains undiscoverable, fail closed.
-            for (attempt in 0 until 10) {
-                if (!pickerForeground()) break
-                val root = device.findObject(By.text(title))
-                    ?: device.findObject(By.textContains(title))
-                if (root != null) {
-                    try {
-                        root.click()
-                        selectedRoot = true
-                        break
-                    } catch (_: StaleObjectException) { }
-                }
-                // Do not swipe when an identifiable roots list is absent.
-                // Guessing screen coordinates may close DocumentsUI. The
-                // required real grant remains unproven until the named root
-                // is exposed and explicitly selected.
-                if (!rootsListFound) break
-            }
-        }
-        // Diagnostics contain only OS widget class/resource IDs and fixed
-        // synthetic labels. Never publish an arbitrary picker hierarchy,
-        // accounts, filesystem paths, or ContentProvider data.
-        val pickerAlive = listOf("com.google.android.documentsui",
-            "com.android.documentsui").any { device.hasObject(By.pkg(it)) }
-        val toolbarIds = if (pickerAlive && !selectedRoot)
-            device.findObjects(By.clazz("android.widget.ImageButton"))
-                .filter {
-                    val bounds = it.visibleBounds
-                    bounds.centerX() < device.displayWidth / 3 &&
-                        bounds.centerY() < device.displayHeight / 4
-                }.take(4).map {
-                    it.resourceName?.substringAfterLast('/')?.take(60) ?: "unlabeled"
-                } else emptyList()
-        assertTrue("Fixture DocumentsProvider root not selectable in OS picker: " +
-            title + " (CTS drawer=" + rootsListFound +
-            ", pickerAlive=" + pickerAlive +
-            ", toolbar IDs=" + toolbarIds.joinToString(",") + ")", selectedRoot)
-        val use = if (visible("Use this folder", 4_000L))
-            "Use this folder" else "USE THIS FOLDER"
-        click(use, "USE_THIS_FOLDER")
-        if (visible("Allow", 3_000L)) click("Allow", "GRANT_ALLOW")
-        else if (visible("ALLOW", 1_000L)) click("ALLOW", "GRANT_ALLOW")
-    }
-
     private fun assertOriginal() {
         // Only the target app receives a scoped tree grant from DocumentsUI.
         // Reading the protected provider before the picker grants access is a
@@ -288,7 +122,7 @@ class RecursiveRealPickerCopyUiTest {
             sourceIntentObserved + "_ACCESSIBILITY_" + sourcePickerAccessible +
             "_RESUMED_" + sourcePickerResumed,
             sourcePickerAccessible || sourcePickerResumed)
-        chooseFixtureRoot(device, "Expository Source Lab")
+        RecursivePickerUi.chooseFixtureRoot(device, "Expository Source Lab")
         // The OS UI click returns before ActivityResult/URI-grant delivery.
         // Wait until Expository has received and opened its scoped tree.
         compose.waitUntil(30_000L) {
@@ -457,7 +291,7 @@ class RecursiveRealPickerCopyUiTest {
                 "_UI_" + uiProbe +
                 "_SYSTEM_CONTROLS_" + pickerControls)
         }
-        chooseFixtureRoot(device, "Expository Target Lab")
+        RecursivePickerUi.chooseFixtureRoot(device, "Expository Target Lab")
         compose.waitUntil(30_000L) {
             compose.onAllNodesWithText("Review whole-folder Copy",
                 substring = true).fetchSemanticsNodes().isNotEmpty()
@@ -513,4 +347,174 @@ class RecursiveRealPickerCopyUiTest {
         assertEquals(fixtureBytes.size.toLong(), file.bytes)
         assertOriginal()
     }
+}
+
+/** Shared genuine OS-picker traversal; no grant spoofing or fixture URI injection. */
+internal object RecursivePickerUi {
+    fun chooseFixtureRoot(device: UiDevice, title: String) {
+        fun visible(name: String, wait: Long = 1_500L) =
+            device.wait(Until.hasObject(By.text(name)), wait)
+        fun click(label: String, stage: String) {
+            repeat(7) {
+                val node = device.wait(Until.findObject(By.text(label)), 2_000L)
+                if (node != null) {
+                    try { node.click(); return }
+                    catch (_: StaleObjectException) { device.waitForIdle(250L) }
+                }
+            }
+            error("DOCUMENTSUI_" + stage + "_NOT_FOUND")
+        }
+        assertTrue("Expected real DocumentsUI folder picker",
+            device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")), 8_000L) ||
+            device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 3_000L) ||
+            visible("Recent", 3_000L) || device.currentPackageName == "android" ||
+            // A system picker can be foreground even while UiAutomator's
+            // accessibility tree has not attached (API35 emulator race).
+            device.executeShellCommand("dumpsys activity activities")
+                .contains("com.android.documentsui.picker.PickActivity"))
+        // A system-owned picker may be resumed while API35 UiAutomator has
+        // not attached an accessibility window. Verify the resumed SYSTEM
+        // activity independently, without accepting a generic Android package
+        // or inventing a grant. Never press an unlabeled toolbar image: on
+        // some picker versions that is Back, which exits the actual picker.
+        fun pickerResumed(): Boolean =
+            device.executeShellCommand("dumpsys activity activities")
+                .lineSequence().any { line ->
+                    (line.contains("mResumedActivity") ||
+                        line.contains("topResumedActivity")) &&
+                        line.contains("documentsui", ignoreCase = true)
+                }
+        val packages = listOf("com.google.android.documentsui", "com.android.documentsui")
+        fun pickerForeground(): Boolean =
+            device.currentPackageName in packages ||
+                packages.any { device.hasObject(By.pkg(it)) } || pickerResumed()
+        val drawerDescriptions = listOf("Show roots", "Open navigation drawer",
+            "Show navigation drawer", "Show locations")
+        fun openLabeledRoots(): Boolean {
+            for (description in drawerDescriptions) {
+                val button = device.findObject(By.desc(description)) ?: continue
+                if (!pickerForeground()) return false
+                try {
+                    button.click()
+                    return true
+                } catch (_: StaleObjectException) { }
+            }
+            return false
+        }
+        // First prefer an already visible, exact synthetic root. Some API35
+        // DocumentsUI builds do not expose CTS's internal roots_list IDs, and
+        // scrolling an unidentified container can dismiss the OS picker.
+        // Use only a real visible system widget, never injected URI authority.
+        var selectedRoot = false
+        val alreadyVisible = if (pickerForeground())
+            device.wait(Until.findObject(By.text(title)), 2_000L) else null
+        if (alreadyVisible != null && pickerForeground()) {
+            try {
+                alreadyVisible.click()
+                selectedRoot = true
+            } catch (_: StaleObjectException) { }
+        }
+        if (!selectedRoot && pickerForeground() && openLabeledRoots()) {
+            val newlyVisible = device.wait(Until.findObject(By.text(title)), 6_000L)
+            if (newlyVisible != null && pickerForeground()) {
+                try {
+                    newlyVisible.click()
+                    selectedRoot = true
+                } catch (_: StaleObjectException) { }
+            }
+        }
+        // CTS's roots_list remains a bounded fallback only if this exact,
+        // genuinely exposed system navigation surface is found.
+        var rootsListFound = false
+        for (pkg in packages) {
+            if (selectedRoot) break
+            val listIds = listOf("$pkg:id/roots_list", "android:id/list")
+            for (listId in listIds) {
+                if (selectedRoot) break
+                val rootsList = UiSelector().resourceId("$pkg:id/container_roots")
+                    .childSelector(UiSelector().resourceId(listId))
+                var list = device.findObject(rootsList)
+                if (!list.waitForExists(1_000L) && pickerForeground()) {
+                    // Explicitly labeled OS navigation only. A generic
+                    // toolbar ImageButton may be the Back affordance.
+                    openLabeledRoots()
+                }
+                list = device.findObject(rootsList)
+                if (!list.waitForExists(3_000L)) continue
+                rootsListFound = true
+                try {
+                    val scroller = UiScrollable(rootsList).setAsVerticalList()
+                    scroller.setMaxSearchSwipes(12)
+                    if (scroller.scrollIntoView(UiSelector().text(title))) {
+                        val root = device.findObject(rootsList.childSelector(
+                            UiSelector().text(title)))
+                        if (root.waitForExists(2_000L)) {
+                            root.click()
+                            selectedRoot = true
+                        }
+                    }
+                } catch (_: UiObjectNotFoundException) {
+                    // Try the alternate roots-list ID before failing closed.
+                }
+            }
+        }
+        if (!selectedRoot) {
+            // Google DocumentsUI on the API35 emulator may expose a valid
+            // roots drawer through accessibility without CTS's AOSP
+            // container_roots/roots_list resource IDs. Never let a missing
+            // private view ID masquerade as missing provider permission.
+            assertTrue(
+                "SYSTEM_PICKER_EXITED_DURING_ROOT_DISCOVERY_NO_GRANT",
+                pickerForeground())
+            if (!device.hasObject(By.text(title))) {
+                openLabeledRoots()
+                device.wait(Until.hasObject(By.text(title)), 1_000L)
+            }
+            // Never guess at an unlabeled top-left icon or edge-swipe:
+            // both can invoke Back and close the real picker. Only the
+            // known, explicitly labeled OS drawer controls above may open it.
+            // If the fixture root remains undiscoverable, fail closed.
+            for (attempt in 0 until 10) {
+                if (!pickerForeground()) break
+                val root = device.findObject(By.text(title))
+                    ?: device.findObject(By.textContains(title))
+                if (root != null) {
+                    try {
+                        root.click()
+                        selectedRoot = true
+                        break
+                    } catch (_: StaleObjectException) { }
+                }
+                // Do not swipe when an identifiable roots list is absent.
+                // Guessing screen coordinates may close DocumentsUI. The
+                // required real grant remains unproven until the named root
+                // is exposed and explicitly selected.
+                if (!rootsListFound) break
+            }
+        }
+        // Diagnostics contain only OS widget class/resource IDs and fixed
+        // synthetic labels. Never publish an arbitrary picker hierarchy,
+        // accounts, filesystem paths, or ContentProvider data.
+        val pickerAlive = listOf("com.google.android.documentsui",
+            "com.android.documentsui").any { device.hasObject(By.pkg(it)) }
+        val toolbarIds = if (pickerAlive && !selectedRoot)
+            device.findObjects(By.clazz("android.widget.ImageButton"))
+                .filter {
+                    val bounds = it.visibleBounds
+                    bounds.centerX() < device.displayWidth / 3 &&
+                        bounds.centerY() < device.displayHeight / 4
+                }.take(4).map {
+                    it.resourceName?.substringAfterLast('/')?.take(60) ?: "unlabeled"
+                } else emptyList()
+        assertTrue("Fixture DocumentsProvider root not selectable in OS picker: " +
+            title + " (CTS drawer=" + rootsListFound +
+            ", pickerAlive=" + pickerAlive +
+            ", toolbar IDs=" + toolbarIds.joinToString(",") + ")", selectedRoot)
+        val use = if (visible("Use this folder", 4_000L))
+            "Use this folder" else "USE THIS FOLDER"
+        click(use, "USE_THIS_FOLDER")
+        if (visible("Allow", 3_000L)) click("Allow", "GRANT_ALLOW")
+        else if (visible("ALLOW", 1_000L)) click("ALLOW", "GRANT_ALLOW")
+    }
+
 }

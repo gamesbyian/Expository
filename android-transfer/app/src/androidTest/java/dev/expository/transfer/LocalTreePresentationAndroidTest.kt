@@ -33,6 +33,50 @@ class LocalTreePresentationAndroidTest {
         TreeEntry("h", ".hidden", false, 0)
     )
 
+    @Test fun inMemoryDualPaneFiltersSurviveTabSwitchButNeverCrossFolderScope() {
+        val a = LocalTreePanePresentationState()
+        val b = LocalTreePanePresentationState()
+        val source = Uri.parse("content://fixture.a/tree/root")
+        val target = Uri.parse("content://fixture.b/tree/other")
+        a.changeFilter(source, "root", "alpha")
+        a.sortMode = LocalTreeSort.SIZE
+        a.descending = true
+        b.changeFilter(target, "other", "beta")
+
+        // Unmounting and reentering the phone tab keeps the same RAM owner.
+        assertEquals("alpha", a.filterFor(source, "root"))
+        assertEquals("beta", b.filterFor(target, "other"))
+        assertEquals(LocalTreeSort.SIZE, a.sortMode)
+        assertTrue(a.descending)
+        // A different folder or provider must never inherit a stale filter.
+        assertEquals("", a.filterFor(source, "sibling"))
+        assertEquals("", a.filterFor(target, "root"))
+        a.changeFilter(target, "root", "new")
+        assertEquals("new", a.filterFor(target, "root"))
+        assertEquals("", a.filterFor(source, "root"))
+        assertEquals("beta", b.filterFor(target, "other"))
+    }
+
+    @Test fun copyDestinationRefreshInvalidatesSelectionAndIncompleteEvidence() {
+        val old = LocalTreeBrowseState(
+            treeUri = Uri.parse("content://provider.one/tree/root"),
+            crumbs = listOf(TreeCrumb("root", "Root")),
+            entries = listOf(TreeEntry("old", "Old.txt", false, 5L)),
+            selected = setOf("old"), complete = true, generation = 42L)
+        val listing = TreeListing(listOf(TreeEntry("new", "New.txt", false, 9L)),
+            complete = true)
+        val refreshed = old.afterCopyObservation(listing, 43L)
+        assertEquals("new", refreshed.entries.single().documentId)
+        assertTrue(refreshed.complete)
+        assertTrue(refreshed.selected.isEmpty())
+        assertEquals(43L, refreshed.generation)
+        val unavailable = old.afterCopyObservation(null, 44L)
+        assertTrue(unavailable.entries.isEmpty())
+        assertFalse(unavailable.complete)
+        assertTrue(unavailable.selected.isEmpty())
+        assertTrue(unavailable.status.contains("Refresh"))
+    }
+
     @Test fun unicodeAndCaseEquivalentProviderNamesCannotAuthorizeWrites() {
         fun list(vararg names: String): TreeListing {
             val cursor = MatrixCursor(arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID,

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -22,7 +21,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.invisibleToUser
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
@@ -38,9 +38,11 @@ import dev.expository.transfer.saf.TreeCopyPreflight
  *
  * Local trees are backed by real read-scoped Android DocumentsProviders.
  * Both panes may open independent pinned SFTP, trusted FTPS, opt-in read-only FTP or public read-only GitHub sessions.
- * The inactive phone tab stays composed: the other session is not silently
- * disconnected by changing tabs. A/B Swap moves the same remembered session
- * with its endpoint using Compose movable content, not a new connection.
+ * Inactive authenticated remote tabs stay composed (not disconnected).
+ * Inactive local SAF panes can unmount: folder grants, browse selection,
+ * and scroll remain in the outer workspace; filter/sort are held in RAM by
+ * this card. A/B Swap moves authenticated sessions with their endpoints
+ * using Compose movable content, not a new connection.
  * The separate Single view remains available. Only reviewed, journaled
  * local-to-local Copy and explicitly requested bounded Local-to-SFTP
  * uploads can run between panes. Other remote cross-pane writes remain gated.
@@ -97,6 +99,10 @@ internal fun DualWorkspaceCard(
     var selectedRemoteBatchB by remember { mutableStateOf<PeerSftpBatchSource?>(null) }
     var relayingFromSession by remember { mutableStateOf<String?>(null) }
     val workspaceBusy = busy || relayingFromSession != null
+    // Presentation preferences are private RAM state outside the inner local
+    // panes. Unmounting an inactive SAF pane never discards its filter/sort.
+    val presentationA = remember { LocalTreePanePresentationState() }
+    val presentationB = remember { LocalTreePanePresentationState() }
     val connectionA = remember {
         movableContentOf<BrowseEndpoint, RemotePeerContext> { endpoint, peer ->
             when (endpoint) {
@@ -160,17 +166,17 @@ internal fun DualWorkspaceCard(
                 DualPairing.LOCAL_REMOTE to "Device ↔ Server",
                 DualPairing.REMOTE_REMOTE to "Server ↔ Server"
             )) {
-                Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !workspaceBusy,
+                FolderActionControl(label = title, enabled = !workspaceBusy,
                     onClick = {
                         selectedRemoteA = null
                         selectedRemoteB = null
                         selectedRemoteBatchA = null
                         selectedRemoteBatchB = null
                         onPreset(pairing)
-                    }) { Text(title) }
+                    })
             }
         }
-        Button(modifier = Modifier.heightIn(min = 48.dp), enabled = !workspaceBusy,
+        FolderActionControl(label = "Swap A and B", enabled = !workspaceBusy,
             onClick = {
                 // Move the remembered remote connection together with its
                 // endpoint and the owner's independently navigated state.
@@ -182,16 +188,17 @@ internal fun DualWorkspaceCard(
                 selectedRemoteBatchA = selectedRemoteBatchB
                 selectedRemoteBatchB = priorBatchA
                 onSwap()
-            }) { Text("Swap A and B") }
+            })
         // Keep a direct scoped folder-picker action visible near the top of
         // dual mode. On a phone the chosen local pane's own Browse card can
         // sit far below the outer scrolling toolbar and controls.
         if (workspace.pane(workspace.activeDual).endpoint.isSaf) {
-            Button(
-                modifier = Modifier.heightIn(min = 48.dp),
+            FolderActionControl(
+                label = "Choose Pane " + workspace.activeDual.name + " folder…",
+                modifier = Modifier.testTag("dual-root-picker-" + workspace.activeDual.name),
                 enabled = !workspaceBusy,
                 onClick = { onPick(workspace.activeDual) }
-            ) { Text("Choose Pane " + workspace.activeDual.name + " folder…") }
+            )
         }
 
         @Composable
@@ -204,11 +211,12 @@ internal fun DualWorkspaceCard(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     for (endpoint in BrowseEndpoint.entries) {
-                        Button(
+                        FolderActionControl(
+                            label = (if (pane.endpoint == endpoint) "✓ " else "") +
+                                endpoint.name,
                             enabled = !workspaceBusy,
-                            modifier = Modifier.heightIn(min = 48.dp)
-                                .testTag("endpoint-" + which.name + "-" + endpoint.name)
-                                .semantics {
+                            modifier = Modifier.testTag("endpoint-" + which.name + "-" +
+                                endpoint.name).semantics {
                                 stateDescription = if (pane.endpoint == endpoint)
                                     "Selected" else "Not selected"
                             },
@@ -224,8 +232,7 @@ internal fun DualWorkspaceCard(
                                 }
                                 onEndpoint(which, endpoint)
                             }
-                        ) { Text(if (pane.endpoint == endpoint) "✓ " + endpoint.name
-                            else endpoint.name) }
+                        )
                     }
                 }
                 if (pane.endpoint.isSaf) {
@@ -244,6 +251,8 @@ internal fun DualWorkspaceCard(
                         state = tree,
                         scroll = scroll,
                         enabled = !workspaceBusy,
+                        presentationState = if (which == WorkspacePane.A)
+                            presentationA else presentationB,
                         onPick = { onPick(which) },
                         onOpen = { entry ->
                             onNavigate(which, tree.crumbs +
@@ -332,19 +341,19 @@ internal fun DualWorkspaceCard(
                 if (compact) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for (pane in listOf(WorkspacePane.A, WorkspacePane.B)) {
-                            Button(
+                            val paneName = workspace.pane(pane).endpoint.name
+                            FolderActionControl(
+                                label = (if (workspace.activeDual == pane) "✓ " else "") +
+                                    "Pane " + pane.name + " · " + paneName,
                                 enabled = !workspaceBusy,
-                                modifier = Modifier.heightIn(min = 48.dp).semantics {
-                                    stateDescription =
-                                        if (workspace.activeDual == pane) "Selected"
-                                        else "Not selected"
-                                },
+                                modifier = Modifier.testTag("dual-pane-tab-" + pane.name)
+                                    .semantics {
+                                        stateDescription =
+                                            if (workspace.activeDual == pane) "Selected"
+                                            else "Not selected"
+                                    },
                                 onClick = { onFocus(pane) }
-                            ) {
-                                val name = workspace.pane(pane).endpoint.name
-                                Text((if (workspace.activeDual == pane) "✓ " else "") +
-                                    "Pane " + pane.name + " · " + name)
-                            }
+                            )
                         }
                     }
                 }
@@ -352,14 +361,24 @@ internal fun DualWorkspaceCard(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // Actual SAF tree identity/permissions/listing, scroll and
+                    // in-memory filters live above this presentation. A hidden
+                    // local view has no remote session to retain: do not leave
+                    // its Material3 child-semantics nodes in a deactivated
+                    // subcomposition while the destination refreshes. Real
+                    // SFTP/FTPS sessions still remain composed when inactive.
+                    val inactiveA = compact && workspace.activeDual != WorkspacePane.A
+                    val inactiveB = compact && workspace.activeDual != WorkspacePane.B
+                    val keepA = !inactiveA || !workspace.a.endpoint.isSaf
+                    val keepB = !inactiveB || !workspace.b.endpoint.isSaf
                     Box(
                         Modifier.fillMaxWidth(if (compact) 1f else 0.48f)
-                            .retainInvisible(compact && workspace.activeDual != WorkspacePane.A)
-                    ) { endpointPane(WorkspacePane.A) }
+                            .retainInvisible(inactiveA)
+                    ) { if (keepA) endpointPane(WorkspacePane.A) }
                     Box(
                         Modifier.fillMaxWidth(if (compact) 1f else 0.48f)
-                            .retainInvisible(compact && workspace.activeDual != WorkspacePane.B)
-                    ) { endpointPane(WorkspacePane.B) }
+                            .retainInvisible(inactiveB)
+                    ) { if (keepB) endpointPane(WorkspacePane.B) }
                 }
             }
         }
@@ -371,12 +390,12 @@ internal fun DualWorkspaceCard(
             a.treeUri != null && a.canWrite && a.complete && b.complete
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Button(enabled = !workspaceBusy && proposedCopy == null && readyA,
-                modifier = Modifier.heightIn(min = 48.dp),
-                onClick = { onCopy(WorkspacePane.A) }) { Text("Copy A → B…") }
-            Button(enabled = !workspaceBusy && proposedCopy == null && readyB,
-                modifier = Modifier.heightIn(min = 48.dp),
-                onClick = { onCopy(WorkspacePane.B) }) { Text("Copy B → A…") }
+            FolderActionControl(label = "Copy A → B…",
+                enabled = !workspaceBusy && proposedCopy == null && readyA,
+                onClick = { onCopy(WorkspacePane.A) })
+            FolderActionControl(label = "Copy B → A…",
+                enabled = !workspaceBusy && proposedCopy == null && readyB,
+                onClick = { onCopy(WorkspacePane.B) })
         }
         if (proposedCopy != null) {
             Card(Modifier.fillMaxWidth()) {
@@ -391,52 +410,70 @@ internal fun DualWorkspaceCard(
                     Text("Each file has a fresh provider preflight, a pinned original source version, a separate durable journal and independent byte verification. Later destination snapshots are refreshed after verified earlier files. The batch stops at the first uncertain result; prior verified files remain. No overwrite or automatic retry.",
                         style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(enabled = !workspaceBusy, modifier = Modifier.heightIn(min = 48.dp),
-                            onClick = onConfirmCopy) { Text("Confirm Copy") }
-                        Button(enabled = !workspaceBusy, modifier = Modifier.heightIn(min = 48.dp),
-                            onClick = onCancelCopy) { Text("Cancel proposal") }
+                        FolderActionControl(label = "Confirm Copy",
+                            enabled = !workspaceBusy, onClick = onConfirmCopy)
+                        FolderActionControl(label = "Cancel proposal",
+                            enabled = !workspaceBusy, onClick = onCancelCopy)
                     }
                 }
             }
         }
-        if (recursiveProposal != null) {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Review whole-folder Copy",
-                        style = MaterialTheme.typography.titleMedium)
-                    Text("Source: pane " + recursiveProposal.sourcePane.name +
-                        " · " + recursiveProposal.request.expectedName)
-                    Text("Destination: pane " + recursiveProposal.destinationPane.name +
-                        " · user-picked Android folder")
-                    Text("Contents: " + recursiveProposal.manifest.directories +
-                        " folder(s) including empty folders, " +
-                        recursiveProposal.manifest.files + " file(s)")
-                    Text("Review digest: " +
-                        recursiveProposal.manifest.digest.take(12) +
-                        "… · expires after one minute")
-                    Text("Copy only. Recheck every source and destination; create new items with durable per-step journals and independent file readback. A failed or interrupted step stops with remaining items unattempted. Originals are never deleted. Requires independently picked different Android provider authorities.",
-                        style = MaterialTheme.typography.bodySmall)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Button(enabled = !workspaceBusy,
-                            modifier = Modifier.heightIn(min = 48.dp),
-                            onClick = onConfirmRecursive) {
-                            Text("Confirm folder Copy")
-                        }
-                        Button(enabled = !workspaceBusy,
-                            modifier = Modifier.heightIn(min = 48.dp),
-                            onClick = onCancelRecursive) {
-                            Text("Cancel folder proposal")
-                        }
-                    }
+        // Keep the Material3 review controls attached across the one-shot
+        // approval -> verified-status transition. Removing a conditional Card
+        // while its child semantics are being invalidated produced the real
+        // API35 "visitAncestors called on an unattached node" crash AFTER
+        // successfully verified Copy. Reuse the same unplaced/inaccessible
+        // retention modifier as the independently owned A/B pane subtrees.
+        // No stale approval remains actionable: null proposals disable both
+        // controls, and the one-shot dispatcher still enforces ownership.
+        Card(Modifier.fillMaxWidth().retainInvisible(recursiveProposal == null)) {
+            Column(Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Review whole-folder Copy",
+                    style = MaterialTheme.typography.titleMedium)
+                Text("Source: pane " + (recursiveProposal?.sourcePane?.name ?: "") +
+                    " · " + (recursiveProposal?.request?.expectedName ?: ""))
+                Text("Destination: pane " +
+                    (recursiveProposal?.destinationPane?.name ?: "") +
+                    " · user-picked Android folder")
+                Text("Contents: " + (recursiveProposal?.manifest?.directories ?: 0) +
+                    " folder(s) including empty folders, " +
+                    (recursiveProposal?.manifest?.files ?: 0) + " file(s)")
+                Text("Review digest: " +
+                    (recursiveProposal?.manifest?.digest?.take(12) ?: "") +
+                    "… · expires after one minute")
+                Text("Copy only. Recheck every source and destination; create new items with durable per-step journals and independent file readback. A failed or interrupted step stops with remaining items unattempted. Originals are never deleted. Requires independently picked different Android provider authorities.",
+                    style = MaterialTheme.typography.bodySmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // These review actions change accessibility state when
+                    // the one-shot proposal is consumed. Foundation clickable
+                    // semantics avoid Material3's traversable child-semantics
+                    // node during the verified Copy -> refresh transition.
+                    FolderActionControl(
+                        label = "Confirm folder Copy",
+                        enabled = !workspaceBusy && recursiveProposal != null,
+                        modifier = Modifier.testTag("dual-recursive-confirm"),
+                        onClick = onConfirmRecursive
+                    )
+                    FolderActionControl(
+                        label = "Cancel folder proposal",
+                        enabled = !workspaceBusy && recursiveProposal != null,
+                        onClick = onCancelRecursive
+                    )
                 }
             }
         }
-        if (busy) Button(onClick = onStopCopy, modifier = Modifier.heightIn(min = 48.dp)) {
-            Text("Cancel transfer")
-        }
-        Text(copyStatus, style = MaterialTheme.typography.bodySmall)
+        // Keep Stop composed without Material3 child-semantics traversal;
+        // invisible and disabled outside an operation, never a stale permit.
+        FolderActionControl(
+            label = "Cancel transfer",
+            enabled = busy,
+            modifier = Modifier.retainInvisible(!busy),
+            onClick = onStopCopy
+        )
+        Text(copyStatus, modifier = Modifier.testTag("dual-copy-feedback"),
+            style = MaterialTheme.typography.bodySmall)
         Text("Device-to-Device and Local-to-SFTP Copy support 1–12 selected files. SFTP-to-SFTP Copy relays 1–12 selected files between independently authenticated servers with exclusive create, durable journaling and independent destination readback. Whole-folder Android provider Copy requires two distinctly scoped providers, a fresh review and a foreground transfer; same-provider recursive Copy, remaining remote routes and cross-pane Move are still unavailable.",
             style = MaterialTheme.typography.bodySmall)
     }
@@ -447,9 +484,20 @@ internal fun DualWorkspaceCard(
 // The subtree is still measured with nonzero width to preserve text-field
 // and nested list constraints. No component is removed from composition.
 private fun Modifier.retainInvisible(hidden: Boolean): Modifier =
-    if (!hidden) this else this
-        .clearAndSetSemantics { }
+    // Keep BOTH modifier node types installed across phone A/B tab changes.
+    // Dynamically adding/removing clearAndSetSemantics can detach a Material3
+    // child-semantics node while an observed Compose snapshot invalidates it
+    // (the API35 visitAncestors-on-unattached-node regression). The inactive
+    // pane stays composed to retain session identity, but has no placed pixels,
+    // pointer targets or accessible semantics.
+    this.semantics { if (hidden) invisibleToUser() }
         .layout { measurable, constraints ->
-            measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
-            layout(0, 0) { }
+            val child = measurable.measure(
+                if (hidden) constraints.copy(minWidth = 0, minHeight = 0)
+                else constraints
+            )
+            if (hidden) layout(0, 0) { }
+            else layout(child.width, child.height) {
+                child.placeRelative(0, 0)
+            }
         }

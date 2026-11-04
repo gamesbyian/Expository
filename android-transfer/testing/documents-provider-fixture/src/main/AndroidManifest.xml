@@ -27,5 +27,15 @@
                 <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
             </intent-filter>
         </provider>
+        <provider
+            android:name="dev.expository.transfer.RecursivePickerDualTargetProvider"
+            android:authorities="test.real.recursive.dual.target.scoped"
+            android:permission="android.permission.MANAGE_DOCUMENTS"
+            android:grantUriPermissions="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
     </application>
 </manifest>

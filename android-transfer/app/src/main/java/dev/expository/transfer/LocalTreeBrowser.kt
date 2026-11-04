@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -93,6 +92,25 @@ internal data class LocalTreeBrowseState(
     val status: String = "Choose a device folder with Android Files. No broad storage permission."
 ) {
     val folderId: String? get() = crumbs.lastOrNull()?.documentId
+
+    /** Atomic post-Copy read result, with no inherited selection authority. */
+    fun afterCopyObservation(
+        observed: TreeListing?, readGeneration: Long
+    ): LocalTreeBrowseState = copy(
+        entries = observed?.children ?: emptyList(),
+        selected = emptySet(), loading = false,
+        complete = observed?.complete == true,
+        hasMore = observed?.hasMore == true,
+        generation = readGeneration,
+        status = when {
+            observed == null ->
+                "Destination listing needs a new Refresh; Copy receipt is separate."
+            observed.complete ->
+                "Folder opened. Scoped Android browser; " +
+                    observed.children.size + " visible items."
+            else -> "Destination listing incomplete; no write authorized."
+        }
+    )
 
     /**
      * An ancestor must be an exact prefix of the currently selected provider
@@ -231,6 +249,25 @@ internal object LocalTreeReader {
     }
 }
 
+/** In-memory only, pane-owned presentation preferences across compact A/B switches.
+ * Provider grants and actual tree/selection state remain owned by TransferActivity.
+ * Never save names/filters/URI authorities in SavedState or on disk.
+ */
+internal class LocalTreePanePresentationState {
+    private data class FilterScope(val tree: Uri?, val folder: String?, val text: String)
+    private var filterScope by mutableStateOf(FilterScope(null, null, ""))
+    var sortMode by mutableStateOf(LocalTreeSort.NAME)
+    var descending by mutableStateOf(false)
+
+    fun filterFor(tree: Uri?, folder: String?): String =
+        if (filterScope.tree == tree && filterScope.folder == folder)
+            filterScope.text else ""
+
+    fun changeFilter(tree: Uri?, folder: String?, text: String) {
+        filterScope = FilterScope(tree, folder, text)
+    }
+}
+
 /** One real independent Android SAF tree. No copying or moving is exposed yet. */
 @Composable
 internal fun LocalTreePane(
@@ -249,11 +286,14 @@ internal fun LocalTreePane(
     /** Only an explicit directory request; no implicit provider write. */
     onCopyFolder: ((TreeEntry) -> Unit)? = null,
     /** Contextual Copy feedback belongs beside the source browser control. */
-    copyFeedback: String? = null
+    copyFeedback: String? = null,
+    /** Optional in-memory state owner for the compact dual-pane presentation. */
+    presentationState: LocalTreePanePresentationState? = null
 ) {
-    var fileFilter by remember(state.treeUri, state.folderId) { mutableStateOf("") }
-    var sortMode by remember { mutableStateOf(LocalTreeSort.NAME) }
-    var descending by remember { mutableStateOf(false) }
+    val ui = presentationState ?: remember { LocalTreePanePresentationState() }
+    val fileFilter = ui.filterFor(state.treeUri, state.folderId)
+    val sortMode = ui.sortMode
+    val descending = ui.descending
     var ancestorMenuExpanded by remember(state.treeUri, state.folderId) {
         mutableStateOf(false)
     }
@@ -278,16 +318,15 @@ internal fun LocalTreePane(
             // squeezing Refresh outside the available touchable viewport.
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Button(
+                FolderActionControl(
+                    label = if (state.treeUri == null) "Choose folder" else "Change folder",
                     enabled = enabled && !state.loading,
-                    modifier = Modifier.heightIn(min = 48.dp)
-                        .testTag("saf-root-picker"),
+                    modifier = Modifier.testTag("saf-root-picker"),
                     onClick = onPick
-                ) { Text(if (state.treeUri == null) "Choose folder" else "Change folder") }
+                )
                 if (state.treeUri != null) {
-                    Button(enabled = enabled && !state.loading,
-                        modifier = Modifier.heightIn(min = 48.dp),
-                        onClick = onRefresh) { Text("Refresh") }
+                    FolderActionControl(label = "Refresh",
+                        enabled = enabled && !state.loading, onClick = onRefresh)
                 }
             }
             Text(
@@ -296,18 +335,15 @@ internal fun LocalTreePane(
                 style = MaterialTheme.typography.bodySmall
             )
             if (state.crumbs.size > 1) {
-                Button(enabled = enabled && !state.loading,
-                    modifier = Modifier.heightIn(min = 48.dp),
-                    onClick = onParent) { Text("Parent folder") }
+                FolderActionControl(label = "Parent folder",
+                    enabled = enabled && !state.loading, onClick = onParent)
             }
             if (state.crumbs.size > 2) {
                 Box {
-                    Button(enabled = enabled && !state.loading,
-                        modifier = Modifier.heightIn(min = 48.dp)
-                            .testTag("saf-ancestor-menu"),
-                        onClick = { ancestorMenuExpanded = true }) {
-                        Text("Jump to ancestor…")
-                    }
+                    FolderActionControl(label = "Jump to ancestor…",
+                        enabled = enabled && !state.loading,
+                        modifier = Modifier.testTag("saf-ancestor-menu"),
+                        onClick = { ancestorMenuExpanded = true })
                     DropdownMenu(
                         expanded = ancestorMenuExpanded,
                         onDismissRequest = { ancestorMenuExpanded = false }
@@ -348,11 +384,8 @@ internal fun LocalTreePane(
                     style = MaterialTheme.typography.bodySmall
                 )
                 if (state.hasMore && state.visibleLimit < LocalTreeReader.MAX_BROWSE) {
-                    Button(enabled = enabled,
-                        modifier = Modifier.heightIn(min = 48.dp),
-                        onClick = onLoadMore) {
-                        Text("Show next 200 (clears selection)")
-                    }
+                    FolderActionControl(label = "Show next 200 (clears selection)",
+                        enabled = enabled, onClick = onLoadMore)
                 } else if (state.hasMore) {
                     Text("2000-item browse safety limit reached. Choose a smaller folder.",
                         style = MaterialTheme.typography.bodySmall)
@@ -365,7 +398,7 @@ internal fun LocalTreePane(
                 style = MaterialTheme.typography.bodySmall)
             SafFolderCreateCard(state, enabled, onRefresh)
             OutlinedTextField(
-                value = fileFilter, onValueChange = { fileFilter = it },
+                value = fileFilter, onValueChange = { ui.changeFilter(state.treeUri, state.folderId, it) },
                 label = { Text("Filter observed names") },
                 singleLine = true, enabled = enabled,
                 modifier = Modifier.fillMaxWidth())
@@ -381,13 +414,16 @@ internal fun LocalTreePane(
                 visibleEntries.filter { it.directory } else emptyList()
             if (rootMatches.size == 1) {
                 val folder = rootMatches.single()
-                Button(
+                // This action appears/disappears as a destination refresh
+                // discovers its first child directory. Keep Material3's
+                // ChildSemanticsNode out of this frequently replaced subtree.
+                FolderActionControl(
+                    label = "Copy folder: " + folder.title + "…",
                     enabled = enabled && !state.loading,
-                    modifier = Modifier.heightIn(min = 48.dp)
-                        .testTag("saf-root-copy-matching-folder")
+                    modifier = Modifier.testTag("saf-root-copy-matching-folder")
                         .semantics { contentDescription = "Copy folder " + folder.title },
                     onClick = { onCopyFolder?.invoke(folder) }
-                ) { Text("Copy folder: " + folder.title + "…") }
+                )
                 Text("Copy requires a separate destination picker and explicit review. " +
                     "The original folder is never deleted.",
                     style = MaterialTheme.typography.bodySmall)
@@ -395,31 +431,29 @@ internal fun LocalTreePane(
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 LocalTreeSort.entries.forEach { choice ->
-                    Button(enabled = enabled,
-                        modifier = Modifier.heightIn(min = 48.dp),
-                        onClick = {
-                            if (sortMode != choice) {
-                                sortMode = choice
-                                // Newest naturally starts with most recent;
-                                // all other sort modes start ascending.
-                                descending = choice == LocalTreeSort.NEWEST
-                            }
-                        }) {
-                        Text((if (sortMode == choice) "✓ " else "") +
+                    FolderActionControl(
+                        label = (if (sortMode == choice) "✓ " else "") +
                             when (choice) {
                                 LocalTreeSort.NAME -> "Name"
                                 LocalTreeSort.SIZE -> "Size"
                                 LocalTreeSort.TYPE -> "Type"
                                 LocalTreeSort.NEWEST -> "Newest"
-                            })
-                    }
+                            },
+                        enabled = enabled,
+                        onClick = {
+                            if (sortMode != choice) {
+                                ui.sortMode = choice
+                                // Newest naturally starts with most recent;
+                                // all other sort modes start ascending.
+                                ui.descending = choice == LocalTreeSort.NEWEST
+                            }
+                        })
                 }
-                Button(enabled = enabled,
-                    modifier = Modifier.heightIn(min = 48.dp)
-                        .testTag("saf-sort-direction"),
-                    onClick = { descending = !descending }) {
-                    Text(if (descending) "Descending ↓" else "Ascending ↑")
-                }
+                FolderActionControl(
+                    label = if (descending) "Descending ↓" else "Ascending ↑",
+                    enabled = enabled,
+                    modifier = Modifier.testTag("saf-sort-direction"),
+                    onClick = { ui.descending = !descending })
             }
             Text("Showing " + visibleEntries.size + " of " + state.entries.size +
                 " observed item(s)" +
@@ -444,30 +478,31 @@ internal fun LocalTreePane(
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
-                        Button(
+                        FolderActionControl(
+                            label = if (entry.directory) "Open"
+                                else if (entry.documentId in state.selected) "✓ Select"
+                                else "Select",
                             enabled = enabled && !state.loading,
-                            modifier = Modifier.heightIn(min = 48.dp).semantics {
+                            modifier = Modifier.semantics {
                                 stateDescription = if (!entry.directory &&
                                     entry.documentId in state.selected) "Selected" else "Not selected"
                             },
                             onClick = {
                                 if (entry.directory) onOpen(entry) else onSelect(entry)
                             }
-                        ) {
-                            Text(if (entry.directory) "Open" else if (entry.documentId in state.selected)
-                                "✓ Select" else "Select")
-                        }
+                        )
                         }
                         // A second line avoids squeezing 48dp buttons beside
                         // long file names on 320dp / high-text-scale displays.
                         if (entry.directory && state.crumbs.size == 1 &&
                             onCopyFolder != null) {
-                            Button(
+                            FolderActionControl(
+                                label = "Copy folder…",
                                 enabled = enabled && !state.loading && state.complete,
-                                modifier = Modifier.heightIn(min = 48.dp)
-                                    .testTag("saf-recursive-copy-" + entry.documentId),
+                                modifier = Modifier.testTag(
+                                    "saf-recursive-copy-" + entry.documentId),
                                 onClick = { onCopyFolder(entry) }
-                            ) { Text("Copy folder…") }
+                            )
                         }
                     }
                 }
@@ -486,7 +521,7 @@ internal fun LocalTreePane(
  * semantic node with a genuine Button role and a >=48dp touch target.
  */
 @Composable
-private fun FolderActionControl(
+internal fun FolderActionControl(
     label: String, enabled: Boolean, modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
