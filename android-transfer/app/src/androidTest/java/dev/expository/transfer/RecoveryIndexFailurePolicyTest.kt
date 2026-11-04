@@ -32,6 +32,7 @@ class RecoveryIndexFailurePolicyTest {
                     "application/octet-stream")
                 put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
             }))
+        val readGrant = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
         val inspector = dev.expository.transfer.journal.RecoveryManualSourceInspector
         try {
             resolver.openOutputStream(uri, "wt")!!.use { it.write(original) }
@@ -46,21 +47,24 @@ class RecoveryIndexFailurePolicyTest {
                 android.net.Uri.parse("file:///private/stale.bin"),
                 android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION))
             assertEquals(dev.expository.transfer.journal.FreshSourceByteRelation.CURRENT_SELECTION_BYTES_MATCH_RECORDED_TRANSFER,
-                inspector.inspect(resolver, uri, evidence))
+                inspector.inspect(resolver, uri, readGrant, evidence))
             assertEquals(dev.expository.transfer.journal.FreshSourceByteRelation.INSPECTION_CANCELED,
-                inspector.inspect(resolver, uri, evidence,
+                inspector.inspect(resolver, uri, readGrant, evidence,
                     continueRequested = { false }))
             assertEquals(dev.expository.transfer.journal.FreshSourceByteRelation.NO_COMPLETED_TRANSFER_BYTES,
-                inspector.inspect(resolver, uri, null))
+                inspector.inspect(resolver, uri, readGrant, null))
             assertEquals(dev.expository.transfer.journal.FreshSourceByteRelation.BOUNDED_READ_TOO_LARGE,
-                inspector.inspect(resolver, uri, evidence.copy(
+                inspector.inspect(resolver, uri, readGrant, evidence.copy(
                     byteCount = inspector.MAX_MANUAL_BYTES + 1)))
             assertEquals(dev.expository.transfer.journal.FreshSourceByteRelation.CURRENT_SELECTION_BYTES_DIFFER_FROM_RECORDED_TRANSFER,
-                inspector.inspect(resolver, uri, evidence.copy(
+                inspector.inspect(resolver, uri, readGrant, evidence.copy(
                     sourceSha256Hex = "0".repeat(64))))
             assertEquals(dev.expository.transfer.journal.FreshSourceByteRelation.INVALID_SOURCE_GRANT,
                 inspector.inspect(resolver,
-                    android.net.Uri.parse("file:///private/stale.bin"), evidence))
+                    android.net.Uri.parse("file:///private/stale.bin"), readGrant, evidence))
+            assertEquals("Readability without a fresh picker grant is insufficient",
+                dev.expository.transfer.journal.FreshSourceByteRelation.INVALID_SOURCE_GRANT,
+                inspector.inspect(resolver, uri, 0, evidence))
             assertArrayEquals("Fresh READ-only inspection must preserve source bytes",
                 original, resolver.openInputStream(uri)!!.use { it.readBytes() })
             assertTrue("An observational hash is not source identity or replay authority",
