@@ -44,6 +44,10 @@ class RecoveryIndexFailurePolicyTest {
             store.recordNew(digest, saved)
             assertEquals(saved, store.read(digest))
             assertTrue(runCatching { store.recordNew(digest, saved) }.isFailure)
+            val orphan = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, orphan.damagedOrUnrecognized)
+            assertTrue(orphan.reviewReferences.single().status
+                .contains("Created-child witness has no matching attempt journal"))
             val raw = File(sandbox, "transfer_created_child_v1_" + digest)
             val encrypted = raw.readBytes()
             val ciphertext = encrypted.toString(Charsets.ISO_8859_1)
