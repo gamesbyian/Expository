@@ -10,6 +10,7 @@ import dev.expository.transfer.engine.*
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 import dev.expository.transfer.journal.ProtectedRecoveryContext
 import dev.expository.transfer.journal.ProtectedRecoveryContextStore
+import dev.expository.transfer.journal.RecoveryTreeRootIdentity
 import dev.expository.transfer.planner.*
 import java.io.FileNotFoundException
 import java.io.InputStream
@@ -78,7 +79,8 @@ internal class SafRecursiveTreeCopy(
                         boundedLabel(relative),
                         boundedLabel("Selected Android folder / " + relative),
                         boundedLabel(request.destinationTree.authority
-                            ?: "Android document provider")
+                            ?: "Android document provider"),
+                        RecoveryTreeRootIdentity.fingerprint(request.destinationTree)
                     )
                 )
                 AndroidAtomicAttemptStorage(appContext, privateKey)

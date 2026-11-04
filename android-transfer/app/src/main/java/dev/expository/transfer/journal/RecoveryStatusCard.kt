@@ -78,26 +78,45 @@ fun RecoveryStatusCard() {
                     inspectionListing = null
                 } else {
                     inspectionListing = observed.getOrNull()
-                    val savedAuthority = status?.inspectionReference(ticket.first)
-                        ?.context?.destinationProvider
-                    // This is an advisory based on a protected *display hint*,
-                    // not a provider attestation, folder identity or retry permit.
+                    val savedContext = status?.inspectionReference(ticket.first)
+                        ?.context
+                    // A V2 encrypted root fingerprint can compare the exact
+                    // originally selected tree scope. This does not prove any
+                    // nested created child, payload bytes or write outcome.
+                    val rootRelation = RecoveryTreeRootIdentity.compare(
+                        savedContext?.destinationTreeRootFingerprint, uri)
                     val providerRelation = RecoveryProviderReview.compare(
-                        savedAuthority, uri.authority)
+                        savedContext?.destinationProvider, uri.authority)
                     inspectionMessage = "Manual inspection for record …" +
                         ticket.first.takeLast(12) +
                         " used a fresh Android tree grant. " +
-                        when (providerRelation) {
-                            RecoveryProviderRelation.DIFFERENT_AUTHORITY ->
-                                "The selected provider authority differs from the original " +
-                                "journal hint. Check your selection. No retry or cleanup."
-                            RecoveryProviderRelation.SAME_AUTHORITY_ONLY ->
-                                "The provider authority matches the hint, but this does NOT " +
-                                "prove the original folder, bytes or attempt. No retry or cleanup."
-                            RecoveryProviderRelation.INDETERMINATE ->
-                                "Provider authority correspondence is unknown. The selected " +
-                                "folder is not proven to be the original destination. " +
+                        when (rootRelation) {
+                            RecoveryTreeRootRelation.SAME_RECORDED_ROOT ->
+                                "Provider and tree-root identifier match the encrypted " +
+                                "original selection. Created children, bytes and attempt " +
+                                "outcome are NOT verified. No retry or cleanup."
+                            RecoveryTreeRootRelation.DIFFERENT_RECORDED_ROOT ->
+                                "This is a different provider or tree root than the " +
+                                "encrypted original selection. Do not treat it as the " +
+                                "previous destination. No retry or cleanup."
+                            RecoveryTreeRootRelation.UNDETERMINED ->
+                                "Saved tree-root identity cannot be compared. " +
                                 "No retry or cleanup."
+                            RecoveryTreeRootRelation.NO_SAVED_ROOT ->
+                                // V1 hints and single-document Save As cannot
+                                // establish tree-root correspondence.
+                                when (providerRelation) {
+                                    RecoveryProviderRelation.DIFFERENT_AUTHORITY ->
+                                        "The selected provider authority differs from the " +
+                                        "older journal hint. No retry or cleanup."
+                                    RecoveryProviderRelation.SAME_AUTHORITY_ONLY ->
+                                        "Only the provider authority matches the older " +
+                                        "hint. Original folder and content are unproven. " +
+                                        "No retry or cleanup."
+                                    RecoveryProviderRelation.INDETERMINATE ->
+                                        "This record has no comparable tree-root identity. " +
+                                        "Original destination remains unproven. No retry or cleanup."
+                                }
                         }
                 }
             }

@@ -65,6 +65,7 @@ import dev.expository.transfer.sftp.SftpAndroidCompat
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 import dev.expository.transfer.journal.ProtectedRecoveryContext
 import dev.expository.transfer.journal.ProtectedRecoveryContextStore
+import dev.expository.transfer.journal.RecoveryTreeRootIdentity
 
 /** A button-owned Boolean is not sufficient authorization after a coroutine is cancelled. */
 internal fun foregroundCopyAllowed(
@@ -1153,7 +1154,9 @@ private fun DeveloperPreview(
                                     digest, sourceName, targetName, provider ->
                                     ProtectedRecoveryContextStore(context.applicationContext)
                                         .recordNew(digest, ProtectedRecoveryContext(
-                                            "SAF_DUAL_COPY", sourceName, targetName, provider))
+                                            "SAF_DUAL_COPY", sourceName, targetName, provider,
+                                            RecoveryTreeRootIdentity.fingerprint(
+                                                current.request.targetTree)))
                                 }).copy(current,
                                 continueRequested = {
                                     foregroundCopyAllowed(permit, owningJob)
