@@ -602,19 +602,25 @@ internal fun SftpBrowseCard(
         val destination = session
         val request = confirmed.request
         val source = remotePaneSource
-        if (busy || destination == null || destination !== request.destination ||
-            sessionId != request.destinationSessionId ||
-            folder != request.destinationFolder ||
-            source == null || source.session !== request.source ||
-            source.sessionId != request.sourceSessionId ||
-            source.folder != request.sourceFolder ||
-            source.absoluteFile != request.sourceFile ||
-            source.revision != request.sourceRevision) {
-            pendingRelay = null
+        // The pending immutable relay review is the one-shot command owner,
+        // shared with SAF and SFTP→SAF Copy. Neither an old UI callback nor
+        // a returned server ACK can constitute renewed approval or byte proof.
+        val dispatch = ClaimedCopyDispatch.claim {
+            !busy && pendingRelay === confirmed &&
+                destination != null && destination === request.destination &&
+                sessionId == request.destinationSessionId &&
+                folder == request.destinationFolder &&
+                source != null && source.session === request.source &&
+                source.sessionId == request.sourceSessionId &&
+                source.folder == request.sourceFolder &&
+                source.absoluteFile == request.sourceFile &&
+                source.revision == request.sourceRevision
+        }
+        pendingRelay = null
+        if (dispatch == null) {
             status = "Server or selected file changed. Copy approval discarded."
             return
         }
-        pendingRelay = null
         onRelaySourceActive(request.sourceSessionId)
         val permit = AtomicBoolean(true)
         continueCopy = permit
@@ -624,34 +630,51 @@ internal fun SftpBrowseCard(
         status = "Relaying one file through Android with an independent destination readback…"
         scope.launch {
             try {
-                val receipt = withContext(Dispatchers.IO) {
+                val run = withContext(Dispatchers.IO) {
                     val active = coroutineContext[Job]
-                    var lastDisplay = 0L
-                    SftpRelayCopy { digest ->
-                        AndroidAtomicAttemptStorage(context.applicationContext, digest)
-                    }.copy(confirmed,
-                        continueRequested = { permit.get() && active?.isActive == true },
-                        onProgress = { bytes ->
-                            if (bytes - lastDisplay >= 256L * 1024L) {
-                                lastDisplay = bytes
-                                publishCopyProgress(bytes, permit, destination)
+                    dispatch.run(
+                        expectedItems = 1,
+                        continueRequested = {
+                            permit.get() && active?.isActive == true
+                        },
+                        prepare = { index ->
+                            if (index != 0) null
+                            else ClaimedCopyDispatch.Prepared(confirmed.plan.digest) {
+                                var lastDisplay = 0L
+                                SftpRelayCopy { digest ->
+                                    AndroidAtomicAttemptStorage(
+                                        context.applicationContext, digest)
+                                }.copy(confirmed,
+                                    continueRequested = {
+                                        permit.get() && active?.isActive == true
+                                    },
+                                    onProgress = { bytes ->
+                                        if (bytes - lastDisplay >= 256L * 1024L) {
+                                            lastDisplay = bytes
+                                            publishCopyProgress(bytes, permit, destination)
+                                        }
+                                    })
                             }
-                        })
+                        }
+                    )
                 }
-                transferred = receipt.bytesWritten
-                status = when (receipt.proof) {
-                    CopyProof.BYTES_VERIFIED ->
+                val receipt = run.receipts.singleOrNull()
+                transferred = run.outcome.verifiedBytes
+                status = when {
+                    run.outcome.complete && receipt != null ->
                         "Server-to-server Copy byte verified (" + receipt.bytesWritten +
                             " bytes). Source unchanged; independent destination SHA-256 matched."
-                    CopyProof.WRITE_ACKNOWLEDGED ->
-                        "Remote server acknowledged the Copy, but independent byte proof is unavailable."
-                    CopyProof.UNCERTAIN ->
-                        "Remote Copy uncertain or partial. An exclusive-create destination may remain. " +
-                            "Review it before retrying."
-                    CopyProof.BLOCKED ->
+                    run.outcome.state == CopyOutcomeState.BLOCKED ->
                         "Remote Copy blocked by fresh preflight, changed source or destination collision."
+                    run.outcome.stopProof == CopyProof.WRITE_ACKNOWLEDGED ->
+                        "Remote server acknowledged the Copy, but independent byte proof is unavailable."
+                    receipt == null ->
+                        "Remote Copy stopped before another destination operation. No verified receipt."
+                    else ->
+                        "Remote Copy uncertain, partial or rejected by the shared receipt check. " +
+                            "Review the exclusive-create destination before retrying."
                 }
-                if (session === destination) {
+                if (session === destination && destination != null) {
                     val current = withContext(Dispatchers.IO) {
                         runCatching { destination.browse(folder) }
                     }
