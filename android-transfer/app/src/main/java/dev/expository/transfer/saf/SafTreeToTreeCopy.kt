@@ -55,6 +55,9 @@ class SafTreeToTreeCopy(
     // SafTreeToTreeCopy(resolver) { digest -> ... } trailing Kotlin lambdas.
     // The optional context callback is always explicitly named.
     private val recordRecoveryContext: ((String, String, String, String) -> Unit)? = null,
+    // Post-create immutable witness, recorded only after fresh child membership
+    // and before opening any byte-writing stream. Never executable authority.
+    private val recordCreatedChild: ((String, Uri, String, String, String) -> Unit)? = null,
     private val storageForPlan: (String) -> AtomicAttemptStorage
 ) {
     private val observer = SafSingleDocumentCopy(resolver)
@@ -272,6 +275,10 @@ class SafTreeToTreeCopy(
                 if (!SafNewDocumentIdentity.isDirectChild(
                     confirmed.sourceName, newId, parentEntries))
                     throw java.io.IOException("SAF_NEW_DOCUMENT_PARENT_UNVERIFIED")
+                // If this private witness cannot be committed, the existing
+                // journal remains UNCERTAIN, and no output stream is opened.
+                recordCreatedChild?.invoke(initial.digest, request.targetTree,
+                    request.targetFolderId, newId, confirmed.sourceName)
                 return resolver.openOutputStream(uri, "w") ?: throw FileNotFoundException()
             }
             override fun openDestinationReadBack(): InputStream? {
