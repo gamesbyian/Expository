@@ -47,10 +47,10 @@ class RecoveryRefreshUiTest {
                     .fetchSemanticsNodes().isNotEmpty()
             }
             rule.onNodeWithText("Show review references").performClick()
-            rule.onNodeWithText("Inspect folder for record …" + digest.takeLast(12))
+            rule.onNodeWithText("Inspect folder for record 1 …" + digest.takeLast(12))
                 .assertExists()
             rule.onNodeWithText("Hide review references").performClick()
-            rule.onNodeWithText("Inspect folder for record …" + digest.takeLast(12))
+            rule.onNodeWithText("Inspect folder for record 1 …" + digest.takeLast(12))
                 .assertDoesNotExist()
             // Hiding a private review record must not mutate its journal.
             // Displaying this action never changes an active journal,
