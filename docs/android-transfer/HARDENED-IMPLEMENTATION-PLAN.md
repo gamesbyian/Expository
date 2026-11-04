@@ -76,7 +76,7 @@ review/                  owned synthetic screenshot atlas, separate physical acc
 
 - `PlanId` immutable. Plan generated from verified snapshot; must be approved **after** conflict policy and destination identity resolved. UI and executor consume identical plan digest. Revalidate immediately before mutation; drift ⇒ new confirmation.
 - Copy never becomes Move. Move within same server may use server-native rename only when operation capability and identity are confirmed. **Native rename is not an assumption of atomicity.**
-- Source deletion forbidden while destination proof below explicit move threshold; any partial result retains originals or flags missing original as incident requiring independent diagnosis.
+- Source deletion forbidden while destination proof is insufficient for the approved Move; the user's single explicit reviewed Move approval includes deletion of the exact original after verified arrival. No routine second confirmation is required. Any partial result retains the original where possible or reports an uncertain deletion for independent diagnosis.
 - Queue/staged files have a user-visible expiration and cleanup policy. Abandoned temporary files are recoverable but not automatically purged if ownership/certainty unknown.
 - No automatic retries of ambiguous writes, rename, overwrite, delete, native provider move or Google Drive create after lost acknowledgement without reconciliation. Idempotency tokens where API supports them; otherwise precise remote probing.
 - Per-item redacted receipt captures plan digest, endpoint *opaque ID*, source/destination relative names (only on-device), source fingerprint, bytes/size, response category, proof tier, final state and whether provider grant persists.
@@ -117,7 +117,7 @@ Sources: [Drive narrow scopes](https://developers.google.com/workspace/drive/api
 - **D07:** Share to Drive unverified: "Handed off" state; no green "Saved".
 - **D08:** Convert supported DOCX → Google Docs: verify MIME/importFormats, confirm, retain source; report conversion not byte equivalence.
 - **D09:** Unsupported conversion (MIME, account policy, too large): offer Save original; don't coerce content.
-- **D10:** Cross-server move source deletion blocked until destination proof and explicit approval.
+- **D10:** Cross-server Move deletes only the exactly selected source under the user's single explicit reviewed Move approval, and only after adequate independent destination proof and fresh source authority; no redundant second approval.
 - **D11:** Same-server remote copy must not invoke FTP RNFR/RNTO or SFTP Rename; only Move may.
 - **D12:** 10k virtualized rename preview at 200% text, stable sort, no misnumbering after scroll.
 - **D13–D20:** First-class Google Docs vs Google Drive action semantics, safe Android open/share contracts, per-pane source parity, real native Doc conversion, unverified handoffs, and multi-file recovery, as defined in [Google Drive/Docs destination UX](GOOGLE-DRIVE-INTEGRATION.md#p0-acceptance-extension-d13d20). Neither a Sharesheet launch nor a Google Drive filename display can substitute for proof of a successful copy/conversion.
