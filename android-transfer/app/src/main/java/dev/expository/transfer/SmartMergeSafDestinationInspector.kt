@@ -177,6 +177,22 @@ internal object SmartMergeSafDestinationInspector {
             continueRequested()) {
             "MERGE_DESTINATION_CHANGED_DURING_SCAN"
         }
+        // A repeated child-directory listing does not prove that each
+        // child's metadata is unchanged: providers may report a stable
+        // parent cursor while independently updating child revisions,
+        // permissions or content-size. Re-query every original child after
+        // the second parent observation and require the same full metadata
+        // fingerprint before certifying the entire index.
+        for (child in children) {
+            require(continueRequested()) { "MERGE_DESTINATION_CANCELED" }
+            val latest = readMeta(resolver, selectedTree, child.key.opaqueItemId)
+            require(latest.name == child.name &&
+                latest.fingerprint == child.key.version &&
+                (latest.mime == DocumentsContract.Document.MIME_TYPE_DIR) ==
+                    (child.kind == ItemKind.DIRECTORY)) {
+                "MERGE_DESTINATION_CHILD_CHANGED_DURING_SCAN"
+            }
+        }
         val snapshot = fingerprint(listOf(
             "MERGE_SAF_DESTINATION_PARENT_V1", authority,
             selectedTree.toString(), rootId, rootAfter.fingerprint,

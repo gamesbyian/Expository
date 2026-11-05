@@ -123,6 +123,30 @@ class SafRecursiveScannerAndroidTest {
             e.resolver, e.targetTree, flags, { e.observedAtMillis }))
     }
 
+    @Test fun mergeDestinationRejectsChildMetadataDriftAfterRepeatedParentList() {
+        val e = Environment()
+        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
+            Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        var checkpoints = 0
+        val result = SmartMergeSafDestinationInspector.capture(
+            e.resolver, e.targetTree, flags, { e.observedAtMillis }) {
+                checkpoints++
+                // The first child metadata and both complete parent listings
+                // have already succeeded. Now the provider changes ONLY the
+                // independently queried child metadata, leaving its parent
+                // listing stable. The second per-child pass must catch this.
+                if (checkpoints == 6) e.mode("targetMetadataDrift")
+                true
+            }
+        assertTrue("Second child metadata pass must execute", checkpoints >= 6)
+        assertNull("Late child change cannot authorize complete M2 inventory",
+            result)
+        e.mode("reset")
+        assertNotNull("Stable metadata still permits inspection",
+            SmartMergeSafDestinationInspector.capture(
+                e.resolver, e.targetTree, flags, { e.observedAtMillis }))
+    }
+
     @Test fun selectedSourceCannotBeReusedAsMergeDestination() {
         val e = Environment()
         val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
