@@ -115,13 +115,15 @@ object SmartMergeCasefoldIllustrator {
             rootName, structure, nowMillis)
         if (!forecast.reviewable)
             return refused(actual.blockers + forecast.blockers)
-        val allChanges = forecast.entries.filter {
+        // Count all hypothetical differences without materializing another
+        // potentially 10,000-entry private path collection in memory.
+        val total = forecast.entries.count {
             it.renamedForCollision || it.sharedDirectory
         }
-        val total = allChanges.size
         if (changeOffset > 0 && changeOffset >= total)
             return refused(actual.blockers + "ILLUSTRATION_PAGE_OUT_OF_RANGE")
-        val samples = allChanges.asSequence()
+        val samples = forecast.entries.asSequence()
+            .filter { it.renamedForCollision || it.sharedDirectory }
             .drop(changeOffset).take(MAX_DISPLAY_CHANGES)
             .map {
                 SmartMergeIllustratedChange(
