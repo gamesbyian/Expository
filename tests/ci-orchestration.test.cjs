@@ -165,6 +165,18 @@ test('owner scoped emulator accepts bounded synthetic batches, never mixes real 
       run(prefix + ' LocalPickerPositiveCopyTest#selectAndSaveNewDocumentWithByteVerifiedReadback').selection,
       'TARGET_TEST_CLASS=dev.expository.transfer.LocalPickerPositiveCopyTest#selectAndSaveNewDocumentWithByteVerifiedReadback\n',
     );
+    for (const name of [
+      'RecursiveRealPickerCopyUiTest#genuineThirdSystemPickerInspectsMergeDestinationWithoutWriting',
+      'RecursiveRealPickerCopyUiTest#genuineIndependentPickerRootsIllustrateActualCasefoldCollisionsWithoutWrites',
+    ]) {
+      const selected = run(prefix + ' ' + name);
+      assert.equal(selected.result.status, 0, selected.result.stderr);
+      assert.equal(selected.selection,
+        'TARGET_TEST_CLASS=dev.expository.transfer.' + name + '\n');
+    }
+    // A selected real picker method must still install the test-only
+    // DocumentsProvider APK. Never let a #selector bypass the fixture.
+    assert.match(workflow, /\$\{TARGET_TEST_CLASS%%#\*\}/);
     const batch = run(prefix + ' SafRecursiveScannerAndroidTest,SafRecursiveTreeCopyAndroidTest');
     assert.equal(batch.result.status, 0, batch.result.stderr);
     assert.equal(batch.selection,
@@ -172,6 +184,9 @@ test('owner scoped emulator accepts bounded synthetic batches, never mixes real 
     for (const invalid of [
       prefix + ' LocalPickerPositiveCopyTest,SafRecursiveScannerAndroidTest',
       prefix + ' RecursiveRealPickerCopyUiTest,SafRecursiveScannerAndroidTest',
+      prefix + ' RecursiveRealPickerCopyUiTest#nonallowlistedMethod',
+      prefix + ' RecursiveRealPickerCopyUiTest#genuineThirdSystemPickerInspectsMergeDestinationWithoutWriting;true',
+      prefix + ' RecursiveRealPickerCopyUiTest#genuineIndependentPickerRootsIllustrateActualCasefoldCollisionsWithoutWrites#extra',
       prefix + ' SafRecursiveScannerAndroidTest,SafRecursiveScannerAndroidTest',
       prefix + ' SafRecursiveScannerAndroidTest,',
       prefix + ' SafRecursiveScannerAndroidTest,SomeUnreviewedTest',
@@ -216,6 +231,18 @@ test('PR emulator receipts fail closed for missing selectors and missing reports
     assert.equal(run(a).status, 0, 'present requested class passes');
     assert.notEqual(run(a + ',' + b).status, 0, 'missing batch class cannot pass');
     assert.notEqual(run(a + '#missingMethod').status, 0, 'missing requested method cannot pass');
+    // An exactly allowlisted method selector must not be satisfied by some
+    // other method in the same instrumented class.
+    const picker = 'dev.expository.transfer.RecursiveRealPickerCopyUiTest';
+    assert.notEqual(run(picker + '#genuineThirdSystemPickerInspectsMergeDestinationWithoutWriting')
+      .status, 0, 'unrelated class cannot satisfy selected real picker method');
+    fs.writeFileSync(path.join(location, 'TEST-picker.xml'),
+      '<testsuite tests="1"><testcase classname="' + picker +
+      '" name="genuineThirdSystemPickerInspectsMergeDestinationWithoutWriting"/></testsuite>');
+    assert.equal(run(picker + '#genuineThirdSystemPickerInspectsMergeDestinationWithoutWriting')
+      .status, 0, 'exact Android picker method receipt is accepted');
+    assert.notEqual(run(picker + '#genuineIndependentPickerRootsIllustrateActualCasefoldCollisionsWithoutWrites')
+      .status, 0, 'other picker method may not substitute');
     fs.writeFileSync(path.join(location, 'TEST-second.xml'),
       '<testsuite tests="1"><testcase classname="' + b + '" name="copy"/></testsuite>');
     assert.equal(run(a + ',' + b).status, 0, 'both batch classes are present');
