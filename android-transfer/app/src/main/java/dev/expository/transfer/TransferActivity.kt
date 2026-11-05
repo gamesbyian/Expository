@@ -243,6 +243,13 @@ private fun DeveloperPreview(
     var pendingMergePicker by remember { mutableStateOf<MergeSourcePickerTicket?>(null) }
     var mergeReadJob by remember { mutableStateOf<Job?>(null) }
     var mergeReading by remember { mutableStateOf(false) }
+    // Per-source status is a temporary read-only diagnostic. It is keyed
+    // to the exact in-memory source object, not a display name or pane slot.
+    var mergeInspecting by remember { mutableStateOf<SmartMergeFolder?>(null) }
+    var mergeInspectionJob by remember { mutableStateOf<Job?>(null) }
+    var mergeInspectResults by remember {
+        mutableStateOf<Map<SmartMergeFolder, SmartMergeReobservation>>(emptyMap())
+    }
     var treeSingle by remember { mutableStateOf(LocalTreeBrowseState()) }
     var treeA by remember { mutableStateOf(LocalTreeBrowseState()) }
     var treeB by remember { mutableStateOf(LocalTreeBrowseState()) }
@@ -546,7 +553,13 @@ private fun DeveloperPreview(
         mergeReadJob?.cancel()
         mergeReadJob = null
         mergeReading = false
+        // A late provider response must never annotate a basket cleared
+        // while that source was being checked.
+        mergeInspectionJob?.cancel()
+        mergeInspectionJob = null
+        mergeInspecting = null
         if (clearBasket) {
+            mergeInspectResults = emptyMap()
             mergeSources = SmartMergeBasket.empty()
             showAllMergeSources = false
             mergeMessage = "Merge source basket cleared. No files were changed."
@@ -555,9 +568,54 @@ private fun DeveloperPreview(
         }
     }
 
+    /**
+     * Re-observe one already picked folder using its ORIGINAL transient
+     * READ proof. No fresh grant flags, silent replacement or Merge command.
+     * This can report matches and drift but may never extend permission.
+     */
+    fun checkMergeSourceAccess(selected: SmartMergeFolder) {
+        if (copyBusy || remoteRelayBusy || mergeReading ||
+            pendingMergePicker != null || mergeInspecting != null ||
+            mergeSources.folders.none { it === selected }) return
+        val generation = treeReadGeneration.incrementAndGet()
+        val observedAt = System.currentTimeMillis()
+        val shareAtStart = currentShareEpoch()
+        mergeInspecting = selected
+        mergeMessage = "Checking the original folder access without changing files…"
+        mergeInspectionJob = scope.launch {
+            try {
+                val observedStatus = withContext(Dispatchers.IO) {
+                    SmartMergeSafFolderCapture.inspectFresh(
+                        context.contentResolver, selected, generation, observedAt)
+                }
+                // A slow provider read may finish AFTER the original five-
+                // minute proof has expired. Never display a matching source
+                // as currently trusted merely because the query began early.
+                val oldProof = selected.source.location.capabilities[Capability.READ]
+                val status = if (oldProof?.valid(System.currentTimeMillis()) == true)
+                    observedStatus else SmartMergeReobservation.UNAUTHORIZED_OR_EXPIRED
+                if (isActive && mergeInspecting === selected &&
+                    mergeSources.folders.any { it === selected } &&
+                    currentShareEpoch() == shareAtStart) {
+                    mergeInspectResults = mergeInspectResults + (selected to status)
+                    mergeMessage = if (status == SmartMergeReobservation.CURRENT_SNAPSHOT)
+                        "Source still matches its previous observation. " +
+                            "This does not authorize Merge; re-review will be required."
+                    else "Source could not be confirmed current. " +
+                        "Remove this basket entry, then pick the folder again before Merge review."
+                }
+            } finally {
+                if (mergeInspecting === selected) {
+                    mergeInspectionJob = null
+                    mergeInspecting = null
+                }
+            }
+        }
+    }
+
     fun launchMergeFolderPicker() {
         if (copyBusy || remoteRelayBusy || mergeReading ||
-            pendingMergePicker != null ||
+            mergeInspecting != null || pendingMergePicker != null ||
             mergeSources.folders.size >= SmartMergeBasket.MAX_SOURCES) return
         val pane = if (model.view == WorkspaceView.SINGLE)
             WorkspacePane.SINGLE else model.activeDual
@@ -1773,7 +1831,8 @@ private fun DeveloperPreview(
                             FolderActionControl(
                                 label = "Add Merge source folder…",
                                 enabled = !copyBusy && !remoteRelayBusy &&
-                                    !mergeReading && pendingMergePicker == null &&
+                                    !mergeReading && mergeInspecting == null &&
+                                    pendingMergePicker == null &&
                                     mergeSources.folders.size < SmartMergeBasket.MAX_SOURCES,
                                 modifier = Modifier.testTag("smart-merge-add-source"),
                                 onClick = { launchMergeFolderPicker() }
@@ -1784,6 +1843,19 @@ private fun DeveloperPreview(
                                     enabled = true,
                                     modifier = Modifier.testTag("smart-merge-cancel-source"),
                                     onClick = { stopMergeObservation(false) }
+                                )
+                            }
+                            if (mergeInspecting != null) {
+                                FolderActionControl(
+                                    label = "Cancel access check",
+                                    enabled = true,
+                                    modifier = Modifier.testTag("smart-merge-cancel-check"),
+                                    onClick = {
+                                        mergeInspectionJob?.cancel()
+                                        mergeInspectionJob = null
+                                        mergeInspecting = null
+                                        mergeMessage = "Access check stopped. No files changed."
+                                    }
                                 )
                             }
                             if (mergeSources.folders.isNotEmpty()) {
@@ -1811,6 +1883,41 @@ private fun DeveloperPreview(
                                         selected.source.name.take(80) +
                                         " · " + selected.collectedFrom.name,
                                         style = MaterialTheme.typography.bodySmall)
+                                    val originalRead = selected.source.location
+                                        .capabilities[Capability.READ]
+                                    val capturedProofValid =
+                                        originalRead?.valid(System.currentTimeMillis()) == true
+                                    if (!capturedProofValid) {
+                                        Text("Original access review expired. " +
+                                            "Remove this entry and pick the folder again.",
+                                            style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    FolderActionControl(
+                                        label = "Check Merge source " + (index + 1) +
+                                            " access",
+                                        enabled = capturedProofValid &&
+                                            !copyBusy && !remoteRelayBusy &&
+                                            !mergeReading && mergeInspecting == null &&
+                                            pendingMergePicker == null,
+                                        onClick = { checkMergeSourceAccess(selected) }
+                                    )
+                                    mergeInspectResults[selected]?.let { last ->
+                                        val note = when (last) {
+                                            SmartMergeReobservation.CURRENT_SNAPSHOT ->
+                                                "Last check matched. Recheck before any review."
+                                            SmartMergeReobservation.MISSING_OR_UNOBSERVED ->
+                                                "Check incomplete; remove this entry and pick the folder again."
+                                            SmartMergeReobservation.UNAUTHORIZED_OR_EXPIRED ->
+                                                "Access expired or denied; remove and re-pick this folder."
+                                            SmartMergeReobservation.DIFFERENT_SOURCE ->
+                                                "Folder identity changed; remove and re-pick it."
+                                            SmartMergeReobservation.AUTHORITY_OR_GRANT_CHANGED ->
+                                                "Provider grant changed; remove and re-pick this folder."
+                                            SmartMergeReobservation.SOURCE_OR_LISTING_CHANGED ->
+                                                "Folder contents changed; remove and re-pick it."
+                                        }
+                                        Text(note, style = MaterialTheme.typography.bodySmall)
+                                    }
                                     FolderActionControl(
                                         label = "Move Merge source " + (index + 1) + " earlier",
                                         enabled = index > 0 && !mergeReading &&
@@ -1833,6 +1940,12 @@ private fun DeveloperPreview(
                                         label = "Remove Merge source " + (index + 1),
                                         enabled = !mergeReading && pendingMergePicker == null,
                                         onClick = {
+                                            if (mergeInspecting === selected) {
+                                                mergeInspectionJob?.cancel()
+                                                mergeInspectionJob = null
+                                                mergeInspecting = null
+                                            }
+                                            mergeInspectResults = mergeInspectResults - selected
                                             mergeSources = mergeSources.removeAt(index)
                                             mergeMessage = "Source removed; no files changed."
                                         }
