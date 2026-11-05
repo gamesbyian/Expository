@@ -8,11 +8,15 @@ import android.content.Intent
 import android.provider.MediaStore
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithTag
@@ -62,6 +66,38 @@ import java.util.UUID
 @RunWith(AndroidJUnit4::class)
 class WorkspaceNavigationUiTest {
     @get:Rule val compose = createAndroidComposeRule<TransferActivity>()
+
+    @Test fun smartMergeSourceBasketHasExplicitPickerAndSurvivesViewSwitchesWithoutWrites() {
+        // The optional Merge basket follows the actual browser, keeping
+        // existing Single/Dual controls and their content above the fold.
+        fun revealBasket() {
+            compose.onNodeWithTag("transfer-workspace-scroll")
+                .performScrollToNode(hasTestTag("smart-merge-basket-toggle"))
+            compose.onNodeWithTag("smart-merge-basket-toggle").assertIsEnabled()
+        }
+        revealBasket()
+        compose.onNodeWithTag("smart-merge-basket-toggle").performClick()
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-add-source"))
+        compose.onNodeWithTag("smart-merge-add-source").assertIsEnabled()
+        compose.onNodeWithText("Smart Merge · 0 source folder(s)").assertExists()
+        compose.onNodeWithText("Collect source folders; no files are changed.").assertExists()
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("workspace-dual-view"))
+        compose.onNodeWithTag("workspace-dual-view").performClick()
+        revealBasket()
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-add-source"))
+        compose.onNodeWithTag("smart-merge-add-source").assertIsEnabled()
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("workspace-single-view"))
+        compose.onNodeWithTag("workspace-single-view").performClick()
+        revealBasket()
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-add-source"))
+        compose.onNodeWithTag("smart-merge-add-source").assertIsEnabled()
+        // No source picker or provider mutation occurs until explicit Add.
+    }
 
     /** SAF sorting/filtering is presentation only, not a mutation witness. */
     @Test fun localTreeDisplayFilterDoesNotChangeSourceOrSelection() {
@@ -537,9 +573,12 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("Location B · SFTP", substring = true).assertExists()
         compose.onNodeWithText("SFTP file transfer").assertExists()
         compose.onNodeWithText("Connect securely").assertIsNotEnabled()
-        // The inactive phone tab is not exposed or disconnected.
+        // The inactive remote pane retains its authenticated Compose
+        // subtree on purpose, while retainInvisible() measures it at 0x0,
+        // does not place it and marks it hidden from accessibility. A node
+        // may remain in test semantics without being displayed or usable.
         compose.onNodeWithText("Pane A · LOCAL").performClick()
-        compose.onNodeWithText("SFTP file transfer").assertDoesNotExist()
+        compose.onNodeWithText("SFTP file transfer").assertIsNotDisplayed()
         compose.onNodeWithText("Pane B · SFTP").performClick()
         compose.onNodeWithText("SFTP file transfer").assertExists()
         // Swap moves the remote session's composition identity with the

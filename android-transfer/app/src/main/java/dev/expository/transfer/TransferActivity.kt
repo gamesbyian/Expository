@@ -15,6 +15,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -45,6 +47,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.unit.dp
 import dev.expository.transfer.planner.*
 import dev.expository.transfer.journal.RecoveryStatusCard
@@ -164,6 +168,14 @@ internal data class RecursiveCopyReview(
 )
 
 /** Exact Single-mode source identity captured BEFORE launching Android's target picker. */
+private data class MergeSourcePickerTicket(
+    val serial: Long,
+    val pane: WorkspacePane,
+    val view: WorkspaceView,
+    val endpoint: BrowseEndpoint,
+    val shareEpoch: Long
+)
+
 private data class SingleFolderTargetPickerWitness(
     val sourceTree: Uri,
     val sourceParentId: String,
@@ -221,6 +233,16 @@ private fun DeveloperPreview(
     // One lifetime-wide monotonic generation prevents a stale provider query
     // from matching a newly reselected tree after endpoint reset or A/B swap.
     val treeReadGeneration = remember { AtomicLong(0L) }
+    // M1 Smart Merge source collection survives Single/Dual navigation only
+    // inside this Compose process; never persist grants, URIs or source IDs.
+    var mergeSources by remember { mutableStateOf(SmartMergeBasket.empty()) }
+    var mergeMessage by remember { mutableStateOf("Collect source folders; no files are changed.") }
+    var showAllMergeSources by remember { mutableStateOf(false) }
+    var mergePanelOpen by remember { mutableStateOf(false) }
+    val mergePickerSerial = remember { AtomicLong(0L) }
+    var pendingMergePicker by remember { mutableStateOf<MergeSourcePickerTicket?>(null) }
+    var mergeReadJob by remember { mutableStateOf<Job?>(null) }
+    var mergeReading by remember { mutableStateOf(false) }
     var treeSingle by remember { mutableStateOf(LocalTreeBrowseState()) }
     var treeA by remember { mutableStateOf(LocalTreeBrowseState()) }
     var treeB by remember { mutableStateOf(LocalTreeBrowseState()) }
@@ -441,6 +463,115 @@ private fun DeveloperPreview(
         // access after process recreation. User can explicitly choose again.
         readTree(which, uri, listOf(TreeCrumb(rootId, "Chosen folder")),
             writeGranted = grant and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0)
+    }
+
+    // A separately picked folder is the exact M1 source, irrespective of
+    // which workspace pane is currently browsing. This does not alter that
+    // pane's location or transfer selection. The returned READ flag must be
+    // the OS picker result's own grant, not a synthesized permission.
+    val mergeFolderPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val ticket = pendingMergePicker
+        pendingMergePicker = null
+        val uri = result.data?.data
+        val readFlags = result.data?.flags ?: 0
+        if (ticket == null || ticket.serial != mergePickerSerial.get()) {
+            mergeMessage = "Old merge picker result ignored; no source collected."
+        } else if (result.resultCode != Activity.RESULT_OK || uri == null) {
+            mergeMessage = "Merge source selection canceled. No files changed."
+        } else if (model.view != ticket.view ||
+            model.pane(ticket.pane).endpoint != ticket.endpoint ||
+            currentShareEpoch() != ticket.shareEpoch) {
+            mergeMessage = "Workspace changed during folder selection. Choose again."
+        } else if (readFlags and Intent.FLAG_GRANT_READ_URI_PERMISSION == 0 ||
+            !LocalTreeReader.validTree(uri)) {
+            mergeMessage = "Android did not grant READ access to a valid folder."
+        } else {
+            val generation = treeReadGeneration.incrementAndGet()
+            val observedAt = System.currentTimeMillis()
+            mergeReading = true
+            mergeMessage = "Inspecting this folder without changing its contents…"
+            mergeReadJob = scope.launch {
+                try {
+                    val source = withContext(Dispatchers.IO) {
+                        SmartMergeSafFolderCapture.capture(
+                            context.contentResolver, uri, readFlags, ticket.pane,
+                            generation, observedAt)
+                    }
+                    if (!isActive || mergePickerSerial.get() != ticket.serial)
+                        return@launch
+                    if (model.view != ticket.view ||
+                        model.pane(ticket.pane).endpoint != ticket.endpoint ||
+                        currentShareEpoch() != ticket.shareEpoch ||
+                        copyBusy || remoteRelayBusy) {
+                        mergeMessage = "Workspace changed while observing this folder. Reselect it."
+                    } else if (source == null) {
+                        mergeMessage = "The selected folder is unreadable, stale or too large " +
+                            "to list safely. No source was collected."
+                    } else if (source.source.location.capabilities[Capability.READ]
+                            ?.valid(System.currentTimeMillis()) != true) {
+                        // A provider can block longer than the source's
+                        // short-lived observation window. Returning from a
+                        // successful query is not proof it is STILL current.
+                        mergeMessage = "The folder observation expired while reading. " +
+                            "Choose it again; nothing was changed."
+                    } else {
+                        val added = mergeSources.add(source)
+                        mergeSources = added.basket
+                        mergeMessage = when (added.status) {
+                            SmartMergeAddStatus.ADDED ->
+                                "Source folder collected. Reauthorization is still required for Merge."
+                            SmartMergeAddStatus.DUPLICATE_SOURCE ->
+                                "This source folder is already in the basket."
+                            SmartMergeAddStatus.OVERLAPPING_SOURCE ->
+                                "This source overlaps another collected folder."
+                            SmartMergeAddStatus.LIMIT_REACHED ->
+                                "The basket has reached its 64-folder safety limit."
+                        }
+                    }
+                } finally {
+                    if (mergePickerSerial.get() == ticket.serial) {
+                        mergeReadJob = null
+                        mergeReading = false
+                    }
+                }
+            }
+        }
+    }
+
+    fun stopMergeObservation(clearBasket: Boolean) {
+        mergePickerSerial.incrementAndGet()
+        pendingMergePicker = null
+        mergeReadJob?.cancel()
+        mergeReadJob = null
+        mergeReading = false
+        if (clearBasket) {
+            mergeSources = SmartMergeBasket.empty()
+            showAllMergeSources = false
+            mergeMessage = "Merge source basket cleared. No files were changed."
+        } else {
+            mergeMessage = "Merge source observation stopped. No source was added."
+        }
+    }
+
+    fun launchMergeFolderPicker() {
+        if (copyBusy || remoteRelayBusy || mergeReading ||
+            pendingMergePicker != null ||
+            mergeSources.folders.size >= SmartMergeBasket.MAX_SOURCES) return
+        val pane = if (model.view == WorkspaceView.SINGLE)
+            WorkspacePane.SINGLE else model.activeDual
+        val serial = mergePickerSerial.incrementAndGet()
+        pendingMergePicker = MergeSourcePickerTicket(serial, pane, model.view,
+            model.pane(pane).endpoint, currentShareEpoch())
+        runCatching {
+            mergeFolderPicker.launch(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            })
+        }.onFailure {
+            pendingMergePicker = null
+            mergeMessage = "Android folder picker unavailable. No source collected."
+        }
     }
 
     var pickerWitnesses by remember { mutableStateOf(ScopedTreePickerWitnesses()) }
@@ -1617,6 +1748,114 @@ private fun DeveloperPreview(
                         onStopCopy = { copyPermit?.set(false) }
                     )
                 }
+            }
+            // The existing navigation controls and working pane must remain
+            // in the initial viewport. Put the optional M1 discovery surface
+            // after the active browser, with a compact, explicit opener.
+            // Expanding the source basket never opens a provider or runs Merge.
+            item {
+                FolderActionControl(
+                    label = "Merge · " + mergeSources.folders.size + " sources",
+                    enabled = !copyBusy && !remoteRelayBusy,
+                    modifier = Modifier.testTag("smart-merge-basket-toggle"),
+                    onClick = { mergePanelOpen = !mergePanelOpen }
+                )
+            }
+            if (mergePanelOpen) {
+            item {
+                Card(Modifier.fillMaxWidth().testTag("smart-merge-source-basket")) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Smart Merge · " + mergeSources.folders.size +
+                            " source folder(s)", style = MaterialTheme.typography.titleMedium)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            FolderActionControl(
+                                label = "Add Merge source folder…",
+                                enabled = !copyBusy && !remoteRelayBusy &&
+                                    !mergeReading && pendingMergePicker == null &&
+                                    mergeSources.folders.size < SmartMergeBasket.MAX_SOURCES,
+                                modifier = Modifier.testTag("smart-merge-add-source"),
+                                onClick = { launchMergeFolderPicker() }
+                            )
+                            if (mergeReading || pendingMergePicker != null) {
+                                FolderActionControl(
+                                    label = "Cancel Merge selection",
+                                    enabled = true,
+                                    modifier = Modifier.testTag("smart-merge-cancel-source"),
+                                    onClick = { stopMergeObservation(false) }
+                                )
+                            }
+                            if (mergeSources.folders.isNotEmpty()) {
+                                FolderActionControl(
+                                    label = "Clear Merge sources",
+                                    enabled = !mergeReading && pendingMergePicker == null,
+                                    modifier = Modifier.testTag("smart-merge-clear"),
+                                    onClick = { stopMergeObservation(true) }
+                                )
+                            }
+                        }
+                        if (mergeSources.folders.isNotEmpty()) {
+                            Text(if (mergeSources.hasMinimumSources)
+                                "Minimum source count reached. Execution is not yet " +
+                                    "available: each source and the destination " +
+                                    "still require fresh review."
+                                else "Choose at least one more folder. Collection is read-only.",
+                                style = MaterialTheme.typography.bodySmall)
+                            val displayed = if (showAllMergeSources)
+                                mergeSources.folders else mergeSources.folders.take(6)
+                            displayed.forEachIndexed { index, selected ->
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text((index + 1).toString() + ". " +
+                                        selected.source.name.take(80) +
+                                        " · " + selected.collectedFrom.name,
+                                        style = MaterialTheme.typography.bodySmall)
+                                    FolderActionControl(
+                                        label = "Move Merge source " + (index + 1) + " earlier",
+                                        enabled = index > 0 && !mergeReading &&
+                                            pendingMergePicker == null,
+                                        onClick = {
+                                            mergeSources = mergeSources.move(index, index - 1)
+                                            mergeMessage = "Source order changed. No Merge was run."
+                                        }
+                                    )
+                                    FolderActionControl(
+                                        label = "Move Merge source " + (index + 1) + " later",
+                                        enabled = index < mergeSources.folders.lastIndex &&
+                                            !mergeReading && pendingMergePicker == null,
+                                        onClick = {
+                                            mergeSources = mergeSources.move(index, index + 1)
+                                            mergeMessage = "Source order changed. No Merge was run."
+                                        }
+                                    )
+                                    FolderActionControl(
+                                        label = "Remove Merge source " + (index + 1),
+                                        enabled = !mergeReading && pendingMergePicker == null,
+                                        onClick = {
+                                            mergeSources = mergeSources.removeAt(index)
+                                            mergeMessage = "Source removed; no files changed."
+                                        }
+                                    )
+                                }
+                            }
+                            if (mergeSources.folders.size > 6) {
+                                FolderActionControl(
+                                    label = if (showAllMergeSources) "Show fewer sources"
+                                        else "Show all " + mergeSources.folders.size + " sources",
+                                    enabled = true,
+                                    onClick = { showAllMergeSources = !showAllMergeSources }
+                                )
+                            }
+                        }
+                        Text(mergeMessage,
+                            modifier = Modifier.semantics {
+                                liveRegion = LiveRegionMode.Polite
+                            },
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
             }
         }
     }
