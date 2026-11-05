@@ -26,6 +26,131 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class SafRecursiveScannerAndroidTest {
+    @Test fun independentlyPickedMergeDestinationIsInspectedWithoutAnyWrite() {
+        val e = Environment()
+        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
+            Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val destination = requireNotNull(SmartMergeSafDestinationInspector.capture(
+            e.resolver, e.targetTree, flags, { e.observedAtMillis }))
+        assertEquals("Target root", destination.displayName)
+        assertEquals(LocationKind.LOCAL_SAF, destination.location.key.kind)
+        assertEquals(e.targetTree.toString(), destination.location.key.grantId)
+        assertEquals("target-root", destination.location.key.rootId)
+        assertEquals("target-root", destination.location.key.containerId)
+        assertEquals(CasePolicy.UNKNOWN, destination.location.casePolicy)
+        assertEquals(setOf(Capability.READ, Capability.WRITE, Capability.CREATE_CHILD),
+            destination.location.capabilities.keys)
+        assertTrue(destination.stillObserved(e.observedAtMillis))
+        assertFalse("A clock rollback cannot renew a picked permission",
+            destination.stillObserved(e.observedAtMillis - 1L))
+        assertFalse(destination.stillObserved(e.observedAtMillis + 300_001L))
+        assertEquals(LocationIndexState.COMPLETE, destination.parentIndex.state)
+        assertEquals(destination.location, destination.parentIndex.location)
+        assertEquals(1, destination.childCount)
+        assertEquals(listOf("Taken.txt"),
+            destination.parentIndex.children.map { it.name })
+        assertNotNull(destination.parentIndex.destinationListing())
+        assertEquals("SmartMergeSafDestinationSnapshot(redacted)",
+            destination.toString())
+        // The existing source bytes and target listing are untouched. This
+        // fixture has no createDocument implementation in the test provider.
+        assertEquals("source-root", LocalTreeReader.rootId(e.sourceTree))
+        assertEquals("Taken.txt",
+            LocalTreeReader.list(e.resolver, e.targetTree, "target-root", 200)
+                .children.single().title)
+    }
+
+    @Test fun mergeDestinationRefusesMissingOsGrantsOrProviderCreateAbility() {
+        val e = Environment()
+        val read = Intent.FLAG_GRANT_READ_URI_PERMISSION
+        val write = Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val capture = { flags: Int ->
+            SmartMergeSafDestinationInspector.capture(
+                e.resolver, e.targetTree, flags, { e.observedAtMillis })
+        }
+        assertNull(capture(0))
+        assertNull(capture(read))
+        assertNull(capture(write))
+        assertNull(SmartMergeSafDestinationInspector.capture(
+            e.resolver, Uri.parse("file:///private"), read or write,
+            { e.observedAtMillis }))
+        assertNull(SmartMergeSafDestinationInspector.capture(
+            e.resolver, Uri.parse("content://test.target.scoped/document/target-root"),
+            read or write, { e.observedAtMillis }))
+        assertNull(SmartMergeSafDestinationInspector.capture(
+            e.resolver, e.targetTree, read or write, { 0L }))
+        assertNull(SmartMergeSafDestinationInspector.capture(
+            e.resolver, e.targetTree, read or write, { e.observedAtMillis },
+            { false }))
+        e.mode("noTargetCreate")
+        assertNull("Provider create flag is mandatory", capture(read or write))
+        e.mode("reset")
+        assertNotNull(capture(read or write))
+    }
+
+    @Test fun mergeDestinationRejectsIncompleteOrChangingParentInventory() {
+        val e = Environment()
+        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
+            Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        e.mode("targetCaseCollision")
+        assertNull("Ambiguous case-folded sibling names must fail closed",
+            SmartMergeSafDestinationInspector.capture(
+                e.resolver, e.targetTree, flags, { e.observedAtMillis }))
+        e.mode("reset")
+        e.mode("targetMetadataDrift")
+        assertNull("Child metadata must match the enumerated name",
+            SmartMergeSafDestinationInspector.capture(
+                e.resolver, e.targetTree, flags, { e.observedAtMillis }))
+        e.mode("reset")
+        e.mode("fullTarget")
+        assertNull("2,001 rows cannot be truncated into a complete parent",
+            SmartMergeSafDestinationInspector.capture(
+                e.resolver, e.targetTree, flags, { e.observedAtMillis }))
+        e.mode("reset")
+        var checkpoint = 0
+        val stale = SmartMergeSafDestinationInspector.capture(
+            e.resolver, e.targetTree, flags, { e.observedAtMillis }) {
+                checkpoint++
+                // After the first authoritative listing and child metadata
+                // queries, insert a new sibling before the mandatory reread.
+                if (checkpoint == 4) e.mode("targetCollision")
+                true
+            }
+        assertTrue(checkpoint >= 4)
+        assertNull("Mid-scan destination drift must refuse the snapshot", stale)
+        e.mode("reset")
+        assertNotNull(SmartMergeSafDestinationInspector.capture(
+            e.resolver, e.targetTree, flags, { e.observedAtMillis }))
+    }
+
+    @Test fun selectedSourceCannotBeReusedAsMergeDestination() {
+        val e = Environment()
+        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
+            Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val source = requireNotNull(SmartMergeSafFolderCapture.capture(
+            e.resolver, e.sourceTree, Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            WorkspacePane.A, 1L, e.observedAtMillis))
+        val second = requireNotNull(SmartMergeSafFolderCapture.capture(
+            e.resolver, e.targetTree, Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            WorkspacePane.B, 2L, e.observedAtMillis))
+        val basket = SmartMergeBasket.empty().add(source).basket.add(second).basket
+        val trees = basket.folders.mapIndexed { i, folder ->
+            requireNotNull(e.scanner.inspectMergeRootInventory(
+                folder, 3L + i))
+        }
+        val destination = requireNotNull(SmartMergeSafDestinationInspector.capture(
+            e.resolver, e.sourceTree, flags, { e.observedAtMillis }))
+        val preview = SmartMergePreviewPlanner.preview(
+            basket, trees, destination.location, destination.parentIndex,
+            "Combined", SmartMergeStructure.KEEP_SOURCE_DIRECTORIES,
+            e.observedAtMillis)
+        assertFalse(preview.reviewable)
+        assertTrue("Same opaque source/destination directory must be blocked",
+            "DESTINATION_INSIDE_SOURCE" in preview.blockers)
+        assertTrue("Do not claim a verified SAF case policy",
+            "DESTINATION_CASE_POLICY_UNVERIFIED" in preview.blockers)
+    }
+
     @Test fun realProviderSourceManifestsFeedPureM2CollisionPreviewWithoutAnyWrite() {
         val e = Environment()
         val read = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION

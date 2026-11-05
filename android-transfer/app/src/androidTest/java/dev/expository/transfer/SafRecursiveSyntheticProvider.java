@@ -90,6 +90,12 @@ public final class SafRecursiveSyntheticProvider extends ContentProvider {
             case "targetCollision":
                 docs.put("colliding", dir("colliding", "target-root", "shows", CREATE));
                 break;
+            case "targetMetadataDrift":
+                metadataNames.put("occupied", "Renamed-only-in-metadata.txt");
+                break;
+            case "targetCaseCollision":
+                docs.put("colliding", file("colliding", "target-root", "taken.TXT", 0L));
+                break;
             case "fullTarget":
                 for (int i = 1; i <= 2000; ++i) {
                     String id = "target-" + i;
