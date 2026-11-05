@@ -177,17 +177,18 @@ object SmartMergeBasketSuite {
         check(SmartMergeFolder.capture(WorkspacePane.A,
             picked("Invalid"), -1L, NOW) == null)
 
-        // M1 must refuse the same malformed provider-supplied source and
-        // ancestor components that hardened M2 already refuses. Do not keep
-        // a seemingly valid basket entry whose eventual path is impossible.
+        // M1 must refuse malformed picked source names that hardened M2
+        // would reject in a recursive manifest. An ancestor of the picked
+        // source does NOT become a merge target component; do not block an
+        // otherwise valid source because its parent has an unusual label.
         for (bad in listOf(".", "..", "bad/name", "bad\\name",
                 "newline\nname", "delete\u007fname", "x".repeat(256),
                 "é".repeat(128))) {
             check(SmartMergeFolder.capture(WorkspacePane.A,
                 picked(bad, id = "invalid-source"), 1L, NOW) == null)
             check(SmartMergeFolder.capture(WorkspacePane.A,
-                picked("Valid", id = "invalid-parent",
-                    parent = listOf("Photos", bad)), 1L, NOW) == null)
+                picked("Valid", id = "unusual-parent",
+                    parent = listOf("Photos", bad)), 1L, NOW) != null)
         }
         // A 254-byte multibyte component is legitimate, even though its
         // character count is much lower than the 255-byte upper bound.
