@@ -8,6 +8,7 @@ import android.content.Intent
 import android.provider.MediaStore
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -572,9 +573,12 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithText("Location B · SFTP", substring = true).assertExists()
         compose.onNodeWithText("SFTP file transfer").assertExists()
         compose.onNodeWithText("Connect securely").assertIsNotEnabled()
-        // The inactive phone tab is not exposed or disconnected.
+        // The inactive remote pane retains its authenticated Compose
+        // subtree on purpose, while retainInvisible() measures it at 0x0,
+        // does not place it and marks it hidden from accessibility. A node
+        // may remain in test semantics without being displayed or usable.
         compose.onNodeWithText("Pane A · LOCAL").performClick()
-        compose.onNodeWithText("SFTP file transfer").assertDoesNotExist()
+        compose.onNodeWithText("SFTP file transfer").assertIsNotDisplayed()
         compose.onNodeWithText("Pane B · SFTP").performClick()
         compose.onNodeWithText("SFTP file transfer").assertExists()
         // Swap moves the remote session's composition identity with the
