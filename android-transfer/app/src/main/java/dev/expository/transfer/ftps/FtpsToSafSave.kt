@@ -1,6 +1,7 @@
 package dev.expository.transfer.ftps
 
 import android.content.ContentResolver
+import android.content.Intent
 import android.net.Uri
 import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.engine.CopyReceipt
@@ -26,18 +27,31 @@ class FtpsToSafSave(private val resolver: ContentResolver,
     private val storageForPlan: (String) -> AtomicAttemptStorage) {
     private val observer = SafSingleDocumentCopy(resolver)
 
+    companion object {
+        /** Require the WRITE flag from the actual ACTION_CREATE_DOCUMENT result.
+         * A readable content URI or a guessed picker label is not a write grant.
+         * Callers must pass the ORIGINAL result flags, never manufacture them.
+         */
+        fun acceptsPickerWriteResult(uri: Uri?, flags: Int): Boolean =
+            uri?.scheme == ContentResolver.SCHEME_CONTENT &&
+                !uri.authority.isNullOrBlank() &&
+                flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0
+    }
+
     fun copy(
         session: FtpsSession,
         sessionOpaqueId: String,
         absoluteFile: String,
         destination: Uri,
+        pickerResultFlags: Int,
         expectedSourceRevision: String,
         continueRequested: () -> Boolean,
         onProgress: (Long) -> Unit = {}
     ): CopyReceipt {
-        if (sessionOpaqueId.isBlank() || expectedSourceRevision.isBlank() ||
-            destination.scheme != ContentResolver.SCHEME_CONTENT)
+        if (sessionOpaqueId.isBlank() || expectedSourceRevision.isBlank())
             return CopyReceipt("", CopyProof.BLOCKED, 0L, "INVALID_SESSION_OR_URI")
+        if (!acceptsPickerWriteResult(destination, pickerResultFlags))
+            return CopyReceipt("", CopyProof.BLOCKED, 0L, "PICKER_WRITE_GRANT_UNPROVEN")
 
         val firstTime = System.currentTimeMillis()
         val firstStat = try { session.statFile(absoluteFile) }

@@ -33,6 +33,28 @@ class FtpsUiSmokeTest {
         rule.onNodeWithText("FTPS requires a trusted TLS certificate", substring = true)
             .assertExists()
     }
+    @Test fun saveAsCannotTreatReadableOrInvalidUriAsWriteGranted() {
+        val gate = dev.expository.transfer.ftps.FtpsToSafSave
+        val document = android.net.Uri.parse(
+            "content://synthetic.ftps.destination/document/new-42")
+        val write = android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val read = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+        org.junit.Assert.assertTrue(gate.acceptsPickerWriteResult(document, write))
+        org.junit.Assert.assertTrue(gate.acceptsPickerWriteResult(
+            document, read or write))
+        org.junit.Assert.assertFalse(gate.acceptsPickerWriteResult(document, read))
+        org.junit.Assert.assertFalse(gate.acceptsPickerWriteResult(document, 0))
+        org.junit.Assert.assertFalse(gate.acceptsPickerWriteResult(null, write))
+        org.junit.Assert.assertFalse(gate.acceptsPickerWriteResult(
+            android.net.Uri.parse("file:///sdcard/Downloads/new-42"), write))
+        org.junit.Assert.assertFalse(gate.acceptsPickerWriteResult(
+            android.net.Uri.parse("content:///document/no-authority"), write))
+        // A rejected callback must not invent a new grant merely because
+        // another flag, such as persistable access, happened to be present.
+        org.junit.Assert.assertFalse(gate.acceptsPickerWriteResult(document,
+            android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION))
+    }
+
     @Test fun copyProgressGateIsMonotonicAndBoundToTheExactForegroundAttempt() {
         val permit = java.util.concurrent.atomic.AtomicBoolean(true)
         val replacement = java.util.concurrent.atomic.AtomicBoolean(true)
