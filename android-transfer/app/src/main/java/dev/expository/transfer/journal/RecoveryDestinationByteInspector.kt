@@ -68,11 +68,15 @@ internal object RecoveryDestinationByteInspector {
             DocumentsContract.buildDocumentUriUsingTree(
                 newlyPickedParent, before.documentId)
         } catch (_: Exception) {
-            return ManualDestinationBytes.DESTINATION_READ_UNAVAILABLE
+            return if (continueRequested())
+                ManualDestinationBytes.DESTINATION_READ_UNAVAILABLE
+            else ManualDestinationBytes.INSPECTION_CANCELED
         }
         val read = try {
             val stream = resolver.openInputStream(childUri)
-                ?: return ManualDestinationBytes.DESTINATION_READ_UNAVAILABLE
+                ?: return if (continueRequested())
+                    ManualDestinationBytes.DESTINATION_READ_UNAVAILABLE
+                else ManualDestinationBytes.INSPECTION_CANCELED
             stream.use { input ->
                 val hash = MessageDigest.getInstance("SHA-256")
                 val buffer = ByteArray(64 * 1024)
@@ -99,7 +103,9 @@ internal object RecoveryDestinationByteInspector {
                 bytes to hash.digest()
             }
         } catch (_: Exception) {
-            return ManualDestinationBytes.DESTINATION_READ_UNAVAILABLE
+            return if (continueRequested())
+                ManualDestinationBytes.DESTINATION_READ_UNAVAILABLE
+            else ManualDestinationBytes.INSPECTION_CANCELED
         }
 
         if (!continueRequested()) return ManualDestinationBytes.INSPECTION_CANCELED
@@ -109,7 +115,9 @@ internal object RecoveryDestinationByteInspector {
             LocalTreeReader.list(resolver, newlyPickedParent,
                 LocalTreeReader.rootId(newlyPickedParent), LocalTreeReader.MAX_BROWSE)
         } catch (_: Exception) {
-            return ManualDestinationBytes.DESTINATION_CHANGED_DURING_READ
+            return if (continueRequested())
+                ManualDestinationBytes.DESTINATION_CHANGED_DURING_READ
+            else ManualDestinationBytes.INSPECTION_CANCELED
         }
         if (!continueRequested()) return ManualDestinationBytes.INSPECTION_CANCELED
         if (RecoveryCreatedChildIdentity.compare(created,
