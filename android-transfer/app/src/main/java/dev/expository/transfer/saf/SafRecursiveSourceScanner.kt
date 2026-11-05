@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import dev.expository.transfer.LocalTreeReader
 import dev.expository.transfer.TreeEntry
+import dev.expository.transfer.SmartMergeSafFolderCapture
 import dev.expository.transfer.planner.*
 import java.security.MessageDigest
 import java.util.ArrayDeque
@@ -164,6 +165,172 @@ internal class SafRecursiveSourceScanner(
         require(acc.state == LocationIndexState.COMPLETE)
         return acc
     }
+
+    /**
+     * T4/M2: read-only, provider-authenticated and fully bounded inventory
+     * of a picked ROOT source folder. Unlike the older recursive Copy
+     * scanner, this requires NO destination, creates NO fake writable
+     * target and cannot return an executable command.
+     *
+     * Every child and directory is read through its original transient
+     * picker tree grant. Every directory index is re-queried and compared
+     * after the full traversal to refuse detectable mid-scan drift. Querying
+     * provider metadata still cannot prove immutable file bytes; any future
+     * Merge execution must repeat per-entry authority/byte verification.
+     *
+     * This can do many expensive provider round trips. Run only on an IO
+     * dispatcher; check continueRequested between bounded steps. Never use
+     * the returned manifest as a mutation token or persist the tree grant.
+     */
+    fun inspectMergeRootInventory(
+        collected: SmartMergeFolder,
+        browseGeneration: Long,
+        continueRequested: () -> Boolean = { true }
+    ): SmartMergeInventory? = runCatching {
+        val root = collected.source
+        val loc = root.location
+        val grant = loc.key.grantId
+        val now = clockMillis()
+        require(browseGeneration > collected.browseGeneration &&
+            browseGeneration < Long.MAX_VALUE && now > 0L &&
+            root.kind == ItemKind.DIRECTORY &&
+            root.parent.isEmpty() && loc.folder.isEmpty() &&
+            loc.key.kind == LocationKind.LOCAL_SAF &&
+            loc.key.rootId == root.key.opaqueItemId &&
+            loc.key.containerId == root.key.opaqueItemId &&
+            loc.key.authorityId == root.key.authorityId &&
+            root.key.version == loc.revision &&
+            !grant.isNullOrBlank() &&
+            loc.capabilities.keys == setOf(Capability.READ)) {
+            "MERGE_PICKED_ROOT_SCOPE_NOT_PROVEN"
+        }
+        val proof = requireNotNull(loc.capabilities[Capability.READ])
+        require(proof.valid(now) &&
+            proof.observationId.startsWith("fresh-os-tree-read:") &&
+            continueRequested()) {
+            "MERGE_ORIGINAL_SOURCE_PROOF_EXPIRED"
+        }
+        val tree = Uri.parse(requireNotNull(grant))
+        require(LocalTreeReader.validTree(tree) &&
+            tree.authority == loc.key.authorityId &&
+            LocalTreeReader.rootId(tree) == loc.key.rootId) {
+            "MERGE_SOURCE_GRANT_OR_ROOT_CHANGED"
+        }
+        require(SmartMergeSafFolderCapture.inspectFresh(
+            resolver, collected, browseGeneration, now) ==
+            SmartMergeReobservation.CURRENT_SNAPSHOT) {
+            "MERGE_SOURCE_ROOT_CHANGED_BEFORE_INVENTORY"
+        }
+
+        val pending = ArrayDeque<Pair<ItemRef, List<String>>>()
+        pending.addLast(root to listOf(root.name))
+        val entries = ArrayList<RecursiveCopyEntry>()
+        val snapshots = ArrayList<Triple<ItemRef, List<String>, PagedLocationIndex>>()
+        val seenItems = hashSetOf<Pair<String, String>>()
+        val digestParts = mutableListOf(
+            "MERGE_SCOPED_RECURSIVE_INVENTORY_V1",
+            root.key.authorityId, root.key.opaqueItemId,
+            root.key.version, loc.key.rootId, requireNotNull(grant),
+            proof.observationId, proof.expiresAtMillis.toString()
+        )
+        var files = 0
+        var directories = 0
+        while (pending.isNotEmpty()) {
+            require(continueRequested()) { "MERGE_INVENTORY_CANCELED" }
+            require(entries.size < RecursiveFolderCopyPlanner.MAX_ITEMS) {
+                "MERGE_INVENTORY_ITEM_BOUND"
+            }
+            val (item, path) = pending.removeFirst()
+            require(path.isNotEmpty() &&
+                path.size <= RecursiveFolderCopyPlanner.MAX_DEPTH &&
+                path.first() == root.name &&
+                path.last() == item.name &&
+                item.parent == path.dropLast(1) &&
+                item.key.authorityId == root.key.authorityId &&
+                item.location.key.kind == LocationKind.LOCAL_SAF &&
+                item.location.key.authorityId == root.key.authorityId &&
+                item.location.key.rootId == loc.key.rootId &&
+                item.location.key.grantId == loc.key.grantId &&
+                item.location.key.containerId.isNotBlank() &&
+                item.location.revision.isNotBlank() &&
+                item.key.version.isNotBlank() &&
+                item.location.capabilities[Capability.READ]?.valid(now) == true &&
+                seenItems.add(item.key.authorityId to item.key.opaqueItemId)) {
+                "MERGE_SOURCE_ANCESTRY_OR_ID_REUSED"
+            }
+            val frozen = item.copy(parent = java.util.Collections.unmodifiableList(
+                item.parent.toList()), location = item.location.copy(
+                    folder = java.util.Collections.unmodifiableList(item.location.folder.toList()),
+                    capabilities = java.util.Collections.unmodifiableMap(
+                        item.location.capabilities.toMap())))
+            entries += RecursiveCopyEntry(frozen,
+                java.util.Collections.unmodifiableList(path.toList()))
+            digestParts += listOf(
+                path.size.toString(), path.joinToString("\u0000"),
+                item.key.opaqueItemId, item.key.version, item.name,
+                item.kind.name, item.location.key.containerId,
+                item.location.revision
+            )
+            if (item.kind == ItemKind.FILE) {
+                files++
+                continue
+            }
+            directories++
+            require(directories <= RecursiveFolderCopyPlanner.MAX_DIRECTORIES) {
+                "MERGE_SOURCE_DIRECTORY_BOUND"
+            }
+            val observed = index(tree, loc.key.rootId,
+                item.key.opaqueItemId, path, proof)
+            require(observed.state == LocationIndexState.COMPLETE &&
+                !observed.snapshotId.isNullOrBlank() &&
+                observed.location.folder == path &&
+                observed.location.key.containerId == item.key.opaqueItemId) {
+                "MERGE_SOURCE_DIRECTORY_INCOMPLETE"
+            }
+            val children = requireNotNull(observed.itemRefs())
+            require(entries.size + pending.size + children.size <=
+                RecursiveFolderCopyPlanner.MAX_ITEMS) {
+                "MERGE_SOURCE_ITEM_BOUND"
+            }
+            snapshots += Triple(item, path.toList(), observed)
+            digestParts += listOf("DIRECTORY", item.key.opaqueItemId,
+                requireNotNull(observed.snapshotId), children.size.toString())
+            children.forEach { child ->
+                pending.addLast(child to (path + child.name))
+            }
+        }
+
+        // Re-read EVERY directory, not just the picked root. Even an empty
+        // nested folder may acquire a child during the initial traversal.
+        for ((directory, path, original) in snapshots) {
+            require(continueRequested() && proof.valid(clockMillis())) {
+                "MERGE_INVENTORY_STOPPED_OR_EXPIRED"
+            }
+            val latest = index(tree, loc.key.rootId,
+                directory.key.opaqueItemId, path, proof)
+            require(latest.state == LocationIndexState.COMPLETE &&
+                latest.snapshotId == original.snapshotId &&
+                latest.location == original.location &&
+                latest.children == original.children) {
+                "MERGE_SOURCE_DIRECTORY_CHANGED_DURING_SCAN"
+            }
+        }
+        val checkedAt = clockMillis()
+        require(continueRequested() && checkedAt >= now &&
+            proof.valid(checkedAt) &&
+            SmartMergeSafFolderCapture.inspectFresh(
+                resolver, collected, browseGeneration + 1L, checkedAt) ==
+                SmartMergeReobservation.CURRENT_SNAPSHOT) {
+            "MERGE_SOURCE_ROOT_CHANGED_AFTER_INVENTORY"
+        }
+        // A review digest is a reproducible display fingerprint, never a
+        // grant to create a destination. The original READ proof is unchanged.
+        SmartMergeInventory(collected, RecursiveFolderManifest(
+            digest(digestParts),
+            java.util.Collections.unmodifiableList(entries.toList()),
+            files, directories, emptyList()
+        ))
+    }.getOrNull()
 
     /**
      * Only returns a reviewable manifest if every descendant AND destination
