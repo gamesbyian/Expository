@@ -253,8 +253,16 @@ class RecursiveRealPickerCopyUiTest {
                 compose.onAllNodesWithTag("smart-merge-source-inventory-" + index)
                     .fetchSemanticsNodes().isNotEmpty()
             }
-            compose.onNodeWithText("Inventory: 17 file(s), 3 folder(s)",
-                substring = true).assertExists()
+            // Both independent sources intentionally report the SAME
+            // inventory totals. Match this row's unique Compose tag rather
+            // than using onNodeWithText(), which wrongly demands a single
+            // matching row after the second source is inspected.
+            compose.onNodeWithTag("smart-merge-source-inventory-" + index)
+                .assertExists()
+            assertEquals("Expected one complete row per inspected source",
+                index + 1,
+                compose.onAllNodesWithText("Inventory: 17 file(s), 3 folder(s)",
+                    substring = true).fetchSemanticsNodes().size)
         }
         press("smart-merge-illustrate")
         compose.waitUntil(30_000L) {
