@@ -44,6 +44,10 @@ fun RecoveryStatusCard() {
     var unreadable by remember { mutableStateOf(false) }
     var refreshSerial by remember { mutableIntStateOf(0) }
     var showReviewReferences by remember { mutableStateOf(false) }
+    // The encrypted recovery index can expose up to 32 identifiable records.
+    // Keep the visible page bounded, but never strand records 13–32 behind a
+    // hardcoded take(12). This is UI-only state, never saved authority.
+    var reviewPageIndex by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     // A one-shot, display-only review ticket bound to the full PRIVATE
     // journal key, not its potentially colliding 12-character display suffix.
@@ -61,6 +65,21 @@ fun RecoveryStatusCard() {
     // not merely its result display. No grant, stream or job is persisted.
     var inspectionJob by remember { mutableStateOf<Job?>(null) }
     var inspectionRunning by remember { mutableStateOf(false) }
+    fun navigateReviewPage(page: Int) {
+        // A page change revokes all older read-only picker/stream callbacks.
+        // The private full record key never becomes a visible page cursor.
+        inspectionJob?.cancel()
+        inspectionJob = null
+        inspectionRunning = false
+        inspectionRevision++
+        inspectionTicket = null
+        inspectionListing = null
+        inspectionMessage = null
+        sourceInspectionTicket = null
+        sourceByteRelation = null
+        sourceInspectionMessage = null
+        reviewPageIndex = page
+    }
     val inspector = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -276,6 +295,7 @@ fun RecoveryStatusCard() {
         sourceInspectionTicket = null
         sourceByteRelation = null
         sourceInspectionMessage = null
+        reviewPageIndex = 0
         status = null
         unreadable = false
         val result = withContext(Dispatchers.IO) {
@@ -325,6 +345,7 @@ fun RecoveryStatusCard() {
                             sourceByteRelation = null
                             sourceInspectionMessage = null
                         }
+                        if (showReviewReferences) reviewPageIndex = 0
                         showReviewReferences = !showReviewReferences
                     }) {
                     Text(if (showReviewReferences) "Hide review references"
@@ -336,8 +357,22 @@ fun RecoveryStatusCard() {
                         "source/destination labels for manual review. No URI, grant, " +
                         "credential or automatic retry is persisted.",
                         style = MaterialTheme.typography.bodySmall)
-                    review.reviewReferences.take(12).forEachIndexed { index, entry ->
-                        Text("Record " + (index + 1) + " · …" + entry.opaqueSuffix +
+                    val pageSize = 12
+                    val totalReferences = review.reviewReferences.size
+                    val totalPages = ((totalReferences + pageSize - 1) / pageSize)
+                        .coerceAtLeast(1)
+                    val shownPage = reviewPageIndex.coerceIn(0, totalPages - 1)
+                    val pageStart = shownPage * pageSize
+                    val pageEnd = minOf(pageStart + pageSize, totalReferences)
+                    if (totalReferences > 0) {
+                        Text("Review references " + (pageStart + 1) + "–" +
+                            pageEnd + " of " + totalReferences + ".",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    review.reviewReferences.drop(pageStart).take(pageSize)
+                        .forEachIndexed { index, entry ->
+                        val displayNumber = pageStart + index + 1
+                        Text("Record " + displayNumber + " · …" + entry.opaqueSuffix +
                             " · " + entry.status,
                             style = MaterialTheme.typography.bodySmall)
                         entry.context?.let { detail ->
@@ -402,7 +437,7 @@ fun RecoveryStatusCard() {
                                             "Android document picker unavailable. No file was accessed."
                                     }
                                 }) {
-                                Text("Compare current source for record " + (index + 1) +
+                                Text("Compare current source for record " + displayNumber +
                                     " …" + entry.opaqueSuffix)
                             }
                         }
@@ -438,7 +473,7 @@ fun RecoveryStatusCard() {
                                             "Android folder picker unavailable. No inspection or transfer attempted."
                                     }
                                 }
-                            ) { Text("Inspect folder for record " + (index + 1) +
+                            ) { Text("Inspect folder for record " + displayNumber +
                                 " …" + entry.opaqueSuffix) }
                         }
                     }
@@ -458,10 +493,25 @@ fun RecoveryStatusCard() {
                                     "Read-only inspection stopped. No transfer was changed."
                             }) { Text("Cancel inspection") }
                     }
-                    val hidden = review.additionalReviewCount +
-                        (review.reviewReferences.size - 12).coerceAtLeast(0)
-                    if (hidden > 0) Text("$hidden more uncertain/unreadable record(s) " +
-                        "not shown. No automatic cleanup or retry is available.",
+                    if (totalPages > 1) {
+                        Button(
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            enabled = shownPage > 0 && inspectionTicket == null &&
+                                sourceInspectionTicket == null && !inspectionRunning,
+                            onClick = { navigateReviewPage(shownPage - 1) }
+                        ) { Text("Previous review records") }
+                        Button(
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            enabled = shownPage < totalPages - 1 &&
+                                inspectionTicket == null &&
+                                sourceInspectionTicket == null && !inspectionRunning,
+                            onClick = { navigateReviewPage(shownPage + 1) }
+                        ) { Text("Next review records") }
+                    }
+                    val unindexed = review.additionalReviewCount
+                    if (unindexed > 0) Text("$unindexed additional uncertain/unreadable " +
+                        "record(s) have no individually inspectable private reference. " +
+                        "No automatic cleanup or retry is available.",
                         style = MaterialTheme.typography.bodySmall)
                 }
             }
