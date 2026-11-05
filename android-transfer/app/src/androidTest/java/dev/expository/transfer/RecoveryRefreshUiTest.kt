@@ -193,6 +193,86 @@ class RecoveryRefreshUiTest {
         }
     }
 
+    @Test fun allIndexedPrivateRecoveryRecordsHaveReachableReviewActions() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val digests = (0 until 14).map {
+            UUID.randomUUID().toString().replace("-", "").repeat(2)
+        }
+        val journals = digests.map { digest ->
+            DurableAttemptJournal(AndroidAtomicAttemptStorage(context, digest))
+        }
+        val ownedFiles = digests.flatMap { digest ->
+            listOf(
+                File(context.noBackupFilesDir, "transfer_attempt_" + digest),
+                File(context.noBackupFilesDir,
+                    "transfer_recovery_context_v1_" + digest)
+            )
+        }
+        try {
+            val protected = ProtectedRecoveryContextStore(context)
+            digests.forEachIndexed { i, digest ->
+                protected.recordNew(digest,
+                    ProtectedRecoveryContext("SAF_PICKER_COPY",
+                        "Synthetic source " + i, "Synthetic destination " + i,
+                        "test.android.provider"))
+                journals[i].confirm(digest)
+                journals[i].beginAttempt(digest, "paged_review_test_" + i)
+            }
+            val before = ownedFiles.map { it.readBytes() }
+            val indexed = dev.expository.transfer.journal.AttemptRecoveryIndex
+                .recover(context).reviewReferences.size
+            assertTrue("Fixture requires at least fourteen indexed records",
+                indexed >= 14)
+            rule.setContent {
+                MaterialTheme {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        RecoveryStatusCard()
+                    }
+                }
+            }
+            rule.waitUntil(15_000L) {
+                rule.onAllNodesWithText("Show review references")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            rule.onNodeWithText("Show review references").performClick()
+            val firstPage = "Review references 1–12 of " + indexed + "."
+            val secondPage = "Review references 13–" +
+                minOf(24, indexed) + " of " + indexed + "."
+            rule.onNodeWithText(firstPage).assertExists()
+            rule.onNodeWithText("Inspect folder for record 1 …",
+                substring = true).assertExists()
+            rule.onNodeWithText("Next review records").performScrollTo()
+                .performClick()
+            rule.onNodeWithText(secondPage).assertExists()
+            rule.onNodeWithText("Inspect folder for record 13 …",
+                substring = true).assertExists()
+            rule.onNodeWithText("Inspect folder for record 14 …",
+                substring = true).assertExists()
+            rule.onNodeWithText("Inspect folder for record 1 …",
+                substring = true).assertDoesNotExist()
+            rule.onNodeWithText("Previous review records").performScrollTo()
+                .performClick()
+            rule.onNodeWithText(firstPage).assertExists()
+            // A private page must be forgotten on hide/reopen, without a
+            // retained URI, transfer replay or journal mutation.
+            rule.onNodeWithText("Hide review references").performScrollTo()
+                .performClick()
+            rule.onNodeWithText("Review references 1–12 of ",
+                substring = true).assertDoesNotExist()
+            rule.onNodeWithText("Show review references").performClick()
+            rule.onNodeWithText(firstPage).assertExists()
+            assertTrue("Browsing must leave all fourteen journals unresolved",
+                journals.all { it.current()?.state == JournalState.ATTEMPT_RECORDED })
+            ownedFiles.forEachIndexed { i, file ->
+                org.junit.Assert.assertArrayEquals(
+                    "Paging cannot rewrite protected recovery records",
+                    before[i], file.readBytes())
+            }
+        } finally {
+            ownedFiles.forEach { AtomicFile(it).delete() }
+        }
+    }
+
     @Test fun privateJournalStatusCanBeReobservedOnDemand() {
         rule.setContent { MaterialTheme { RecoveryStatusCard() } }
         rule.onNodeWithText("Interrupted transfer review").assertExists()
