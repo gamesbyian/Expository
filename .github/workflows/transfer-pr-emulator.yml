@@ -84,6 +84,9 @@ jobs:
                 # Target one cancellation-vs-missing-provider read-only recovery
                 # regression, rather than the entire stateful recovery class.
                 RecoveryIndexFailurePolicyTest#canceledDestinationByteReviewDoesNotBecomeProviderFailure) ;;
+                # One synthetic protected-index pagination UI journey; the
+                # whole recovery class also contains an unrelated real picker.
+                RecoveryRefreshUiTest#allIndexedPrivateRecoveryRecordsHaveReachableReviewActions) ;;
                 # Exact bounded two-file Android Files picker + two receipts.
                 LocalPickerPositiveCopyTest#twoRealSystemPickedTreesCopyTwoSelectedFiles) ;;
                 NewFolderPositiveProviderTest#oneRealSystemPickedFolderCreatesExactChildAndVerifiedJournal) ;;
