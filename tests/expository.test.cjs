@@ -636,6 +636,25 @@ test('changed Git branch snapshot never claims a verified folder',async()=>{
  assert.doesNotMatch(get('status').textContent,/Folder verified/);
 });
 
+test('changed file-versus-folder kind cannot be called a verified directory',async()=>{
+ const fetcher=async()=>new Response(JSON.stringify({
+  truncated:false,
+  tree:Array.from({length:1000},(_,i)=>({
+   type:'blob',path:'entry'+i,size:10
+  }))
+ }),{status:200});
+ const {app,get}=boot(fetcher);
+ app.state.repo='test/large';app.state.branch='main';app.state.path='';
+ app.state.indexTruncated=true;app.state.mode='list';
+ app.state.items=Array.from({length:1000},(_,i)=>({
+  type:i===0?'dir':'file',name:'entry'+i,path:'entry'+i,size:10
+ }));
+ assert.equal(await app.recoverTargetedFolder(),0);
+ assert.equal(app.state.items.length,1000);
+ assert.match(get('status').textContent,/Directory changed between listings/);
+ assert.doesNotMatch(get('status').textContent,/Folder verified/);
+});
+
 test('truncated direct folder tree never claims complete coverage',async()=>{
  const fetcher=async()=>new Response(JSON.stringify({truncated:true,tree:[{type:'blob',path:'later.svg',size:50}]}),{status:200});
  const {app,get}=boot(fetcher);app.state.repo='test/large';app.state.branch='main';app.state.path='';
