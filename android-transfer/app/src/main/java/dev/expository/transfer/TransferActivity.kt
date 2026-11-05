@@ -44,6 +44,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
@@ -2476,14 +2477,31 @@ private fun DeveloperPreview(
                                             modifier = Modifier.testTag(
                                                 "smart-merge-illustration-page-status"),
                                             style = MaterialTheme.typography.bodySmall)
-                                        illustration.changes.forEach { change ->
-                                            Text("Source " + change.sourceNumber + ": " +
-                                                change.observedRelativePath.joinToString("/") +
-                                                " → " +
-                                                change.hypotheticalTargetPath.joinToString("/") +
-                                                if (change.directoryReused)
-                                                    " (hypothetical directory reuse)"
-                                                else " (hypothetical keep-both rename)",
+                                        illustration.changes.forEachIndexed { index, change ->
+                                            // Keep full, unmodified path text for
+                                            // accessibility while bounding visible
+                                            // rows on narrow screens. Long
+                                            // provider-controlled components must
+                                            // not bury pager navigation.
+                                            val description =
+                                                "Source " + change.sourceNumber + ": " +
+                                                    change.observedRelativePath
+                                                        .joinToString("/") +
+                                                    " → " +
+                                                    change.hypotheticalTargetPath
+                                                        .joinToString("/") +
+                                                    if (change.directoryReused)
+                                                        " (hypothetical directory reuse)"
+                                                    else " (hypothetical keep-both rename)"
+                                            Text(description,
+                                                modifier = Modifier
+                                                    .testTag("smart-merge-illustration-change-" +
+                                                        index)
+                                                    .semantics {
+                                                        contentDescription = description
+                                                    },
+                                                maxLines = 3,
+                                                overflow = TextOverflow.Ellipsis,
                                                 style = MaterialTheme.typography.bodySmall)
                                         }
                                         if (illustration.totalChanges >
