@@ -243,6 +243,17 @@ private fun DeveloperPreview(
     var pendingMergePicker by remember { mutableStateOf<MergeSourcePickerTicket?>(null) }
     var mergeReadJob by remember { mutableStateOf<Job?>(null) }
     var mergeReading by remember { mutableStateOf(false) }
+    // An independently picked destination uses its own OS result and READ /
+    // WRITE flags; no writable adapter, background job or persisted URI.
+    val mergeDestinationPickerSerial = remember { AtomicLong(0L) }
+    var pendingMergeDestinationPicker by remember {
+        mutableStateOf<MergeSourcePickerTicket?>(null)
+    }
+    var mergeDestinationJob by remember { mutableStateOf<Job?>(null) }
+    var mergeDestinationReading by remember { mutableStateOf(false) }
+    var mergeDestination by remember {
+        mutableStateOf<SmartMergeSafDestinationSnapshot?>(null)
+    }
     // Per-source status is a temporary read-only diagnostic. It is keyed
     // to the exact in-memory source object, not a display name or pane slot.
     var mergeInspecting by remember { mutableStateOf<SmartMergeFolder?>(null) }
@@ -547,6 +558,101 @@ private fun DeveloperPreview(
         }
     }
 
+    // The destination never inherits source picker permissions, and its
+    // independently observed listing never authorizes any filesystem writes.
+    val mergeDestinationPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val ticket = pendingMergeDestinationPicker
+        pendingMergeDestinationPicker = null
+        val tree = result.data?.data
+        val flags = result.data?.flags ?: 0
+        if (ticket == null || ticket.serial != mergeDestinationPickerSerial.get()) {
+            mergeMessage = "Old Merge destination selection ignored."
+        } else if (result.resultCode != Activity.RESULT_OK || tree == null) {
+            mergeMessage = "Merge destination selection canceled. No files changed."
+        } else if (model.view != ticket.view ||
+            model.pane(ticket.pane).endpoint != ticket.endpoint ||
+            currentShareEpoch() != ticket.shareEpoch ||
+            !mergeSources.hasMinimumSources) {
+            mergeMessage = "Workspace or sources changed. Choose the destination again."
+        } else if (flags and Intent.FLAG_GRANT_READ_URI_PERMISSION == 0 ||
+            flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION == 0 ||
+            !LocalTreeReader.validTree(tree)) {
+            mergeMessage = "Android did not grant READ and WRITE access to a valid folder."
+        } else {
+            mergeDestinationReading = true
+            mergeMessage = "Inspecting selected Merge destination; no files are being changed…"
+            mergeDestinationJob = scope.launch {
+                try {
+                    val captured = withContext(Dispatchers.IO) {
+                        SmartMergeSafDestinationInspector.capture(
+                            context.contentResolver, tree, flags,
+                            continueRequested = {
+                                isActive &&
+                                    mergeDestinationPickerSerial.get() == ticket.serial
+                            })
+                    }
+                    if (!isActive ||
+                        mergeDestinationPickerSerial.get() != ticket.serial) return@launch
+                    if (model.view != ticket.view ||
+                        model.pane(ticket.pane).endpoint != ticket.endpoint ||
+                        currentShareEpoch() != ticket.shareEpoch ||
+                        !mergeSources.hasMinimumSources ||
+                        copyBusy || remoteRelayBusy) {
+                        mergeMessage = "Context changed during destination inspection. Reselect it."
+                    } else if (captured == null ||
+                        !captured.stillObserved(System.currentTimeMillis())) {
+                        mergeMessage = "Destination could not be verified: check folder access, " +
+                            "creation support, complete listing and provider stability."
+                    } else {
+                        mergeDestination = captured
+                        mergeMessage = "Destination inspected without changes. " +
+                            "Merge remains unavailable until source review, verified " +
+                            "case policy, a safe executable plan and recovery are complete."
+                    }
+                } finally {
+                    if (mergeDestinationPickerSerial.get() == ticket.serial) {
+                        mergeDestinationJob = null
+                        mergeDestinationReading = false
+                    }
+                }
+            }
+        }
+    }
+
+    fun clearMergeDestination() {
+        mergeDestinationPickerSerial.incrementAndGet()
+        pendingMergeDestinationPicker = null
+        mergeDestinationJob?.cancel()
+        mergeDestinationJob = null
+        mergeDestinationReading = false
+        mergeDestination = null
+    }
+
+    fun launchMergeDestinationPicker() {
+        if (!mergeSources.hasMinimumSources || mergeReading ||
+            mergeInspecting != null || pendingMergePicker != null ||
+            mergeDestinationReading || pendingMergeDestinationPicker != null ||
+            copyBusy || remoteRelayBusy) return
+        val pane = if (model.view == WorkspaceView.SINGLE)
+            WorkspacePane.SINGLE else model.activeDual
+        val serial = mergeDestinationPickerSerial.incrementAndGet()
+        pendingMergeDestinationPicker = MergeSourcePickerTicket(
+            serial, pane, model.view, model.pane(pane).endpoint,
+            currentShareEpoch())
+        mergeDestination = null
+        runCatching {
+            mergeDestinationPicker.launch(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            })
+        }.onFailure {
+            pendingMergeDestinationPicker = null
+            mergeMessage = "Android destination picker unavailable. No files changed."
+        }
+    }
+
     fun stopMergeObservation(clearBasket: Boolean) {
         mergePickerSerial.incrementAndGet()
         pendingMergePicker = null
@@ -559,6 +665,7 @@ private fun DeveloperPreview(
         mergeInspectionJob = null
         mergeInspecting = null
         if (clearBasket) {
+            clearMergeDestination()
             mergeInspectResults = emptyMap()
             mergeSources = SmartMergeBasket.empty()
             showAllMergeSources = false
@@ -1858,6 +1965,42 @@ private fun DeveloperPreview(
                                     }
                                 )
                             }
+                            if (mergeSources.hasMinimumSources) {
+                                FolderActionControl(
+                                    label = "Choose Merge destination…",
+                                    enabled = !copyBusy && !remoteRelayBusy &&
+                                        !mergeReading && mergeInspecting == null &&
+                                        pendingMergePicker == null &&
+                                        !mergeDestinationReading &&
+                                        pendingMergeDestinationPicker == null,
+                                    modifier = Modifier.testTag("smart-merge-pick-destination"),
+                                    onClick = { launchMergeDestinationPicker() }
+                                )
+                            }
+                            if (mergeDestinationReading ||
+                                pendingMergeDestinationPicker != null) {
+                                FolderActionControl(
+                                    label = "Cancel destination inspection",
+                                    enabled = true,
+                                    modifier = Modifier.testTag("smart-merge-cancel-destination"),
+                                    onClick = {
+                                        clearMergeDestination()
+                                        mergeMessage = "Destination inspection stopped. No files changed."
+                                    }
+                                )
+                            }
+                            if (mergeDestination != null) {
+                                FolderActionControl(
+                                    label = "Clear Merge destination",
+                                    enabled = !mergeDestinationReading &&
+                                        pendingMergeDestinationPicker == null,
+                                    modifier = Modifier.testTag("smart-merge-clear-destination"),
+                                    onClick = {
+                                        clearMergeDestination()
+                                        mergeMessage = "Destination cleared. No files changed."
+                                    }
+                                )
+                            }
                             if (mergeSources.folders.isNotEmpty()) {
                                 FolderActionControl(
                                     label = "Clear Merge sources",
@@ -1960,6 +2103,19 @@ private fun DeveloperPreview(
                                     onClick = { showAllMergeSources = !showAllMergeSources }
                                 )
                             }
+                        }
+                        mergeDestination?.let { destination ->
+                            val valid = destination.stillObserved(System.currentTimeMillis())
+                            Text("Destination: " + destination.displayName.take(80) +
+                                " · " + destination.childCount + " direct entries " +
+                                if (valid) "· complete READ-only inventory"
+                                else "· observation expired; re-pick required",
+                                modifier = Modifier.testTag("smart-merge-destination-summary"),
+                                style = MaterialTheme.typography.bodySmall)
+                            Text("Android granted READ/WRITE and the provider advertised " +
+                                "create-folder support at inspection time. Storage case policy " +
+                                "is unknown; no Merge execution is authorized.",
+                                style = MaterialTheme.typography.bodySmall)
                         }
                         Text(mergeMessage,
                             modifier = Modifier.semantics {
