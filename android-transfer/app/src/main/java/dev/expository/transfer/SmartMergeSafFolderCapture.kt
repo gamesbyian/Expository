@@ -107,6 +107,11 @@ internal object SmartMergeSafFolderCapture {
             "MERGE_SOURCE_PICKER_READ_SCOPE_UNPROVEN"
         }
         val id = LocalTreeReader.rootId(tree)
+        // The tree root ID is opaque and may contain separators, but cannot
+        // bypass the same 8192-byte provider-ID bound applied to children.
+        require(id.toByteArray(StandardCharsets.UTF_8).size <= 8192) {
+            "MERGE_SOURCE_ROOT_ID_UNBOUNDED"
+        }
         val before = readRoot(resolver, tree, id)
         val children = LocalTreeReader.list(
             resolver, tree, id, LocalTreeReader.MAX_BROWSE)
