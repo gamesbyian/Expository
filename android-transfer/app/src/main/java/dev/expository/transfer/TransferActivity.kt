@@ -293,6 +293,14 @@ private fun DeveloperPreview(
         "Choose a source and destination; Copy needs explicit review.") }
     var copyPermit by remember { mutableStateOf<AtomicBoolean?>(null) }
 
+    fun clearMergeSourceInventories() {
+        mergeInventorySerial.incrementAndGet()
+        mergeInventoryJob?.cancel()
+        mergeInventoryJob = null
+        mergeInventoryReading = null
+        mergeSourceInventory = emptyMap()
+    }
+
     fun tree(which: WorkspacePane): LocalTreeBrowseState = when (which) {
         WorkspacePane.SINGLE -> treeSingle
         WorkspacePane.A -> treeA
@@ -673,14 +681,6 @@ private fun DeveloperPreview(
             pendingMergeDestinationPicker = null
             mergeMessage = "Android destination picker unavailable. No files changed."
         }
-    }
-
-    fun clearMergeSourceInventories() {
-        mergeInventorySerial.incrementAndGet()
-        mergeInventoryJob?.cancel()
-        mergeInventoryJob = null
-        mergeInventoryReading = null
-        mergeSourceInventory = emptyMap()
     }
 
     /**
