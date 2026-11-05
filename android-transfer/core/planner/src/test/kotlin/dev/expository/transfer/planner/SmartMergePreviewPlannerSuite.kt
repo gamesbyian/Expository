@@ -169,6 +169,32 @@ object SmartMergePreviewPlannerSuite {
             key = base.key.copy(containerId = a.source.key.opaqueItemId)) }
         check(plan(sources, trees, destination = unrelatedAuthority,
             parent = index(unrelatedAuthority)).reviewable)
+        // A remote host can legitimately serve two separately authenticated
+        // storage namespaces with reused opaque names/IDs. Equal ID text
+        // outside a common verified namespace and storage domain is not
+        // evidence of nesting. Conversely, verified SAME storage must block.
+        val remoteLocation = loc("remote-host", kind = LocationKind.REMOTE_SFTP)
+        val remoteRoot = ItemRef(
+            ItemKey("remote-host", "remote-directory-id", "v1"),
+            remoteLocation, remoteLocation.folder, "RemoteA", ItemKind.DIRECTORY)
+        val remoteFolder = requireNotNull(SmartMergeFolder.capture(
+            WorkspacePane.SINGLE, remoteRoot, 7L, NOW))
+        val remoteBasket = basket(remoteFolder, b)
+        val remoteTrees = listOf(inventory(remoteFolder), trees[1])
+        val unrelatedRemoteStorage = remoteLocation.copy(
+            key = remoteLocation.key.copy(rootId = "another-grant-root",
+                containerId = remoteRoot.key.opaqueItemId),
+            verifiedNamespace = "other-authenticated-namespace",
+            verifiedStorageDomain = "other-storage-domain")
+        check(plan(remoteBasket, remoteTrees,
+            destination = unrelatedRemoteStorage,
+            parent = index(unrelatedRemoteStorage)).reviewable)
+        val sameRemoteStorage = unrelatedRemoteStorage.copy(
+            verifiedNamespace = remoteLocation.verifiedNamespace,
+            verifiedStorageDomain = remoteLocation.verifiedStorageDomain)
+        check("DESTINATION_INSIDE_SOURCE" in plan(remoteBasket, remoteTrees,
+            destination = sameRemoteStorage,
+            parent = index(sameRemoteStorage)).blockers)
         check("DESTINATION_MERGE_ADAPTER_UNQUALIFIED" in plan(sources, trees,
             destination = loc("dest", kind = LocationKind.REMOTE_FTP),
             parent = index(loc("dest", kind = LocationKind.REMOTE_FTP))).blockers)
