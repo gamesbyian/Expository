@@ -828,7 +828,11 @@ private fun DeveloperPreview(
                     selected.folders.indices.all { i ->
                         mergeSourceInventory[selected.folders[i]] === collected[i] &&
                             selected.folders[i].source.location
-                                .capabilities[Capability.READ]?.valid(checkedAt) == true
+                                .capabilities[Capability.READ]?.let { proof ->
+                                    checkedAt >= now &&
+                                        checkedAt >= proof.expiresAtMillis - 300_000L &&
+                                        proof.valid(checkedAt)
+                                } == true
                     } && picked.stillObserved(checkedAt)
                 if (!unchanged) {
                     mergeMessage = "Sources or destination changed while calculating. " +
@@ -2429,11 +2433,15 @@ private fun DeveloperPreview(
                                 )
                             }
                             mergeIllustration?.let { illustration ->
-                                val stillCurrent = mergeDestination?.stillObserved(
-                                    System.currentTimeMillis()) == true &&
+                                val displayedAt = System.currentTimeMillis()
+                                val stillCurrent =
+                                    mergeDestination?.stillObserved(displayedAt) == true &&
                                     mergeSources.folders.all { source ->
                                         source.source.location.capabilities[Capability.READ]
-                                            ?.valid(System.currentTimeMillis()) == true
+                                            ?.let { proof ->
+                                                displayedAt >= proof.expiresAtMillis - 300_000L &&
+                                                    proof.valid(displayedAt)
+                                            } == true
                                     }
                                 Text(if (stillCurrent)
                                     "Read-only example, NEVER executable. " +
