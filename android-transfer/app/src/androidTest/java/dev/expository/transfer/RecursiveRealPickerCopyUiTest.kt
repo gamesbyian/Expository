@@ -62,6 +62,86 @@ class RecursiveRealPickerCopyUiTest {
         assertArrayEquals("Test source must never change", fixtureBytes, read)
     }
 
+    @Test fun genuineThirdSystemPickerInspectsMergeDestinationWithoutWriting() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val automation = instrumentation.uiAutomation
+        automation.serviceInfo?.let { info ->
+            info.flags = info.flags or
+                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+            automation.serviceInfo = info
+        }
+        val device = UiDevice.getInstance(instrumentation)
+        assertTrue("Independent fixture DocumentsProviders must be installed",
+            device.executeShellCommand(
+                "pm list packages dev.expository.transfer.fixture")
+                .contains("package:dev.expository.transfer.fixture"))
+        val context = instrumentation.targetContext
+        val journalBefore = context.noBackupFilesDir.list().orEmpty().toSet()
+        fun visiblePicker(tag: String, title: String) {
+            compose.onNodeWithTag("transfer-workspace-scroll")
+                .performScrollToNode(hasTestTag(tag))
+            compose.onNodeWithTag(tag)
+                .assertIsEnabled().assertIsDisplayed().performClick()
+            // This is a genuine system DocumentsUI selection and an OS-owned
+            // URI grant, not an injected ActivityResult or forged permission.
+            RecursivePickerUi.chooseFixtureRoot(device, title)
+        }
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-basket-toggle"))
+        compose.onNodeWithTag("smart-merge-basket-toggle")
+            .assertIsEnabled().assertIsDisplayed().performClick()
+        visiblePicker("smart-merge-add-source", "Expository Source Lab")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithText("Smart Merge · 1 source folder(s)")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        visiblePicker("smart-merge-add-source", "Expository Target Lab")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithText("Smart Merge · 2 source folder(s)")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        visiblePicker("smart-merge-pick-destination", "Expository Dual Target Lab")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithTag("smart-merge-destination-summary")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Destination: Expository Dual Target Lab",
+            substring = true).assertExists()
+        compose.onNodeWithText("0 direct entries", substring = true).assertExists()
+        compose.onNodeWithText("Storage case policy is unknown",
+            substring = true).assertExists()
+        compose.onNodeWithText("Merge remains unavailable",
+            substring = true).assertExists()
+
+        val sourceTree = Uri.parse(
+            "content://test.real.recursive.source.scoped/tree/lab-source-root")
+        val destTree = Uri.parse(
+            "content://test.real.recursive.dual.target.scoped/tree/lab-target-root")
+        assertArrayEquals("Actual source bytes must remain unchanged",
+            fixtureBytes, context.contentResolver.openInputStream(
+                DocumentsContract.buildDocumentUriUsingTree(sourceTree, "clip"))!!
+                .use { it.readBytes() })
+        val destination = LocalTreeReader.list(
+            context.contentResolver, destTree, "lab-target-root",
+            LocalTreeReader.MAX_BROWSE)
+        assertTrue("Third independent provider must have a complete listing",
+            destination.complete && !destination.hasMore)
+        assertTrue("Inspection must never create a destination child",
+            destination.children.isEmpty())
+        assertEquals("No Merge attempt or recovery record may be created",
+            journalBefore, context.noBackupFilesDir.list().orEmpty().toSet())
+
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-clear-destination"))
+        compose.onNodeWithTag("smart-merge-clear-destination")
+            .assertIsEnabled().performClick()
+        assertTrue("Clear must remove the destination review from the app",
+            compose.onAllNodesWithTag("smart-merge-destination-summary")
+                .fetchSemanticsNodes().isEmpty())
+    }
+
     @Test fun genuineSystemPickerCollectsSmartMergeSourceWithoutTransfer() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val automation = instrumentation.uiAutomation
