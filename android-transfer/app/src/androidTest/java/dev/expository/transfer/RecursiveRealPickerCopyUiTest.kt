@@ -97,6 +97,19 @@ class RecursiveRealPickerCopyUiTest {
             compose.onAllNodesWithText("Smart Merge · 1 source folder(s)")
                 .fetchSemanticsNodes().isNotEmpty()
         }
+        // Complete recursive source inventory is exposed through the real
+        // installed UI, using the ORIGINAL READ grant. This is observational
+        // only: no destination chosen, no file can be created or removed.
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-inspect-source-0"))
+        compose.onNodeWithTag("smart-merge-inspect-source-0")
+            .assertIsEnabled().performClick()
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithTag("smart-merge-source-inventory-0")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Inventory: 1 file(s), 3 folder(s)",
+            substring = true).assertExists()
         visiblePicker("smart-merge-add-source", "Expository Target Lab")
         compose.waitUntil(30_000L) {
             compose.onAllNodesWithText("Smart Merge · 2 source folder(s)")
