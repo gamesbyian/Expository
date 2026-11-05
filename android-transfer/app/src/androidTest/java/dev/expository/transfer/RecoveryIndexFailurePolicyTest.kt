@@ -118,6 +118,57 @@ class RecoveryIndexFailurePolicyTest {
                 continueRequested = { false }))
     }
 
+    @Test fun orphanSidecarsCannotCrowdOutARealInterruptedAttempt() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "recovery-priority-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val digest = "f".repeat(64)
+        val journal = DurableAttemptJournal(
+            dev.expository.transfer.journal.AndroidAtomicAttemptStorage(
+                isolated, digest))
+        try {
+            journal.confirm(digest)
+            journal.beginAttempt(digest, "real_attempt_has_priority")
+            val privateJournal = File(sandbox, "transfer_attempt_" + digest)
+            val originalJournal = privateJournal.readBytes()
+            // These 40 validly named but orphaned encrypted-context records
+            // are inspection anomalies, not evidence of a transfer attempt.
+            // They should NEVER consume all 32 review slots ahead of the
+            // one real unresolved journal.
+            val orphanFiles = (0 until 40).map { index ->
+                File(sandbox, "transfer_recovery_context_v1_" +
+                    index.toString(16).padStart(64, '0')).apply {
+                    writeBytes(byteArrayOf(1, 2, 3))
+                }
+            }
+            val summary = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, summary.requiresReview)
+            assertEquals(40, summary.damagedOrUnrecognized)
+            assertEquals(32, summary.reviewReferences.size)
+            assertEquals(9, summary.additionalReviewCount)
+            assertEquals(digest,
+                summary.reviewReferences.first().recordKey)
+            assertTrue(summary.reviewReferences.first().status
+                .contains("Requires independent destination review"))
+            assertEquals(JournalState.ATTEMPT_RECORDED, journal.current()?.state)
+            assertArrayEquals(originalJournal, privateJournal.readBytes())
+            orphanFiles.forEach { file ->
+                assertArrayEquals(byteArrayOf(1, 2, 3), file.readBytes())
+            }
+            // Repeated scans must not promote, consume or reorder the
+            // genuinely interrupted attempt behind orphan-only hints.
+            val second = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(digest, second.reviewReferences.first().recordKey)
+            assertEquals(summary.additionalReviewCount, second.additionalReviewCount)
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
     @Test fun hiddenReviewCountDoesNotDuplicateAnAlreadyVisibleSidecarWarning() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val sandbox = File(app.cacheDir, "hidden-recovery-count-" + UUID.randomUUID())
