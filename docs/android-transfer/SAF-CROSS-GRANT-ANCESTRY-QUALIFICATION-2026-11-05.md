@@ -1,5 +1,7 @@
 # Smart Merge: qualification of independently picked SAF roots
 
+**Implementation pending qualification (2026-11-05):** [#514](https://github.com/gamesbyian/Expository/pull/514) adds a provider relationship diagnostic limited to `OVERLAP` or `UNKNOWN`. Its exact folder alias check can refuse without IPC; other directional queries are disabled by default until an independent trusted `Root.FLAG_SUPPORTS_IS_CHILD` observation is supplied. A negative, unsupported, inconsistent, stale or revoked answer remains UNKNOWN; no `DISJOINT_VERIFIED` state, planner exception, writer or persisted grant exists. The Android synthetic E2 run and exact-head native qualification are pending, and genuine same-authority independently OS-picked providers have not been qualified.
+
 **Status (2026-11-05): research and test design, not shipped authority.** Owner: native T4 Smart Merge (#384); shared command/recovery owners remain #324/#325. This document follows the accepted conservative M2 planner gate [#500](https://github.com/gamesbyian/Expository/pull/500), which refuses differently rooted, same-provider SAF source/destination pairs until disjointness is *proved*. It does not relax the gate.
 
 ## Platform facts and why the current refusal is correct
