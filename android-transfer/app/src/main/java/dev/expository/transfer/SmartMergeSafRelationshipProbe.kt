@@ -46,6 +46,10 @@ internal object SmartMergeSafRelationshipProbe {
         destination: SmartMergeSafDestinationSnapshot,
         clockMillis: () -> Long = System::currentTimeMillis,
         continueRequested: () -> Boolean = { true },
+        // The root capability must be independently authenticated before a
+        // provider RPC. A picker grant alone does not advertise this flag.
+        // There is intentionally no production caller/implicit true default.
+        providerChildCapabilityObserved: Boolean = false,
         descendantQuery: (Uri, Uri) -> Boolean = { parent, child ->
             DocumentsContract.isChildDocument(resolver, parent, child)
         }
@@ -94,6 +98,12 @@ internal object SmartMergeSafRelationshipProbe {
         }
         if (origin.key.opaqueItemId == target.key.rootId)
             return@runCatching SmartMergeSafRelationship.OVERLAP
+        // No potentially expensive/unsupported IPC until a trusted adapter
+        // has actually observed Root.FLAG_SUPPORTS_IS_CHILD. A future adapter
+        // may provide this positive prerequisite, never a DISJOINT result.
+        require(providerChildCapabilityObserved) {
+            "SAF_RELATIONSHIP_PROVIDER_CAPABILITY_UNVERIFIED"
+        }
 
         fun live(): Boolean {
             val now = clockMillis()
