@@ -59,6 +59,7 @@ import dev.expository.transfer.saf.TreeCopyPreflight
 import dev.expository.transfer.saf.SafTreeToTreeCopy
 import dev.expository.transfer.saf.SafRecursiveTreeCopy
 import dev.expository.transfer.saf.ScopedRecursiveSourceRequest
+import dev.expository.transfer.saf.SafRecursiveSourceScanner
 import dev.expository.transfer.engine.RecursiveCopyResult
 import dev.expository.transfer.engine.RecursiveCopyProgress
 import dev.expository.transfer.engine.toDispatchCopyReceipt
@@ -261,6 +262,14 @@ private fun DeveloperPreview(
     var mergeInspectResults by remember {
         mutableStateOf<Map<SmartMergeFolder, SmartMergeReobservation>>(emptyMap())
     }
+    // Read-only, per-exact-source complete descendant inventory. Never
+    // persist previews, source IDs, URIs or private filenames.
+    var mergeSourceInventory by remember {
+        mutableStateOf<Map<SmartMergeFolder, SmartMergeInventory>>(emptyMap())
+    }
+    var mergeInventoryReading by remember { mutableStateOf<SmartMergeFolder?>(null) }
+    var mergeInventoryJob by remember { mutableStateOf<Job?>(null) }
+    val mergeInventorySerial = remember { AtomicLong(0L) }
     var treeSingle by remember { mutableStateOf(LocalTreeBrowseState()) }
     var treeA by remember { mutableStateOf(LocalTreeBrowseState()) }
     var treeB by remember { mutableStateOf(LocalTreeBrowseState()) }
@@ -283,6 +292,14 @@ private fun DeveloperPreview(
     var copyStatus by remember { mutableStateOf(
         "Choose a source and destination; Copy needs explicit review.") }
     var copyPermit by remember { mutableStateOf<AtomicBoolean?>(null) }
+
+    fun clearMergeSourceInventories() {
+        mergeInventorySerial.incrementAndGet()
+        mergeInventoryJob?.cancel()
+        mergeInventoryJob = null
+        mergeInventoryReading = null
+        mergeSourceInventory = emptyMap()
+    }
 
     fun tree(which: WorkspacePane): LocalTreeBrowseState = when (which) {
         WorkspacePane.SINGLE -> treeSingle
@@ -538,6 +555,7 @@ private fun DeveloperPreview(
                         val added = mergeSources.add(source)
                         mergeSources = added.basket
                         if (added.status == SmartMergeAddStatus.ADDED) {
+                            clearMergeSourceInventories()
                             // A source-list mutation invalidates any pending
                             // target review, even though picker grants remain
                             // independent. Do not let a late target read win.
@@ -645,6 +663,7 @@ private fun DeveloperPreview(
         if (!mergeSources.hasMinimumSources || mergeReading ||
             mergeInspecting != null || pendingMergePicker != null ||
             mergeDestinationReading || pendingMergeDestinationPicker != null ||
+            mergeInventoryReading != null ||
             copyBusy || remoteRelayBusy) return
         val pane = if (model.view == WorkspaceView.SINGLE)
             WorkspacePane.SINGLE else model.activeDual
@@ -664,6 +683,69 @@ private fun DeveloperPreview(
         }
     }
 
+    /**
+     * READ-only on-demand recursive source inventory through the original OS
+     * picker grant. No new grant, Copy request, destination mutation or
+     * private durable state. This calls the already-qualified M2 scanner.
+     */
+    fun inspectMergeSourceInventory(selected: SmartMergeFolder) {
+        if (mergeSources.folders.none { it === selected } ||
+            mergeInventoryReading != null || mergeReading ||
+            mergeInspecting != null || pendingMergePicker != null ||
+            mergeDestinationReading || pendingMergeDestinationPicker != null ||
+            copyBusy || remoteRelayBusy) return
+        val now = System.currentTimeMillis()
+        val capturedRead = selected.source.location.capabilities[Capability.READ]
+        if (capturedRead?.valid(now) != true ||
+            now < capturedRead.expiresAtMillis - 300_000L) {
+            mergeSourceInventory = mergeSourceInventory - selected
+            mergeMessage = "Original Merge source access expired. Re-pick the folder."
+            return
+        }
+        val serial = mergeInventorySerial.incrementAndGet()
+        val generation = treeReadGeneration.incrementAndGet()
+        val shareEpoch = currentShareEpoch()
+        mergeInventoryReading = selected
+        mergeSourceInventory = mergeSourceInventory - selected
+        mergeMessage = "Inspecting source descendants without writing files…"
+        mergeInventoryJob = scope.launch {
+            try {
+                val inventory = withContext(Dispatchers.IO) {
+                    SafRecursiveSourceScanner(context.contentResolver)
+                        .inspectMergeRootInventory(selected, generation,
+                            continueRequested = {
+                                isActive && mergeInventorySerial.get() == serial &&
+                                    currentShareEpoch() == shareEpoch
+                            })
+                }
+                if (!isActive || mergeInventorySerial.get() != serial ||
+                    mergeInventoryReading !== selected) return@launch
+                if (currentShareEpoch() != shareEpoch ||
+                    mergeSources.folders.none { it === selected } ||
+                    copyBusy || remoteRelayBusy ||
+                    capturedRead.valid(System.currentTimeMillis()) != true ||
+                    System.currentTimeMillis() <
+                        capturedRead.expiresAtMillis - 300_000L) {
+                    mergeMessage = "Source access or app context changed. Re-pick before inspection."
+                } else if (inventory == null ||
+                    !inventory.manifest.reviewable) {
+                    mergeMessage = "Source scan incomplete, canceled, changed or expired. " +
+                        "No partial contents are treated as reviewed."
+                } else {
+                    mergeSourceInventory = mergeSourceInventory + (selected to inventory)
+                    mergeMessage = "Source inventory inspected. This is read-only " +
+                        "observation, not a Merge command or transfer approval."
+                }
+            } finally {
+                if (mergeInventorySerial.get() == serial &&
+                    mergeInventoryReading === selected) {
+                    mergeInventoryJob = null
+                    mergeInventoryReading = null
+                }
+            }
+        }
+    }
+
     fun stopMergeObservation(clearBasket: Boolean) {
         mergePickerSerial.incrementAndGet()
         pendingMergePicker = null
@@ -676,6 +758,7 @@ private fun DeveloperPreview(
         mergeInspectionJob = null
         mergeInspecting = null
         if (clearBasket) {
+            clearMergeSourceInventories()
             clearMergeDestination()
             mergeInspectResults = emptyMap()
             mergeSources = SmartMergeBasket.empty()
@@ -694,10 +777,12 @@ private fun DeveloperPreview(
     fun checkMergeSourceAccess(selected: SmartMergeFolder) {
         if (copyBusy || remoteRelayBusy || mergeReading ||
             pendingMergePicker != null || mergeInspecting != null ||
+            mergeInventoryReading != null ||
             mergeSources.folders.none { it === selected }) return
         val generation = treeReadGeneration.incrementAndGet()
         val observedAt = System.currentTimeMillis()
         val shareAtStart = currentShareEpoch()
+        mergeSourceInventory = mergeSourceInventory - selected
         mergeInspecting = selected
         mergeMessage = "Checking the original folder access without changing files…"
         mergeInspectionJob = scope.launch {
@@ -735,6 +820,7 @@ private fun DeveloperPreview(
         if (copyBusy || remoteRelayBusy || mergeReading ||
             mergeInspecting != null || pendingMergePicker != null ||
             mergeDestinationReading || pendingMergeDestinationPicker != null ||
+            mergeInventoryReading != null ||
             mergeSources.folders.size >= SmartMergeBasket.MAX_SOURCES) return
         val pane = if (model.view == WorkspaceView.SINGLE)
             WorkspacePane.SINGLE else model.activeDual
@@ -1954,6 +2040,7 @@ private fun DeveloperPreview(
                                     pendingMergePicker == null &&
                                     !mergeDestinationReading &&
                                     pendingMergeDestinationPicker == null &&
+                                    mergeInventoryReading == null &&
                                     mergeSources.folders.size < SmartMergeBasket.MAX_SOURCES,
                                 modifier = Modifier.testTag("smart-merge-add-source"),
                                 onClick = { launchMergeFolderPicker() }
@@ -1964,6 +2051,17 @@ private fun DeveloperPreview(
                                     enabled = true,
                                     modifier = Modifier.testTag("smart-merge-cancel-source"),
                                     onClick = { stopMergeObservation(false) }
+                                )
+                            }
+                            if (mergeInventoryReading != null) {
+                                FolderActionControl(
+                                    label = "Cancel source inventory",
+                                    enabled = true,
+                                    modifier = Modifier.testTag("smart-merge-cancel-inventory"),
+                                    onClick = {
+                                        clearMergeSourceInventories()
+                                        mergeMessage = "Source scan canceled; no file changes."
+                                    }
                                 )
                             }
                             if (mergeInspecting != null) {
@@ -2042,11 +2140,41 @@ private fun DeveloperPreview(
                                         style = MaterialTheme.typography.bodySmall)
                                     val originalRead = selected.source.location
                                         .capabilities[Capability.READ]
+                                    val clockNow = System.currentTimeMillis()
                                     val capturedProofValid =
-                                        originalRead?.valid(System.currentTimeMillis()) == true
+                                        originalRead?.valid(clockNow) == true &&
+                                            clockNow >=
+                                                originalRead.expiresAtMillis - 300_000L
                                     if (!capturedProofValid) {
                                         Text("Original access review expired. " +
                                             "Remove this entry and pick the folder again.",
+                                            style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    FolderActionControl(
+                                        label = "Inspect Merge source " + (index + 1) +
+                                            " contents",
+                                        enabled = capturedProofValid &&
+                                            !copyBusy && !remoteRelayBusy &&
+                                            !mergeReading && mergeInspecting == null &&
+                                            pendingMergePicker == null &&
+                                            !mergeDestinationReading &&
+                                            pendingMergeDestinationPicker == null &&
+                                            mergeInventoryReading == null,
+                                        modifier = Modifier.testTag(
+                                            "smart-merge-inspect-source-" + index),
+                                        onClick = { inspectMergeSourceInventory(selected) }
+                                    )
+                                    mergeSourceInventory[selected]?.let { inventory ->
+                                        val current = capturedProofValid
+                                        Text(
+                                            if (current) "Inventory: " +
+                                                inventory.manifest.files + " file(s), " +
+                                                inventory.manifest.directories +
+                                                " folder(s) including chosen root, " +
+                                                "complete at scan time; recheck before any Merge."
+                                            else "Inventory expired; re-pick before review.",
+                                            modifier = Modifier.testTag(
+                                                "smart-merge-source-inventory-" + index),
                                             style = MaterialTheme.typography.bodySmall)
                                     }
                                     FolderActionControl(
@@ -2055,7 +2183,8 @@ private fun DeveloperPreview(
                                         enabled = capturedProofValid &&
                                             !copyBusy && !remoteRelayBusy &&
                                             !mergeReading && mergeInspecting == null &&
-                                            pendingMergePicker == null,
+                                            pendingMergePicker == null &&
+                                            mergeInventoryReading == null,
                                         onClick = { checkMergeSourceAccess(selected) }
                                     )
                                     mergeInspectResults[selected]?.let { last ->
@@ -2081,6 +2210,7 @@ private fun DeveloperPreview(
                                             pendingMergePicker == null,
                                         onClick = {
                                             mergeSources = mergeSources.move(index, index - 1)
+                                            clearMergeSourceInventories()
                                             clearMergeDestination()
                                             mergeMessage = "Source order changed. No Merge was run."
                                         }
@@ -2091,6 +2221,7 @@ private fun DeveloperPreview(
                                             !mergeReading && pendingMergePicker == null,
                                         onClick = {
                                             mergeSources = mergeSources.move(index, index + 1)
+                                            clearMergeSourceInventories()
                                             clearMergeDestination()
                                             mergeMessage = "Source order changed. No Merge was run."
                                         }
@@ -2106,6 +2237,7 @@ private fun DeveloperPreview(
                                             }
                                             mergeInspectResults = mergeInspectResults - selected
                                             mergeSources = mergeSources.removeAt(index)
+                                            clearMergeSourceInventories()
                                             clearMergeDestination()
                                             mergeMessage = "Source removed; no files changed."
                                         }
