@@ -28,6 +28,8 @@ import org.junit.runner.RunWith
 class SafRecursiveScannerAndroidTest {
     @Test fun sameAuthoritySafRelationshipOnlyReportsPositiveOverlapOrUnknown() {
         val e = Environment()
+        val appContext = InstrumentationRegistry.getInstrumentation().targetContext
+        val journalBefore = appContext.noBackupFilesDir.list().orEmpty().toSet()
         val read = Intent.FLAG_GRANT_READ_URI_PERMISSION
         val writable = read or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         val source = requireNotNull(SmartMergeSafFolderCapture.capture(
@@ -99,9 +101,11 @@ class SafRecursiveScannerAndroidTest {
                 e.resolver, source, destination, { e.observedAtMillis }))
         val after = LocalTreeReader.list(
             e.resolver, sameProviderChild, "shows", LocalTreeReader.MAX_BROWSE)
-        assertEquals(before, after)
-        assertEquals("No write or recovery state is produced",
-            2, after.children.size)
+        assertEquals("The provider cannot be changed by a relationship probe",
+            before, after)
+        assertEquals(2, after.children.size)
+        assertEquals("Probing ancestry cannot create recovery records",
+            journalBefore, appContext.noBackupFilesDir.list().orEmpty().toSet())
     }
 
     @Test fun safRelationshipSkipsCrossAuthorityAndExactAliasWithoutRemoteCalls() {
