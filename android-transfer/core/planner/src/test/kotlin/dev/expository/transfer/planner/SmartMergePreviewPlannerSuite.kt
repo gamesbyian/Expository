@@ -140,6 +140,69 @@ object SmartMergePreviewPlannerSuite {
         val unknown = loc("dest", case = CasePolicy.UNKNOWN)
         check("DESTINATION_CASE_POLICY_UNVERIFIED" in
             plan(sources, trees, destination = unknown, parent = index(unknown)).blockers)
+        // A visual what-if is possible under unknown SAF case semantics
+        // ONLY when every other hardened M2 guard has passed. It must never
+        // export a digest, ItemRef or runnable operation plan.
+        fun illustrate(
+            destination: LocationRef = unknown,
+            parent: PagedLocationIndex? = index(destination),
+            sourceTrees: List<SmartMergeInventory> = trees,
+            name: String = "Merged files",
+            mode: SmartMergeStructure = SmartMergeStructure.KEEP_SOURCE_DIRECTORIES,
+            time: Long = NOW
+        ) = SmartMergeCasefoldIllustrator.inspect(
+            sources, sourceTrees, destination, parent, name, mode, time)
+        val illustrated = illustrate()
+        check(illustrated.illustrated && !illustrated.executable)
+        check(illustrated.mappedChildren == 2 &&
+            illustrated.hypotheticalRenames == 1 &&
+            illustrated.hypotheticalSharedDirectories == 0)
+        check(illustrated.blockers == listOf("DESTINATION_CASE_POLICY_UNVERIFIED"))
+        check(illustrated.changes.size == 1)
+        check(illustrated.changes.single().sourceNumber == 2)
+        check(illustrated.changes.single().hypotheticalTargetPath ==
+            listOf("report (2).txt"))
+        check(illustrated.toString() == "SmartMergeCasefoldIllustration(redacted)")
+        check(illustrated.changes.single().toString() ==
+            "SmartMergeIllustratedChange(redacted)")
+        check(illustrate(sourceTrees = albums).hypotheticalRenames == 1)
+        val coalescedIllustration = illustrate(sourceTrees = albums,
+            mode = SmartMergeStructure.COALESCE_MATCHING_DIRECTORIES)
+        check(coalescedIllustration.illustrated)
+        check(coalescedIllustration.hypotheticalSharedDirectories == 1 &&
+            coalescedIllustration.hypotheticalRenames == 1)
+        check(coalescedIllustration.changes.any { it.directoryReused })
+        val rootConflict = illustrate(parent = index(unknown, "merged FILES"))
+        check(!rootConflict.illustrated && rootConflict.mappedChildren == 0 &&
+            rootConflict.changes.isEmpty() &&
+            "MERGE_FOLDER_ALREADY_EXISTS" in rootConflict.blockers)
+        val missingIllustration = illustrate(sourceTrees = listOf(trees[0]))
+        check(!missingIllustration.illustrated &&
+            "SOURCE_INVENTORY_COUNT_MISMATCH" in missingIllustration.blockers)
+        val expiredIllustration = illustrate(time = NOW + 20_000L)
+        check(!expiredIllustration.illustrated &&
+            "SOURCE_READ_PROOF_EXPIRED" in expiredIllustration.blockers)
+        val notSaf = loc("remote", kind = LocationKind.REMOTE_SFTP)
+        check(!illustrate(destination = notSaf, parent = index(notSaf)).illustrated)
+        val wrongCase = loc("dest", case = CasePolicy.CASE_SENSITIVE)
+        check(!illustrate(destination = wrongCase, parent = index(wrongCase)).illustrated)
+        val alias = loc("saf-A", folder = emptyList()).let { base ->
+            base.copy(key = base.key.copy(rootId = a.source.key.opaqueItemId,
+                containerId = a.source.key.opaqueItemId,
+                grantId = "second-grant"),
+                casePolicy = CasePolicy.UNKNOWN)
+        }
+        val blockedAlias = illustrate(destination = alias, parent = index(alias))
+        check(!blockedAlias.illustrated &&
+            "DESTINATION_INSIDE_SOURCE" in blockedAlias.blockers)
+        val unrelatedRoot = unknown.copy(key = unknown.key.copy(
+            authorityId = "saf-A", rootId = "different-picker-root",
+            containerId = "different-picker-root"))
+        check(!illustrate(destination = unrelatedRoot,
+            parent = index(unrelatedRoot)).illustrated)
+        val noName = illustrate(name = "../invalid")
+        check(!noName.illustrated && "MERGE_FOLDER_NAME_INVALID" in noName.blockers)
+
         val descendant = loc("saf-A", folder = listOf("Pictures", "A", "Nested"))
         check("DESTINATION_INSIDE_SOURCE" in plan(sources, trees,
             destination = descendant, parent = index(descendant)).blockers)
