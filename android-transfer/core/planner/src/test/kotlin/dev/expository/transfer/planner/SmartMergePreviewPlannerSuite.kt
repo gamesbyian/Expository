@@ -122,6 +122,98 @@ object SmartMergePreviewPlannerSuite {
         check(shared.entries[2].sharedDirectory)
         check(shared.digest != separate.digest)
 
+        // Two independent OS-picked tree grants can return the SAME
+        // authority-scoped document ID under different source paths. The
+        // resulting source inventories are individually complete and valid;
+        // the combined M2 review must refuse a duplicate underlying object,
+        // even though the visible filenames and picked roots differ.
+        val sharedAuthority = "saf-shared-provider"
+        val left = source("Left", sharedAuthority)
+        val secondRoot = source("Right", sharedAuthority)
+        val rightLocation = secondRoot.source.location.copy(
+            key = secondRoot.source.location.key.copy(
+                rootId = "independently-picked-root",
+                grantId = "independent-tree-grant"))
+        val right = requireNotNull(SmartMergeFolder.capture(
+            WorkspacePane.B,
+            secondRoot.source.copy(location = rightLocation), 9L, NOW))
+        val leftFile = entry(left.source, listOf("first-name.txt"))
+        val rightFile = entry(right.source, listOf("alias-name.txt"))
+            .let { file -> file.copy(source = file.source.copy(
+                key = file.source.key.copy(
+                    opaqueItemId = leftFile.source.key.opaqueItemId))) }
+        val crossGrantBasket = basket(left, right)
+        val overlappingTrees = listOf(
+            inventory(left, leftFile), inventory(right, rightFile))
+        val repeated = plan(crossGrantBasket, overlappingTrees)
+        check(!repeated.reviewable && repeated.entries.isEmpty())
+        check("SOURCE_SAF_DOCUMENT_REUSED_ACROSS_TREES" in repeated.blockers)
+        check(repeated.collisionRenames == 0 && repeated.sharedDirectories == 0)
+        check(repeated.digest == plan(crossGrantBasket, overlappingTrees).digest)
+        check(!SmartMergeCasefoldIllustrator.inspect(
+            crossGrantBasket, overlappingTrees,
+            loc("dest", case = CasePolicy.UNKNOWN),
+            index(loc("dest", case = CasePolicy.UNKNOWN)),
+            "Merged files", SmartMergeStructure.KEEP_SOURCE_DIRECTORIES,
+            NOW).illustrated)
+
+        // Root IDs must also be covered, not just duplicated file children.
+        // A root picked by A may appear as a descendant of B under an alias.
+        val rootAsChild = rightFile.copy(source = rightFile.source.copy(
+            key = rightFile.source.key.copy(
+                opaqueItemId = left.source.key.opaqueItemId)))
+        val repeatedRoot = plan(crossGrantBasket, listOf(
+            inventory(left, leftFile), inventory(right, rootAsChild)))
+        check("SOURCE_SAF_DOCUMENT_REUSED_ACROSS_TREES" in repeatedRoot.blockers)
+        check(repeatedRoot.entries.isEmpty())
+
+        // Different content IDs in the same provider remain distinguishable
+        // for the *read-only* preview. This does not grant a disjointness
+        // certificate or imply executable M3 permission.
+        val distinctIds = plan(crossGrantBasket, listOf(
+            inventory(left, leftFile),
+            inventory(right, entry(right.source, listOf("independent.txt")))))
+        check(distinctIds.reviewable && distinctIds.entries.size == 2)
+
+        // Equal opaque text under a different provider authority is never
+        // evidence of the same document, regardless of its file name.
+        val anotherAuthority = source("Other", "different-saf-provider")
+        val unrelatedFile = entry(anotherAuthority.source, listOf("alias-name.txt"))
+            .let { file -> file.copy(source = file.source.copy(
+                key = file.source.key.copy(
+                    opaqueItemId = leftFile.source.key.opaqueItemId))) }
+        check(plan(basket(left, anotherAuthority), listOf(
+            inventory(left, leftFile),
+            inventory(anotherAuthority, unrelatedFile))).reviewable)
+
+        // For authenticated remote accounts, equal strings alone do not
+        // establish shared files: opaque IDs are adapter/scope dependent.
+        val remoteOneLocation = loc("shared-remote-host",
+            kind = LocationKind.REMOTE_SFTP)
+        val remoteTwoLocation = remoteOneLocation.copy(
+            verifiedNamespace = "separate-authenticated-session",
+            verifiedStorageDomain = "separate-storage-domain")
+        val remoteOneRoot = ItemRef(
+            ItemKey("shared-remote-host", "remote-root-one", "v1"),
+            remoteOneLocation, remoteOneLocation.folder,
+            "RemoteOne", ItemKind.DIRECTORY)
+        val remoteTwoRoot = ItemRef(
+            ItemKey("shared-remote-host", "remote-root-two", "v1"),
+            remoteTwoLocation, remoteTwoLocation.folder,
+            "RemoteTwo", ItemKind.DIRECTORY)
+        val remoteOne = requireNotNull(SmartMergeFolder.capture(
+            WorkspacePane.A, remoteOneRoot, 9L, NOW))
+        val remoteTwo = requireNotNull(SmartMergeFolder.capture(
+            WorkspacePane.B, remoteTwoRoot, 9L, NOW))
+        val remoteOneFile = entry(remoteOneRoot, listOf("identical-id.bin"))
+        val remoteTwoFile = entry(remoteTwoRoot, listOf("identical-id.bin"))
+            .let { file -> file.copy(source = file.source.copy(
+                key = file.source.key.copy(
+                    opaqueItemId = remoteOneFile.source.key.opaqueItemId))) }
+        check(plan(basket(remoteOne, remoteTwo), listOf(
+            inventory(remoteOne, remoteOneFile),
+            inventory(remoteTwo, remoteTwoFile))).reviewable)
+
         // Never silently treat stale or incomplete inventory as a full merge.
         check("DESTINATION_PARENT_INCOMPLETE" in
             plan(sources, trees, parent = null).blockers)
