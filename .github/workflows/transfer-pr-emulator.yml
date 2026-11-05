@@ -81,6 +81,9 @@ jobs:
                 # One isolated foreground Copy state gate, avoiding the known
                 # intermittent DocumentsUI navigation tests on this runner.
                 LocalPickerCancelSmokeTest#localCopyLateProgressDoesNotCrossCancellationOrAttemptBoundaries) ;;
+                # Target one cancellation-vs-missing-provider read-only recovery
+                # regression, rather than the entire stateful recovery class.
+                RecoveryIndexFailurePolicyTest#canceledDestinationByteReviewDoesNotBecomeProviderFailure) ;;
                 # Exact bounded two-file Android Files picker + two receipts.
                 LocalPickerPositiveCopyTest#twoRealSystemPickedTreesCopyTwoSelectedFiles) ;;
                 NewFolderPositiveProviderTest#oneRealSystemPickedFolderCreatesExactChildAndVerifiedJournal) ;;
