@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="1248" height="1248" viewBox="0 0 1248 1248"
+     role="img" aria-labelledby="title description">
+  <title id="title">Pastel repository storage and folders</title>
+  <desc id="description">Three-tier repository cylinder in pastel yellow, blue and red,
+    with one round status indicator per tier; circular dotted connectors lead to
+    three softly rounded file-folder outlines.</desc>
+  <!-- Editable original vector redrawn from two user-supplied visual references.
+       Palette, cylinder, connectors and folder instances are independently editable.
+       Hide or remove the background group for transparency. -->
+  <defs>
+    <clipPath id="cylinder-clip">
+      <path d="M60 356
+               C60 294 188 249 353 249
+               C518 249 645 294 645 356
+               V909
+               C645 961 512 995 353 995
+               C194 995 60 962 60 909 Z"/>
+    </clipPath>
+    <g id="folder-outline" fill="white"
+       stroke="#050505" stroke-width="36"
+       stroke-linecap="round" stroke-linejoin="round">
+      <!-- Back folder lip, visible behind the foreground folder. -->
+      <path d="M811 308 L779 69
+               Q777 58 791 58
+               H1049 Q1057 58 1061 68
+               L1077 116" fill="none"/>
+      <!-- The body has curved rather than sharp angular joins. -->
+      <path d="M812 309 L886 131
+               Q892 116 906 116
+               H1178 Q1195 116 1186 135
+               L1114 300 Q1109 313 1096 313
+               H823 Q808 313 812 299 Z"/>
+    </g>
+  </defs>
+  <g id="background">
+    <rect x="0" y="0" width="1248" height="1248" fill="#ffffff"/>
+  </g>
+  <g id="repository-cylinder">
+    <g clip-path="url(#cylinder-clip)">
+      <path id="bottom-red" fill="#F2ABB0"
+            d="M60 356 C60 294 188 249 353 249
+               C518 249 645 294 645 356 V909
+               C645 961 512 995 353 995
+               C194 995 60 962 60 909 Z"/>
+      <path id="middle-blue" fill="#A1CAEB"
+            d="M60 525 C81 595 191 639 353 639
+               C515 639 624 595 645 525
+               V705 C625 773 515 815 353 815
+               C191 815 81 773 60 705 Z"/>
+      <path id="top-yellow" fill="#F8DF9D"
+            d="M60 356 C81 420 191 463 353 463
+               C515 463 624 420 645 356
+               V525 C624 594 515 639 353 639
+               C191 639 81 594 60 525 Z"/>
+      <ellipse id="top-oval" cx="353" cy="356" rx="293" ry="107"
+               fill="#FFF0BD"/>
+    </g>
+    <g fill="none" stroke="#050505" stroke-width="38"
+       stroke-linejoin="round" stroke-linecap="round">
+      <path id="outer-wall-and-base"
+            d="M60 356 V909
+               C60 961 194 995 353 995
+               C512 995 645 961 645 909 V356"/>
+      <path id="upper-tier-divider"
+            d="M60 525 C81 595 191 639 353 639
+               C515 639 624 595 645 525"/>
+      <path id="lower-tier-divider"
+            d="M60 705 C81 773 191 815 353 815
+               C515 815 624 773 645 705"/>
+      <ellipse id="top-rim" cx="353" cy="356" rx="293" ry="107"/>
+    </g>
+    <g id="tier-indicators" fill="#050505">
+      <circle id="yellow-indicator" cx="120" cy="497" r="21"/>
+      <circle id="blue-indicator" cx="120" cy="683" r="21"/>
+      <circle id="red-indicator" cx="120" cy="864" r="21"/>
+    </g>
+  </g>
+  <g id="circular-connector-dots" fill="#050505">
+    <g id="upper-connector">
+      <circle cx="351" cy="98" r="20"/>
+      <circle cx="429" cy="98" r="20"/>
+      <circle cx="507" cy="98" r="20"/>
+      <circle cx="585" cy="98" r="20"/>
+      <circle cx="663" cy="98" r="20"/>
+      <circle cx="351" cy="175" r="20"/>
+    </g>
+    <g id="lower-connector">
+      <circle cx="351" cy="1073" r="20"/>
+      <circle cx="351" cy="1150" r="20"/>
+      <circle cx="429" cy="1150" r="20"/>
+      <circle cx="507" cy="1150" r="20"/>
+      <circle cx="585" cy="1150" r="20"/>
+      <circle cx="663" cy="1150" r="20"/>
+    </g>
+  </g>
+  <g id="three-folders">
+    <use id="top-folder" xlink:href="#folder-outline"/>
+    <use id="middle-folder" xlink:href="#folder-outline" transform="translate(0 429)"/>
+    <use id="bottom-folder" xlink:href="#folder-outline" transform="translate(0 878)"/>
+  </g>
+</svg>
