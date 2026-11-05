@@ -41,6 +41,8 @@ class SafRecursiveScannerAndroidTest {
         assertEquals(setOf(Capability.READ, Capability.WRITE, Capability.CREATE_CHILD),
             destination.location.capabilities.keys)
         assertTrue(destination.stillObserved(e.observedAtMillis))
+        assertFalse("A clock rollback cannot renew a picked permission",
+            destination.stillObserved(e.observedAtMillis - 1L))
         assertFalse(destination.stillObserved(e.observedAtMillis + 300_001L))
         assertEquals(LocationIndexState.COMPLETE, destination.parentIndex.state)
         assertEquals(destination.location, destination.parentIndex.location)
