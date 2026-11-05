@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
@@ -267,6 +268,10 @@ class RecursiveRealPickerCopyUiTest {
                 .fetchSemanticsNodes().isEmpty())
         compose.onNodeWithText("Source 2: Shows → Shows (2)",
             substring = true).assertExists()
+        compose.onNodeWithTag("smart-merge-illustration-change-0").assertExists()
+        compose.onNodeWithContentDescription(
+            "Source 2: Shows → Shows (2) (hypothetical keep-both rename)"
+        ).assertExists()
         compose.onNodeWithText("Safety blocker: DESTINATION_CASE_POLICY_UNVERIFIED")
             .assertExists()
 
