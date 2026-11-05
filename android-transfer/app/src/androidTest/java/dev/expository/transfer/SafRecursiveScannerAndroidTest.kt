@@ -26,6 +26,80 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class SafRecursiveScannerAndroidTest {
+    @Test fun realProviderSourceManifestsFeedPureM2CollisionPreviewWithoutAnyWrite() {
+        val e = Environment()
+        val read = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+        val a = requireNotNull(SmartMergeSafFolderCapture.capture(
+            e.resolver, e.sourceTree, read, WorkspacePane.A, 1L, e.observedAtMillis))
+        val b = requireNotNull(SmartMergeSafFolderCapture.capture(
+            e.resolver, e.targetTree, read, WorkspacePane.B, 2L, e.observedAtMillis))
+        val basket = SmartMergeBasket.empty().add(a).basket.add(b).basket
+        val inventories = basket.folders.mapIndexed { i, picked ->
+            requireNotNull(e.scanner.inspectMergeRootInventory(picked, 3L + i))
+        }
+        // Synthetic DESTINATION ONLY. This test does not assert a real
+        // third-party target grant, create capability or executable adapter.
+        // It checks that actual source provider manifests meet the existing
+        // immutable M2 planner's structural and ancestry requirements.
+        val proof = CapabilityProof(Support.SUPPORTED,
+            "test-only-destination-observation", e.observedAtMillis + 10_000L)
+        val destination = LocationRef(
+            LocationKey(LocationKind.LOCAL_SAF, "test-only-review-destination",
+                "target-root", "target-root",
+                "content://test-only-review-destination/tree/target-root"),
+            emptyList(), "review-only-parent-revision",
+            mapOf(Capability.READ to proof, Capability.WRITE to proof,
+                Capability.CREATE_CHILD to proof),
+            casePolicy = CasePolicy.CASE_INSENSITIVE
+        )
+        val parent = PagedLocationIndex.begin(destination).append(
+            LocationPage(destination, "synthetic-complete-parent-snapshot",
+                null, null, emptyList(), authoritative = true))
+        assertEquals(LocationIndexState.COMPLETE, parent.state)
+        val preview = SmartMergePreviewPlanner.preview(
+            basket, inventories, destination, parent,
+            "Combined", SmartMergeStructure.KEEP_SOURCE_DIRECTORIES,
+            e.observedAtMillis)
+        assertTrue("Real source manifests must be structurally usable by M2: " +
+            preview.blockers.joinToString(","), preview.reviewable)
+        assertEquals(4, preview.entries.size)
+        assertEquals(0, preview.collisionRenames)
+        assertEquals(0, preview.sharedDirectories)
+        assertEquals(listOf(
+            listOf("Shows"),
+            listOf("Shows", "Empty"),
+            listOf("Shows", "Episode.bin"),
+            listOf("Taken.txt")
+        ), preview.entries.map { it.targetPath })
+        assertEquals(64, preview.digest.length)
+        assertFalse("No plan may be a mutation token",
+            preview.toString().contains("Episode.bin"))
+    }
+
+    @Test fun pickedSafRecursiveInventoryRejectsNestedChangeDuringSecondPass() {
+        val e = Environment()
+        val collected = requireNotNull(SmartMergeSafFolderCapture.capture(
+            e.resolver, e.sourceTree,
+            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            WorkspacePane.SINGLE, 1L, e.observedAtMillis))
+        var checkpoints = 0
+        val stale = e.scanner.inspectMergeRootInventory(collected, 2L) {
+            checkpoints++
+            // After one full root/Shows/Empty/file traversal, mutate the
+            // NESTED Shows folder. The root child list remains unchanged.
+            // The required second pass must reject the new ambiguous entry.
+            if (checkpoints == 6) e.mode("duplicate")
+            true
+        }
+        assertTrue("The second-pass checkpoint must have been reached",
+            checkpoints >= 6)
+        assertNull("Changed nested subtree cannot produce partial or stale M2",
+            stale)
+        e.mode("reset")
+        assertNotNull("A fresh whole-tree scan can succeed after correction",
+            e.scanner.inspectMergeRootInventory(collected, 3L))
+    }
+
     @Test fun pickedSafRootProducesCompleteReadOnlyM2InventoryIncludingEmptyFolders() {
         val e = Environment()
         val collected = requireNotNull(SmartMergeSafFolderCapture.capture(
