@@ -128,6 +128,52 @@ class RecursiveRealPickerCopyUiTest {
         compose.onNodeWithText("Merge remains unavailable",
             substring = true).assertExists()
 
+        // Collecting the second source invalidated old M2 inventories.
+        // Re-read BOTH source roots through their original independent OS
+        // grants, then run the pure non-executing case-folded illustration.
+        fun inspectSource(index: Int) {
+            val tag = "smart-merge-inspect-source-" + index
+            compose.onNodeWithTag("transfer-workspace-scroll")
+                .performScrollToNode(hasTestTag(tag))
+            compose.onNodeWithTag(tag).assertIsEnabled().performClick()
+            compose.waitUntil(30_000L) {
+                compose.onAllNodesWithTag("smart-merge-source-inventory-" + index)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+        }
+        inspectSource(0)
+        inspectSource(1)
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-illustrate"))
+        compose.onNodeWithTag("smart-merge-illustrate")
+            .assertIsEnabled().performClick()
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithTag("smart-merge-illustration-counts")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Under hypothetical case-folding: 3 descendant item(s)",
+            substring = true).assertExists()
+        compose.onNodeWithText("Safety blocker: DESTINATION_CASE_POLICY_UNVERIFIED")
+            .assertExists()
+        compose.onNodeWithText("Read-only example, NEVER executable.",
+            substring = true).assertExists()
+        // Mode changes revoke the previous example, without changing any
+        // provider contents or granting an executable operation.
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-collision-mode"))
+        compose.onNodeWithTag("smart-merge-collision-mode")
+            .assertIsEnabled().performClick()
+        compose.onNodeWithTag("smart-merge-illustration-counts")
+            .assertDoesNotExist()
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-illustrate"))
+        compose.onNodeWithTag("smart-merge-illustrate")
+            .assertIsEnabled().performClick()
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithTag("smart-merge-illustration-counts")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
         val sourceTree = Uri.parse(
             "content://test.real.recursive.source.scoped/tree/lab-source-root")
         val destTree = Uri.parse(
