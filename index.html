@@ -538,12 +538,13 @@ async function recoverTargetedFolder(){
     // direct tree is missing any originally listed path, the branch likely
     // moved between reads; the combined view must not claim verification.
     const completeTree=!result.truncated&&tree.length<=5000;
-    const directPaths=completeTree?new Set(tree.filter(entry=>
+    const directPaths=completeTree?new Map(tree.filter(entry=>
      ['tree','blob'].includes(entry.type)&&entry.path&&
      !entry.path.includes('/')&&safeRepoPath(entry.path))
-     .map(entry=>folder?folder+'/'+entry.path:entry.path)):null;
+     .map(entry=>[folder?folder+'/'+entry.path:entry.path,
+      entry.type==='tree'?'dir':'file'])):null;
     const snapshotsDisagree=directPaths!==null&&
-     [...known].some(path=>!directPaths.has(path));
+     state.items.some(item=>directPaths.get(item.path)!==item.type);
     for(const entry of tree.slice(0,5000)){
      if(!['tree','blob'].includes(entry.type)||!entry.path||entry.path.includes('/')||!safeRepoPath(entry.path))continue;
      const path=folder?folder+'/'+entry.path:entry.path;
