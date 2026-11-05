@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1536" height="1536" viewBox="-104 5 1720 1720" role="img" aria-labelledby="title desc">
+  <title id="title">Expository, four-colour magnifying glass</title>
+  <desc id="desc">A white magnifying glass with precisely rotated and offset red, blue, and yellow silhouettes on black.</desc>
+  <!-- Editable construction:
+       Lens pivot: (546.102, 466.631) in original 1536 x 1536 source coordinates.
+       Every silhouette references the SAME geometry; no shadow is redrawn.
+       Increment: +19 degrees clockwise, +138.24 units horizontally and vertically (9% of 1536).
+       SVG transforms execute right-to-left: first rotate about lens pivot, then translate.
+       Layer angles and offsets are absolute from white, not cumulative floating-point approximations.
+       Edit the three <use> transforms to change placement. Edit #magnifier to change all four outlines.
+       A final black lens knockout maintains a clear, black opening as in the supplied design.
+       Framing is enlarged to retain the entire corrected yellow handle.
+  -->
+  <defs>
+    <path id="magnifier" fill-rule="evenodd" d="M288 191 L258 223 L238 249 L219 279 L201 314 L191 338 L179 375 L174 397 L168 438 L168 491 L171 516 L180 558 L191 592 L201 616 L223 658 L249 696 L272 723 L292 743 L321 768 L351 789 L380 806 L425 826 L459 837 L486 843 L524 848 L577 847 L606 843 L647 833 L677 822 L713 805 L747 784 L765 770 L767 770 L825 838 L992 1040 L1005 1050 L1015 1055 L1027 1058 L1052 1057 L1059 1055 L1075 1046 L1087 1034 L1093 1025 L1100 1006 L1101 986 L1095 964 L1089 954 L1067 931 L991 860 L828 711 L828 709 L838 698 L854 676 L875 642 L893 605 L903 579 L912 549 L920 508 L922 485 L922 441 L920 418 L913 379 L906 353 L893 317 L880 289 L861 255 L838 223 L821 203 L794 176 L771 157 L745 139 L711 120 L686 109 L653 98 L607 88 L577 85 L529 85 L502 88 L454 98 L423 108 L396 119 L356 140 L327 159 Z M538 195 L565 195 L588 197 L609 201 L640 210 L660 218 L683 230 L707 246 L725 261 L744 280 L766 308 L788 348 L797 370 L806 400 L810 419 L814 456 L814 475 L810 514 L804 540 L797 561 L776 603 L767 617 L748 641 L726 664 L709 679 L689 694 L661 711 L635 723 L615 730 L581 738 L563 740 L526 740 L507 738 L480 732 L452 723 L436 716 L406 699 L385 684 L361 663 L345 646 L325 620 L311 598 L300 576 L290 551 L279 509 L276 479 L276 455 L279 428 L285 402 L296 369 L316 330 L328 312 L349 286 L367 268 L394 246 L412 234 L442 218 L489 202 L515 197 Z"/>
+    <path id="lens-opening" d="M538 195 L565 195 L588 197 L609 201 L640 210 L660 218 L683 230 L707 246 L725 261 L744 280 L766 308 L788 348 L797 370 L806 400 L810 419 L814 456 L814 475 L810 514 L804 540 L797 561 L776 603 L767 617 L748 641 L726 664 L709 679 L689 694 L661 711 L635 723 L615 730 L581 738 L563 740 L526 740 L507 738 L480 732 L452 723 L436 716 L406 699 L385 684 L361 663 L345 646 L325 620 L311 598 L300 576 L290 551 L279 509 L276 479 L276 455 L279 428 L285 402 L296 369 L316 330 L328 312 L349 286 L367 268 L394 246 L412 234 L442 218 L489 202 L515 197 Z"/>
+  </defs>
+  <rect x="-104" y="5" width="1720" height="1720" fill="#000000"/>
+  <use id="yellow" xlink:href="#magnifier" fill="#FFFF00" transform="translate(414.72 414.72) rotate(57 546.102 466.631)"/>
+  <use id="blue" xlink:href="#magnifier" fill="#0000FF" transform="translate(276.48 276.48) rotate(38 546.102 466.631)"/>
+  <use id="red" xlink:href="#magnifier" fill="#FF0000" transform="translate(138.24 138.24) rotate(19 546.102 466.631)"/>
+  <use id="white" xlink:href="#magnifier" fill="#FFFFFF"/>
+  <use id="lens-knockout" xlink:href="#lens-opening" fill="#000000"/>
+</svg>
