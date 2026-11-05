@@ -534,6 +534,13 @@ async function recoverTargetedFolder(){
     // Two read snapshots can overlap imperfectly if a moving branch changes
     // during the request sequence; never report complete coverage then.
     const known=new Set(state.items.map(x=>x.path));let added=0,cappedByUnion=false;
+    // Keep the original snapshot distinct from the union. If a complete
+    // direct tree is missing any originally listed path, the branch likely
+    // moved between reads; the combined view must not claim verification.
+    const directPaths=new Set(tree.filter(entry=>['tree','blob'].includes(entry.type)&&
+     entry.path&&!entry.path.includes('/')&&safeRepoPath(entry.path))
+     .map(entry=>folder?folder+'/'+entry.path:entry.path));
+    const snapshotsDisagree=[...known].some(path=>!directPaths.has(path));
     for(const entry of tree.slice(0,5000)){
      if(!['tree','blob'].includes(entry.type)||!entry.path||entry.path.includes('/')||!safeRepoPath(entry.path))continue;
      const path=folder?folder+'/'+entry.path:entry.path;
@@ -544,9 +551,13 @@ async function recoverTargetedFolder(){
      if(item.type==='dir')treeAdd(path);
     }
     if(added)state.items.sort((a,b)=>(a.type==='dir'?0:1)-(b.type==='dir'?0:1)||a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}));
-    const incomplete=Boolean(result.truncated)||tree.length>5000||cappedByUnion;
+    const incomplete=Boolean(result.truncated)||tree.length>5000||cappedByUnion||snapshotsDisagree;
     if(live()){if(added)paint();paintTree();
-     status(state.items.length+' items · '+(folder||'/')+' · '+added+' recovered via direct Git tree'+(incomplete?' · Direct tree/5,000-item display cap; results still incomplete.':' · Folder verified without relying on truncated repository index.'))}
+     const coverage=cappedByUnion?' · 5,000-item combined display cap reached; results still incomplete.':
+      snapshotsDisagree?' · Directory changed between listings; results still incomplete.':
+      incomplete?' · Direct tree/5,000-item display cap; results still incomplete.':
+      ' · Folder verified without relying on truncated repository index.';
+     status(state.items.length+' items · '+(folder||'/')+' · '+added+' recovered via direct Git tree'+coverage)}
     return added;
    }
   }
