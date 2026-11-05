@@ -777,7 +777,7 @@ private fun DeveloperPreview(
      * planner must block on missing SAF case-policy evidence and NOTHING else.
      * No picker grant renewal, provider write, stored path or copied content.
      */
-    fun illustrateMergeCollisions() {
+    fun illustrateMergeCollisions(changeOffset: Int = 0) {
         if (!mergeSources.hasMinimumSources || mergeIllustrationBusy ||
             mergeInventoryReading != null || mergeReading ||
             mergeInspecting != null || pendingMergePicker != null ||
@@ -817,7 +817,8 @@ private fun DeveloperPreview(
                 val candidate = withContext(Dispatchers.Default) {
                     SmartMergeCasefoldIllustrator.inspect(
                         selected, collected, picked.location, picked.parentIndex,
-                        name, structure, System.currentTimeMillis())
+                        name, structure, System.currentTimeMillis(),
+                        changeOffset = changeOffset)
                 }
                 val checkedAt = System.currentTimeMillis()
                 if (!isActive || serial != mergeIllustrationSerial.get()) return@launch
@@ -2465,6 +2466,16 @@ private fun DeveloperPreview(
                                             modifier = Modifier.testTag(
                                                 "smart-merge-illustration-counts"),
                                             style = MaterialTheme.typography.bodySmall)
+                                        Text("Hypothetical differences " +
+                                            (if (illustration.totalChanges == 0) "0"
+                                                else (illustration.changeOffset + 1).toString()) +
+                                            "–" +
+                                            (illustration.changeOffset +
+                                                illustration.changes.size) +
+                                            " of " + illustration.totalChanges + ".",
+                                            modifier = Modifier.testTag(
+                                                "smart-merge-illustration-page-status"),
+                                            style = MaterialTheme.typography.bodySmall)
                                         illustration.changes.forEach { change ->
                                             Text("Source " + change.sourceNumber + ": " +
                                                 change.observedRelativePath.joinToString("/") +
@@ -2475,11 +2486,45 @@ private fun DeveloperPreview(
                                                 else " (hypothetical keep-both rename)",
                                                 style = MaterialTheme.typography.bodySmall)
                                         }
-                                        if (illustration.hypotheticalRenames +
-                                            illustration.hypotheticalSharedDirectories >
-                                            illustration.changes.size)
-                                            Text("Only the first 12 differences are shown.",
+                                        if (illustration.totalChanges >
+                                            SmartMergeCasefoldIllustrator.MAX_DISPLAY_CHANGES) {
+                                            FlowRow(
+                                                horizontalArrangement =
+                                                    Arrangement.spacedBy(8.dp),
+                                                verticalArrangement =
+                                                    Arrangement.spacedBy(4.dp)) {
+                                                FolderActionControl(
+                                                    label = "Previous differences",
+                                                    enabled = illustration.changeOffset > 0 &&
+                                                        !mergeIllustrationBusy,
+                                                    modifier = Modifier.testTag(
+                                                        "smart-merge-illustration-previous"),
+                                                    onClick = {
+                                                        illustrateMergeCollisions(
+                                                            illustration.changeOffset -
+                                                                SmartMergeCasefoldIllustrator
+                                                                    .MAX_DISPLAY_CHANGES)
+                                                    }
+                                                )
+                                                FolderActionControl(
+                                                    label = "Next differences",
+                                                    enabled =
+                                                        illustration.nextChangeOffset != null &&
+                                                            !mergeIllustrationBusy,
+                                                    modifier = Modifier.testTag(
+                                                        "smart-merge-illustration-next"),
+                                                    onClick = {
+                                                        illustration.nextChangeOffset?.let {
+                                                            illustrateMergeCollisions(it)
+                                                        }
+                                                    }
+                                                )
+                                            }
+                                            Text("Each page recalculates the complete " +
+                                                "read-only example from currently observed " +
+                                                "source and destination permissions.",
                                                 style = MaterialTheme.typography.bodySmall)
+                                        }
                                     } else {
                                         Text("No mapping shown while real planner " +
                                             "safety blockers remain.",

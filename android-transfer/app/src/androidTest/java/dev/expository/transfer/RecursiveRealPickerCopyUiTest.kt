@@ -261,6 +261,10 @@ class RecursiveRealPickerCopyUiTest {
         }
         compose.onNodeWithText("6 descendant item(s), 1 keep-both rename(s)",
             substring = true).assertExists()
+        compose.onNodeWithText("Hypothetical differences 1–1 of 1.").assertExists()
+        assertTrue("Single collision must not show unnecessary page navigation",
+            compose.onAllNodesWithTag("smart-merge-illustration-next")
+                .fetchSemanticsNodes().isEmpty())
         compose.onNodeWithText("Source 2: Shows → Shows (2)",
             substring = true).assertExists()
         compose.onNodeWithText("Safety blocker: DESTINATION_CASE_POLICY_UNVERIFIED")
@@ -280,6 +284,10 @@ class RecursiveRealPickerCopyUiTest {
         }
         compose.onNodeWithText("6 descendant item(s), 1 keep-both rename(s), " +
             "2 reused directory name(s)", substring = true).assertExists()
+        compose.onNodeWithText("Hypothetical differences 1–3 of 3.").assertExists()
+        assertTrue("Coalescing below the page cap should not show paging",
+            compose.onAllNodesWithTag("smart-merge-illustration-previous")
+                .fetchSemanticsNodes().isEmpty())
         compose.onNodeWithText("Source 2: Shows → Shows (hypothetical directory reuse)",
             substring = true).assertExists()
 

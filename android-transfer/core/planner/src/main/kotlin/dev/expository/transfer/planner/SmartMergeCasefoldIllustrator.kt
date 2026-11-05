@@ -16,6 +16,12 @@ class SmartMergeCasefoldIllustration internal constructor(
     val mappedChildren: Int,
     val hypotheticalRenames: Int,
     val hypotheticalSharedDirectories: Int,
+    /** Number of all changes, not just this bounded display page. */
+    val totalChanges: Int,
+    /** Zero-based index into the ordered hypothetical differences. */
+    val changeOffset: Int,
+    /** Null at the final page. No server cursor or persisted token. */
+    val nextChangeOffset: Int?,
     val changes: List<SmartMergeIllustratedChange>
 ) {
     val executable: Boolean get() = false
@@ -54,14 +60,15 @@ object SmartMergeCasefoldIllustrator {
         destinationParentIndex: PagedLocationIndex?,
         rootName: String,
         structure: SmartMergeStructure,
-        nowMillis: Long
+        nowMillis: Long,
+        changeOffset: Int = 0
     ): SmartMergeCasefoldIllustration {
         val actual = SmartMergePreviewPlanner.preview(
             basket, inventories, destination, destinationParentIndex,
             rootName, structure, nowMillis)
         fun refused(reasons: List<String>) = SmartMergeCasefoldIllustration(
             Collections.unmodifiableList(reasons.distinct()), false, 0, 0, 0,
-            emptyList())
+            0, 0, null, emptyList())
         if (destination.key.kind != LocationKind.LOCAL_SAF ||
             destination.casePolicy != CasePolicy.UNKNOWN) {
             return refused(actual.blockers + "ILLUSTRATION_REQUIRES_UNKNOWN_SAF_CASE_POLICY")
@@ -70,6 +77,12 @@ object SmartMergeCasefoldIllustrator {
         // hypothetical mapping stage; case policy must be the ONLY blocker.
         if (actual.blockers != listOf("DESTINATION_CASE_POLICY_UNVERIFIED"))
             return refused(actual.blockers)
+        // Each page is a bounded, independently recomputed, non-executable
+        // illustration. Reject arbitrary or oversize offsets, never return
+        // a truncated-but-apparently-complete mapping from an invalid page.
+        if (changeOffset < 0 || changeOffset % MAX_DISPLAY_CHANGES != 0 ||
+            changeOffset >= SmartMergePreviewPlanner.MAX_PREVIEW_ENTRIES)
+            return refused(actual.blockers + "ILLUSTRATION_PAGE_INVALID")
         val existing = destinationParentIndex ?: return refused(actual.blockers)
         if (existing.state != LocationIndexState.COMPLETE ||
             existing.location != destination || existing.snapshotId.isNullOrBlank())
@@ -102,9 +115,16 @@ object SmartMergeCasefoldIllustrator {
             rootName, structure, nowMillis)
         if (!forecast.reviewable)
             return refused(actual.blockers + forecast.blockers)
+        // Count all hypothetical differences without materializing another
+        // potentially 10,000-entry private path collection in memory.
+        val total = forecast.entries.count {
+            it.renamedForCollision || it.sharedDirectory
+        }
+        if (changeOffset > 0 && changeOffset >= total)
+            return refused(actual.blockers + "ILLUSTRATION_PAGE_OUT_OF_RANGE")
         val samples = forecast.entries.asSequence()
             .filter { it.renamedForCollision || it.sharedDirectory }
-            .take(MAX_DISPLAY_CHANGES)
+            .drop(changeOffset).take(MAX_DISPLAY_CHANGES)
             .map {
                 SmartMergeIllustratedChange(
                     it.sourceIndex + 1,
@@ -112,9 +132,11 @@ object SmartMergeCasefoldIllustrator {
                     Collections.unmodifiableList(it.targetPath.toList()),
                     it.sharedDirectory)
             }.toList()
+        val following = (changeOffset + samples.size).takeIf { it < total }
         return SmartMergeCasefoldIllustration(
             Collections.unmodifiableList(actual.blockers.toList()), true,
             forecast.entries.size, forecast.collisionRenames,
-            forecast.sharedDirectories, Collections.unmodifiableList(samples))
+            forecast.sharedDirectories, total, changeOffset, following,
+            Collections.unmodifiableList(samples))
     }
 }
