@@ -151,7 +151,11 @@ class RecursiveRealPickerCopyUiTest {
             compose.onAllNodesWithTag("smart-merge-illustration-counts")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("Under hypothetical case-folding: 3 descendant item(s)",
+        // Target Lab is a separately OS-picked *source* in this test, and
+        // an earlier test may have populated it during the same installed
+        // provider process. The independent duplicate-tree test pins exact
+        // collision numbers; this test proves the user journey and invariants.
+        compose.onNodeWithText("Under hypothetical case-folding:",
             substring = true).assertExists()
         compose.onNodeWithText("Safety blocker: DESTINATION_CASE_POLICY_UNVERIFIED")
             .assertExists()
