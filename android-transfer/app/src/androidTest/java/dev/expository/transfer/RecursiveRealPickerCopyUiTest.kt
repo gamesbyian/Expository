@@ -2,6 +2,7 @@ package dev.expository.transfer
 
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.net.Uri
+import android.os.SystemClock
 import android.provider.DocumentsContract
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -10,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -204,6 +206,117 @@ class RecursiveRealPickerCopyUiTest {
         assertTrue("Clear must remove the destination review from the app",
             compose.onAllNodesWithTag("smart-merge-destination-summary")
                 .fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test fun genuinePagedCasefoldReviewWithManyCollisionsAndNoWrites() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val automation = instrumentation.uiAutomation
+        automation.serviceInfo?.let { info ->
+            info.flags = info.flags or
+                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+            automation.serviceInfo = info
+        }
+        val device = UiDevice.getInstance(instrumentation)
+        val context = instrumentation.targetContext
+        assertTrue("Disposable picker fixture APK not installed",
+            device.executeShellCommand("pm list packages dev.expository.transfer.fixture")
+                .contains("package:dev.expository.transfer.fixture"))
+        val journalBefore = context.noBackupFilesDir.list().orEmpty().toSet()
+        fun press(tag: String) {
+            compose.onNodeWithTag("transfer-workspace-scroll")
+                .performScrollToNode(hasTestTag(tag))
+            compose.onNodeWithTag(tag).assertIsEnabled().performClick()
+        }
+        fun pickRoot(tag: String, title: String) {
+            press(tag)
+            RecursivePickerUi.chooseFixtureRoot(device, title)
+        }
+        press("smart-merge-basket-toggle")
+        pickRoot("smart-merge-add-source", "Expository Paging A Lab")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithText("Smart Merge · 1 source folder(s)")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        pickRoot("smart-merge-add-source", "Expository Paging B Lab")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithText("Smart Merge · 2 source folder(s)")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        pickRoot("smart-merge-pick-destination", "Expository Dual Target Lab")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithTag("smart-merge-destination-summary")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        for (index in 0..1) {
+            press("smart-merge-inspect-source-" + index)
+            compose.waitUntil(30_000L) {
+                compose.onAllNodesWithTag("smart-merge-source-inventory-" + index)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            // Both independent sources intentionally report the SAME
+            // inventory totals. Match this row's unique Compose tag rather
+            // than using onNodeWithText(), which wrongly demands a single
+            // matching row after the second source is inspected.
+            compose.onNodeWithTag("smart-merge-source-inventory-" + index)
+                .assertExists()
+            assertEquals("Expected one complete row per inspected source",
+                index + 1,
+                compose.onAllNodesWithText("Inventory: 17 file(s), 3 folder(s)",
+                    substring = true).fetchSemanticsNodes().size)
+        }
+        press("smart-merge-illustrate")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithText("Hypothetical differences 1–12 of 17.")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("38 descendant item(s), 17 keep-both rename(s)",
+            substring = true).assertExists()
+        compose.onNodeWithText("Source 2: Collision-01.txt → Collision-01 (2).txt",
+            substring = true).assertExists()
+        compose.onNodeWithTag("smart-merge-illustration-next")
+            .assertIsEnabled().performScrollTo().performClick()
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithText("Hypothetical differences 13–17 of 17.")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Source 2: Collision-16.txt → Collision-16 (2).txt",
+            substring = true).assertExists()
+        compose.onNodeWithTag("smart-merge-illustration-next").assertIsNotEnabled()
+        compose.onNodeWithTag("smart-merge-illustration-previous")
+            .assertIsEnabled().performScrollTo().performClick()
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithText("Hypothetical differences 1–12 of 17.")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        // All three OS picker grants are independently scoped. Neither an
+        // illustration page turn nor its recomputation can create documents,
+        // change fixture payload bytes, or create durable recovery records.
+        for (authority in listOf("test.real.recursive.paging.a.scoped",
+                "test.real.recursive.paging.b.scoped")) {
+            val tree = Uri.parse("content://" + authority + "/tree/lab-source-root")
+            assertArrayEquals("Original independently granted source was modified",
+                fixtureBytes, context.contentResolver.openInputStream(
+                    DocumentsContract.buildDocumentUriUsingTree(tree, "clip"))!!
+                    .use { it.readBytes() })
+            val roots = LocalTreeReader.list(context.contentResolver, tree,
+                "lab-source-root", LocalTreeReader.MAX_BROWSE)
+            assertTrue(roots.complete && !roots.hasMore)
+            // Sixteen colliding files are DIRECT children. Episode.bin is
+            // the seventeenth file inside Shows, independently verified by
+            // byte-exact stream readback above. Do not conflate direct and
+            // recursive counts from the completed source manifest.
+            assertEquals(16, roots.children.count { !it.directory })
+        }
+        val target = Uri.parse(
+            "content://test.real.recursive.dual.target.scoped/tree/lab-target-root")
+        val children = LocalTreeReader.list(context.contentResolver, target,
+            "lab-target-root", LocalTreeReader.MAX_BROWSE)
+        assertTrue("Paging cannot create a destination child",
+            children.complete && !children.hasMore && children.children.isEmpty())
+        assertEquals("No protected recovery records may be created",
+            journalBefore, context.noBackupFilesDir.list().orEmpty().toSet())
     }
 
     @Test fun genuineIndependentPickerRootsIllustrateActualCasefoldCollisionsWithoutWrites() {
@@ -696,14 +809,6 @@ internal object RecursivePickerUi {
             }
             error("DOCUMENTSUI_" + stage + "_NOT_FOUND")
         }
-        assertTrue("Expected real DocumentsUI folder picker",
-            device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")), 8_000L) ||
-            device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 3_000L) ||
-            visible("Recent", 3_000L) || device.currentPackageName == "android" ||
-            // A system picker can be foreground even while UiAutomator's
-            // accessibility tree has not attached (API35 emulator race).
-            device.executeShellCommand("dumpsys activity activities")
-                .contains("com.android.documentsui.picker.PickActivity"))
         // A system-owned picker may be resumed while API35 UiAutomator has
         // not attached an accessibility window. Verify the resumed SYSTEM
         // activity independently, without accepting a generic Android package
@@ -720,6 +825,18 @@ internal object RecursivePickerUi {
         fun pickerForeground(): Boolean =
             device.currentPackageName in packages ||
                 packages.any { device.hasObject(By.pkg(it)) } || pickerResumed()
+        // Do not accept generic package "android" or a stale "Recent"
+        // label as proof that ACTION_OPEN_DOCUMENT_TREE is open. Android 35
+        // sometimes reports the generic OS package while the real picker
+        // has not attached its UiAutomator window yet. Bounded polling only:
+        // no guessed tap, implicit grant or untrusted URI injection.
+        val pickerDeadline = SystemClock.uptimeMillis() + 20_000L
+        var realPickerReady = pickerForeground()
+        while (!realPickerReady && SystemClock.uptimeMillis() < pickerDeadline) {
+            SystemClock.sleep(300L)
+            realPickerReady = pickerForeground()
+        }
+        assertTrue("Actual DocumentsUI picker never foregrounded", realPickerReady)
         val drawerDescriptions = listOf("Show roots", "Open navigation drawer",
             "Show navigation drawer", "Show locations")
         fun openLabeledRoots(): Boolean {

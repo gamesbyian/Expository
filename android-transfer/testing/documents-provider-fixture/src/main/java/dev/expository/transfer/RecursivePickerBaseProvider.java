@@ -32,6 +32,8 @@ abstract class RecursivePickerBaseProvider extends DocumentsProvider {
     private int createdCount;
     abstract boolean isSource();
     abstract String fixtureTitle();
+    /** Dedicated E2 paging fixtures only; ordinary picker roots stay unchanged. */
+    boolean seedPagingCollisions() { return false; }
 
     private String rootId() { return isSource() ? "lab-source-root" : "lab-target-root"; }
     private File bytes(String id) {
@@ -54,6 +56,25 @@ abstract class RecursivePickerBaseProvider extends DocumentsProvider {
                 for(int i=0;i<LENGTH;i++) payload[i]=(byte)((i*19+7)&255);
                 out.write(payload);
             } catch(IOException error) { throw new IllegalStateException(error); }
+            if (seedPagingCollisions()) {
+                // Exact duplicate names across TWO independent provider
+                // authorities, never within one. The source files exist as
+                // harmless, byte-empty test payloads; the destination is
+                // never written to by the Merge illustration.
+                for (int i = 1; i <= 16; i++) {
+                    String id = String.format(java.util.Locale.ROOT,
+                        "collision-%02d", i);
+                    String name = String.format(java.util.Locale.ROOT,
+                        "Collision-%02d.txt", i);
+                    docs.put(id, new Doc(id, root, name, "text/plain"));
+                    try (FileOutputStream out = new FileOutputStream(bytes(id))) {
+                        // A real zero-byte document: no fabricated stream or
+                        // external storage path is needed for this E2 fixture.
+                    } catch (IOException error) {
+                        throw new IllegalStateException(error);
+                    }
+                }
+            }
         }
         return true;
     }

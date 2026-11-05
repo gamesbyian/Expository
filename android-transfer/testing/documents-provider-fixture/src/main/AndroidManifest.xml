@@ -30,6 +30,28 @@
                 <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
             </intent-filter>
         </provider>
+        <!-- Two independently OS-granted, disposable roots with sixteen
+             matching direct filenames for bounded Merge paging E2. -->
+        <provider
+            android:name="dev.expository.transfer.RecursivePickerPagingSourceAProvider"
+            android:authorities="test.real.recursive.paging.a.scoped"
+            android:permission="android.permission.MANAGE_DOCUMENTS"
+            android:grantUriPermissions="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+        <provider
+            android:name="dev.expository.transfer.RecursivePickerPagingSourceBProvider"
+            android:authorities="test.real.recursive.paging.b.scoped"
+            android:permission="android.permission.MANAGE_DOCUMENTS"
+            android:grantUriPermissions="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
         <provider
             android:name="dev.expository.transfer.RecursivePickerTargetProvider"
             android:authorities="test.real.recursive.target.scoped"
