@@ -156,7 +156,8 @@ internal object SmartMergeSafFolderCapture {
         val old = selected.source
         val loc = old.location
         val proof = loc.capabilities[Capability.READ]
-        if (proof?.valid(nowMillis) != true ||
+            ?: return SmartMergeReobservation.UNAUTHORIZED_OR_EXPIRED
+        if (!proof.valid(nowMillis) ||
             nowMillis < proof.expiresAtMillis - OBSERVATION_LIFETIME_MS)
             return SmartMergeReobservation.UNAUTHORIZED_OR_EXPIRED
         val grantedTree = loc.key.grantId
@@ -167,10 +168,14 @@ internal object SmartMergeSafFolderCapture {
             loc.key.rootId != old.key.opaqueItemId ||
             loc.key.authorityId != old.key.authorityId)
             return SmartMergeReobservation.AUTHORITY_OR_GRANT_CHANGED
-        val tree = Uri.parse(grantedTree)
-        if (!LocalTreeReader.validTree(tree) ||
-            tree.authority != loc.key.authorityId ||
-            LocalTreeReader.rootId(tree) != loc.key.rootId)
+        val tree = runCatching { Uri.parse(grantedTree) }.getOrNull()
+            ?: return SmartMergeReobservation.AUTHORITY_OR_GRANT_CHANGED
+        val treeRoot = runCatching {
+            if (LocalTreeReader.validTree(tree))
+                LocalTreeReader.rootId(tree) else null
+        }.getOrNull()
+        if (tree.authority != loc.key.authorityId ||
+            treeRoot != loc.key.rootId)
             return SmartMergeReobservation.AUTHORITY_OR_GRANT_CHANGED
         val observation = try {
             scanRoot(resolver, tree)
