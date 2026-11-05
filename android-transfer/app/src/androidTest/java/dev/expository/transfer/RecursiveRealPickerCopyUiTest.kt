@@ -11,7 +11,6 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -164,8 +163,9 @@ class RecursiveRealPickerCopyUiTest {
             .performScrollToNode(hasTestTag("smart-merge-collision-mode"))
         compose.onNodeWithTag("smart-merge-collision-mode")
             .assertIsEnabled().performClick()
-        compose.onNodeWithTag("smart-merge-illustration-counts")
-            .assertDoesNotExist()
+        assertTrue("Mode change must invalidate the previous illustration",
+            compose.onAllNodesWithTag("smart-merge-illustration-counts")
+                .fetchSemanticsNodes().isEmpty())
         compose.onNodeWithTag("transfer-workspace-scroll")
             .performScrollToNode(hasTestTag("smart-merge-illustrate"))
         compose.onNodeWithTag("smart-merge-illustrate")
