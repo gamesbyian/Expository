@@ -36,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -270,6 +271,18 @@ private fun DeveloperPreview(
     var mergeInventoryReading by remember { mutableStateOf<SmartMergeFolder?>(null) }
     var mergeInventoryJob by remember { mutableStateOf<Job?>(null) }
     val mergeInventorySerial = remember { AtomicLong(0L) }
+    // Case-folded illustration is diagnostic only: no source ItemRefs,
+    // executable SmartMergePreview, digest or write authority is retained.
+    var mergeIllustrationName by remember { mutableStateOf("Combined") }
+    var mergeIllustrationStructure by remember {
+        mutableStateOf(SmartMergeStructure.KEEP_SOURCE_DIRECTORIES)
+    }
+    var mergeIllustration by remember {
+        mutableStateOf<SmartMergeCasefoldIllustration?>(null)
+    }
+    var mergeIllustrationBusy by remember { mutableStateOf(false) }
+    var mergeIllustrationJob by remember { mutableStateOf<Job?>(null) }
+    val mergeIllustrationSerial = remember { AtomicLong(0L) }
     var treeSingle by remember { mutableStateOf(LocalTreeBrowseState()) }
     var treeA by remember { mutableStateOf(LocalTreeBrowseState()) }
     var treeB by remember { mutableStateOf(LocalTreeBrowseState()) }
@@ -293,7 +306,16 @@ private fun DeveloperPreview(
         "Choose a source and destination; Copy needs explicit review.") }
     var copyPermit by remember { mutableStateOf<AtomicBoolean?>(null) }
 
+    fun clearMergeIllustration() {
+        mergeIllustrationSerial.incrementAndGet()
+        mergeIllustrationJob?.cancel()
+        mergeIllustrationJob = null
+        mergeIllustrationBusy = false
+        mergeIllustration = null
+    }
+
     fun clearMergeSourceInventories() {
+        clearMergeIllustration()
         mergeInventorySerial.incrementAndGet()
         mergeInventoryJob?.cancel()
         mergeInventoryJob = null
@@ -635,6 +657,7 @@ private fun DeveloperPreview(
                         mergeMessage = "Destination could not be verified: check folder access, " +
                             "creation support, complete listing and provider stability."
                     } else {
+                        clearMergeIllustration()
                         mergeDestination = captured
                         mergeMessage = "Destination inspected without changes. " +
                             "Merge remains unavailable until source review, verified " +
@@ -651,6 +674,7 @@ private fun DeveloperPreview(
     }
 
     fun clearMergeDestination() {
+        clearMergeIllustration()
         mergeDestinationPickerSerial.incrementAndGet()
         pendingMergeDestinationPicker = null
         mergeDestinationJob?.cancel()
@@ -671,6 +695,7 @@ private fun DeveloperPreview(
         pendingMergeDestinationPicker = MergeSourcePickerTicket(
             serial, pane, model.view, model.pane(pane).endpoint,
             currentShareEpoch())
+        clearMergeIllustration()
         mergeDestination = null
         runCatching {
             mergeDestinationPicker.launch(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
@@ -702,6 +727,7 @@ private fun DeveloperPreview(
             mergeMessage = "Original Merge source access expired. Re-pick the folder."
             return
         }
+        clearMergeIllustration()
         val serial = mergeInventorySerial.incrementAndGet()
         val generation = treeReadGeneration.incrementAndGet()
         val shareEpoch = currentShareEpoch()
@@ -746,6 +772,82 @@ private fun DeveloperPreview(
         }
     }
 
+    /**
+     * Show only a non-executable case-folded what-if. The actual, unmodified
+     * planner must block on missing SAF case-policy evidence and NOTHING else.
+     * No picker grant renewal, provider write, stored path or copied content.
+     */
+    fun illustrateMergeCollisions() {
+        if (!mergeSources.hasMinimumSources || mergeIllustrationBusy ||
+            mergeInventoryReading != null || mergeReading ||
+            mergeInspecting != null || pendingMergePicker != null ||
+            mergeDestinationReading || pendingMergeDestinationPicker != null ||
+            copyBusy || remoteRelayBusy) return
+        val picked = mergeDestination
+        val now = System.currentTimeMillis()
+        if (picked == null || !picked.stillObserved(now)) {
+            clearMergeIllustration()
+            mergeMessage = "Destination observation expired. Choose it again."
+            return
+        }
+        val selected = mergeSources
+        val inventories = selected.folders.map { mergeSourceInventory[it] }
+        val valid = inventories.all { it != null } &&
+            selected.folders.all { source ->
+                val proof = source.source.location.capabilities[Capability.READ]
+                proof?.valid(now) == true &&
+                    now >= proof.expiresAtMillis - 300_000L
+            }
+        if (!valid) {
+            clearMergeIllustration()
+            mergeMessage = "Inspect every current source before illustrating collisions. " +
+                "Expired access requires re-picking the folder."
+            return
+        }
+        val collected = inventories.filterNotNull()
+        val name = mergeIllustrationName
+        val structure = mergeIllustrationStructure
+        val epoch = currentShareEpoch()
+        val serial = mergeIllustrationSerial.incrementAndGet()
+        mergeIllustration = null
+        mergeIllustrationBusy = true
+        mergeMessage = "Calculating a read-only collision illustration…"
+        mergeIllustrationJob = scope.launch {
+            try {
+                val candidate = withContext(Dispatchers.Default) {
+                    SmartMergeCasefoldIllustrator.inspect(
+                        selected, collected, picked.location, picked.parentIndex,
+                        name, structure, System.currentTimeMillis())
+                }
+                val checkedAt = System.currentTimeMillis()
+                if (!isActive || serial != mergeIllustrationSerial.get()) return@launch
+                val unchanged = currentShareEpoch() == epoch &&
+                    selected === mergeSources && picked === mergeDestination &&
+                    mergeIllustrationName == name &&
+                    mergeIllustrationStructure == structure &&
+                    selected.folders.indices.all { i ->
+                        mergeSourceInventory[selected.folders[i]] === collected[i] &&
+                            selected.folders[i].source.location
+                                .capabilities[Capability.READ]?.valid(checkedAt) == true
+                    } && picked.stillObserved(checkedAt)
+                if (!unchanged) {
+                    mergeMessage = "Sources or destination changed while calculating. " +
+                        "Review them again."
+                } else {
+                    mergeIllustration = candidate
+                    mergeMessage = if (candidate.illustrated)
+                        "Case-folded example ready. It is not a Merge approval or file operation."
+                    else "Illustration refused because the actual planner has additional blockers."
+                }
+            } finally {
+                if (serial == mergeIllustrationSerial.get()) {
+                    mergeIllustrationJob = null
+                    mergeIllustrationBusy = false
+                }
+            }
+        }
+    }
+
     fun stopMergeObservation(clearBasket: Boolean) {
         mergePickerSerial.incrementAndGet()
         pendingMergePicker = null
@@ -782,6 +884,7 @@ private fun DeveloperPreview(
         val generation = treeReadGeneration.incrementAndGet()
         val observedAt = System.currentTimeMillis()
         val shareAtStart = currentShareEpoch()
+        clearMergeIllustration()
         mergeSourceInventory = mergeSourceInventory - selected
         mergeInspecting = selected
         mergeMessage = "Checking the original folder access without changing files…"
@@ -2265,6 +2368,117 @@ private fun DeveloperPreview(
                                 "create-folder support at inspection time. Storage case policy " +
                                 "is unknown; no Merge execution is authorized.",
                                 style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (mergeSources.hasMinimumSources) {
+                            OutlinedTextField(
+                                value = mergeIllustrationName,
+                                onValueChange = {
+                                    mergeIllustrationName = it
+                                    clearMergeIllustration()
+                                },
+                                label = { Text("Proposed new Merge folder name") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                                    .testTag("smart-merge-root-name")
+                            )
+                            FolderActionControl(
+                                label = if (mergeIllustrationStructure ==
+                                    SmartMergeStructure.KEEP_SOURCE_DIRECTORIES)
+                                    "Collision mode: keep folders separate"
+                                else "Collision mode: combine matching folders",
+                                enabled = !mergeIllustrationBusy,
+                                modifier = Modifier.testTag("smart-merge-collision-mode"),
+                                onClick = {
+                                    clearMergeIllustration()
+                                    mergeIllustrationStructure =
+                                        if (mergeIllustrationStructure ==
+                                            SmartMergeStructure.KEEP_SOURCE_DIRECTORIES)
+                                            SmartMergeStructure.COALESCE_MATCHING_DIRECTORIES
+                                        else SmartMergeStructure.KEEP_SOURCE_DIRECTORIES
+                                }
+                            )
+                            val knownInventories = mergeSources.folders.all {
+                                mergeSourceInventory[it] != null
+                            }
+                            FolderActionControl(
+                                label = if (mergeIllustrationBusy)
+                                    "Calculating collision example…"
+                                else "Illustrate Merge collisions (read-only)",
+                                enabled = knownInventories &&
+                                    mergeDestination?.stillObserved(
+                                        System.currentTimeMillis()) == true &&
+                                    !mergeIllustrationBusy &&
+                                    mergeInventoryReading == null &&
+                                    mergeInspecting == null &&
+                                    !mergeReading && !mergeDestinationReading &&
+                                    pendingMergePicker == null &&
+                                    pendingMergeDestinationPicker == null &&
+                                    !copyBusy && !remoteRelayBusy,
+                                modifier = Modifier.testTag("smart-merge-illustrate"),
+                                onClick = { illustrateMergeCollisions() }
+                            )
+                            if (mergeIllustrationBusy) {
+                                FolderActionControl(
+                                    label = "Cancel collision example",
+                                    enabled = true,
+                                    modifier = Modifier.testTag("smart-merge-cancel-illustration"),
+                                    onClick = {
+                                        clearMergeIllustration()
+                                        mergeMessage = "Collision illustration canceled."
+                                    }
+                                )
+                            }
+                            mergeIllustration?.let { illustration ->
+                                val stillCurrent = mergeDestination?.stillObserved(
+                                    System.currentTimeMillis()) == true &&
+                                    mergeSources.folders.all { source ->
+                                        source.source.location.capabilities[Capability.READ]
+                                            ?.valid(System.currentTimeMillis()) == true
+                                    }
+                                Text(if (stillCurrent)
+                                    "Read-only example, NEVER executable. " +
+                                        "Actual storage case rules are unverified."
+                                else "Example expired. Re-pick and inspect sources/destination.",
+                                    modifier = Modifier.testTag("smart-merge-illustration-status"),
+                                    style = MaterialTheme.typography.bodySmall)
+                                if (stillCurrent) {
+                                    illustration.blockers.take(6).forEach { blocker ->
+                                        Text("Safety blocker: " + blocker,
+                                            style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    if (illustration.illustrated) {
+                                        Text("Under hypothetical case-folding: " +
+                                            illustration.mappedChildren +
+                                            " descendant item(s), " +
+                                            illustration.hypotheticalRenames +
+                                            " keep-both rename(s), " +
+                                            illustration.hypotheticalSharedDirectories +
+                                            " reused directory name(s).",
+                                            modifier = Modifier.testTag(
+                                                "smart-merge-illustration-counts"),
+                                            style = MaterialTheme.typography.bodySmall)
+                                        illustration.changes.forEach { change ->
+                                            Text("Source " + change.sourceNumber + ": " +
+                                                change.observedRelativePath.joinToString("/") +
+                                                " → " +
+                                                change.hypotheticalTargetPath.joinToString("/") +
+                                                if (change.directoryReused)
+                                                    " (hypothetical directory reuse)"
+                                                else " (hypothetical keep-both rename)",
+                                                style = MaterialTheme.typography.bodySmall)
+                                        }
+                                        if (illustration.hypotheticalRenames +
+                                            illustration.hypotheticalSharedDirectories >
+                                            illustration.changes.size)
+                                            Text("Only the first 12 differences are shown.",
+                                                style = MaterialTheme.typography.bodySmall)
+                                    } else {
+                                        Text("No mapping shown while real planner " +
+                                            "safety blockers remain.",
+                                            style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
                         }
                         Text(mergeMessage,
                             modifier = Modifier.semantics {
