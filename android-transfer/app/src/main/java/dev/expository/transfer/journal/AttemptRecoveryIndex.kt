@@ -179,27 +179,6 @@ object AttemptRecoveryIndex {
         val orphanContexts = contextDigests(names).toSet()
         val orphanChildren = createdChildDigests(names).toSet()
         val orphanBytes = sourceByteDigests(names).toSet()
-        for (orphan in (orphanContexts + orphanChildren + orphanBytes)
-            .filterNot { it in journalKeys }.sorted()) {
-            damaged++
-            if (details.size < MAX_REVIEW_REFERENCES) {
-                details += RecoveryReviewReference(
-                    orphan.takeLast(12),
-                    if (orphan in orphanContexts)
-                        "Protected context has no matching attempt journal"
-                    else if (orphan in orphanChildren)
-                        "Created-child witness has no matching attempt journal"
-                    else "Completed-byte evidence has no matching attempt journal",
-                    contextWarning = if (orphan in orphanContexts)
-                        "No attempt record exists. Do not retry or infer destination state from this hint."
-                    else "An orphan created-child or byte witness is not a transfer receipt. No retry or cleanup.",
-                    recordKey = orphan
-                )
-            } else {
-                unlisted++
-            }
-        }
-
         for (digest in digests) {
             try {
                 when (DurableAttemptJournal(
@@ -234,6 +213,32 @@ object AttemptRecoveryIndex {
                 reference(digest, "Journal unreadable or damaged")
             }
         }
+        // The bounded 32-row review index must prioritize actual journaled
+        // attempts over orphan context/child/byte hints. Otherwise 32 orphan
+        // sidecars can consume every row and strand a real interrupted Copy
+        // with no inspection button. Orphans remain counted and get any
+        // remaining slots; overflow is still explicit and never replayed.
+        for (orphan in (orphanContexts + orphanChildren + orphanBytes)
+            .filterNot { it in journalKeys }.sorted()) {
+            damaged++
+            if (details.size < MAX_REVIEW_REFERENCES) {
+                details += RecoveryReviewReference(
+                    orphan.takeLast(12),
+                    if (orphan in orphanContexts)
+                        "Protected context has no matching attempt journal"
+                    else if (orphan in orphanChildren)
+                        "Created-child witness has no matching attempt journal"
+                    else "Completed-byte evidence has no matching attempt journal",
+                    contextWarning = if (orphan in orphanContexts)
+                        "No attempt record exists. Do not retry or infer destination state from this hint."
+                    else "An orphan created-child or byte witness is not a transfer receipt. No retry or cleanup.",
+                    recordKey = orphan
+                )
+            } else {
+                unlisted++
+            }
+        }
+
         return RecoveryCounts(uncertain, verified, notStarted, damaged,
             details.toList(), unlisted)
     }
