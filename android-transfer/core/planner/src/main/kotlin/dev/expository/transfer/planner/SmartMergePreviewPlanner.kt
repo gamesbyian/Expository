@@ -341,6 +341,38 @@ object SmartMergePreviewPlanner {
         if (suppliedCount > MAX_PREVIEW_ENTRIES)
             errors += "MERGE_PREVIEW_ENTRY_LIMIT"
 
+        // Independent picker roots are not independent DOCUMENT identities.
+        // Two otherwise valid SAF source trees can expose the same provider-
+        // scoped opaque document ID via aliases or overlapping subtrees, even
+        // if their basket roots, grants, names and display paths differ. A
+        // filename-only collision planner would then propose copying ONE
+        // object twice. Fail the entire preview upon affirmative cross-tree
+        // reuse, including a root appearing as another tree's descendant.
+        //
+        // Do not confuse this positive overlap proof with disjointness:
+        // *absence* of a repeated ID proves neither independent ancestry nor
+        // safe execution. Remote IDs are intentionally not compared here;
+        // their identity scope requires independently qualified adapters.
+        if (verifiedTrees.size == basket.folders.size &&
+            verifiedTrees.all { it.isNotEmpty() }) {
+            val observedSafDocuments = hashSetOf<Pair<String, String>>()
+            var reusedAcrossTrees = false
+            for (tree in verifiedTrees) {
+                for (entry in tree) {
+                    val item = entry.source
+                    if (item.location.key.kind == LocationKind.LOCAL_SAF &&
+                        !observedSafDocuments.add(
+                            item.key.authorityId to item.key.opaqueItemId)) {
+                        reusedAcrossTrees = true
+                        break
+                    }
+                }
+                if (reusedAcrossTrees) break
+            }
+            if (reusedAcrossTrees)
+                errors += "SOURCE_SAF_DOCUMENT_REUSED_ACROSS_TREES"
+        }
+
         val planned = mutableListOf<SmartMergePreviewEntry>()
         val reserved = hashMapOf<List<String>, MutableMap<String, ItemKind>>()
         val dirs = hashMapOf<Pair<Int, List<String>>, List<String>>()
