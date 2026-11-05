@@ -82,6 +82,10 @@ class WorkspaceNavigationUiTest {
         compose.onNodeWithTag("smart-merge-add-source").assertIsEnabled()
         compose.onNodeWithText("Smart Merge · 0 source folder(s)").assertExists()
         compose.onNodeWithText("Collect source folders; no files are changed.").assertExists()
+        // Freshness checks require an actually captured source. An empty
+        // basket cannot manufacture provider IDs, grants or authorizations.
+        compose.onNodeWithText("Check Merge source 1 access").assertDoesNotExist()
+        compose.onNodeWithTag("smart-merge-cancel-check").assertDoesNotExist()
         compose.onNodeWithTag("transfer-workspace-scroll")
             .performScrollToNode(hasTestTag("workspace-dual-view"))
         compose.onNodeWithTag("workspace-dual-view").performClick()
