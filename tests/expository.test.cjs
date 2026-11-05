@@ -538,7 +538,10 @@ test('deep capped folder recovery uses a cached parent SHA without walking nine 
  const paths=[];
  const fetcher=async url=>{
   paths.push(url);
-  return new Response(JSON.stringify({truncated:false,tree:[{type:'blob',path:'extra.svg',size:50}]}),{status:200});
+  return new Response(JSON.stringify({truncated:false,tree:[
+   ...Array.from({length:1000},(_,i)=>({type:'blob',path:'img'+i+'.svg',size:50})),
+   {type:'blob',path:'extra.svg',size:50}
+  ]}),{status:200});
  };
  const {app,get}=boot(fetcher);
  Object.assign(app.state,{repo,branch,path:folder,repoRequest:3,seq:4,indexTruncated:true,indexReady:true,mode:'list'});
