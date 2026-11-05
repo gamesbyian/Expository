@@ -353,6 +353,42 @@ object SmartMergePreviewPlannerSuite {
                 "report (3).txt", "report (4).txt"))
         check(occupied.collisionRenames == 2)
 
+        // Different spellings can have the SAME provider comparison key.
+        // Each new collision must advance one shared suffix cursor, without
+        // restarting from (2) for every case/NFC variant. The resulting
+        // user-visible spelling must still come from the original source.
+        val variants = listOf("Café.txt", "Cafe\\u0301.txt", "CAFÉ.txt", "café.txt")
+            .map { it.replace("\\u0301", "\u0301") }
+        val variantFolders = (0 until 32).map {
+            source("Variant" + it, "variant-" + it)
+        }
+        val variantTrees = variantFolders.mapIndexed { i, folder ->
+            inventory(folder, entry(folder.source,
+                listOf(variants[i % variants.size])))
+        }
+        val variantPlan = plan(basket(*variantFolders.toTypedArray()),
+            variantTrees)
+        check(variantPlan.reviewable && variantPlan.collisionRenames == 31)
+        check(variantPlan.entries.size == variantFolders.size)
+        variantPlan.entries.forEachIndexed { i, mapped ->
+            val original = variants[i % variants.size]
+            val expected = if (i == 0) original else
+                original.substringBeforeLast('.') + " (${i + 1}).txt"
+            check(mapped.targetPath == listOf(expected))
+        }
+        check(variantPlan.digest == plan(
+            basket(*variantFolders.toTypedArray()), variantTrees).digest)
+        // A genuinely case-sensitive destination must retain two different
+        // spellings without inventing a collision.
+        val sensitive = loc("dest", case = CasePolicy.CASE_SENSITIVE)
+        val caseDistinct = plan(sources, listOf(
+            inventory(a, entry(a.source, listOf("Report.txt"))),
+            inventory(b, entry(b.source, listOf("report.txt")))
+        ), destination = sensitive)
+        check(caseDistinct.reviewable && caseDistinct.collisionRenames == 0)
+        check(caseDistinct.entries.map { it.targetPath.single() } ==
+            listOf("Report.txt", "report.txt"))
+
         // The first source can plan successfully before a later collision
         // proves that no legal keep-both suffix fits the provider's 255-byte
         // component limit. Reject the ENTIRE preview, not just the final
