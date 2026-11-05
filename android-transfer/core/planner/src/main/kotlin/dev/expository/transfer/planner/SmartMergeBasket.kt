@@ -30,9 +30,8 @@ class SmartMergeFolder private constructor(
                 observed.parent != l.folder ||
                 k.authorityId.isBlank() || k.rootId.isBlank() ||
                 k.containerId.isBlank() || l.revision.isBlank() ||
-                observed.name.isBlank() || observed.name == "." ||
-                observed.name == ".." ||
-                observed.name.any { it == '/' || it == '\\' || it.code < 32 } ||
+                !SmartMergeNameRules.validComponent(observed.name) ||
+                l.folder.any { !SmartMergeNameRules.validComponent(it) } ||
                 l.capabilities[Capability.READ]?.valid(nowMillis) != true)
                 return null
             // A SAF picker grant cannot be inferred from a provider name.
