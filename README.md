@@ -12,7 +12,7 @@ Expository browses **public repositories without login** and can browse selected
 
 ## Canonical logo
 
-The approved [Expository v1 full logo](assets/branding/magnifier-disk-stack-centred.svg) uses **horizontal-only, unrotated pastel echoes**, with a [matching square icon crop](assets/branding/expository-v1-icon-square.svg). Prior canonical assets and the vertical-only experiment are preserved in [draft artwork](assets/branding/draft-artwork/). See the [branding specification](assets/branding/README.md). This design designation does not automatically change deployed application icons.
+The approved [Expository v1 full logo](assets/branding/magnifier-disk-stack-centred.svg) uses **horizontal-only, unrotated pastel echoes**, with a [matching square icon crop](assets/branding/expository-v1-icon-square.svg). Prior canonical assets and the vertical-only experiment are preserved in [draft artwork](assets/branding/draft-artwork/). See the [branding specification](assets/branding/README.md). The approved square asset is now wired into the web header and SVG favicon and into Android Transfer's launcher VectorDrawable ([PR #489](https://github.com/gamesbyian/Expository/pull/489)). Existing Android installations must be rebuilt/reinstalled to receive their new launcher asset; physical-device appearance remains a separate acceptance gate.
 
 ## What you can do
 

@@ -12,4 +12,4 @@ The previously canonical diagonal-echo design and its matching square crop are a
 
 Run `python scripts/render-expository-branding.py` at the repository root (with `cairosvg` installed) to render PNG files directly from the canonical SVGs and the axis-aligned variants. The PNG rendering preserves the vector geometry; the square icon is 1536×1536 and the full logo uses its original aspect ratio.
 
-Brand-file approval does not itself change the live web app's header, favicon or Android launcher icon.
+**Live consumers:** [PR #489](https://github.com/gamesbyian/Expository/pull/489) connected this approved square artwork to the Pages header and SVG/favicon links in `index.html`, and installed the corresponding platform-native Android launcher VectorDrawable through the app manifest. Source wiring and compilation are verified; an already installed Android APK retains its old embedded icon until replaced, and physical launcher/phone visual acceptance is not implied.
