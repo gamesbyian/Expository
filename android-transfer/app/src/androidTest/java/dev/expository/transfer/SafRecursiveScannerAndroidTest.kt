@@ -102,6 +102,10 @@ class SafRecursiveScannerAndroidTest {
         assertNull(SmartMergeSafFolderCapture.capture(
             resolver, Uri.parse("content://test.source.scoped/document/shows"),
             read, WorkspacePane.A, 1L, now))
+        assertNull("Unbounded opaque provider root ID is rejected before IPC",
+            SmartMergeSafFolderCapture.capture(
+                resolver, Uri.parse("content://test.source.scoped/tree/" +
+                    "x".repeat(8193)), read, WorkspacePane.A, 1L, now))
         assertNull(SmartMergeSafFolderCapture.capture(
             resolver, source, read, WorkspacePane.A, -1L, now))
         assertNull(SmartMergeSafFolderCapture.capture(
