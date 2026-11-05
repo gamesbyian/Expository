@@ -87,6 +87,12 @@ jobs:
                 # Exact DocumentsProvider workspace selection UI, independently
                 # from the known-intermittent OS folder picker E2 (#222).
                 WorkspaceNavigationUiTest#documentProviderIsSelectableInSingleAndDualWithoutImplicitWrites) ;;
+                # Two EXACT genuine OS-picker Smart Merge journeys. Isolating
+                # each method prevents prior disposable-provider test writes
+                # contaminating counts and avoids paying for unrelated tests.
+                # No arbitrary picker method or unreviewed shell fragment.
+                RecursiveRealPickerCopyUiTest#genuineThirdSystemPickerInspectsMergeDestinationWithoutWriting) ;;
+                RecursiveRealPickerCopyUiTest#genuineIndependentPickerRootsIllustrateActualCasefoldCollisionsWithoutWrites) ;;
                 # Bounded synthetic provider display-only/recursive scan regression; no
                 # external server, picker authorization or file mutation.
                 ComposeSemanticsLifecycleUiTest|DualPickerLifecycleIsolationUiTest|LocalTreePresentationAndroidTest|SafRecursiveScannerAndroidTest|SafRecursiveTreeCopyAndroidTest|RecursiveFolderCopyOfferUiTest|RecursiveRealPickerCopyUiTest|DualRecursiveRealPickerCopyUiTest|WorkspaceNavigationUiTest#localTreeDisplayFilterDoesNotChangeSourceOrSelection) ;;
@@ -134,12 +140,13 @@ jobs:
           # The runner invokes one script string via sh -c; do not use a
           # multi-line if block. The optional class was already allowlisted.
           # Real OS-picker E2 needs its providers installed as an independent
-          # APK. Providers inside androidTest are not reliably discoverable
+          # APK, including EXACT reviewed Class#method selections. Providers
+          # inside androidTest are not reliably discoverable
           # as DocumentsUI roots. For other scoped classes, skip the fixture.
           # Keep this as one shell command with AND-chain failure propagation.
           # Reuse one Gradle daemon for the fixture and instrumented app build
           # inside this ephemeral job instead of forking two single-use JVMs.
-          script: cd android-transfer && ( ( [ -n "$TARGET_TEST_CLASS" ] && [ "$TARGET_TEST_CLASS" != "dev.expository.transfer.RecursiveRealPickerCopyUiTest" ] && [ "$TARGET_TEST_CLASS" != "dev.expository.transfer.DualRecursiveRealPickerCopyUiTest" ] && [ "$TARGET_TEST_CLASS" != "dev.expository.transfer.DualPickerLifecycleIsolationUiTest" ] ) || ( gradle -PwithAndroid=true -PwithPickerFixture=true :testing:documents-provider-fixture:assembleDebug --daemon && adb install -r testing/documents-provider-fixture/build/outputs/apk/debug/documents-provider-fixture-debug.apk ) ) && gradle -PwithAndroid=true ${TARGET_TEST_CLASS:+-Pandroid.testInstrumentationRunnerArguments.class=$TARGET_TEST_CLASS} :app:connectedDebugAndroidTest --daemon
+          script: cd android-transfer && ( ( [ -n "$TARGET_TEST_CLASS" ] && [ "${TARGET_TEST_CLASS%%#*}" != "dev.expository.transfer.RecursiveRealPickerCopyUiTest" ] && [ "$TARGET_TEST_CLASS" != "dev.expository.transfer.DualRecursiveRealPickerCopyUiTest" ] && [ "$TARGET_TEST_CLASS" != "dev.expository.transfer.DualPickerLifecycleIsolationUiTest" ] ) || ( gradle -PwithAndroid=true -PwithPickerFixture=true :testing:documents-provider-fixture:assembleDebug --daemon && adb install -r testing/documents-provider-fixture/build/outputs/apk/debug/documents-provider-fixture-debug.apk ) ) && gradle -PwithAndroid=true ${TARGET_TEST_CLASS:+-Pandroid.testInstrumentationRunnerArguments.class=$TARGET_TEST_CLASS} :app:connectedDebugAndroidTest --daemon
       - name: Require executed instrumentation receipts
         if: success()
         shell: bash
