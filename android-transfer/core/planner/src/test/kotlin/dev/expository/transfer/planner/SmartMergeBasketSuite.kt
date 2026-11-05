@@ -177,6 +177,27 @@ object SmartMergeBasketSuite {
         check(SmartMergeFolder.capture(WorkspacePane.A,
             picked("Invalid"), -1L, NOW) == null)
 
+        // M1 must refuse the same malformed provider-supplied source and
+        // ancestor components that hardened M2 already refuses. Do not keep
+        // a seemingly valid basket entry whose eventual path is impossible.
+        for (bad in listOf(".", "..", "bad/name", "bad\\\\name",
+                "newline\\nname", "delete\\u007fname", "x".repeat(256),
+                "é".repeat(128))) {
+            check(SmartMergeFolder.capture(WorkspacePane.A,
+                picked(bad, id = "invalid-source"), 1L, NOW) == null)
+            check(SmartMergeFolder.capture(WorkspacePane.A,
+                picked("Valid", id = "invalid-parent",
+                    parent = listOf("Photos", bad)), 1L, NOW) == null)
+        }
+        // A 254-byte multibyte component is legitimate, even though its
+        // character count is much lower than the 255-byte upper bound.
+        val nearLimit = "é".repeat(127)
+        check(SmartMergeFolder.capture(WorkspacePane.A,
+            picked(nearLimit, id = "boundary-source"), 1L, NOW) != null)
+        check(SmartMergeFolder.capture(WorkspacePane.A,
+            picked("Valid", id = "boundary-parent",
+                parent = listOf(nearLimit)), 1L, NOW) != null)
+
         // A fresh provider observation is checked without making the old
         // basket into a new grant or turning a cached browser visit into proof.
         val chosen = many.folders.take(2)
