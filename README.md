@@ -12,7 +12,7 @@ Expository browses **public repositories without login** and can browse selected
 
 ## Canonical logo
 
-The [approved Expository v1 logo](assets/branding/magnifier-disk-stack-centred.svg) is the authoritative SVG source. Superseded designs are kept under [draft artwork](assets/branding/draft-artwork/). Approval does not automatically change any deployed app icon.
+The [approved Expository v1 full logo](assets/branding/magnifier-disk-stack-centred.svg) and [matching square icon](assets/branding/expository-v1-icon-square.svg) are the authoritative SVG assets. The full logo is tightly framed; the square icon crops the same vector artwork. Superseded designs and the [horizontal](assets/branding/draft-artwork/magnifier-v1-echoes-horizontal.svg) / [vertical](assets/branding/draft-artwork/magnifier-v1-echoes-vertical.svg) parallel-echo studies are archived in [draft artwork](assets/branding/draft-artwork/). This does not automatically change deployed app icons.
 
 ## What you can do
 

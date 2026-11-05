@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1536" height="1536" viewBox="-104 5 1720 1720" role="img" aria-labelledby="title desc">
-  <title id="title">Expository: centred pastel disk stack in four-colour magnifier</title>
-  <desc id="desc">Jaunty pastel repository with A centered, fully visible pastel repository cylinder tilted eleven degrees with twenty percent lighter white lines and unchanged indicator dots.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1379" height="992" viewBox="71 154 1379 992" role="img" aria-labelledby="title desc">
+  <title id="title">Expository canonical v1, tight full logo</title>
+  <desc id="desc">The v1 white magnifier and pastel echoes are mirrored horizontally then rotated 90 degrees counterclockwise, while the repository cylinder retains its original orientation and is recentered inside the moved lens.</desc>
   <!-- Editable construction:
        Lens pivot: (546.102, 466.631) in original 1536 x 1536 source coordinates.
        Every silhouette references the SAME geometry; no shadow is redrawn.
@@ -10,7 +10,8 @@
        Layer angles and offsets are absolute from white, not cumulative floating-point approximations.
        Edit the three <use> transforms to change placement. Edit #magnifier to change all four outlines.
        The lens is true black with white monochrome accents; all pastel fills remain unchanged.
-       Framing is enlarged to retain the entire corrected yellow handle.
+       The disk remains at its native -11 degree tilt; new lens centre = (466.631, 546.102).
+       This alternative is separate from unchanged canonical v1.
   -->
   <defs>
     <path id="magnifier" fill-rule="evenodd" d="M288 191 L258 223 L238 249 L219 279 L201 314 L191 338 L179 375 L174 397 L168 438 L168 491 L171 516 L180 558 L191 592 L201 616 L223 658 L249 696 L272 723 L292 743 L321 768 L351 789 L380 806 L425 826 L459 837 L486 843 L524 848 L577 847 L606 843 L647 833 L677 822 L713 805 L747 784 L765 770 L767 770 L825 838 L992 1040 L1005 1050 L1015 1055 L1027 1058 L1052 1057 L1059 1055 L1075 1046 L1087 1034 L1093 1025 L1100 1006 L1101 986 L1095 964 L1089 954 L1067 931 L991 860 L828 711 L828 709 L838 698 L854 676 L875 642 L893 605 L903 579 L912 549 L920 508 L922 485 L922 441 L920 418 L913 379 L906 353 L893 317 L880 289 L861 255 L838 223 L821 203 L794 176 L771 157 L745 139 L711 120 L686 109 L653 98 L607 88 L577 85 L529 85 L502 88 L454 98 L423 108 L396 119 L356 140 L327 159 Z M538 195 L565 195 L588 197 L609 201 L640 210 L660 218 L683 230 L707 246 L725 261 L744 280 L766 308 L788 348 L797 370 L806 400 L810 419 L814 456 L814 475 L810 514 L804 540 L797 561 L776 603 L767 617 L748 641 L726 664 L709 679 L689 694 L661 711 L635 723 L615 730 L581 738 L563 740 L526 740 L507 738 L480 732 L452 723 L436 716 L406 699 L385 684 L361 663 L345 646 L325 620 L311 598 L300 576 L290 551 L279 509 L276 479 L276 455 L279 428 L285 402 L296 369 L316 330 L328 312 L349 286 L367 268 L394 246 L412 234 L442 218 L489 202 L515 197 Z"/>
@@ -27,20 +28,24 @@
     
 
     <!-- Clip agrees exactly with base lens opening. -->
-    <clipPath id="foreground-lens-clip" clipPathUnits="userSpaceOnUse"><path d="M538 195 L565 195 L588 197 L609 201 L640 210 L660 218 L683 230 L707 246 L725 261 L744 280 L766 308 L788 348 L797 370 L806 400 L810 419 L814 456 L814 475 L810 514 L804 540 L797 561 L776 603 L767 617 L748 641 L726 664 L709 679 L689 694 L661 711 L635 723 L615 730 L581 738 L563 740 L526 740 L507 738 L480 732 L452 723 L436 716 L406 699 L385 684 L361 663 L345 646 L325 620 L311 598 L300 576 L290 551 L279 509 L276 479 L276 455 L279 428 L285 402 L296 369 L316 330 L328 312 L349 286 L367 268 L394 246 L412 234 L442 218 L489 202 L515 197 Z"/></clipPath>
+    <clipPath id="foreground-lens-clip" clipPathUnits="userSpaceOnUse"><path transform="matrix(0 1 1 0 0 0)" d="M538 195 L565 195 L588 197 L609 201 L640 210 L660 218 L683 230 L707 246 L725 261 L744 280 L766 308 L788 348 L797 370 L806 400 L810 419 L814 456 L814 475 L810 514 L804 540 L797 561 L776 603 L767 617 L748 641 L726 664 L709 679 L689 694 L661 711 L635 723 L615 730 L581 738 L563 740 L526 740 L507 738 L480 732 L452 723 L436 716 L406 699 L385 684 L361 663 L345 646 L325 620 L311 598 L300 576 L290 551 L279 509 L276 479 L276 455 L279 428 L285 402 L296 369 L316 330 L328 312 L349 286 L367 268 L394 246 L412 234 L442 218 L489 202 L515 197 Z"/></clipPath>
   </defs>
-  <rect x="-104" y="5" width="1720" height="1720" fill="#000000"/>
+  <rect x="71" y="154" width="1379" height="992" fill="#000000"/>
+  <!-- Mirror x across x=768 then rotate 90 degrees CCW about (768,768): net transform (x,y) -> (y,x). -->
+  <g id="magnifier-and-echoes-reoriented" transform="matrix(0 1 1 0 0 0)">
   <use id="yellow" xlink:href="#magnifier" fill="#F8DF9D" transform="translate(207.36 207.36) rotate(28.5 546.102 466.631)"/>
   <use id="blue" xlink:href="#magnifier" fill="#A1CAEB" transform="translate(138.24 138.24) rotate(19 546.102 466.631)"/>
   <use id="red" xlink:href="#magnifier" fill="#F2ABB0" transform="translate(69.12 69.12) rotate(9.5 546.102 466.631)"/>
   <use id="white" xlink:href="#magnifier" fill="#FFFFFF"/>
+  </g>
 
   <!-- True black lens background; monochrome source strokes/dots inverted to white. -->
-  <use id="lens-interior" xlink:href="#lens-opening" fill="#000000"/>
+  <use id="lens-interior" xlink:href="#lens-opening" fill="#000000" transform="matrix(0 1 1 0 0 0)"/>
   <!-- New adjustments: lower folder (+4,+2), upper dots (-6,+2) relative to preceding black-lens variant. Everything inside lens: 6 units right, then 110% about lens pivot (546.102,466.631). Crop remains fixed. -->
   <g id="lens-contents" clip-path="url(#foreground-lens-clip)">
     <!-- Scale about lens centre first, then shift 3 ticks (6 original SVG units) right. -->
-    <g id="lens-artwork-layout" transform="translate(0 0)">
+    <!-- Original cylinder orientation is untouched; translate only to new lens centre. -->
+    <g id="lens-artwork-layout" transform="translate(-79.471 79.471)">
     
     
     <g id="pastel-repository-art">
@@ -90,5 +95,5 @@
     </g>
     </g>
   </g>
-  <use id="foreground-rim-top" xlink:href="#magnifier" fill="#FFFFFF"/>
+  <use id="foreground-rim-top" xlink:href="#magnifier" fill="#FFFFFF" transform="matrix(0 1 1 0 0 0)"/>
 </svg>
