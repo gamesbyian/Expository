@@ -67,9 +67,7 @@ object SmartMergePreviewPlanner {
     const val MAX_PREVIEW_ENTRIES = 10_000
 
     private fun validName(name: String): Boolean =
-        name.isNotBlank() && name != "." && name != ".." &&
-            name.toByteArray(StandardCharsets.UTF_8).size <= 255 &&
-            name.none { it == '/' || it == '\\' || it.code < 32 || it.code == 127 }
+        SmartMergeNameRules.validComponent(name)
 
     private fun nameKey(name: String, casePolicy: CasePolicy): String {
         val normalized = Normalizer.normalize(name, Normalizer.Form.NFC)
