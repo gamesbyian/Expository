@@ -180,8 +180,8 @@ object SmartMergeBasketSuite {
         // M1 must refuse the same malformed provider-supplied source and
         // ancestor components that hardened M2 already refuses. Do not keep
         // a seemingly valid basket entry whose eventual path is impossible.
-        for (bad in listOf(".", "..", "bad/name", "bad\\\\name",
-                "newline\\nname", "delete\\u007fname", "x".repeat(256),
+        for (bad in listOf(".", "..", "bad/name", "bad\\name",
+                "newline\nname", "delete\u007fname", "x".repeat(256),
                 "é".repeat(128))) {
             check(SmartMergeFolder.capture(WorkspacePane.A,
                 picked(bad, id = "invalid-source"), 1L, NOW) == null)
