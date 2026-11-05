@@ -509,6 +509,13 @@ private fun DeveloperPreview(
                     } else if (source == null) {
                         mergeMessage = "The selected folder is unreadable, stale or too large " +
                             "to list safely. No source was collected."
+                    } else if (source.source.location.capabilities[Capability.READ]
+                            ?.valid(System.currentTimeMillis()) != true) {
+                        // A provider can block longer than the source's
+                        // short-lived observation window. Returning from a
+                        // successful query is not proof it is STILL current.
+                        mergeMessage = "The folder observation expired while reading. " +
+                            "Choose it again; nothing was changed."
                     } else {
                         val added = mergeSources.add(source)
                         mergeSources = added.basket
