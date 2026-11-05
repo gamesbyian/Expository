@@ -26,6 +26,128 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class SafRecursiveScannerAndroidTest {
+    @Test fun sameAuthoritySafRelationshipOnlyReportsPositiveOverlapOrUnknown() {
+        val e = Environment()
+        val appContext = InstrumentationRegistry.getInstrumentation().targetContext
+        val journalBefore = appContext.noBackupFilesDir.list().orEmpty().toSet()
+        val read = Intent.FLAG_GRANT_READ_URI_PERMISSION
+        val writable = read or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val source = requireNotNull(SmartMergeSafFolderCapture.capture(
+            e.resolver, e.sourceTree, read, WorkspacePane.A, 1L,
+            e.observedAtMillis))
+        val sameProviderChild = Uri.parse("content://test.source.scoped/tree/shows")
+        val destination = requireNotNull(SmartMergeSafDestinationInspector.capture(
+            e.resolver, sameProviderChild, writable, { e.observedAtMillis }))
+        val before = LocalTreeReader.list(
+            e.resolver, sameProviderChild, "shows", LocalTreeReader.MAX_BROWSE)
+        var calls = 0
+        fun inspect(
+            clock: () -> Long = { e.observedAtMillis },
+            live: () -> Boolean = { true },
+            query: (Uri, Uri) -> Boolean
+        ) = SmartMergeSafRelationshipProbe.observe(
+            e.resolver, source, destination, clock, live,
+            providerChildCapabilityObserved = true, descendantQuery = query)
+        val forward = inspect(query = { parent, child ->
+            calls++
+            DocumentsContract.getDocumentId(parent) == "source-root" &&
+                DocumentsContract.getDocumentId(child) == "shows"
+        })
+        assertEquals(SmartMergeSafRelationship.OVERLAP, forward)
+        assertEquals("Both directional calls must be repeated", 4, calls)
+        calls = 0
+        assertEquals(SmartMergeSafRelationship.OVERLAP, inspect(query = {
+                parent, child ->
+            calls++
+            DocumentsContract.getDocumentId(parent) == "shows" &&
+                DocumentsContract.getDocumentId(child) == "source-root"
+        }))
+        assertEquals(4, calls)
+        assertEquals("False from the provider is NOT disjointness",
+            SmartMergeSafRelationship.UNKNOWN, inspect(query = { _, _ -> false }))
+        calls = 0
+        assertEquals("No child relationship RPC without observed root support",
+            SmartMergeSafRelationship.UNKNOWN,
+            SmartMergeSafRelationshipProbe.observe(e.resolver, source, destination,
+                { e.observedAtMillis },
+                descendantQuery = { _, _ ->
+                    calls++
+                    true
+                }))
+        assertEquals(0, calls)
+        calls = 0
+        assertEquals("A contradictory positive must not be called stable",
+            SmartMergeSafRelationship.UNKNOWN, inspect(query = { _, _ ->
+                calls++
+                calls == 1
+            }))
+        assertEquals(SmartMergeSafRelationship.UNKNOWN,
+            inspect(query = { _, _ -> throw SecurityException("revoked") }))
+        assertEquals(SmartMergeSafRelationship.UNKNOWN,
+            inspect(query = { _, _ -> throw java.io.FileNotFoundException() }))
+        calls = 0
+        assertEquals("Cancellation across provider queries must fail closed",
+            SmartMergeSafRelationship.UNKNOWN,
+            inspect(live = { calls < 2 }, query = { _, _ ->
+                calls++
+                true
+            }))
+        assertEquals("Original picker READ proof cannot renew on expiry",
+            SmartMergeSafRelationship.UNKNOWN,
+            inspect(clock = { e.observedAtMillis + 300_001L },
+                query = { _, _ -> true }))
+        calls = 0
+        assertEquals("A clock rollback mid-query cannot certify ancestry",
+            SmartMergeSafRelationship.UNKNOWN,
+            inspect(clock = {
+                calls++
+                if (calls == 1) e.observedAtMillis
+                else e.observedAtMillis - 1L
+            }, query = { _, _ -> true }))
+        // The regular synthetic ContentProvider lacks DocumentsProvider's
+        // isChildDocument implementation. A real framework call must not
+        // turn its default/unsupported behavior into a disjoint certificate.
+        assertEquals(SmartMergeSafRelationship.UNKNOWN,
+            SmartMergeSafRelationshipProbe.observe(
+                e.resolver, source, destination, { e.observedAtMillis },
+                providerChildCapabilityObserved = true))
+        val after = LocalTreeReader.list(
+            e.resolver, sameProviderChild, "shows", LocalTreeReader.MAX_BROWSE)
+        assertEquals("The provider cannot be changed by a relationship probe",
+            before, after)
+        assertEquals(2, after.children.size)
+        assertEquals("Probing ancestry cannot create recovery records",
+            journalBefore, appContext.noBackupFilesDir.list().orEmpty().toSet())
+    }
+
+    @Test fun safRelationshipSkipsCrossAuthorityAndExactAliasWithoutRemoteCalls() {
+        val e = Environment()
+        val read = Intent.FLAG_GRANT_READ_URI_PERMISSION
+        val writable = read or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val source = requireNotNull(SmartMergeSafFolderCapture.capture(
+            e.resolver, e.sourceTree, read, WorkspacePane.A, 1L,
+            e.observedAtMillis))
+        val otherProvider = requireNotNull(SmartMergeSafDestinationInspector.capture(
+            e.resolver, e.targetTree, writable, { e.observedAtMillis }))
+        var callbacks = 0
+        val neverQuery: (Uri, Uri) -> Boolean = { _, _ ->
+            callbacks++
+            error("Must never query unrelated provider scopes or exact alias")
+        }
+        assertEquals(SmartMergeSafRelationship.UNKNOWN,
+            SmartMergeSafRelationshipProbe.observe(
+                e.resolver, source, otherProvider, { e.observedAtMillis },
+                descendantQuery = neverQuery))
+        val sameRoot = requireNotNull(SmartMergeSafDestinationInspector.capture(
+            e.resolver, e.sourceTree, writable, { e.observedAtMillis }))
+        assertEquals(SmartMergeSafRelationship.OVERLAP,
+            SmartMergeSafRelationshipProbe.observe(
+                e.resolver, source, sameRoot, { e.observedAtMillis },
+                descendantQuery = neverQuery))
+        assertEquals(0, callbacks)
+        assertTrue(SmartMergeSafRelationship.entries.none { it.name == "DISJOINT" })
+    }
+
     @Test fun independentlyPickedMergeDestinationIsInspectedWithoutAnyWrite() {
         val e = Environment()
         val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
