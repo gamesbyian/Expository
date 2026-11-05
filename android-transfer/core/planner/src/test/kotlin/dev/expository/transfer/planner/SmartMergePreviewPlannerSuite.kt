@@ -163,6 +163,24 @@ object SmartMergePreviewPlannerSuite {
                 grantId = "another-writable-picker")) }
         check("DESTINATION_INSIDE_SOURCE" in plan(sources, trees,
             destination = opaqueParent, parent = index(opaqueParent)).blockers)
+        // Different tree-root IDs from the SAME SAF provider cannot certify
+        // physical disjointness. The destination could actually be a child of
+        // a collected root, even if its displayed path starts elsewhere.
+        val unrelatedPickedRoot = loc("saf-A", folder = listOf("Other label"))
+            .let { base -> base.copy(key = base.key.copy(
+                rootId = "unobserved-other-tree",
+                containerId = "unobserved-other-tree",
+                grantId = "separate-picker-grant")) }
+        val unresolved = plan(sources, trees,
+            destination = unrelatedPickedRoot, parent = index(unrelatedPickedRoot))
+        check("DESTINATION_SAF_SEPARATION_UNPROVEN" in unresolved.blockers)
+        check(!unresolved.reviewable && unresolved.entries.isEmpty())
+        // Different providers really have different ID namespaces. A
+        // conservative same-authority check must not block those by accident.
+        val unrelatedProviderRoot = unrelatedPickedRoot.copy(
+            key = unrelatedPickedRoot.key.copy(authorityId = "other-saf-provider"))
+        check(plan(sources, trees, destination = unrelatedProviderRoot,
+            parent = index(unrelatedProviderRoot)).reviewable)
         // Equal opaque strings belonging to a DIFFERENT independent
         // authority are not sufficient to invent a source/destination alias.
         val unrelatedAuthority = loc("dest").let { base -> base.copy(
