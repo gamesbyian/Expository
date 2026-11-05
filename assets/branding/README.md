@@ -1,20 +1,15 @@
 # Expository branding
 
-## Canonical v1
+## Approved canonical v1
 
-The approved **[full master](magnifier-disk-stack-centred.svg)** is the reoriented pastel magnifier, with a tightly framed SVG canvas. The magnifier and coloured echoes are mirrored and rotated 90° counterclockwise compared with the original experiment, but the pastel disk stack retains its original tilt.
+**[Full v1 master SVG](magnifier-disk-stack-centred.svg)** uses the white magnifier and upright pastel storage stack with **horizontal-only, unrotated** red, blue and yellow echoes. Each layer shares the same editable magnifier silhouette. Visual horizontal offsets are 69.12, 138.24 and 207.36 SVG units to the right; there are no relative vertical offsets or rotations. The outer mirror/rotation used to orient the glass is part of the shared base geometry and unchanged.
 
-The [square icon SVG](expository-v1-icon-square.svg) uses exactly the same geometry and colours, with a tighter square viewBox `109 194 920 920`, intentionally clipping the handles as in the approved icon crop. The master uses `71 154 1379 992`, retaining the full magnifier and its pastel echoes. Neither embeds raster imagery.
+**[Square v1 icon SVG](expository-v1-icon-square.svg)** uses the very same illustration, cropped to `viewBox="71 170 920 920"` to match the approved square-icon reference. The full master uses `viewBox="71 154 1209 961"`. Both have solid black backgrounds and preserve the storage cylinder's original angle, colour and indicator dots.
 
-The earlier canonical disk-stack master is archived as [magnifier-disk-stack-centred-original-v1.svg](draft-artwork/magnifier-disk-stack-centred-original-v1.svg).
+The previously canonical diagonal-echo design and its matching square crop are archived byte-for-byte as [former full master](draft-artwork/magnifier-v1-reoriented-diagonal-echoes.svg) and [former icon](draft-artwork/expository-v1-icon-square-reoriented.svg). Other superseded variants, including the vertical-only study and the source horizontal-only experiment, remain in [draft-artwork/](draft-artwork/) for comparison. Drafts are not the approved logo.
 
-## Exploration variants
+## Raster exports
 
-Two additional parallel-echo studies are retained in [draft-artwork/](draft-artwork/):
+Run `python scripts/render-expository-branding.py` at the repository root (with `cairosvg` installed) to render PNG files directly from the canonical SVGs and the axis-aligned variants. The PNG rendering preserves the vector geometry; the square icon is 1536×1536 and the full logo uses its original aspect ratio.
 
-- [Horizontal-only](draft-artwork/magnifier-v1-echoes-horizontal.svg): offsets visually right by +69.12, +138.24, +207.36, with no vertical offsets or rotations.
-- [Vertical-only](draft-artwork/magnifier-v1-echoes-vertical.svg): offsets visually down by +69.12, +138.24, +207.36, with no horizontal offsets or rotations.
-
-These two are **draft variants**, not substitutes for canonical v1. All variants leave the disk stack and white foreground lens unchanged. Because the v1 glass is represented by `matrix(0 1 1 0 0 0)`, its local x/y coordinates are swapped on display; therefore horizontal-only echoes use internal `translate(0, n)`, and vertical-only echoes use `translate(n, 0)`.
-
-The PNG exports can be regenerated from the SVGs using [scripts/render-expository-branding.py](../../scripts/render-expository-branding.py). Designation as brand assets does not mean app launcher icons or favicons have been deployed.
+Brand-file approval does not itself change the live web app's header, favicon or Android launcher icon.

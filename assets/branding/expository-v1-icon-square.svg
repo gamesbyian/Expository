@@ -1,18 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1536" height="1536" viewBox="109 194 920 920" role="img" aria-labelledby="title desc">
-  <title id="title">Expository canonical v1, square icon crop</title>
-  <desc id="desc">The v1 white magnifier and pastel echoes are mirrored horizontally then rotated 90 degrees counterclockwise, while the repository cylinder retains its original orientation and is recentered inside the moved lens.</desc>
-  <!-- Editable construction:
-       Lens pivot: (546.102, 466.631) in original 1536 x 1536 source coordinates.
-       Every silhouette references the SAME geometry; no shadow is redrawn.
-       Increment: +9.5 degrees clockwise, +69.12 units horizontally and vertically (4.5% of 1536).
-       SVG transforms execute right-to-left: first rotate about lens pivot, then translate.
-       Layer angles and offsets are absolute from white, not cumulative floating-point approximations.
-       Edit the three <use> transforms to change placement. Edit #magnifier to change all four outlines.
-       The lens is true black with white monochrome accents; all pastel fills remain unchanged.
-       The disk remains at its native -11 degree tilt; new lens centre = (466.631, 546.102).
-       This alternative is separate from unchanged canonical v1.
-  -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1536" height="1536" viewBox="71 170 920 920" role="img" aria-labelledby="title desc">
+  <title id="title">Expository canonical v1: square cropped horizontal-only echoes</title>
+  <desc id="desc">Approved Expository v1 square icon crop of the canonical horizontal-only magnifier and pastel disk stack.</desc>
+  <!-- Canonical horizontal-only composition. Every coloured echo references the exact same
+       #magnifier path as the white foreground; inner disk stack retains its original tilt.
+       Display-coordinate echo offsets: red +69.12, blue +138.24, yellow +207.36 horizontally.
+       No relative rotation or vertical offset. Because the exterior uses the transpose
+       matrix (0 1 1 0 0 0), internal SVG translations are along Y.
+       The square icon is a crop (viewBox only); do not alter the common geometry.
+       Approved canonical v1; earlier diagonal/rotated designs are archived. -->
   <defs>
     <path id="magnifier" fill-rule="evenodd" d="M288 191 L258 223 L238 249 L219 279 L201 314 L191 338 L179 375 L174 397 L168 438 L168 491 L171 516 L180 558 L191 592 L201 616 L223 658 L249 696 L272 723 L292 743 L321 768 L351 789 L380 806 L425 826 L459 837 L486 843 L524 848 L577 847 L606 843 L647 833 L677 822 L713 805 L747 784 L765 770 L767 770 L825 838 L992 1040 L1005 1050 L1015 1055 L1027 1058 L1052 1057 L1059 1055 L1075 1046 L1087 1034 L1093 1025 L1100 1006 L1101 986 L1095 964 L1089 954 L1067 931 L991 860 L828 711 L828 709 L838 698 L854 676 L875 642 L893 605 L903 579 L912 549 L920 508 L922 485 L922 441 L920 418 L913 379 L906 353 L893 317 L880 289 L861 255 L838 223 L821 203 L794 176 L771 157 L745 139 L711 120 L686 109 L653 98 L607 88 L577 85 L529 85 L502 88 L454 98 L423 108 L396 119 L356 140 L327 159 Z M538 195 L565 195 L588 197 L609 201 L640 210 L660 218 L683 230 L707 246 L725 261 L744 280 L766 308 L788 348 L797 370 L806 400 L810 419 L814 456 L814 475 L810 514 L804 540 L797 561 L776 603 L767 617 L748 641 L726 664 L709 679 L689 694 L661 711 L635 723 L615 730 L581 738 L563 740 L526 740 L507 738 L480 732 L452 723 L436 716 L406 699 L385 684 L361 663 L345 646 L325 620 L311 598 L300 576 L290 551 L279 509 L276 479 L276 455 L279 428 L285 402 L296 369 L316 330 L328 312 L349 286 L367 268 L394 246 L412 234 L442 218 L489 202 L515 197 Z"/>
     <path id="lens-opening" d="M538 195 L565 195 L588 197 L609 201 L640 210 L660 218 L683 230 L707 246 L725 261 L744 280 L766 308 L788 348 L797 370 L806 400 L810 419 L814 456 L814 475 L810 514 L804 540 L797 561 L776 603 L767 617 L748 641 L726 664 L709 679 L689 694 L661 711 L635 723 L615 730 L581 738 L563 740 L526 740 L507 738 L480 732 L452 723 L436 716 L406 699 L385 684 L361 663 L345 646 L325 620 L311 598 L300 576 L290 551 L279 509 L276 479 L276 455 L279 428 L285 402 L296 369 L316 330 L328 312 L349 286 L367 268 L394 246 L412 234 L442 218 L489 202 L515 197 Z"/>
@@ -30,12 +26,12 @@
     <!-- Clip agrees exactly with base lens opening. -->
     <clipPath id="foreground-lens-clip" clipPathUnits="userSpaceOnUse"><path transform="matrix(0 1 1 0 0 0)" d="M538 195 L565 195 L588 197 L609 201 L640 210 L660 218 L683 230 L707 246 L725 261 L744 280 L766 308 L788 348 L797 370 L806 400 L810 419 L814 456 L814 475 L810 514 L804 540 L797 561 L776 603 L767 617 L748 641 L726 664 L709 679 L689 694 L661 711 L635 723 L615 730 L581 738 L563 740 L526 740 L507 738 L480 732 L452 723 L436 716 L406 699 L385 684 L361 663 L345 646 L325 620 L311 598 L300 576 L290 551 L279 509 L276 479 L276 455 L279 428 L285 402 L296 369 L316 330 L328 312 L349 286 L367 268 L394 246 L412 234 L442 218 L489 202 L515 197 Z"/></clipPath>
   </defs>
-  <rect x="109" y="194" width="920" height="920" fill="#000000"/>
+  <rect x="71" y="170" width="920" height="920" fill="#000000"/>
   <!-- Mirror x across x=768 then rotate 90 degrees CCW about (768,768): net transform (x,y) -> (y,x). -->
   <g id="magnifier-and-echoes-reoriented" transform="matrix(0 1 1 0 0 0)">
-  <use id="yellow" xlink:href="#magnifier" fill="#F8DF9D" transform="translate(207.36 207.36) rotate(28.5 546.102 466.631)"/>
-  <use id="blue" xlink:href="#magnifier" fill="#A1CAEB" transform="translate(138.24 138.24) rotate(19 546.102 466.631)"/>
-  <use id="red" xlink:href="#magnifier" fill="#F2ABB0" transform="translate(69.12 69.12) rotate(9.5 546.102 466.631)"/>
+  <use id="yellow" xlink:href="#magnifier" fill="#F8DF9D" transform="translate(0 207.36)"/>
+  <use id="blue" xlink:href="#magnifier" fill="#A1CAEB" transform="translate(0 138.24)"/>
+  <use id="red" xlink:href="#magnifier" fill="#F2ABB0" transform="translate(0 69.12)"/>
   <use id="white" xlink:href="#magnifier" fill="#FFFFFF"/>
   </g>
 
