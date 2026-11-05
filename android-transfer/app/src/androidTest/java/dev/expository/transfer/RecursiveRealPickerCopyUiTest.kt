@@ -2,6 +2,7 @@ package dev.expository.transfer
 
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.net.Uri
+import android.os.SystemClock
 import android.provider.DocumentsContract
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -803,14 +804,6 @@ internal object RecursivePickerUi {
             }
             error("DOCUMENTSUI_" + stage + "_NOT_FOUND")
         }
-        assertTrue("Expected real DocumentsUI folder picker",
-            device.wait(Until.hasObject(By.pkg("com.google.android.documentsui")), 8_000L) ||
-            device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 3_000L) ||
-            visible("Recent", 3_000L) || device.currentPackageName == "android" ||
-            // A system picker can be foreground even while UiAutomator's
-            // accessibility tree has not attached (API35 emulator race).
-            device.executeShellCommand("dumpsys activity activities")
-                .contains("com.android.documentsui.picker.PickActivity"))
         // A system-owned picker may be resumed while API35 UiAutomator has
         // not attached an accessibility window. Verify the resumed SYSTEM
         // activity independently, without accepting a generic Android package
@@ -827,6 +820,18 @@ internal object RecursivePickerUi {
         fun pickerForeground(): Boolean =
             device.currentPackageName in packages ||
                 packages.any { device.hasObject(By.pkg(it)) } || pickerResumed()
+        // Do not accept generic package "android" or a stale "Recent"
+        // label as proof that ACTION_OPEN_DOCUMENT_TREE is open. Android 35
+        // sometimes reports the generic OS package while the real picker
+        // has not attached its UiAutomator window yet. Bounded polling only:
+        // no guessed tap, implicit grant or untrusted URI injection.
+        val pickerDeadline = SystemClock.uptimeMillis() + 20_000L
+        var realPickerReady = pickerForeground()
+        while (!realPickerReady && SystemClock.uptimeMillis() < pickerDeadline) {
+            SystemClock.sleep(300L)
+            realPickerReady = pickerForeground()
+        }
+        assertTrue("Actual DocumentsUI picker never foregrounded", realPickerReady)
         val drawerDescriptions = listOf("Show roots", "Open navigation drawer",
             "Show navigation drawer", "Show locations")
         fun openLabeledRoots(): Boolean {
