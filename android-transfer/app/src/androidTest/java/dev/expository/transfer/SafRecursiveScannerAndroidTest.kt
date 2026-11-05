@@ -46,7 +46,8 @@ class SafRecursiveScannerAndroidTest {
             live: () -> Boolean = { true },
             query: (Uri, Uri) -> Boolean
         ) = SmartMergeSafRelationshipProbe.observe(
-            e.resolver, source, destination, clock, live, query)
+            e.resolver, source, destination, clock, live,
+            providerChildCapabilityObserved = true, descendantQuery = query)
         val forward = inspect(query = { parent, child ->
             calls++
             DocumentsContract.getDocumentId(parent) == "source-root" &&
@@ -64,6 +65,16 @@ class SafRecursiveScannerAndroidTest {
         assertEquals(4, calls)
         assertEquals("False from the provider is NOT disjointness",
             SmartMergeSafRelationship.UNKNOWN, inspect(query = { _, _ -> false }))
+        calls = 0
+        assertEquals("No child relationship RPC without observed root support",
+            SmartMergeSafRelationship.UNKNOWN,
+            SmartMergeSafRelationshipProbe.observe(e.resolver, source, destination,
+                { e.observedAtMillis },
+                descendantQuery = { _, _ ->
+                    calls++
+                    true
+                }))
+        assertEquals(0, calls)
         calls = 0
         assertEquals("A contradictory positive must not be called stable",
             SmartMergeSafRelationship.UNKNOWN, inspect(query = { _, _ ->
@@ -98,7 +109,8 @@ class SafRecursiveScannerAndroidTest {
         // turn its default/unsupported behavior into a disjoint certificate.
         assertEquals(SmartMergeSafRelationship.UNKNOWN,
             SmartMergeSafRelationshipProbe.observe(
-                e.resolver, source, destination, { e.observedAtMillis }))
+                e.resolver, source, destination, { e.observedAtMillis },
+                providerChildCapabilityObserved = true))
         val after = LocalTreeReader.list(
             e.resolver, sameProviderChild, "shows", LocalTreeReader.MAX_BROWSE)
         assertEquals("The provider cannot be changed by a relationship probe",
