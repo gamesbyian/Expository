@@ -773,6 +773,7 @@ private fun DeveloperPreview(
     fun checkMergeSourceAccess(selected: SmartMergeFolder) {
         if (copyBusy || remoteRelayBusy || mergeReading ||
             pendingMergePicker != null || mergeInspecting != null ||
+            mergeInventoryReading != null ||
             mergeSources.folders.none { it === selected }) return
         val generation = treeReadGeneration.incrementAndGet()
         val observedAt = System.currentTimeMillis()
@@ -2175,7 +2176,8 @@ private fun DeveloperPreview(
                                         enabled = capturedProofValid &&
                                             !copyBusy && !remoteRelayBusy &&
                                             !mergeReading && mergeInspecting == null &&
-                                            pendingMergePicker == null,
+                                            pendingMergePicker == null &&
+                                            mergeInventoryReading == null,
                                         onClick = { checkMergeSourceAccess(selected) }
                                     )
                                     mergeInspectResults[selected]?.let { last ->
