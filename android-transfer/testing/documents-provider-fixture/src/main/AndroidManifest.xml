@@ -17,6 +17,19 @@
                 <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
             </intent-filter>
         </provider>
+        <!-- A fourth disposable, separately OS-granted source exposes
+             matching names to verify keep-both/coalescing illustrations
+             without mutating any source or destination. -->
+        <provider
+            android:name="dev.expository.transfer.RecursivePickerMergeSourceProvider"
+            android:authorities="test.real.recursive.merge.source.scoped"
+            android:permission="android.permission.MANAGE_DOCUMENTS"
+            android:grantUriPermissions="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
         <provider
             android:name="dev.expository.transfer.RecursivePickerTargetProvider"
             android:authorities="test.real.recursive.target.scoped"

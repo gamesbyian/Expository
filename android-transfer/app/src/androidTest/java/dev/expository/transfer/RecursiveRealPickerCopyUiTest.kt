@@ -151,10 +151,9 @@ class RecursiveRealPickerCopyUiTest {
             compose.onAllNodesWithTag("smart-merge-illustration-counts")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        // Target Lab is a separately OS-picked *source* in this test, and
-        // an earlier test may have populated it during the same installed
-        // provider process. The independent duplicate-tree test pins exact
-        // collision numbers; this test proves the user journey and invariants.
+        // Target Lab can contain files from a previous real-picker test in
+        // this installed fixture process. Only the separately controlled
+        // duplicate-source journey below pins exact collision numbers.
         compose.onNodeWithText("Under hypothetical case-folding:",
             substring = true).assertExists()
         compose.onNodeWithText("Safety blocker: DESTINATION_CASE_POLICY_UNVERIFIED")
@@ -203,6 +202,109 @@ class RecursiveRealPickerCopyUiTest {
             .assertIsEnabled().performClick()
         assertTrue("Clear must remove the destination review from the app",
             compose.onAllNodesWithTag("smart-merge-destination-summary")
+                .fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test fun genuineIndependentPickerRootsIllustrateActualCasefoldCollisionsWithoutWrites() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val automation = instrumentation.uiAutomation
+        automation.serviceInfo?.let { info ->
+            info.flags = info.flags or
+                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+            automation.serviceInfo = info
+        }
+        val device = UiDevice.getInstance(instrumentation)
+        assertTrue("Test DocumentsProvider fixture APK must actually be installed",
+            device.executeShellCommand("pm list packages dev.expository.transfer.fixture")
+                .contains("package:dev.expository.transfer.fixture"))
+        val context = instrumentation.targetContext
+        val recoveryBefore = context.noBackupFilesDir.list().orEmpty().toSet()
+        fun press(tag: String) {
+            compose.onNodeWithTag("transfer-workspace-scroll")
+                .performScrollToNode(hasTestTag(tag))
+            compose.onNodeWithTag(tag).assertIsEnabled().performClick()
+        }
+        fun pickSource(title: String, expected: Int) {
+            press("smart-merge-add-source")
+            RecursivePickerUi.chooseFixtureRoot(device, title)
+            compose.waitUntil(30_000L) {
+                compose.onAllNodesWithText("Smart Merge · " +
+                    expected + " source folder(s)")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+        }
+        press("smart-merge-basket-toggle")
+        pickSource("Expository Source Lab", 1)
+        pickSource("Expository Merge Source Lab", 2)
+        // These two provider roots intentionally contain identically named
+        // Shows / Empty / Episode.bin entries, but different authorities and
+        // original OS picker grants. They must not be mistaken for one object.
+        press("smart-merge-pick-destination")
+        RecursivePickerUi.chooseFixtureRoot(device, "Expository Dual Target Lab")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithTag("smart-merge-destination-summary")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        for (index in 0..1) {
+            press("smart-merge-inspect-source-" + index)
+            compose.waitUntil(30_000L) {
+                compose.onAllNodesWithTag("smart-merge-source-inventory-" + index)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+        }
+        press("smart-merge-illustrate")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithTag("smart-merge-illustration-counts")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("6 descendant item(s), 1 keep-both rename(s)",
+            substring = true).assertExists()
+        compose.onNodeWithText("Source 2: Shows → Shows (2)",
+            substring = true).assertExists()
+        compose.onNodeWithText("Safety blocker: DESTINATION_CASE_POLICY_UNVERIFIED")
+            .assertExists()
+
+        // A different structure changes the *hypothetical* mapping. A
+        // complete replace of the old preview is necessary: it cannot be
+        // reused as an approval or result for another mode.
+        press("smart-merge-collision-mode")
+        assertTrue("Changing collision policy must revoke the old example",
+            compose.onAllNodesWithTag("smart-merge-illustration-counts")
+                .fetchSemanticsNodes().isEmpty())
+        press("smart-merge-illustrate")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithTag("smart-merge-illustration-counts")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("6 descendant item(s), 1 keep-both rename(s), " +
+            "2 reused directory name(s)", substring = true).assertExists()
+        compose.onNodeWithText("Source 2: Shows → Shows (hypothetical directory reuse)",
+            substring = true).assertExists()
+
+        val actualSource = Uri.parse(
+            "content://test.real.recursive.source.scoped/tree/lab-source-root")
+        val secondSource = Uri.parse(
+            "content://test.real.recursive.merge.source.scoped/tree/lab-source-root")
+        for (source in listOf(actualSource, secondSource)) {
+            val original = DocumentsContract.buildDocumentUriUsingTree(source, "clip")
+            assertArrayEquals("Both picked originals must remain byte-exact",
+                fixtureBytes, context.contentResolver.openInputStream(original)!!
+                    .use { it.readBytes() })
+        }
+        val emptyTarget = Uri.parse(
+            "content://test.real.recursive.dual.target.scoped/tree/lab-target-root")
+        val targetList = LocalTreeReader.list(context.contentResolver, emptyTarget,
+            "lab-target-root", LocalTreeReader.MAX_BROWSE)
+        assertTrue("Collision illustration must not create any destination child",
+            targetList.complete && !targetList.hasMore &&
+                targetList.children.isEmpty())
+        assertEquals("Collision illustration cannot create durable recovery state",
+            recoveryBefore, context.noBackupFilesDir.list().orEmpty().toSet())
+        press("smart-merge-clear")
+        assertTrue("Clearing source basket must invalidate the illustration",
+            compose.onAllNodesWithTag("smart-merge-illustration-counts")
                 .fetchSemanticsNodes().isEmpty())
     }
 
