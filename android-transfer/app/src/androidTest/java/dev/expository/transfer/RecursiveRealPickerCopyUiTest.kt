@@ -301,7 +301,11 @@ class RecursiveRealPickerCopyUiTest {
             val roots = LocalTreeReader.list(context.contentResolver, tree,
                 "lab-source-root", LocalTreeReader.MAX_BROWSE)
             assertTrue(roots.complete && !roots.hasMore)
-            assertEquals(17, roots.children.count { !it.directory })
+            // Sixteen colliding files are DIRECT children. Episode.bin is
+            // the seventeenth file inside Shows, independently verified by
+            // byte-exact stream readback above. Do not conflate direct and
+            // recursive counts from the completed source manifest.
+            assertEquals(16, roots.children.count { !it.directory })
         }
         val target = Uri.parse(
             "content://test.real.recursive.dual.target.scoped/tree/lab-target-root")
