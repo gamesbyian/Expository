@@ -75,6 +75,49 @@ class RecoveryIndexFailurePolicyTest {
     }
 
 
+    @Test fun canceledDestinationByteReviewDoesNotBecomeProviderFailure() {
+        val resolver = InstrumentationRegistry.getInstrumentation()
+            .targetContext.contentResolver
+        // No installed provider at this authority. The first parent listing
+        // and protected child identity are synthetic, read-only observations;
+        // opening the missing content stream must fail without filesystem I/O.
+        val parent = android.net.Uri.parse(
+            "content://expository.uninstalled.review.provider/tree/fresh-parent")
+        val created = dev.expository.transfer.journal.RecoveryCreatedChildIdentity
+            .capture(parent, "fresh-parent", "new-file-43", "Episode.bin",
+                directory = false)
+        val listing = TreeListing(
+            listOf(TreeEntry("new-file-43", "Episode.bin", false, 0L)), true)
+        val sent = dev.expository.transfer.journal.ProtectedTransferredByteEvidence(
+            0L, "0".repeat(64))
+        val inspector = dev.expository.transfer.journal.RecoveryDestinationByteInspector
+        assertEquals(
+            dev.expository.transfer.journal.CreatedChildRelation
+                .SAME_RECORDED_CHILD_IDENTITY,
+            dev.expository.transfer.journal.RecoveryCreatedChildIdentity
+                .compare(created, parent, listing))
+        // A genuinely active review still reports an unavailable provider.
+        assertEquals(
+            dev.expository.transfer.journal.ManualDestinationBytes
+                .DESTINATION_READ_UNAVAILABLE,
+            inspector.inspect(resolver, parent, listing, created, sent))
+        // The operator can cancel while a provider read is failing.
+        // That race must not be reported as a current provider failure.
+        val checks = java.util.concurrent.atomic.AtomicInteger(0)
+        assertEquals(
+            dev.expository.transfer.journal.ManualDestinationBytes
+                .INSPECTION_CANCELED,
+            inspector.inspect(resolver, parent, listing, created, sent,
+                continueRequested = { checks.incrementAndGet() <= 2 }))
+        assertTrue("Cancellation must be rechecked after provider failure",
+            checks.get() >= 3)
+        assertEquals(
+            dev.expository.transfer.journal.ManualDestinationBytes
+                .INSPECTION_CANCELED,
+            inspector.inspect(resolver, parent, listing, created, sent,
+                continueRequested = { false }))
+    }
+
     @Test fun hiddenReviewCountDoesNotDuplicateAnAlreadyVisibleSidecarWarning() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val sandbox = File(app.cacheDir, "hidden-recovery-count-" + UUID.randomUUID())
