@@ -51,7 +51,11 @@ internal object SmartMergeSafRelationshipProbe {
         // There is intentionally no production caller/implicit true default.
         providerChildCapabilityObserved: Boolean = false,
         descendantQuery: (Uri, Uri) -> Boolean = { parent, child ->
-            DocumentsContract.isChildDocument(resolver, parent, child)
+            // The outer scope gate is dynamic, but Android Lint must also
+            // see an API 29 guard at the exact framework invocation site.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                DocumentsContract.isChildDocument(resolver, parent, child)
+            else false
         }
     ): SmartMergeSafRelationship = runCatching {
         require(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { "SAF_CHILD_API_UNAVAILABLE" }
