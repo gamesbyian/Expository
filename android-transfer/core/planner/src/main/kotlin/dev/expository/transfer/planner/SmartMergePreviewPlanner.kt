@@ -105,8 +105,30 @@ object SmartMergePreviewPlanner {
                 a.verifiedNamespace == destination.verifiedNamespace &&
                 !a.verifiedStorageDomain.isNullOrBlank() &&
                 a.verifiedStorageDomain == destination.verifiedStorageDomain)
-        if (a.key.kind != destination.key.kind ||
-            !sameIdentity || a.key.rootId != destination.key.rootId) return false
+        if (a.key.kind != destination.key.kind || !sameIdentity) return false
+        // Provider-granted directory identities outrank visible path labels.
+        // A separately picked SAF tree can use a different grant/root from
+        // the source while still referring to that exact source directory.
+        // In that case the destination parent, or the entire destination
+        // grant root, is already INSIDE the source. Do not require equal
+        // picker root IDs before checking these opaque identities.
+        // SAF document IDs are scoped to their provider authority. Remote
+        // opaque IDs can be reused by distinct authenticated accounts or
+        // storage domains at the same host; compare those only when BOTH
+        // verified remote namespace and storage-domain witnesses match.
+        val sameOpaqueScope = if (a.key.kind == LocationKind.LOCAL_SAF) {
+            a.key.authorityId == destination.key.authorityId
+        } else {
+            !a.verifiedNamespace.isNullOrBlank() &&
+                a.verifiedNamespace == destination.verifiedNamespace &&
+                !a.verifiedStorageDomain.isNullOrBlank() &&
+                a.verifiedStorageDomain == destination.verifiedStorageDomain
+        }
+        if (sameOpaqueScope && source.key.opaqueItemId.isNotBlank() &&
+            (source.key.opaqueItemId == destination.key.containerId ||
+                source.key.opaqueItemId == destination.key.rootId))
+            return true
+        if (a.key.rootId != destination.key.rootId) return false
         // An apparently different remote profile can alias the same storage.
         // Even if the grant differs, matching verified authority/root/path
         // cannot be treated as evidence that a descendant is independent.
