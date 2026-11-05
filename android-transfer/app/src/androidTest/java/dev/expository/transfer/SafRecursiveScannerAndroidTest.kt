@@ -92,6 +92,16 @@ class SafRecursiveScannerAndroidTest {
         val e = Environment()
         val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
             Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        e.mode("targetCaseCollision")
+        assertNull("Ambiguous case-folded sibling names must fail closed",
+            SmartMergeSafDestinationInspector.capture(
+                e.resolver, e.targetTree, flags, { e.observedAtMillis }))
+        e.mode("reset")
+        e.mode("targetMetadataDrift")
+        assertNull("Child metadata must match the enumerated name",
+            SmartMergeSafDestinationInspector.capture(
+                e.resolver, e.targetTree, flags, { e.observedAtMillis }))
+        e.mode("reset")
         e.mode("fullTarget")
         assertNull("2,001 rows cannot be truncated into a complete parent",
             SmartMergeSafDestinationInspector.capture(
