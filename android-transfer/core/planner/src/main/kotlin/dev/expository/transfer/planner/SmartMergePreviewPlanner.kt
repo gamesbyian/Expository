@@ -142,6 +142,25 @@ object SmartMergePreviewPlanner {
     }
 
     /**
+     * An Android DocumentsProvider grant identifies its selected root, not a
+     * certified parent chain for every other independently picked root under
+     * the same authority. Different opaque root IDs do not establish that two
+     * trees are siblings rather than ancestor/descendant.
+     *
+     * The exact-parent/root alias guard handles affirmative overlap; this
+     * separate blocker handles UNKNOWN relationship until an adapter supplies
+     * real provider-backed ancestry/disjointness evidence. Never infer it
+     * from display paths, a picker label, or a different grant URI.
+     */
+    private fun safSeparationUnproven(
+        source: ItemRef, destination: LocationRef
+    ): Boolean =
+        source.location.key.kind == LocationKind.LOCAL_SAF &&
+            destination.key.kind == LocationKind.LOCAL_SAF &&
+            source.location.key.authorityId == destination.key.authorityId &&
+            source.location.key.rootId != destination.key.rootId
+
+    /**
      * Structural validation is defense in depth, never a substitute for
      * adapter-authenticated COMPLETE pages or a fresh execution preflight.
      * RecursiveFolderManifest is a public review value, so a caller must
@@ -303,6 +322,8 @@ object SmartMergePreviewPlanner {
                 errors += "SOURCE_READ_PROOF_EXPIRED"
             if (validName(rootName) && isNestedDestination(origin, destination, rootName))
                 errors += "DESTINATION_INSIDE_SOURCE"
+            else if (safSeparationUnproven(origin, destination))
+                errors += "DESTINATION_SAF_SEPARATION_UNPROVEN"
             val inventory = inventories.getOrNull(index)
             if (inventory != null &&
                 inventory.manifest.entries.size > MAX_PREVIEW_ENTRIES)
