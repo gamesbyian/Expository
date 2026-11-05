@@ -1,8 +1,10 @@
+> Historical draft explorations. See [canonical v1](../magnifier-disk-stack-centred.svg).
+
 # Alternate magnifier explorations: disk-only and rising echoes
 
 Both files are independent, editable standalone SVG variants derived from [the accepted gray-folder artwork](magnifier-four-layer-half-spacing-pastel-lens-gray-folders.svg). The accepted source remains unchanged.
 
-## [Disk-stack only](magnifier-disk-stack-centred.svg)
+## [Disk-stack only](../magnifier-disk-stack-centred.svg)
 
 Remove the three folders and dotted connectors from the inner lens, preserving the actual source cylinder paths and all pastel tier fills. The original cylinder retains its **−11° tilt**. To fit it fully inside the white lens, use `repository-cylinder-placement="rotate(-11 546.102 466.631) translate(366.072 149.411) scale(0.51)"` and remove the earlier 110% shared lens contents scaling. The disk stack is centred on lens pivot (546.102,466.631), using cylinder nominal centre (353,622). Disk stroke width **38 → 30.4** (−20%), while status indicator dot radii stay **21** in the source coordinate space. White rim, black backdrop, and existing pastel echoes remain unchanged.
 

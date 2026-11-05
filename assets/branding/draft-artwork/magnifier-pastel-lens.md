@@ -1,6 +1,8 @@
+> Historical draft explorations. See [canonical v1](../magnifier-disk-stack-centred.svg).
+
 # Pastel repository in the half-spacing magnifier
 
-[Editable composition SVG](magnifier-four-layer-half-spacing-pastel-lens.svg) combines the untouched original [half-spacing magnifier](magnifier-four-layer-half-spacing.svg) with the actual vector paths from [repository storage and pastel folders](../repository-storage-folders-pastel.svg). All input source files remain intact.
+[Editable composition SVG](magnifier-four-layer-half-spacing-pastel-lens.svg) combines the untouched original [half-spacing magnifier](magnifier-four-layer-half-spacing.svg) with the actual vector paths from [repository storage and pastel folders](repository-storage-folders-pastel.svg). All input source files remain intact.
 
 The white rim, black exterior, and red/blue/yellow shadow positions remain mathematically identical to the half-spacing version: 9.5° / 19° / 28.5° clockwise and 4.5% / 9% / 13.5% diagonal offsets. Only the foreground *lens interior* changes, to pale blue-gray `#EBF0F4` supporting the black outlined source art.
 
