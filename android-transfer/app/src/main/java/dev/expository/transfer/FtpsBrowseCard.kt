@@ -129,6 +129,7 @@ fun FtpsBrowseCard() {
 
     val saveAs = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val destination = result.data?.data
+        val pickerResultFlags = result.data?.flags ?: 0
         val live = session
         val source = pendingFile
         val witness = pendingSaveWitness
@@ -141,6 +142,11 @@ fun FtpsBrowseCard() {
             witness?.matches(sessionId, folder, source) != true) {
             busy = false
             status = "FTPS session, folder or remote file changed during Save As. No copy started; the picker may have created an empty document."
+        } else if (!FtpsToSafSave.acceptsPickerWriteResult(
+                destination, pickerResultFlags)) {
+            busy = false
+            status = "Android Save As returned no fresh WRITE grant. No Copy started; " +
+                "the picker may already have created an empty document."
         } else {
             val permit = AtomicBoolean(true)
             continueCopy = permit
@@ -156,6 +162,7 @@ fun FtpsBrowseCard() {
                             AndroidAtomicAttemptStorage(context.applicationContext, digest)
                         }.copy(
                             live, sessionId, source, destination,
+                            pickerResultFlags = pickerResultFlags,
                             expectedSourceRevision = witness?.revision.orEmpty(),
                             continueRequested = { permit.get() && active?.isActive == true },
                             onProgress = { bytes ->
