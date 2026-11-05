@@ -26,6 +26,43 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class SafRecursiveScannerAndroidTest {
+    @Test fun readOnlySafMergeSourceReobservationKeepsOriginalProofAndDetectsDrift() {
+        val resolver = InstrumentationRegistry.getInstrumentation().context.contentResolver
+        val source = Uri.parse("content://test.source.scoped/tree/source-root")
+        val target = Uri.parse("content://test.target.scoped/tree/target-root")
+        val readFlag = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+        val time = 1_000_000L
+        check(resolver.call(source, "reset", null, null) != null)
+        val collected = requireNotNull(SmartMergeSafFolderCapture.capture(
+            resolver, target, readFlag, WorkspacePane.A, 100L, time))
+        val original = collected.source
+        assertEquals(SmartMergeReobservation.MISSING_OR_UNOBSERVED,
+            SmartMergeSafFolderCapture.inspectFresh(resolver, collected, 100L, time))
+        assertEquals(SmartMergeReobservation.CURRENT_SNAPSHOT,
+            SmartMergeSafFolderCapture.inspectFresh(resolver, collected, 101L, time + 500L))
+        assertEquals("Read-only check cannot mint a new READ proof", original,
+            collected.source)
+        assertFalse("No WRITE permission should be invented",
+            collected.source.location.capabilities.containsKey(Capability.WRITE))
+        check(resolver.call(source, "targetCollision", null, null) != null)
+        assertEquals(SmartMergeReobservation.SOURCE_OR_LISTING_CHANGED,
+            SmartMergeSafFolderCapture.inspectFresh(resolver, collected, 102L, time + 800L))
+        check(resolver.call(source, "reset", null, null) != null)
+        assertEquals(SmartMergeReobservation.CURRENT_SNAPSHOT,
+            SmartMergeSafFolderCapture.inspectFresh(resolver, collected, 103L, time + 900L))
+        check(resolver.call(source, "fullTarget", null, null) != null)
+        assertEquals("Partial provider inventory may not be considered current",
+            SmartMergeReobservation.MISSING_OR_UNOBSERVED,
+            SmartMergeSafFolderCapture.inspectFresh(resolver, collected, 104L, time + 1_000L))
+        assertEquals(SmartMergeReobservation.UNAUTHORIZED_OR_EXPIRED,
+            SmartMergeSafFolderCapture.inspectFresh(resolver, collected, 105L,
+                time + 5L * 60_000L + 1L))
+        assertEquals("Clock rollback must not resurrect a proof",
+            SmartMergeReobservation.UNAUTHORIZED_OR_EXPIRED,
+            SmartMergeSafFolderCapture.inspectFresh(resolver, collected, 106L, time - 1L))
+        check(resolver.call(source, "reset", null, null) != null)
+    }
+
     // Smart Merge M1 capture shares this already-qualified inert provider
     // test fixture. It is read-only and never creates a merge destination.
     private val resolver = InstrumentationRegistry.getInstrumentation().context.contentResolver
