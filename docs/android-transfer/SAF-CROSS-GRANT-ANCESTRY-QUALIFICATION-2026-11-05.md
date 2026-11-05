@@ -1,6 +1,8 @@
 # Smart Merge: qualification of independently picked SAF roots
 
-**Status (2026-11-05): research and test design, not shipped authority.** Owner: native T4 Smart Merge (#384); shared command/recovery owners remain #324/#325. This document follows the accepted conservative M2 planner gate [#500](https://github.com/gamesbyian/Expository/pull/500), which refuses differently rooted, same-provider SAF source/destination pairs until disjointness is *proved*. It does not relax the gate.
+**Accepted inert relationship diagnostic (2026-11-05):** [Merged #514](https://github.com/gamesbyian/Expository/pull/514) implements only `OVERLAP` / `UNKNOWN`; an exact same-authority opaque root alias refuses with no IPC. All other directional queries require an *independently observed* `Root.FLAG_SUPPORTS_IS_CHILD` capability and default to disabled; consistent positive answers are overlap/refusal evidence, while negative, unsupported, inconsistent, stale, revoked or canceled answers remain UNKNOWN. [Exact-head API35 synthetic-provider E2](https://github.com/gamesbyian/Expository/actions/runs/42097589744) executed **25/25 tests, zero skipped**, at `f88625d5`, with JVM, Android compile/lint and web checks green. It used injected positive query callbacks, **not real cross-grant provider-positive OS acceptance**. There is no live root capability fetch, runtime UI wiring, `DISJOINT_VERIFIED` state, planner exception, writer or persisted grant. Genuine same-authority separately picked E2 and physical/provider E4 remain unqualified.
+
+**Status (2026-11-05): accepted inert diagnostic plus outstanding qualification, not shipped disjointness or merge authority.** Owner: native T4 Smart Merge (#384); shared command/recovery owners remain #324/#325. This document follows the accepted conservative M2 planner gate [#500](https://github.com/gamesbyian/Expository/pull/500), which refuses differently rooted, same-provider SAF source/destination pairs until disjointness is *proved*. It does not relax the gate.
 
 ## Platform facts and why the current refusal is correct
 
@@ -36,12 +38,12 @@ Official references:
 | Root membership changes between checks | Stale observation | Invalidate, re-pick and reobserve |
 | Provider returns contradictory results on repeated reads | Unstable | Refuse; log only redacted diagnostic category |
 
-## Required tests before even exposing diagnostics
+## Remaining evidence ladder for genuine provider relationship diagnostics
 
-- E1: pure tri-state model, directions, fail-closed invalidation, exact authority and grant checks, expiry/clock rollback, no false negative `DISJOINT` state.
-- E2 synthetic Android providers: a real installed API35 fixture implementing `isChildDocument` positively, an unimplemented/default-negative provider, aliases, shared opaque IDs across authorities, denied queries, deliberate drift, cancellation, provider exception, and two independent genuine DocumentsUI grants. Prove **zero writes and zero recovery records** for every branch.
+- **Accepted limited E1/E2 #514:** source/destination in-memory scope checks, positive test callbacks, repeated directions, exact alias, default-negative/exception, canceled/expired/rollback, redacted result and no recovery records passed the installed API35 synthetic ContentResolver fixture. This did **not** query a genuinely separate second OS grant under one authority or authenticate a live `FLAG_SUPPORTS_IS_CHILD` observation; the injectable positive callback is test evidence only.
+- **Still required E2:** a real installed disposable `DocumentsProvider` implementing a positive `isChildDocument` contract, genuine two separate DocumentsUI grants under the same provider authority, authenticated Root flag observation, false/default-negative provider, sibling/ancestor aliases, denied queries, scope drift and cancellation. Prove **zero writes and recovery records** for every branch.
 - E3 controlled adapter diagnostics only, no live mutation. Keep provider-specific behavior and counterexamples documented.
 - E4 physical device + third-party providers, including non-file-backed/virtual roots and cloud authorization interruptions; prove whether any *narrow* disjointness certificate is sustainable. Unknown remains blocked.
 - E5 signed build acceptance only after the actual review/no-replace command and #324/#325 durable recovery also pass, separately from this read-only ancestry work.
 
-**Next executable slice:** implement an inert `OVERLAP / UNKNOWN` diagnostic probe with synthetic fixture coverage, without connecting any `UNKNOWN` result to a runnable preview or weakening #500. Only then evaluate whether a provider-specific affirmative disjointness witness is representable and worth shipping.
+**Next executable slice:** qualify a read-only, actually OS-picked same-authority root-capability witness and genuine provider-positive / provider-default-negative ancestry behavior through isolated Android API35 fixtures. Then, if useful, surface only `OVERLAP` or `UNKNOWN` diagnostics in the basket, without ever converting UNKNOWN/false to a writable preview or relaxing #500. A provider-specific `DISJOINT_VERIFIED` contract is a separate, currently **unimplemented and unaccepted** research problem, not a consequence of #514.
