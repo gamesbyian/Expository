@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1536" height="1536" viewBox="-104 5 1720 1720" role="img" aria-labelledby="title desc">
+  <title id="title">Expository: centred pastel disk stack magnifier</title>
+  <desc id="desc">The tilted pastel three-tier disk stack fills the black circular lens, cropped slightly at the top and bottom; pastel magnifier echoes retain their angled geometry.</desc>
+  <!-- Editable construction:
+       Lens pivot: (546.102, 466.631) in original 1536 x 1536 source coordinates.
+       Every silhouette references the SAME geometry; no shadow is redrawn.
+       Increment: +9.5 degrees clockwise, +69.12 units horizontally and vertically (4.5% of 1536).
+       SVG transforms execute right-to-left: first rotate about lens pivot, then translate.
+       Layer angles and offsets are absolute from white, not cumulative floating-point approximations.
+       Edit the three <use> transforms to change placement. Edit #magnifier to change all four outlines.
+       The lens is true black with white monochrome accents; all pastel fills remain unchanged.
+       Framing is enlarged to retain the entire corrected yellow handle.
+  -->
+  <defs>
+    <path id="magnifier" fill-rule="evenodd" d="M288 191 L258 223 L238 249 L219 279 L201 314 L191 338 L179 375 L174 397 L168 438 L168 491 L171 516 L180 558 L191 592 L201 616 L223 658 L249 696 L272 723 L292 743 L321 768 L351 789 L380 806 L425 826 L459 837 L486 843 L524 848 L577 847 L606 843 L647 833 L677 822 L713 805 L747 784 L765 770 L767 770 L825 838 L992 1040 L1005 1050 L1015 1055 L1027 1058 L1052 1057 L1059 1055 L1075 1046 L1087 1034 L1093 1025 L1100 1006 L1101 986 L1095 964 L1089 954 L1067 931 L991 860 L828 711 L828 709 L838 698 L854 676 L875 642 L893 605 L903 579 L912 549 L920 508 L922 485 L922 441 L920 418 L913 379 L906 353 L893 317 L880 289 L861 255 L838 223 L821 203 L794 176 L771 157 L745 139 L711 120 L686 109 L653 98 L607 88 L577 85 L529 85 L502 88 L454 98 L423 108 L396 119 L356 140 L327 159 Z M538 195 L565 195 L588 197 L609 201 L640 210 L660 218 L683 230 L707 246 L725 261 L744 280 L766 308 L788 348 L797 370 L806 400 L810 419 L814 456 L814 475 L810 514 L804 540 L797 561 L776 603 L767 617 L748 641 L726 664 L709 679 L689 694 L661 711 L635 723 L615 730 L581 738 L563 740 L526 740 L507 738 L480 732 L452 723 L436 716 L406 699 L385 684 L361 663 L345 646 L325 620 L311 598 L300 576 L290 551 L279 509 L276 479 L276 455 L279 428 L285 402 L296 369 L316 330 L328 312 L349 286 L367 268 L394 246 L412 234 L442 218 L489 202 L515 197 Z"/>
+    <path id="lens-opening" d="M538 195 L565 195 L588 197 L609 201 L640 210 L660 218 L683 230 L707 246 L725 261 L744 280 L766 308 L788 348 L797 370 L806 400 L810 419 L814 456 L814 475 L810 514 L804 540 L797 561 L776 603 L767 617 L748 641 L726 664 L709 679 L689 694 L661 711 L635 723 L615 730 L581 738 L563 740 L526 740 L507 738 L480 732 L452 723 L436 716 L406 699 L385 684 L361 663 L345 646 L325 620 L311 598 L300 576 L290 551 L279 509 L276 479 L276 455 L279 428 L285 402 L296 369 L316 330 L328 312 L349 286 L367 268 L394 246 L412 234 L442 218 L489 202 L515 197 Z"/>
+    <!-- Exact original cylinder and folder geometries from assets/repository-storage-folders-pastel.svg -->
+    <clipPath id="cylinder-clip">
+      <path d="M60 356
+               C60 294 188 249 353 249
+               C518 249 645 294 645 356
+               V909
+               C645 961 512 995 353 995
+               C194 995 60 962 60 909 Z"/>
+    </clipPath>
+    <g id="folder-outline" fill="#A6A6A6"
+       stroke="#FFFFFF" stroke-width="27"
+       stroke-linecap="round" stroke-linejoin="round">
+      <!-- Back folder lip, visible behind the foreground folder. -->
+      <path d="M811 308 L779 69
+               Q777 58 791 58
+               H1049 Q1057 58 1061 68
+               L1077 116" fill="none"/>
+      <!-- The body has curved rather than sharp angular joins. -->
+      <path d="M812 309 L886 131
+               Q892 116 906 116
+               H1178 Q1195 116 1186 135
+               L1114 300 Q1109 313 1096 313
+               H823 Q808 313 812 299 Z"/>
+    </g>
+
+    <!-- Clip agrees exactly with base lens opening. -->
+    <clipPath id="foreground-lens-clip" clipPathUnits="userSpaceOnUse"><path d="M538 195 L565 195 L588 197 L609 201 L640 210 L660 218 L683 230 L707 246 L725 261 L744 280 L766 308 L788 348 L797 370 L806 400 L810 419 L814 456 L814 475 L810 514 L804 540 L797 561 L776 603 L767 617 L748 641 L726 664 L709 679 L689 694 L661 711 L635 723 L615 730 L581 738 L563 740 L526 740 L507 738 L480 732 L452 723 L436 716 L406 699 L385 684 L361 663 L345 646 L325 620 L311 598 L300 576 L290 551 L279 509 L276 479 L276 455 L279 428 L285 402 L296 369 L316 330 L328 312 L349 286 L367 268 L394 246 L412 234 L442 218 L489 202 L515 197 Z"/></clipPath>
+  </defs>
+  <rect x="-104" y="5" width="1720" height="1720" fill="#000000"/>
+  <use id="yellow" xlink:href="#magnifier" fill="#F8DF9D" transform="translate(207.36 207.36) rotate(28.5 546.102 466.631)"/>
+  <use id="blue" xlink:href="#magnifier" fill="#A1CAEB" transform="translate(138.24 138.24) rotate(19 546.102 466.631)"/>
+  <use id="red" xlink:href="#magnifier" fill="#F2ABB0" transform="translate(69.12 69.12) rotate(9.5 546.102 466.631)"/>
+  <use id="white" xlink:href="#magnifier" fill="#FFFFFF"/>
+
+  <!-- True black lens background; monochrome source strokes/dots inverted to white. -->
+  <use id="lens-interior" xlink:href="#lens-opening" fill="#000000"/>
+  <!-- New adjustments: lower folder (+4,+2), upper dots (-6,+2) relative to preceding black-lens variant. Everything inside lens: 6 units right, then 110% about lens pivot (546.102,466.631). Crop remains fixed. -->
+  <g id="lens-contents" clip-path="url(#foreground-lens-clip)">
+    <!-- Scale about lens centre first, then shift 3 ticks (6 original SVG units) right. -->
+    <!-- Stack only: existing -11 degree cylinder tilt retained.
+         Enlarged 1.5x about the original cylinder placement centre, then shifted
+         (+146,-14) within the existing 110% lens layout. Deliberately cropped by
+         the original foreground-lens-clip. No original geometry is redrawn. -->
+    <g id="lens-artwork-layout" transform="translate(6 0) translate(546.102 466.631) scale(1.1) translate(-546.102 -466.631)">
+      <g id="centered-cylinder" transform="translate(146 -14) translate(403 481) scale(1.5) translate(-403 -481)">
+      <g id="repository-cylinder-placement" transform="rotate(-11 403 481) translate(255 220) scale(0.42)">
+        <g id="repository-cylinder">
+    <g clip-path="url(#cylinder-clip)">
+      <path id="bottom-red" fill="#F2ABB0"
+            d="M60 356 C60 294 188 249 353 249
+               C518 249 645 294 645 356 V909
+               C645 961 512 995 353 995
+               C194 995 60 962 60 909 Z"/>
+      <path id="middle-blue" fill="#A1CAEB"
+            d="M60 525 C81 595 191 639 353 639
+               C515 639 624 595 645 525
+               V705 C625 773 515 815 353 815
+               C191 815 81 773 60 705 Z"/>
+      <path id="top-yellow" fill="#F8DF9D"
+            d="M60 356 C81 420 191 463 353 463
+               C515 463 624 420 645 356
+               V525 C624 594 515 639 353 639
+               C191 639 81 594 60 525 Z"/>
+      <ellipse id="top-oval" cx="353" cy="356" rx="293" ry="107"
+               fill="#FFF0BD"/>
+    </g>
+    <g fill="none" stroke="#FFFFFF" stroke-width="38"
+       stroke-linejoin="round" stroke-linecap="round">
+      <path id="outer-wall-and-base"
+            d="M60 356 V909
+               C60 961 194 995 353 995
+               C512 995 645 961 645 909 V356"/>
+      <path id="upper-tier-divider"
+            d="M60 525 C81 595 191 639 353 639
+               C515 639 624 595 645 525"/>
+      <path id="lower-tier-divider"
+            d="M60 705 C81 773 191 815 353 815
+               C515 815 624 773 645 705"/>
+      <ellipse id="top-rim" cx="353" cy="356" rx="293" ry="107"/>
+    </g>
+    <g id="tier-indicators" fill="#FFFFFF">
+      <circle id="yellow-indicator" cx="585" cy="497" r="21"/>
+      <circle id="blue-indicator" cx="585" cy="683" r="21"/>
+      <circle id="red-indicator" cx="585" cy="864" r="21"/>
+    </g>
+  </g>
+      </g>
+    </g>
+  </g>
+  <use id="foreground-rim-top" xlink:href="#magnifier" fill="#FFFFFF"/>
+</svg>
