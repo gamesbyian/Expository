@@ -93,6 +93,9 @@ jobs:
                 # No arbitrary picker method or unreviewed shell fragment.
                 RecursiveRealPickerCopyUiTest#genuineThirdSystemPickerInspectsMergeDestinationWithoutWriting) ;;
                 RecursiveRealPickerCopyUiTest#genuineIndependentPickerRootsIllustrateActualCasefoldCollisionsWithoutWrites) ;;
+                # Independent 2-source, >12-collision paging E2 with real
+                # DocumentsUI grants and disposable provider fixtures.
+                RecursiveRealPickerCopyUiTest#genuinePagedCasefoldReviewWithManyCollisionsAndNoWrites) ;;
                 # Bounded synthetic provider display-only/recursive scan regression; no
                 # external server, picker authorization or file mutation.
                 ComposeSemanticsLifecycleUiTest|DualPickerLifecycleIsolationUiTest|LocalTreePresentationAndroidTest|SafRecursiveScannerAndroidTest|SafRecursiveTreeCopyAndroidTest|RecursiveFolderCopyOfferUiTest|RecursiveRealPickerCopyUiTest|DualRecursiveRealPickerCopyUiTest|WorkspaceNavigationUiTest#localTreeDisplayFilterDoesNotChangeSourceOrSelection) ;;
