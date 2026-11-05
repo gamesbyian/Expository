@@ -57,12 +57,20 @@ class SmartMergeFolder private constructor(
     internal fun sameObjectAs(other: SmartMergeFolder): Boolean {
         val a = source
         val b = other.source
-        return a.location.key.kind == b.location.key.kind &&
-            a.location.key.authorityId == b.location.key.authorityId &&
-            a.location.key.rootId == b.location.key.rootId &&
+        if (a.location.key.kind != b.location.key.kind ||
+            a.location.key.authorityId != b.location.key.authorityId ||
+            a.key.opaqueItemId != b.key.opaqueItemId) return false
+        // DocumentsProvider document IDs are scoped to their authority,
+        // not to each independently picked tree root or transient grant.
+        // One SAF document selected through two roots is ONE M1 source.
+        // This positive identity match does NOT establish ancestry or
+        // disjointness for different IDs under the same provider.
+        if (a.location.key.kind == LocationKind.LOCAL_SAF) return true
+        // Remotes may reuse opaque IDs across independently authenticated
+        // namespaces or storage domains. Preserve their stricter scope.
+        return a.location.key.rootId == b.location.key.rootId &&
             a.location.verifiedNamespace == b.location.verifiedNamespace &&
-            a.location.verifiedStorageDomain == b.location.verifiedStorageDomain &&
-            a.key.opaqueItemId == b.key.opaqueItemId
+            a.location.verifiedStorageDomain == b.location.verifiedStorageDomain
     }
 
     internal fun overlaps(other: SmartMergeFolder): Boolean {

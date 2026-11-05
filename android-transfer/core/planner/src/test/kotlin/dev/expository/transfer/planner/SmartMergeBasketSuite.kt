@@ -93,6 +93,41 @@ object SmartMergeBasketSuite {
         val regranted = many.add(collect(picked("2024", grant = "tree-B")))
         check(regranted.status == SmartMergeAddStatus.DUPLICATE_SOURCE)
         check(regranted.basket === many)
+        // The same Android DocumentsProvider document can be chosen through
+        // different OS-picked tree roots, with different transient grants and
+        // display paths. The provider-scoped opaque document ID still proves
+        // a duplicate source. Do not count it twice in a later Merge.
+        val firstPicked = many.folders.first().source
+        val anotherPickedRoot = firstPicked.copy(
+            location = firstPicked.location.copy(
+                key = firstPicked.location.key.copy(
+                    rootId = "independent-tree-root",
+                    grantId = "independent-os-picker-grant")))
+        val sameDocumentCrossRoot = many.add(collect(anotherPickedRoot))
+        check(sameDocumentCrossRoot.status == SmartMergeAddStatus.DUPLICATE_SOURCE)
+        check(sameDocumentCrossRoot.basket === many)
+        val sameTextOtherProvider = anotherPickedRoot.copy(
+            key = anotherPickedRoot.key.copy(authorityId = "other-provider"),
+            location = anotherPickedRoot.location.copy(
+                key = anotherPickedRoot.location.key.copy(
+                    authorityId = "other-provider")))
+        check(many.add(collect(sameTextOtherProvider)).status ==
+            SmartMergeAddStatus.ADDED)
+
+        // Remote opaque IDs can be recycled in separate authenticated
+        // account/storage namespaces. SAF's authority-wide dedupe must
+        // never silently collapse those independent remote sources.
+        val sharedRemote = remote("Archive A", "shared-opaque",
+            authority = "same-host")
+        val otherAccount = sharedRemote.copy(
+            location = sharedRemote.location.copy(
+                verifiedNamespace = "authenticated-other-account",
+                verifiedStorageDomain = "storage-other-account"))
+        val remoteScopeBasket = SmartMergeBasket.empty()
+            .add(collect(sharedRemote)).basket
+        check(remoteScopeBasket.add(collect(otherAccount)).status ==
+            SmartMergeAddStatus.ADDED)
+
         val overlap = many.add(collect(picked("April",
             parent = listOf("Photos", "2024"))))
         check(overlap.status == SmartMergeAddStatus.OVERLAPPING_SOURCE)
