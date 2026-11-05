@@ -495,16 +495,32 @@ function recoverLargeFolderFromIndex(){
 async function recoverTargetedFolder(){
  const repo=state.repo,branch=state.branch,folder=state.path,request=state.repoRequest,seq=state.seq;
  const parts=folder?folder.split('/'):[];
- if(state.items.length<1000||!state.indexTruncated&&!state.indexError||parts.length>8)return 0;
+ if(state.items.length<1000||!state.indexTruncated&&!state.indexError)return 0;
  const key=repo+'@'+branch+'/'+folder;
  if(state.folderRecoveryKey===key)return 0;
  state.folderRecoveryKey=key;
  const live=()=>request===state.repoRequest&&seq===state.seq&&repo===state.repo&&branch===state.branch&&folder===state.path;
  try{
   // Direct, nonrecursive Git trees avoid the repository-wide recursive tree cap.
-  // At most nine API reads: root plus eight explicitly visited directory levels.
-  let ref=branch,tree=[];
-  for(let depth=0;depth<=parts.length;depth++){
+  // Shallow paths keep the established root-to-folder walk (at most nine reads).
+  // At greater depth, obtain the exact child tree SHA from its parent Contents
+  // listing, already cached when the user navigated there. This avoids N ancestor
+  // requests and permits recovery for a deeply nested directory without scanning
+  // unrelated trees. Missing/capped parent listings remain explicitly incomplete.
+  let ref=branch,tree=[],startDepth=0;
+  if(parts.length>8){
+   const parent=parts.slice(0,-1).join('/');
+   const key=repo+'@'+branch+'/'+parent;
+   let siblings=state.cache.get(key);
+   if(!siblings)siblings=await json('/repos/'+repo+'/contents/'+pathPart(parent)+'?ref='+enc(branch));
+   if(!live())return 0;
+   if(!Array.isArray(siblings))throw Error('Parent directory listing unavailable.');
+   const candidates=siblings.filter(x=>x.type==='dir'&&x.path===folder&&/^[a-f0-9]{40}$/i.test(x.sha||''));
+   if(candidates.length!==1)throw Error('Exact folder tree SHA unavailable from its parent listing.');
+   ref=candidates[0].sha;
+   startDepth=parts.length;
+  }
+  for(let depth=startDepth;depth<=parts.length;depth++){
    const result=await json('/repos/'+repo+'/git/trees/'+enc(ref));
    if(!live())return 0;
    if(!Array.isArray(result.tree))throw Error('GitHub returned an invalid direct tree.');
