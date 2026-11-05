@@ -1883,10 +1883,20 @@ private fun DeveloperPreview(
                                         selected.source.name.take(80) +
                                         " · " + selected.collectedFrom.name,
                                         style = MaterialTheme.typography.bodySmall)
+                                    val originalRead = selected.source.location
+                                        .capabilities[Capability.READ]
+                                    val capturedProofValid =
+                                        originalRead?.valid(System.currentTimeMillis()) == true
+                                    if (!capturedProofValid) {
+                                        Text("Original access review expired. " +
+                                            "Remove this entry and pick the folder again.",
+                                            style = MaterialTheme.typography.bodySmall)
+                                    }
                                     FolderActionControl(
                                         label = "Check Merge source " + (index + 1) +
                                             " access",
-                                        enabled = !copyBusy && !remoteRelayBusy &&
+                                        enabled = capturedProofValid &&
+                                            !copyBusy && !remoteRelayBusy &&
                                             !mergeReading && mergeInspecting == null &&
                                             pendingMergePicker == null,
                                         onClick = { checkMergeSourceAccess(selected) }
