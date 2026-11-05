@@ -99,15 +99,18 @@ internal object SmartMergeSafDestinationInspector {
             val name = text(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
             val mime = text(DocumentsContract.Document.COLUMN_MIME_TYPE)
             val flags = numeric(DocumentsContract.Document.COLUMN_FLAGS).toIntOrNull()
+            // Consume all columns while positioned ON the only row.
+            // moveToNext() advances past the last row even for MatrixCursor.
+            val values = listOf(foundId.orEmpty(), name.orEmpty(), mime.orEmpty(),
+                flags?.toString().orEmpty(),
+                numeric(DocumentsContract.Document.COLUMN_SIZE),
+                numeric(DocumentsContract.Document.COLUMN_LAST_MODIFIED))
             require(!cursor.moveToNext() && foundId == id &&
                 id.isNotBlank() && id.toByteArray(StandardCharsets.UTF_8).size <= 8192 &&
                 !name.isNullOrBlank() && safeName(name) &&
                 !mime.isNullOrBlank() && flags != null) {
                 "MERGE_DESTINATION_METADATA_AMBIGUOUS"
             }
-            val values = listOf(foundId.orEmpty(), name.orEmpty(), mime.orEmpty(),
-                flags.toString(), numeric(DocumentsContract.Document.COLUMN_SIZE),
-                numeric(DocumentsContract.Document.COLUMN_LAST_MODIFIED))
             Meta(id, requireNotNull(name), requireNotNull(mime),
                 flags, fingerprint(values))
         } ?: error("MERGE_DESTINATION_PROVIDER_UNAVAILABLE")
