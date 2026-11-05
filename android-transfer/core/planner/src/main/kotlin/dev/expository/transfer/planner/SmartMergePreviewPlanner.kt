@@ -351,6 +351,10 @@ object SmartMergePreviewPlanner {
         // a successful earlier attempt can never become available later.
         // This preserves the original first-free-name policy but prevents
         // 64 sources with thousands of conflicts repeatedly scanning (2)…
+        // Group spelling/canonical-equivalent requests by the same key used
+        // for collision detection. Otherwise 64 differently cased or NFC/NFD
+        // spellings of one name each restart at (2), needlessly probing all
+        // preceding suffixes on large multi-folder reviews.
         val nextSuffix = hashMapOf<Triple<List<String>, String, ItemKind>, Int>()
         var renamed = 0
         var coalesced = 0
@@ -383,7 +387,7 @@ object SmartMergePreviewPlanner {
                             shared = true
                             coalesced++
                         } else {
-                            val suffixKey = Triple(parentTarget, requested, kind)
+                            val suffixKey = Triple(parentTarget, key, kind)
                             var sequence = nextSuffix[suffixKey] ?: 2
                             var unique = false
                             while (sequence <= MAX_PREVIEW_ENTRIES + 1) {
