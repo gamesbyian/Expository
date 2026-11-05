@@ -143,6 +143,32 @@ object SmartMergePreviewPlannerSuite {
         val descendant = loc("saf-A", folder = listOf("Pictures", "A", "Nested"))
         check("DESTINATION_INSIDE_SOURCE" in plan(sources, trees,
             destination = descendant, parent = index(descendant)).blockers)
+        // A second, independently granted picker root may be the SAME opaque
+        // source directory, even with a different grant/root and no matching
+        // display path. String-prefix comparison used to miss this.
+        val pickedSourceRoot = loc("saf-A", folder = emptyList()).let { base ->
+            base.copy(key = base.key.copy(rootId = a.source.key.opaqueItemId,
+                containerId = a.source.key.opaqueItemId,
+                grantId = "separate-writable-picker"))
+        }
+        check("DESTINATION_INSIDE_SOURCE" in plan(sources, trees,
+            destination = pickedSourceRoot,
+            parent = index(pickedSourceRoot)).blockers)
+        // Also reject a destination whose actual parent is the source, even
+        // if the picker root and its user-visible folder labels are different.
+        val opaqueParent = loc("saf-A", folder = listOf("Different", "Display"))
+            .let { base -> base.copy(key = base.key.copy(
+                rootId = "different-picker-root",
+                containerId = a.source.key.opaqueItemId,
+                grantId = "another-writable-picker")) }
+        check("DESTINATION_INSIDE_SOURCE" in plan(sources, trees,
+            destination = opaqueParent, parent = index(opaqueParent)).blockers)
+        // Equal opaque strings belonging to a DIFFERENT independent
+        // authority are not sufficient to invent a source/destination alias.
+        val unrelatedAuthority = loc("dest").let { base -> base.copy(
+            key = base.key.copy(containerId = a.source.key.opaqueItemId)) }
+        check(plan(sources, trees, destination = unrelatedAuthority,
+            parent = index(unrelatedAuthority)).reviewable)
         check("DESTINATION_MERGE_ADAPTER_UNQUALIFIED" in plan(sources, trees,
             destination = loc("dest", kind = LocationKind.REMOTE_FTP),
             parent = index(loc("dest", kind = LocationKind.REMOTE_FTP))).blockers)
