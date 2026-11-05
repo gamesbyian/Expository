@@ -86,6 +86,8 @@ class WorkspaceNavigationUiTest {
         // basket cannot manufacture provider IDs, grants or authorizations.
         compose.onNodeWithText("Check Merge source 1 access").assertDoesNotExist()
         compose.onNodeWithTag("smart-merge-cancel-check").assertDoesNotExist()
+        compose.onNodeWithTag("smart-merge-pick-destination").assertDoesNotExist()
+        compose.onNodeWithTag("smart-merge-destination-summary").assertDoesNotExist()
         compose.onNodeWithTag("transfer-workspace-scroll")
             .performScrollToNode(hasTestTag("workspace-dual-view"))
         compose.onNodeWithTag("workspace-dual-view").performClick()
