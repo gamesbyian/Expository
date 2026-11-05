@@ -537,6 +537,17 @@ private fun DeveloperPreview(
                     } else {
                         val added = mergeSources.add(source)
                         mergeSources = added.basket
+                        if (added.status == SmartMergeAddStatus.ADDED) {
+                            // A source-list mutation invalidates any pending
+                            // target review, even though picker grants remain
+                            // independent. Do not let a late target read win.
+                            mergeDestinationPickerSerial.incrementAndGet()
+                            pendingMergeDestinationPicker = null
+                            mergeDestinationJob?.cancel()
+                            mergeDestinationJob = null
+                            mergeDestinationReading = false
+                            mergeDestination = null
+                        }
                         mergeMessage = when (added.status) {
                             SmartMergeAddStatus.ADDED ->
                                 "Source folder collected. Reauthorization is still required for Merge."
@@ -723,6 +734,7 @@ private fun DeveloperPreview(
     fun launchMergeFolderPicker() {
         if (copyBusy || remoteRelayBusy || mergeReading ||
             mergeInspecting != null || pendingMergePicker != null ||
+            mergeDestinationReading || pendingMergeDestinationPicker != null ||
             mergeSources.folders.size >= SmartMergeBasket.MAX_SOURCES) return
         val pane = if (model.view == WorkspaceView.SINGLE)
             WorkspacePane.SINGLE else model.activeDual
@@ -1940,6 +1952,8 @@ private fun DeveloperPreview(
                                 enabled = !copyBusy && !remoteRelayBusy &&
                                     !mergeReading && mergeInspecting == null &&
                                     pendingMergePicker == null &&
+                                    !mergeDestinationReading &&
+                                    pendingMergeDestinationPicker == null &&
                                     mergeSources.folders.size < SmartMergeBasket.MAX_SOURCES,
                                 modifier = Modifier.testTag("smart-merge-add-source"),
                                 onClick = { launchMergeFolderPicker() }
@@ -2067,6 +2081,7 @@ private fun DeveloperPreview(
                                             pendingMergePicker == null,
                                         onClick = {
                                             mergeSources = mergeSources.move(index, index - 1)
+                                            clearMergeDestination()
                                             mergeMessage = "Source order changed. No Merge was run."
                                         }
                                     )
@@ -2076,6 +2091,7 @@ private fun DeveloperPreview(
                                             !mergeReading && pendingMergePicker == null,
                                         onClick = {
                                             mergeSources = mergeSources.move(index, index + 1)
+                                            clearMergeDestination()
                                             mergeMessage = "Source order changed. No Merge was run."
                                         }
                                     )
@@ -2090,6 +2106,7 @@ private fun DeveloperPreview(
                                             }
                                             mergeInspectResults = mergeInspectResults - selected
                                             mergeSources = mergeSources.removeAt(index)
+                                            clearMergeDestination()
                                             mergeMessage = "Source removed; no files changed."
                                         }
                                     )
