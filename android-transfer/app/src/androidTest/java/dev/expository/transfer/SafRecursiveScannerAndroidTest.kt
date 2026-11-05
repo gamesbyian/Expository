@@ -26,6 +26,93 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class SafRecursiveScannerAndroidTest {
+    @Test fun pickedSafRootProducesCompleteReadOnlyM2InventoryIncludingEmptyFolders() {
+        val e = Environment()
+        val collected = requireNotNull(SmartMergeSafFolderCapture.capture(
+            e.resolver, e.sourceTree, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            WorkspacePane.SINGLE, 1L, e.observedAtMillis))
+        val inventory = requireNotNull(e.scanner.inspectMergeRootInventory(
+            collected, browseGeneration = 2L))
+        assertTrue(inventory.collected === collected)
+        val m = inventory.manifest
+        assertTrue(m.reviewable)
+        assertEquals(64, m.digest.length)
+        assertEquals(3, m.directories)
+        assertEquals(1, m.files)
+        assertEquals(listOf(
+            listOf("Source root"),
+            listOf("Source root", "Shows"),
+            listOf("Source root", "Shows", "Empty"),
+            listOf("Source root", "Shows", "Episode.bin")
+        ), m.entries.map { it.relativePath })
+        assertEquals(collected.source, m.entries.first().source)
+        val shows = m.entries[1].source
+        val nested = m.entries.last().source
+        assertEquals("source-root", shows.location.key.containerId)
+        assertEquals("shows", nested.location.key.containerId)
+        assertTrue(m.entries.all {
+            it.source.location.capabilities.keys == setOf(Capability.READ)
+        })
+        assertEquals("SmartMergeInventory(redacted)", inventory.toString())
+        val repeat = requireNotNull(e.scanner.inspectMergeRootInventory(
+            collected, browseGeneration = 3L))
+        assertEquals(m.digest, repeat.manifest.digest)
+        assertEquals(m.entries, repeat.manifest.entries)
+        assertTrue(runCatching {
+            (m.entries as MutableList<RecursiveCopyEntry>).clear()
+        }.isFailure)
+    }
+
+    @Test fun twoIndependentSafPickedRootsHaveCompleteSeparateReadOnlyInventories() {
+        val e = Environment()
+        val read = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+        val one = requireNotNull(SmartMergeSafFolderCapture.capture(
+            e.resolver, e.sourceTree, read, WorkspacePane.A, 1L, e.observedAtMillis))
+        val two = requireNotNull(SmartMergeSafFolderCapture.capture(
+            e.resolver, e.targetTree, read, WorkspacePane.B, 2L, e.observedAtMillis))
+        val basket = SmartMergeBasket.empty().add(one).basket.add(two).basket
+        assertTrue(basket.hasMinimumSources)
+        assertEquals(2, basket.folders.size)
+        val inventories = basket.folders.mapIndexed { index, source ->
+            requireNotNull(e.scanner.inspectMergeRootInventory(
+                source, browseGeneration = 3L + index))
+        }
+        assertEquals(listOf(4, 2),
+            inventories.map { it.manifest.entries.size })
+        assertEquals(listOf(1, 1),
+            inventories.map { it.manifest.files })
+        assertTrue(inventories.all { it.manifest.reviewable })
+        assertEquals("Taken.txt", inventories[1].manifest.entries.last().source.name)
+        assertFalse(inventories[0].manifest.digest == inventories[1].manifest.digest)
+    }
+
+    @Test fun mergeRootInventoryRejectsChangingIncompleteOrCancelledTrees() {
+        val e = Environment()
+        val read = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+        val one = requireNotNull(SmartMergeSafFolderCapture.capture(
+            e.resolver, e.sourceTree, read, WorkspacePane.A, 1L, e.observedAtMillis))
+        assertNull("Same generation cannot certify a fresh tree",
+            e.scanner.inspectMergeRootInventory(one, 1L))
+        assertNull("Caller cancellation cannot yield a partial manifest",
+            e.scanner.inspectMergeRootInventory(one, 2L) { false })
+        e.mode("changedName")
+        assertNull("Child metadata drift must block inventory",
+            e.scanner.inspectMergeRootInventory(one, 3L))
+        e.mode("reset")
+        e.mode("duplicate")
+        assertNull("Ambiguous nested names cannot make a complete manifest",
+            e.scanner.inspectMergeRootInventory(one, 4L))
+        e.mode("reset")
+        e.mode("manyFolders")
+        assertNull("Over-limit folders must refuse, not truncate",
+            e.scanner.inspectMergeRootInventory(one, 5L))
+        e.mode("reset")
+        e.observedAtMillis += 5L * 60_000L + 1L
+        assertNull("Original READ proof cannot be silently renewed",
+            e.scanner.inspectMergeRootInventory(one, 6L))
+        e.mode("reset")
+    }
+
     @Test fun readOnlySafMergeSourceReobservationKeepsOriginalProofAndDetectsDrift() {
         val resolver = InstrumentationRegistry.getInstrumentation().context.contentResolver
         val source = Uri.parse("content://test.source.scoped/tree/source-root")
