@@ -538,7 +538,10 @@ test('deep capped folder recovery uses a cached parent SHA without walking nine 
  const paths=[];
  const fetcher=async url=>{
   paths.push(url);
-  return new Response(JSON.stringify({truncated:false,tree:[{type:'blob',path:'extra.svg',size:50}]}),{status:200});
+  return new Response(JSON.stringify({truncated:false,tree:[
+   ...Array.from({length:1000},(_,i)=>({type:'blob',path:'img'+i+'.svg',size:50})),
+   {type:'blob',path:'extra.svg',size:50}
+  ]}),{status:200});
  };
  const {app,get}=boot(fetcher);
  Object.assign(app.state,{repo,branch,path:folder,repoRequest:3,seq:4,indexTruncated:true,indexReady:true,mode:'list'});
@@ -588,6 +591,68 @@ test('deep folder recovery drops delayed parent responses after navigation',asyn
  release();
  assert.equal(await pending,0);
  assert.equal(app.state.items.length,1000);
+});
+
+test('direct Git-tree recovery caps the entire visible union at 5,000 entries',async()=>{
+ // Git trees and Contents listings may reflect different branch snapshots;
+ // do not append 5,000 NEW entries on top of the first 1,000.
+ const fetcher=async()=>new Response(JSON.stringify({
+  truncated:false,
+  tree:Array.from({length:4500},(_,i)=>({
+   type:'blob',path:'new'+i+'.svg',size:10
+  }))
+ }),{status:200});
+ const {app,get}=boot(fetcher);
+ app.state.repo='test/large';app.state.branch='main';app.state.path='';
+ app.state.indexTruncated=true;app.state.mode='list';
+ app.state.items=Array.from({length:1000},(_,i)=>({
+  type:'file',name:'old'+i+'.svg',path:'old'+i+'.svg',size:10
+ }));
+ const added=await app.recoverTargetedFolder();
+ assert.equal(added,4000,'visible union is capped, not each response independently');
+ assert.equal(app.state.items.length,5000);
+ assert.equal(new Set(app.state.items.map(item=>item.path)).size,5000);
+ assert.match(get('status').textContent,/results still incomplete/);
+});
+
+test('changed Git branch snapshot never claims a verified folder',async()=>{
+ const fetcher=async()=>new Response(JSON.stringify({
+  truncated:false,
+  tree:Array.from({length:1001},(_,i)=>({
+   type:'blob',path:'new'+i+'.svg',size:10
+  }))
+ }),{status:200});
+ const {app,get}=boot(fetcher);
+ app.state.repo='test/large';app.state.branch='main';app.state.path='';
+ app.state.indexTruncated=true;app.state.mode='list';
+ app.state.items=Array.from({length:1000},(_,i)=>({
+  type:'file',name:'old'+i+'.svg',path:'old'+i+'.svg'
+ }));
+ const added=await app.recoverTargetedFolder();
+ assert.equal(added,1001);
+ assert.equal(app.state.items.length,2001,'below the union cap');
+ assert.match(get('status').textContent,/Directory changed between listings/);
+ assert.match(get('status').textContent,/results still incomplete/);
+ assert.doesNotMatch(get('status').textContent,/Folder verified/);
+});
+
+test('changed file-versus-folder kind cannot be called a verified directory',async()=>{
+ const fetcher=async()=>new Response(JSON.stringify({
+  truncated:false,
+  tree:Array.from({length:1000},(_,i)=>({
+   type:'blob',path:'entry'+i,size:10
+  }))
+ }),{status:200});
+ const {app,get}=boot(fetcher);
+ app.state.repo='test/large';app.state.branch='main';app.state.path='';
+ app.state.indexTruncated=true;app.state.mode='list';
+ app.state.items=Array.from({length:1000},(_,i)=>({
+  type:i===0?'dir':'file',name:'entry'+i,path:'entry'+i,size:10
+ }));
+ assert.equal(await app.recoverTargetedFolder(),0);
+ assert.equal(app.state.items.length,1000);
+ assert.match(get('status').textContent,/Directory changed between listings/);
+ assert.doesNotMatch(get('status').textContent,/Folder verified/);
 });
 
 test('truncated direct folder tree never claims complete coverage',async()=>{
