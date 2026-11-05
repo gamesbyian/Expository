@@ -1,7 +1,9 @@
-# Draft artwork (deprecated)
+# Draft artwork and prior logo versions
 
-**Approved logo:** [Expository v1 canonical SVG](../magnifier-disk-stack-centred.svg).
+The approved [canonical v1 full logo](../magnifier-disk-stack-centred.svg) and [square icon](../expository-v1-icon-square.svg) live in the parent branding directory.
 
-All SVG artwork in this directory is an archived, noncanonical design exploration. The original vector files have been moved without altering their contents. The old repository-storage-and-folders illustration is also kept here as an historical source asset.
+The older first-designated canonical artwork is preserved intact as [magnifier-disk-stack-centred-original-v1.svg](magnifier-disk-stack-centred-original-v1.svg). The previous uncropped reoriented illustration also remains available as [magnifier-v1-mirrored-rotated-upright-disk.svg](magnifier-v1-mirrored-rotated-upright-disk.svg).
 
-Design and geometry notes are retained alongside drafts. Never substitute a draft for the canonical logo without a new owner decision.
+Two newly requested explorations retain parallel echoes with [horizontal-only](magnifier-v1-echoes-horizontal.svg) or [vertical-only](magnifier-v1-echoes-vertical.svg) offsets. Both use unchanged canonical disk-stack artwork and are noncanonical.
+
+All other historical SVGs and construction notes remain in this archive; no earlier designs are discarded.
