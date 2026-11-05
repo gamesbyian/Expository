@@ -712,7 +712,8 @@ private fun DeveloperPreview(
                     SafRecursiveSourceScanner(context.contentResolver)
                         .inspectMergeRootInventory(selected, generation,
                             continueRequested = {
-                                isActive && mergeInventorySerial.get() == serial
+                                isActive && mergeInventorySerial.get() == serial &&
+                                    currentShareEpoch() == shareEpoch
                             })
                 }
                 if (!isActive || mergeInventorySerial.get() != serial ||
@@ -2163,8 +2164,8 @@ private fun DeveloperPreview(
                                             if (current) "Inventory: " +
                                                 inventory.manifest.files + " file(s), " +
                                                 inventory.manifest.directories +
-                                                " folder(s), complete at scan time; " +
-                                                "recheck before any Merge."
+                                                " folder(s) including chosen root, " +
+                                                "complete at scan time; recheck before any Merge."
                                             else "Inventory expired; re-pick before review.",
                                             modifier = Modifier.testTag(
                                                 "smart-merge-source-inventory-" + index),
