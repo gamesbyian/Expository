@@ -531,6 +531,65 @@ test('truncated recursive index recovers a capped child folder through two nonre
  assert.equal(paths.length,2,'one root and one folder tree, no recursive refetch');
  assert.equal(get('status').textContent.includes('Folder verified'),true);
 });
+test('deep capped folder recovery uses a cached parent SHA without walking nine ancestors',async()=>{
+ const repo='test/large',branch='main',sha='c'.repeat(40);
+ const folder=Array.from({length:12},(_,i)=>'level'+i).join('/');
+ const parent=folder.split('/').slice(0,-1).join('/');
+ const paths=[];
+ const fetcher=async url=>{
+  paths.push(url);
+  return new Response(JSON.stringify({truncated:false,tree:[{type:'blob',path:'extra.svg',size:50}]}),{status:200});
+ };
+ const {app,get}=boot(fetcher);
+ Object.assign(app.state,{repo,branch,path:folder,repoRequest:3,seq:4,indexTruncated:true,indexReady:true,mode:'list'});
+ app.state.cache.set(repo+'@'+branch+'/'+parent,[{type:'dir',path:folder,name:'level11',sha}]);
+ app.state.items=Array.from({length:1000},(_,i)=>({type:'file',path:folder+'/img'+i+'.svg',name:'img'+i+'.svg',size:50}));
+ const added=await app.recoverTargetedFolder();
+ assert.equal(added,1);
+ assert.deepEqual(paths,['https://api.github.com/repos/test/large/git/trees/'+sha]);
+ assert.equal(app.state.items.length,1001);
+ assert.match(get('status').textContent,/Folder verified/);
+});
+test('deep recovery fetches an uncached parent once and rejects unknown child SHA',async()=>{
+ const repo='test/large',branch='main',sha='d'.repeat(40);
+ const folder=Array.from({length:10},(_,i)=>'nested'+i).join('/');
+ const parent=folder.split('/').slice(0,-1).join('/');
+ const paths=[];
+ let includeChild=true;
+ const fetcher=async url=>{
+  paths.push(url);
+  const data=url.includes('/contents/')?
+   (includeChild?[{type:'dir',path:folder,sha}]:[{type:'dir',path:'other',sha}]):
+   {truncated:false,tree:[{type:'blob',path:'extra.svg',size:10}]};
+  return new Response(JSON.stringify(data),{status:200});
+ };
+ const {app,get}=boot(fetcher);
+ Object.assign(app.state,{repo,branch,path:folder,repoRequest:1,seq:1,indexTruncated:true,indexReady:true,mode:'list'});
+ app.state.items=Array.from({length:1000},(_,i)=>({type:'file',name:i+'.svg',path:folder+'/'+i+'.svg',size:10}));
+ assert.equal(await app.recoverTargetedFolder(),1);
+ assert.deepEqual(paths,['https://api.github.com/repos/test/large/contents/'+parent+'?ref=main','https://api.github.com/repos/test/large/git/trees/'+sha]);
+ // A separate folder generation must refuse ambiguous or capped parent Contents
+ // responses instead of claiming recovery from an unrelated tree.
+ app.state.seq++;app.state.folderRecoveryKey='';app.state.items.pop();includeChild=false;
+ paths.length=0;
+ assert.equal(await app.recoverTargetedFolder(),0);
+ assert.deepEqual(paths,['https://api.github.com/repos/test/large/contents/'+parent+'?ref=main']);
+ assert.match(get('status').textContent,/Listing may be incomplete/);
+});
+test('deep folder recovery drops delayed parent responses after navigation',async()=>{
+ let release;
+ const fetcher=()=>new Promise(resolve=>{release=()=>resolve(new Response(JSON.stringify([{type:'dir',path:'old',sha:'e'.repeat(40)}]),{status:200}))});
+ const {app}=boot(fetcher);
+ const folder=Array.from({length:10},(_,i)=>'level'+i).join('/');
+ Object.assign(app.state,{repo:'test/large',branch:'main',path:folder,indexTruncated:true,indexReady:true,seq:7,repoRequest:1});
+ app.state.items=Array.from({length:1000},(_,i)=>({type:'file',name:i+'.svg',path:folder+'/'+i+'.svg'}));
+ const pending=app.recoverTargetedFolder();
+ app.state.seq++;
+ release();
+ assert.equal(await pending,0);
+ assert.equal(app.state.items.length,1000);
+});
+
 test('truncated direct folder tree never claims complete coverage',async()=>{
  const fetcher=async()=>new Response(JSON.stringify({truncated:true,tree:[{type:'blob',path:'later.svg',size:50}]}),{status:200});
  const {app,get}=boot(fetcher);app.state.repo='test/large';app.state.branch='main';app.state.path='';
