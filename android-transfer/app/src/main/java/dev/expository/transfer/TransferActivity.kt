@@ -695,7 +695,9 @@ private fun DeveloperPreview(
             mergeDestinationReading || pendingMergeDestinationPicker != null ||
             copyBusy || remoteRelayBusy) return
         val now = System.currentTimeMillis()
-        if (selected.source.location.capabilities[Capability.READ]?.valid(now) != true) {
+        val capturedRead = selected.source.location.capabilities[Capability.READ]
+        if (capturedRead?.valid(now) != true ||
+            now < capturedRead.expiresAtMillis - 300_000L) {
             mergeSourceInventory = mergeSourceInventory - selected
             mergeMessage = "Original Merge source access expired. Re-pick the folder."
             return
@@ -721,8 +723,9 @@ private fun DeveloperPreview(
                 if (currentShareEpoch() != shareEpoch ||
                     mergeSources.folders.none { it === selected } ||
                     copyBusy || remoteRelayBusy ||
-                    selected.source.location.capabilities[Capability.READ]
-                        ?.valid(System.currentTimeMillis()) != true) {
+                    capturedRead.valid(System.currentTimeMillis()) != true ||
+                    System.currentTimeMillis() <
+                        capturedRead.expiresAtMillis - 300_000L) {
                     mergeMessage = "Source access or app context changed. Re-pick before inspection."
                 } else if (inventory == null ||
                     !inventory.manifest.reviewable) {
@@ -2137,8 +2140,11 @@ private fun DeveloperPreview(
                                         style = MaterialTheme.typography.bodySmall)
                                     val originalRead = selected.source.location
                                         .capabilities[Capability.READ]
+                                    val clockNow = System.currentTimeMillis()
                                     val capturedProofValid =
-                                        originalRead?.valid(System.currentTimeMillis()) == true
+                                        originalRead?.valid(clockNow) == true &&
+                                            clockNow >=
+                                                originalRead.expiresAtMillis - 300_000L
                                     if (!capturedProofValid) {
                                         Text("Original access review expired. " +
                                             "Remove this entry and pick the folder again.",
