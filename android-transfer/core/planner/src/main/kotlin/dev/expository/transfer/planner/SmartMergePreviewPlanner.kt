@@ -112,7 +112,19 @@ object SmartMergePreviewPlanner {
         // In that case the destination parent, or the entire destination
         // grant root, is already INSIDE the source. Do not require equal
         // picker root IDs before checking these opaque identities.
-        if (source.key.opaqueItemId.isNotBlank() &&
+        // SAF document IDs are scoped to their provider authority. Remote
+        // opaque IDs can be reused by distinct authenticated accounts or
+        // storage domains at the same host; compare those only when BOTH
+        // verified remote namespace and storage-domain witnesses match.
+        val sameOpaqueScope = if (a.key.kind == LocationKind.LOCAL_SAF) {
+            a.key.authorityId == destination.key.authorityId
+        } else {
+            !a.verifiedNamespace.isNullOrBlank() &&
+                a.verifiedNamespace == destination.verifiedNamespace &&
+                !a.verifiedStorageDomain.isNullOrBlank() &&
+                a.verifiedStorageDomain == destination.verifiedStorageDomain
+        }
+        if (sameOpaqueScope && source.key.opaqueItemId.isNotBlank() &&
             (source.key.opaqueItemId == destination.key.containerId ||
                 source.key.opaqueItemId == destination.key.rootId))
             return true
