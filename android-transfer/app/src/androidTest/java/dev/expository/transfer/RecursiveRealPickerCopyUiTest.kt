@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -203,6 +204,105 @@ class RecursiveRealPickerCopyUiTest {
         assertTrue("Clear must remove the destination review from the app",
             compose.onAllNodesWithTag("smart-merge-destination-summary")
                 .fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test fun genuinePagedCasefoldReviewWithManyCollisionsAndNoWrites() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val automation = instrumentation.uiAutomation
+        automation.serviceInfo?.let { info ->
+            info.flags = info.flags or
+                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+            automation.serviceInfo = info
+        }
+        val device = UiDevice.getInstance(instrumentation)
+        val context = instrumentation.targetContext
+        assertTrue("Disposable picker fixture APK not installed",
+            device.executeShellCommand("pm list packages dev.expository.transfer.fixture")
+                .contains("package:dev.expository.transfer.fixture"))
+        val journalBefore = context.noBackupFilesDir.list().orEmpty().toSet()
+        fun press(tag: String) {
+            compose.onNodeWithTag("transfer-workspace-scroll")
+                .performScrollToNode(hasTestTag(tag))
+            compose.onNodeWithTag(tag).assertIsEnabled().performClick()
+        }
+        fun pickRoot(tag: String, title: String) {
+            press(tag)
+            RecursivePickerUi.chooseFixtureRoot(device, title)
+        }
+        press("smart-merge-basket-toggle")
+        pickRoot("smart-merge-add-source", "Expository Paging A Lab")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithText("Smart Merge · 1 source folder(s)")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        pickRoot("smart-merge-add-source", "Expository Paging B Lab")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithText("Smart Merge · 2 source folder(s)")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        pickRoot("smart-merge-pick-destination", "Expository Dual Target Lab")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithTag("smart-merge-destination-summary")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        for (index in 0..1) {
+            press("smart-merge-inspect-source-" + index)
+            compose.waitUntil(30_000L) {
+                compose.onAllNodesWithTag("smart-merge-source-inventory-" + index)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("Inventory: 17 file(s), 3 folder(s)",
+                substring = true).assertExists()
+        }
+        press("smart-merge-illustrate")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithText("Hypothetical differences 1–12 of 17.")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("38 descendant item(s), 17 keep-both rename(s)",
+            substring = true).assertExists()
+        compose.onNodeWithText("Source 2: Collision-01.txt → Collision-01 (2).txt",
+            substring = true).assertExists()
+        compose.onNodeWithTag("smart-merge-illustration-next")
+            .assertIsEnabled().performScrollTo().performClick()
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithText("Hypothetical differences 13–17 of 17.")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Source 2: Collision-16.txt → Collision-16 (2).txt",
+            substring = true).assertExists()
+        compose.onNodeWithTag("smart-merge-illustration-next").assertIsNotEnabled()
+        compose.onNodeWithTag("smart-merge-illustration-previous")
+            .assertIsEnabled().performScrollTo().performClick()
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithText("Hypothetical differences 1–12 of 17.")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        // All three OS picker grants are independently scoped. Neither an
+        // illustration page turn nor its recomputation can create documents,
+        // change fixture payload bytes, or create durable recovery records.
+        for (authority in listOf("test.real.recursive.paging.a.scoped",
+                "test.real.recursive.paging.b.scoped")) {
+            val tree = Uri.parse("content://" + authority + "/tree/lab-source-root")
+            assertArrayEquals("Original independently granted source was modified",
+                fixtureBytes, context.contentResolver.openInputStream(
+                    DocumentsContract.buildDocumentUriUsingTree(tree, "clip"))!!
+                    .use { it.readBytes() })
+            val roots = LocalTreeReader.list(context.contentResolver, tree,
+                "lab-source-root", LocalTreeReader.MAX_BROWSE)
+            assertTrue(roots.complete && !roots.hasMore)
+            assertEquals(17, roots.children.count { !it.directory })
+        }
+        val target = Uri.parse(
+            "content://test.real.recursive.dual.target.scoped/tree/lab-target-root")
+        val children = LocalTreeReader.list(context.contentResolver, target,
+            "lab-target-root", LocalTreeReader.MAX_BROWSE)
+        assertTrue("Paging cannot create a destination child",
+            children.complete && !children.hasMore && children.children.isEmpty())
+        assertEquals("No protected recovery records may be created",
+            journalBefore, context.noBackupFilesDir.list().orEmpty().toSet())
     }
 
     @Test fun genuineIndependentPickerRootsIllustrateActualCasefoldCollisionsWithoutWrites() {
