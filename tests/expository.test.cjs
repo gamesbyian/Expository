@@ -612,6 +612,27 @@ test('direct Git-tree recovery caps the entire visible union at 5,000 entries',a
  assert.match(get('status').textContent,/results still incomplete/);
 });
 
+test('changed Git branch snapshot never claims a verified folder',async()=>{
+ const fetcher=async()=>new Response(JSON.stringify({
+  truncated:false,
+  tree:Array.from({length:1001},(_,i)=>({
+   type:'blob',path:'new'+i+'.svg',size:10
+  }))
+ }),{status:200});
+ const {app,get}=boot(fetcher);
+ app.state.repo='test/large';app.state.branch='main';app.state.path='';
+ app.state.indexTruncated=true;app.state.mode='list';
+ app.state.items=Array.from({length:1000},(_,i)=>({
+  type:'file',name:'old'+i+'.svg',path:'old'+i+'.svg'
+ }));
+ const added=await app.recoverTargetedFolder();
+ assert.equal(added,1001);
+ assert.equal(app.state.items.length,2001,'below the union cap');
+ assert.match(get('status').textContent,/Directory changed between listings/);
+ assert.match(get('status').textContent,/results still incomplete/);
+ assert.doesNotMatch(get('status').textContent,/Folder verified/);
+});
+
 test('truncated direct folder tree never claims complete coverage',async()=>{
  const fetcher=async()=>new Response(JSON.stringify({truncated:true,tree:[{type:'blob',path:'later.svg',size:50}]}),{status:200});
  const {app,get}=boot(fetcher);app.state.repo='test/large';app.state.branch='main';app.state.path='';
