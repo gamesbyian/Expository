@@ -33,12 +33,14 @@ import java.security.MessageDigest
 internal class SmartMergeSafDestinationSnapshot(
     val location: LocationRef,
     val parentIndex: PagedLocationIndex,
-    val displayName: String
+    val displayName: String,
+    private val observedAtMillis: Long
 ) {
     val childCount: Int get() = parentIndex.children.size
 
     fun stillObserved(nowMillis: Long): Boolean =
-        parentIndex.state == LocationIndexState.COMPLETE &&
+        nowMillis >= observedAtMillis &&
+            parentIndex.state == LocationIndexState.COMPLETE &&
             parentIndex.location == location &&
             listOf(Capability.READ, Capability.WRITE, Capability.CREATE_CHILD)
                 .all { location.capabilities[it]?.valid(nowMillis) == true }
@@ -213,6 +215,7 @@ internal object SmartMergeSafDestinationInspector {
             clockMillis() in observedAt..expires && continueRequested()) {
             "MERGE_DESTINATION_OBSERVATION_EXPIRED"
         }
-        SmartMergeSafDestinationSnapshot(destination, index, rootAfter.name)
+        SmartMergeSafDestinationSnapshot(
+            destination, index, rootAfter.name, observedAt)
     }.getOrNull()
 }
