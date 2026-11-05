@@ -62,6 +62,79 @@ class RecursiveRealPickerCopyUiTest {
         assertArrayEquals("Test source must never change", fixtureBytes, read)
     }
 
+    @Test fun genuineSystemPickerCollectsSmartMergeSourceWithoutTransfer() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val automation = instrumentation.uiAutomation
+        automation.serviceInfo?.let { info ->
+            info.flags = info.flags or
+                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+            automation.serviceInfo = info
+        }
+        val device = UiDevice.getInstance(instrumentation)
+        assertTrue("Fixture test provider must be installed",
+            device.executeShellCommand(
+                "pm list packages dev.expository.transfer.fixture")
+                .contains("package:dev.expository.transfer.fixture"))
+        val context = instrumentation.targetContext
+        val journalBefore = context.noBackupFilesDir.list().orEmpty().toSet()
+
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-basket-toggle"))
+        compose.onNodeWithTag("smart-merge-basket-toggle")
+            .assertIsEnabled().assertIsDisplayed().performClick()
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-add-source"))
+        compose.onNodeWithTag("smart-merge-add-source")
+            .assertIsEnabled().assertIsDisplayed().performClick()
+        // The actual system Files UI must discover a real test-only provider
+        // root and return a real OS READ grant. No synthetic ActivityResult,
+        // URI injection or test-side permission laundering is allowed.
+        RecursivePickerUi.chooseFixtureRoot(device, "Expository Source Lab")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithText("Smart Merge · 1 source folder(s)")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Minimum source count reached.",
+            substring = true).assertDoesNotExist()
+        // A second system picker grant belongs to a different disposable
+        // DocumentsProvider and must be collected, NOT substituted for the
+        // first source or a destination. This is the real N>=2 M1 contract.
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-add-source"))
+        compose.onNodeWithTag("smart-merge-add-source")
+            .assertIsEnabled().assertIsDisplayed().performClick()
+        RecursivePickerUi.chooseFixtureRoot(device, "Expository Target Lab")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithText("Smart Merge · 2 source folder(s)")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Minimum source count reached.",
+            substring = true).assertExists()
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("workspace-dual-view"))
+        compose.onNodeWithTag("workspace-dual-view")
+            .assertIsEnabled().performClick()
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-basket-toggle"))
+        compose.onNodeWithText("Merge · 2 sources").assertExists()
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("workspace-single-view"))
+        compose.onNodeWithTag("workspace-single-view")
+            .assertIsEnabled().performClick()
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-basket-toggle"))
+        compose.onNodeWithText("Merge · 2 sources").assertExists()
+        assertArrayEquals("Read-only basket must leave the real fixture unchanged",
+            fixtureBytes,
+            context.contentResolver.openInputStream(
+                DocumentsContract.buildDocumentUriUsingTree(sourceTree, "clip"))!!
+                .use { it.readBytes() })
+        assertEquals("No recovery records may be created by source collection",
+            journalBefore, context.noBackupFilesDir.list().orEmpty().toSet())
+    }
+
     @Test fun genuineSystemTreeGrantsCopyNestedAndEmptyFoldersInSingle() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         // The source and target picker windows belong to an external SYSTEM
