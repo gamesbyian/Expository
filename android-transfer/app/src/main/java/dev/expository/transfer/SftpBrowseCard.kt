@@ -115,6 +115,25 @@ internal data class PendingPeerSftpDownload(
     val preflight: SftpTreeCopyPreflight
 )
 
+/** Reviewed SFTP listing file and its weak provider revision, held only
+ * during one Android CREATE_DOCUMENT picker journey. This prevents the
+ * existing Save As from silently adopting a different file version while
+ * the Android picker is open. Metadata equality is still not byte identity.
+ */
+internal data class SftpSaveAsWitness(
+    val sessionId: String,
+    val folder: String,
+    val file: String,
+    val revision: String
+) {
+    fun matches(liveSessionId: String, liveFolder: String,
+        liveFile: String): Boolean =
+        sessionId.isNotBlank() && folder.isNotBlank() &&
+            file.isNotBlank() && revision.isNotBlank() &&
+            sessionId == liveSessionId && folder == liveFolder &&
+            file == liveFile
+}
+
 internal data class RemotePickerWitness(
     val sessionId: String,
     val folder: String,
@@ -172,7 +191,7 @@ internal fun SftpBrowseCard(
     var pendingPeerBatch by remember { mutableStateOf<PendingPeerSftpBatchDownload?>(null) }
     var pendingRelay by remember { mutableStateOf<SftpRelayPreflight?>(null) }
     var pendingRelayBatch by remember { mutableStateOf<PendingSftpRelayBatch?>(null) }
-    var pendingSaveWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
+    var pendingSaveWitness by remember { mutableStateOf<SftpSaveAsWitness?>(null) }
     var pendingUploadWitness by remember { mutableStateOf<RemotePickerWitness?>(null) }
     var pendingPickedUpload by remember { mutableStateOf<PendingPickedSftpUpload?>(null) }
     var pendingMove by remember { mutableStateOf<String?>(null) }
@@ -294,6 +313,7 @@ internal fun SftpBrowseCard(
                     }.copy(
                         live, sessionId, path, target,
                         pickerResultFlags = pickerResultFlags,
+                        expectedSourceRevision = requireNotNull(witness).revision,
                         continueRequested = { permit.get() && active?.isActive == true },
                         onProgress = { bytes ->
                             if (bytes - lastDisplayed >= 256L * 1024L) {
@@ -2194,8 +2214,13 @@ internal fun SftpBrowseCard(
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Button(enabled = !busy && !peerRelayLocked, modifier = Modifier.heightIn(min = 48.dp),
                                         onClick = {
+                                            // Bind the Save As action to the
+                                            // exact observed revision, rather
+                                            // than silently accepting a file
+                                            // replaced during the OS picker.
                                             pendingFile = path
-                                            pendingSaveWitness = RemotePickerWitness(sessionId, folder, path)
+                                            pendingSaveWitness = SftpSaveAsWitness(
+                                                sessionId, folder, path, entry.revision)
                                             busy = true
                                             val extension = entry.name.substringAfterLast('.', "").lowercase()
                                             val mime = MimeTypeMap.getSingleton()
