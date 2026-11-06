@@ -1692,14 +1692,13 @@ internal fun SftpBrowseCard(
                                             SftpHostKeyPin(chosenPin))
                                         val root = SftpPath.requireAbsolute(chosenFolder)
                                         val live = SecureSftp.connect(target, chosenUser, secret)
-                                        try {
-                                            val listing = live.browse(root)
-                                            acquisition.offer(live)
-                                            live to listing
-                                        } catch (e: Exception) {
-                                            live.close()
-                                            throw e
-                                        }
+                                        // The first directory read may stall after
+                                        // pinned SSH authentication. Register for
+                                        // cancellation retirement before issuing it;
+                                        // UI adoption still requires a valid listing.
+                                        acquisition.offer(live)
+                                        val listing = live.browse(root)
+                                        live to listing
                                     }
                                 } finally { secret.fill('\u0000') }
                             }
