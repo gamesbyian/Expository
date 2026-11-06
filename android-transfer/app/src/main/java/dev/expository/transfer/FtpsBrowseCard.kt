@@ -89,6 +89,18 @@ internal object FtpsCopyProgressGate {
         presentedPermit === expectedPermit
 }
 
+/** A separately typed remote path never obtains write authority from a listing. */
+internal data class FtpsDirectFileSelection(val path: String, val displayName: String) {
+    companion object {
+        fun checked(candidate: String): FtpsDirectFileSelection? = runCatching {
+            val path = FtpsPath.checked(candidate)
+            require(path != "/") { "FILE_PATH_REQUIRED" }
+            val filename = FtpsPath.checkedChild(path.substringAfterLast('/'))
+            FtpsDirectFileSelection(path, filename)
+        }.getOrNull()
+    }
+}
+
 /**
  * Minimal live secure FTPS browser. Copy-only, foreground-only and session-only
  * authentication. LIST previews may be incomplete; MLST file stat is mandatory
@@ -111,6 +123,8 @@ fun FtpsBrowseCard() {
     var page by remember { mutableStateOf<FtpsBrowsePreview?>(null) }
     var browseLimit by remember { mutableStateOf(FtpsBrowseBounds.INITIAL) }
     var fileFilter by remember { mutableStateOf("") }
+    // Session-only input. Never saved to disk or used as mutation proof.
+    var directFilePath by remember { mutableStateOf("") }
     var sortMode by remember { mutableStateOf(FtpsFolderSort.NAME) }
     var descending by remember { mutableStateOf(false) }
     var pendingFile by remember { mutableStateOf<String?>(null) }
@@ -254,6 +268,65 @@ fun FtpsBrowseCard() {
         }
     }
 
+    fun beginVerifiedSaveAs(rawPath: String) {
+        // This route intentionally works even when MLSD/LIST omits a file.
+        // A path entered by the user is a candidate, NEVER an observed file.
+        val candidate = FtpsDirectFileSelection.checked(rawPath)
+        if (candidate == null) {
+            status = "Enter an absolute remote file path with a valid filename."
+            return
+        }
+        val live = session
+        if (live == null || busy) {
+            status = "Reconnect and finish any current operation before Save As."
+            return
+        }
+        busy = true
+        pendingFile = null
+        pendingSaveWitness = null
+        status = "Checking authoritative remote MLST metadata before Save As…"
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { live.statFile(candidate.path) }
+            }
+            if (session !== live) {
+                busy = false
+                status = "FTPS session changed. Save canceled."
+            } else {
+                result.onSuccess { observation ->
+                    // Only MLST success binds the exact path+revision to the
+                    // existing one-shot Android CREATE_DOCUMENT review.
+                    pendingFile = candidate.path
+                    pendingSaveWitness = FtpsPickerWitness(
+                        sessionId, folder, candidate.path, observation.revision)
+                    val extension = candidate.displayName
+                        .substringAfterLast('.', "").lowercase()
+                    val mime = MimeTypeMap.getSingleton()
+                        .getMimeTypeFromExtension(extension)
+                        ?: "application/octet-stream"
+                    try {
+                        saveAs.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = mime
+                            putExtra(Intent.EXTRA_TITLE, candidate.displayName)
+                        })
+                        status = "Choose a new Android document. The FTPS source is unchanged."
+                    } catch (_: Exception) {
+                        pendingFile = null
+                        pendingSaveWitness = null
+                        busy = false
+                        status = "Android Save As picker unavailable. Nothing was transferred."
+                    }
+                }.onFailure {
+                    pendingFile = null
+                    pendingSaveWitness = null
+                    busy = false
+                    status = "Remote MLST file identity unavailable. No Android document created."
+                }
+            }
+        }
+    }
+
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("FTPS server → Save to device", style = MaterialTheme.typography.titleMedium)
@@ -331,6 +404,7 @@ fun FtpsBrowseCard() {
                             }
                             result.onSuccess { (live, listing) ->
                                 session = live
+                                directFilePath = ""
                                 sessionId = UUID.randomUUID().toString()
                                 folder = chosenRoot
                                 browseLimit = FtpsBrowseBounds.INITIAL
@@ -349,6 +423,7 @@ fun FtpsBrowseCard() {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(enabled = !busy, onClick = {
                         session = null
+                        directFilePath = ""
                         sessionId = ""
                         page = null
                         browseLimit = FtpsBrowseBounds.INITIAL
@@ -363,6 +438,21 @@ fun FtpsBrowseCard() {
                     val parent = folder.substringBeforeLast('/', "").ifBlank { "/" }
                     browseTo(parent)
                 }) { Text("Parent folder") }
+                Text("Save an exact remote file path", style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(directFilePath,
+                    { directFilePath = it.take(4096) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Absolute FTPS file path") },
+                    singleLine = true, enabled = !busy)
+                Button(
+                    enabled = !busy && directFilePath.isNotBlank(),
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    onClick = { beginVerifiedSaveAs(directFilePath) }
+                ) { Text("Verify path and Save As…") }
+                Text("For incomplete or empty directory listings: a typed path is checked " +
+                    "with MLST before opening Android Save As. Missing metadata blocks the copy; " +
+                    "no remote writes or plaintext fallback.",
+                    style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(fileFilter, { fileFilter = it.take(256) },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Filter names in this FTPS folder") },
@@ -406,58 +496,9 @@ fun FtpsBrowseCard() {
                                     onClick = { browseTo(fullPath) }) { Text("Open") }
                             } else {
                                 Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
-                                    onClick = {
-                                        // Verify file identity before opening Android's
-                                        // CREATE_DOCUMENT picker. Otherwise a missing
-                                        // MLST/permission could leave an empty document.
-                                        val live = session
-                                        if (live == null) {
-                                            status = "FTPS session expired. Reconnect to save."
-                                        } else {
-                                            busy = true
-                                            pendingFile = null
-                                            pendingSaveWitness = null
-                                            status = "Checking remote file metadata before Save As…"
-                                            scope.launch {
-                                                val preflight = withContext(Dispatchers.IO) {
-                                                    runCatching { live.statFile(fullPath) }
-                                                }
-                                                if (session !== live) {
-                                                    busy = false
-                                                    status = "FTPS session changed. Save canceled."
-                                                } else {
-                                                    preflight.onSuccess {
-                                                        pendingFile = fullPath
-                                                        pendingSaveWitness = FtpsPickerWitness(sessionId, folder, fullPath,
-                                                            it.revision)
-                                                        val extension = entry.name
-                                                            .substringAfterLast('.', "").lowercase()
-                                                        val mime = MimeTypeMap.getSingleton()
-                                                            .getMimeTypeFromExtension(extension)
-                                                            ?: "application/octet-stream"
-                                                        try {
-                                                            saveAs.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                                                                addCategory(Intent.CATEGORY_OPENABLE)
-                                                                type = mime
-                                                                putExtra(Intent.EXTRA_TITLE, entry.name)
-                                                            })
-                                                            status = "Choose a new Android document. No remote source changes."
-                                                        } catch (_: Exception) {
-                                                            pendingFile = null
-                                                            pendingSaveWitness = null
-                                                            busy = false
-                                                            status = "Android Save As picker unavailable. Nothing was transferred."
-                                                        }
-                                                    }.onFailure {
-                                                        pendingFile = null
-                                                        pendingSaveWitness = null
-                                                        busy = false
-                                                        status = "Remote file metadata unavailable. No Android document was created."
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }) { Text("Save As…") }
+                                    onClick = { beginVerifiedSaveAs(fullPath) }) {
+                                    Text("Save As…")
+                                }
                             }
                         }
                     }

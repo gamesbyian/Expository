@@ -55,6 +55,32 @@ class FtpsUiSmokeTest {
             android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION))
     }
 
+    @Test fun directFtpsFilePathRequiresCheckedAbsoluteFileCandidate() {
+        val parse = FtpsDirectFileSelection.Companion
+        val valid = parse.checked("/pub/example/readme.txt")
+        org.junit.Assert.assertNotNull(valid)
+        org.junit.Assert.assertEquals("/pub/example/readme.txt", valid?.path)
+        org.junit.Assert.assertEquals("readme.txt", valid?.displayName)
+        org.junit.Assert.assertEquals("Résumé.txt",
+            parse.checked("/Media/Résumé.txt")?.displayName)
+        for (bad in listOf(
+            "", "pub/example/readme.txt", "/", "/pub/", "/pub//readme.txt",
+            "/pub/../readme.txt", "/pub/./readme.txt",
+            "/pub/bad\\file.txt", "/pub/bad\nfile.txt",
+            "/pub/" + "é".repeat(128) + ".txt",
+            "/" + "long".repeat(1100)
+        )) {
+            org.junit.Assert.assertNull(
+                "Invalid or overlong direct path must never reach MLST or picker",
+                parse.checked(bad))
+        }
+        val maximumComponent = "x".repeat(251) + ".txt"
+        org.junit.Assert.assertEquals(maximumComponent,
+            parse.checked("/" + maximumComponent)?.displayName)
+        org.junit.Assert.assertNull(
+            parse.checked("/" + "x".repeat(252) + ".txt"))
+    }
+
     @Test fun copyProgressGateIsMonotonicAndBoundToTheExactForegroundAttempt() {
         val permit = java.util.concurrent.atomic.AtomicBoolean(true)
         val replacement = java.util.concurrent.atomic.AtomicBoolean(true)
