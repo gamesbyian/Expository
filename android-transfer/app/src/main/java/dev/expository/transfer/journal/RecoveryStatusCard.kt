@@ -322,7 +322,7 @@ fun RecoveryStatusCard() {
                     status == null -> "Checking private operation journal…"
                     status!!.requiresReview > 0 || status!!.damagedOrUnrecognized > 0 ->
                         "${status!!.requiresReview} attempt(s) requiring inspection, " +
-                        "${status!!.damagedOrUnrecognized} damaged/unrecognized. " +
+                        "At least ${status!!.damagedOrUnrecognized} damaged/unrecognized. " +
                         "An attempt may still be active; status refresh never stops or retries it. " +
                         "Inspect unresolved destinations before any new approval. Sources are never deleted."
                     else -> "No uncertain prior journaled attempts found. " +
@@ -538,6 +538,7 @@ fun RecoveryStatusCard() {
                                 sourceInspectionTicket == null && !inspectionRunning,
                             onClick = {
                                 navigateReviewPage(0)
+                                status = null
                                 referenceWindow = review.referenceWindow - 1
                             }
                         ) { Text("Previous 32 review records") }
@@ -550,6 +551,7 @@ fun RecoveryStatusCard() {
                                 sourceInspectionTicket == null && !inspectionRunning,
                             onClick = {
                                 navigateReviewPage(0)
+                                status = null
                                 referenceWindow = review.referenceWindow + 1
                             }
                         ) { Text("Next 32 review records") }
