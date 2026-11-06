@@ -28,6 +28,15 @@ import org.apache.sshd.sftp.server.SftpSubsystemFactory
 import org.apache.sshd.sftp.server.SftpEventListener
 import org.apache.sshd.sftp.server.DirectoryHandle
 import org.apache.sshd.server.session.ServerSession
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import java.security.KeyStore
+import java.util.Date
+import java.util.UUID
+import javax.net.ssl.KeyManagerFactory
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLServerSocket
+import javax.security.auth.x500.X500Principal
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -452,6 +461,115 @@ class FtpsUiSmokeTest {
 
     @Test fun pendingSftpLoginCancelDoesNotAuthenticateOrAdoptSocket() =
         pendingSftpLoginCanBeCanceledAgainstPinnedLoopback()
+
+    @Test(timeout = 90_000L)
+    fun implicitFtpsRejectsRuntimeGeneratedUntrustedTlsCertificate() {
+        // Real TLS handshake on loopback. Generate a short-lived test-only
+        // identity in AndroidKeyStore at runtime; no certificate, private key,
+        // credential or endpoint is checked into the repository or artifacts.
+        val alias = "ftps-test-untrusted-" + UUID.randomUUID()
+        val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        try {
+        val now = System.currentTimeMillis()
+        val generator = KeyPairGenerator.getInstance("RSA", "AndroidKeyStore")
+        generator.initialize(
+            KeyGenParameterSpec.Builder(alias,
+                KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY)
+                .setKeySize(2048)
+                .setDigests(KeyProperties.DIGEST_SHA256)
+                .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PKCS1)
+                .setCertificateSubject(X500Principal("CN=localhost"))
+                .setCertificateSerialNumber(java.math.BigInteger.valueOf(now))
+                .setCertificateNotBefore(Date(now - 30_000L))
+                .setCertificateNotAfter(Date(now + 120_000L))
+                .build()
+        )
+        generator.generateKeyPair()
+        val keyManagers = KeyManagerFactory.getInstance(
+            KeyManagerFactory.getDefaultAlgorithm()).apply {
+            init(store, null)
+        }
+        val original = keyManagers.keyManagers.filterIsInstance<javax.net.ssl.X509KeyManager>()
+            .first()
+        val certificateChosen = java.util.concurrent.atomic.AtomicBoolean(false)
+        val tracked = object : javax.net.ssl.X509KeyManager {
+            override fun getClientAliases(type: String?, issuers: Array<java.security.Principal>?) =
+                original.getClientAliases(type, issuers)
+            override fun chooseClientAlias(types: Array<String>?,
+                issuers: Array<java.security.Principal>?, socket: java.net.Socket?) =
+                original.chooseClientAlias(types, issuers, socket)
+            override fun getServerAliases(type: String?, issuers: Array<java.security.Principal>?) =
+                original.getServerAliases(type, issuers)
+            override fun chooseServerAlias(type: String?, issuers: Array<java.security.Principal>?,
+                socket: java.net.Socket?) =
+                original.chooseServerAlias(type, issuers, socket).also { selected ->
+                    if (selected != null) certificateChosen.set(true)
+                }
+            override fun getCertificateChain(name: String?) =
+                original.getCertificateChain(name)
+            override fun getPrivateKey(name: String?) =
+                original.getPrivateKey(name)
+        }
+        val tls = SSLContext.getInstance("TLS").apply {
+            init(arrayOf(tracked), null, null)
+        }
+        val socket = (tls.serverSocketFactory.createServerSocket(
+            0, 1, java.net.InetAddress.getByName("127.0.0.1"))
+            as SSLServerSocket).apply { soTimeout = 10_000 }
+        val accepted = java.util.concurrent.CountDownLatch(1)
+        val serverAuthenticated = java.util.concurrent.atomic.AtomicBoolean(false)
+        val server = Thread {
+            try {
+                socket.accept().use { connection ->
+                    accepted.countDown()
+                    (connection as javax.net.ssl.SSLSocket).apply {
+                        soTimeout = 8_000
+                        startHandshake()
+                    }
+                    serverAuthenticated.set(true)
+                }
+            } catch (_: Exception) { /* Expected TLS trust rejection */ }
+        }
+        server.isDaemon = true
+        server.start()
+        try {
+            rule.setContent {
+                MaterialTheme {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        FtpsBrowseCard()
+                    }
+                }
+            }
+            rule.onNodeWithText("Implicit TLS").performScrollTo().performClick()
+            rule.onNodeWithTag("ftps-login-host").performTextReplacement("127.0.0.1")
+            rule.onNodeWithTag("ftps-login-port")
+                .performTextReplacement(socket.localPort.toString())
+            rule.onNodeWithTag("ftps-login-user").performTextReplacement("synthetic-user")
+            rule.onNodeWithTag("ftps-login-password")
+                .performTextReplacement("synthetic-secret")
+            rule.onNodeWithText("Connect securely").performScrollTo().performClick()
+            org.junit.Assert.assertTrue("TLS connection must reach disposable fixture",
+                accepted.await(8L, java.util.concurrent.TimeUnit.SECONDS))
+            rule.waitUntil(15_000L) {
+                rule.onAllNodesWithText("FTPS connection or listing failed",
+                    substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            org.junit.Assert.assertTrue(
+                "Fixture must present a selected certificate, not merely fail TLS setup",
+                certificateChosen.get())
+            org.junit.Assert.assertFalse(
+                "Self-signed unknown TLS identity must not authenticate",
+                serverAuthenticated.get())
+            rule.onNodeWithText("Connect securely").assertExists()
+            rule.onNodeWithText("Disconnect").assertDoesNotExist()
+        } finally {
+            socket.close()
+            server.join(2500L)
+        }
+        } finally {
+            store.deleteEntry(alias)
+        }
+    }
 
     @Test fun protocolSelectorHasStrictSecureModesAndNoAutomaticConnection() {
         rule.setContent { MaterialTheme { FtpsBrowseCard() } }
