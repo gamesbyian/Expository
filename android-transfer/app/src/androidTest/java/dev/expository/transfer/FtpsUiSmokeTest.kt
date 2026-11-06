@@ -107,6 +107,146 @@ class FtpsUiSmokeTest {
         }
     }
 
+    @Test fun stalledPlainFtpDirectoryCanBeStoppedWithoutReusingControlSocket() {
+        // Fully disposable FTP control/data fixture, no external endpoint,
+        // writes, downloads, production credentials or authentic source.
+        val local = java.net.InetAddress.getByName("127.0.0.1")
+        val listener = java.net.ServerSocket(0, 1, local)
+        val secondListing = java.util.concurrent.CountDownLatch(1)
+        val observedCommands = java.util.concurrent.ConcurrentLinkedQueue<String>()
+        val fixtureFailure = java.util.concurrent.atomic.AtomicReference("none")
+        val releaseSecond = java.util.concurrent.CountDownLatch(1)
+        val worker = Thread {
+            var passive: java.net.ServerSocket? = null
+            try {
+                listener.accept().use { control ->
+                    control.soTimeout = 25_000
+                    val reader = java.io.BufferedReader(
+                        java.io.InputStreamReader(control.getInputStream(),
+                            java.nio.charset.StandardCharsets.UTF_8))
+                    val output = control.getOutputStream()
+                    fun reply(line: String) {
+                        output.write((line + "\r\n").toByteArray(
+                            java.nio.charset.StandardCharsets.UTF_8))
+                        output.flush()
+                    }
+                    var firstListing = true
+                    reply("220 Synthetic FTP test service")
+                    while (true) {
+                        val line = reader.readLine() ?: break
+                        val verb = line.substringBefore(' ').uppercase()
+                        observedCommands.add(verb)
+                        when (verb) {
+                            "USER" -> reply("331 Password required")
+                            "PASS" -> reply("230 Synthetic login accepted")
+                            "TYPE" -> reply("200 Binary mode")
+                            "CWD" -> reply("250 Directory exists")
+                            "SYST" -> reply("215 UNIX Type: L8")
+                            "PWD" -> reply("257 \"/\"")
+                            "FEAT" -> reply("211 End")
+                            "OPTS" -> reply("200 Option accepted")
+                            "EPSV", "PASV" -> {
+                                passive?.close()
+                                passive = java.net.ServerSocket(0, 1, local)
+                                passive?.soTimeout = 5_000
+                                val port = passive!!.localPort
+                                if (line.startsWith("PASV")) {
+                                    reply("227 Entering Passive Mode (127,0,0,1," +
+                                        (port / 256) + "," + (port % 256) + ")")
+                                } else {
+                                    reply("229 Entering Extended Passive Mode (|||$port|)")
+                                }
+                            }
+                            // Intentionally force the production MLSD->LIST
+                            // compatibility view; neither listing authorizes writes.
+                            "MLSD" -> reply("502 MLSD unavailable in test fixture")
+                            "LIST" -> {
+                                if (firstListing) {
+                                    reply("150 Synthetic directory transfer")
+                                    passive!!.accept().use { data ->
+                                        data.getOutputStream().write(
+                                            ("-rw-r--r-- 1 owner group 9 Jan 01 00:00 synthetic.txt\r\n")
+                                                .toByteArray(java.nio.charset.StandardCharsets.UTF_8))
+                                    }
+                                    passive?.close()
+                                    passive = null
+                                    firstListing = false
+                                    reply("226 Directory transfer complete")
+                                } else {
+                                    secondListing.countDown()
+                                    // Deliberate stall on *same* control socket.
+                                    releaseSecond.await(18L, java.util.concurrent.TimeUnit.SECONDS)
+                                    reply("425 Read-only listing canceled")
+                                }
+                            }
+                            "QUIT" -> { reply("221 Good bye"); break }
+                            else -> reply("502 Command unavailable")
+                        }
+                    }
+                }
+            } catch (failure: Exception) {
+                // Diagnostics are limited to the exception type. Never record
+                // received credentials, paths, replies or socket contents.
+                fixtureFailure.set(failure.javaClass.simpleName)
+            }
+            finally {
+                runCatching { passive?.close() }
+            }
+        }
+        worker.isDaemon = true
+        worker.start()
+        try {
+            rule.setContent {
+                MaterialTheme {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        PlainFtpBrowseCard()
+                    }
+                }
+            }
+            rule.onNodeWithTag("plain-ftp-host").performTextInput("127.0.0.1")
+            rule.onNodeWithTag("plain-ftp-port").performTextReplacement(
+                listener.localPort.toString())
+            rule.onNodeWithTag("plain-ftp-user").performTextInput("synthetic-user")
+            rule.onNodeWithTag("plain-ftp-password").performTextInput("synthetic-only")
+            rule.onNodeWithText("I accept plaintext credential exposure (required)")
+                .performScrollTo().performClick()
+            rule.onNodeWithText("Connect insecurely").performScrollTo().performClick()
+            try {
+                rule.waitUntil(15_000L) {
+                    val failed = rule.onAllNodesWithText(
+                        "FTP connection or listing failed", substring = true)
+                        .fetchSemanticsNodes().isNotEmpty()
+                    if (failed) throw AssertionError(
+                        "Synthetic FTP initial listing was rejected. Commands=" +
+                            observedCommands.toList().take(14).joinToString(",") +
+                            ", fixtureFailure=" + fixtureFailure.get())
+                    rule.onAllNodesWithText("Connected via unencrypted FTP", substring = true)
+                        .fetchSemanticsNodes().isNotEmpty()
+                }
+            } catch (error: Exception) {
+                throw AssertionError(
+                    "Initial FTP session never entered connected browse mode. Commands=" +
+                        observedCommands.toList().take(14).joinToString(",") +
+                        ", fixtureFailure=" + fixtureFailure.get(), error)
+            }
+            rule.onNodeWithText("synthetic.txt").assertExists()
+            rule.onNodeWithText("Refresh").performScrollTo().performClick()
+            org.junit.Assert.assertTrue("Second FTP listing must stall",
+                secondListing.await(5L, java.util.concurrent.TimeUnit.SECONDS))
+            rule.onNodeWithText("Stop browsing and disconnect")
+                .performScrollTo().performClick()
+            rule.onNodeWithText("FTP browse stopped", substring = true).assertExists()
+            rule.onNodeWithText("Connect insecurely").assertExists()
+            rule.onNodeWithText("synthetic.txt").assertDoesNotExist()
+            rule.onNodeWithText("I accept plaintext credential exposure (required)")
+                .assertExists()
+        } finally {
+            releaseSecond.countDown()
+            listener.close()
+            worker.join(3000L)
+        }
+    }
+
     private fun pendingFtpsLoginCanBeCanceled() {
         // Disposable FTPS localhost fixture never sends a TLS/FTP greeting.
         // No credentials can be transmitted or authenticated.
