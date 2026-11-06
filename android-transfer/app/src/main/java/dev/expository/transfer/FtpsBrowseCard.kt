@@ -440,23 +440,18 @@ fun FtpsBrowseCard() {
                                         val target = FtpsTarget(chosenHost, chosenPort, chosenMode, chosenPolicy)
                                         val root = FtpsPath.checked(chosenRoot)
                                         val live = SecureFtps.connect(target, chosenUser, secret)
-                                        try {
-                                            // A successfully authenticated control session
-                                            // survives only explicitly classified listing
-                                            // command refusals, not TLS/socket/permission
-                                            // errors. The direct-path UI still needs MLST.
-                                            val listing = try { live.browseReadOnly(root) }
-                                                catch (error: Exception) {
-                                                    if (!FtpsDegradedListingPolicy.permitsManualMlst(error))
-                                                        throw error
-                                                    null
-                                                }
-                                            acquisition.offer(live)
-                                            live to listing
-                                        } catch (error: Exception) {
-                                            live.close()
-                                            throw error
-                                        }
+                                        // Register the TLS-protected socket before
+                                        // listing, so Cancel can retire a stalled
+                                        // initial MLSD/LIST command. The UI still
+                                        // adopts only after required listing policy.
+                                        acquisition.offer(live)
+                                        val listing = try { live.browseReadOnly(root) }
+                                            catch (error: Exception) {
+                                                if (!FtpsDegradedListingPolicy.permitsManualMlst(error))
+                                                    throw error
+                                                null
+                                            }
+                                        live to listing
                                     }
                                 } finally { secret.fill('\u0000') }
                             }
