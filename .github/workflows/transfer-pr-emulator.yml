@@ -80,6 +80,9 @@ jobs:
                 # browser, backed by an app-private pinned SSH loopback
                 # fixture. Isolate it from stateful sibling picker tests.
                 SftpSaveAsRealPickerUiTest#pinnedServerListedFileSavesExactBytesThroughRealDocumentsUi) ;;
+                # Independent exact direct-path Save As through the same
+                # production pinned-SFTP and real Android system picker.
+                SftpSaveAsRealPickerUiTest#pinnedServerDirectFilePathSavesExactBytesThroughRealDocumentsUi) ;;
                 # The original source must never switch mid-Save As after Share.
                 LocalPickerPositiveCopyTest#incomingShareDuringSaveAsCannotSwitchTheSource) ;;
                 # One isolated foreground Copy state gate, avoiding the known
