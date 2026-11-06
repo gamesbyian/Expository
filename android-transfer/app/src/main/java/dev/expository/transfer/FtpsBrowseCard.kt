@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -394,18 +395,22 @@ fun FtpsBrowseCard() {
                         style = MaterialTheme.typography.bodySmall)
                 }
                 OutlinedTextField(host, { host = it }, label = { Text("FTPS host") },
-                    enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("ftps-login-host"))
                 OutlinedTextField(port, { port = it }, label = { Text("Port") },
-                    enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("ftps-login-port"))
                 OutlinedTextField(startFolder, { startFolder = it },
                     label = { Text("Starting folder (absolute path)") },
                     enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(username, { username = it }, label = { Text("Username") },
-                    enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("ftps-login-user"))
                 OutlinedTextField(password, { password = it },
                     label = { Text("Password (session only)") },
                     visualTransformation = PasswordVisualTransformation(),
-                    enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("ftps-login-password"))
                 Button(
                     modifier = Modifier.heightIn(min = 48.dp),
                     enabled = !busy && host.isNotBlank() && username.isNotBlank() && password.isNotBlank(),

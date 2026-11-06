@@ -1607,21 +1607,26 @@ internal fun SftpBrowseCard(
                     }
                 }
                 OutlinedTextField(host, { host = it }, label = { Text("SFTP host") },
-                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy && !peerRelayLocked, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("sftp-login-host"))
                 OutlinedTextField(port, { port = it }, label = { Text("Port") },
-                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy && !peerRelayLocked, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("sftp-login-port"))
                 OutlinedTextField(startFolder, { startFolder = it },
                     label = { Text("Starting folder (absolute path)") },
                     enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(username, { username = it }, label = { Text("Username") },
-                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy && !peerRelayLocked, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("sftp-login-user"))
                 OutlinedTextField(password, { password = it },
                     label = { Text("Password (session only)") },
                     visualTransformation = PasswordVisualTransformation(),
-                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy && !peerRelayLocked, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("sftp-login-password"))
                 OutlinedTextField(fingerprint, { fingerprint = it },
                     label = { Text("Trusted SSH key: SHA256:…") },
-                    enabled = !busy && !peerRelayLocked, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy && !peerRelayLocked, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("sftp-login-pin"))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Button(modifier = Modifier.heightIn(min = 48.dp),
