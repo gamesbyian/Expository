@@ -116,6 +116,42 @@ class FtpsUiSmokeTest {
         org.junit.Assert.assertEquals(1, adoptedCount.get())
     }
 
+    @Test fun repeatedSessionOfferNeverClosesTheOriginalOwner() {
+        val originalClosed = java.util.concurrent.atomic.AtomicInteger(0)
+        val competingClosed = java.util.concurrent.atomic.AtomicInteger(0)
+        val competitorDone = java.util.concurrent.CountDownLatch(1)
+        val original = AutoCloseable { originalClosed.incrementAndGet() }
+        val competitor = AutoCloseable {
+            competingClosed.incrementAndGet()
+            competitorDone.countDown()
+        }
+        val acquisition = RemoteSessionAcquisition<AutoCloseable>()
+        acquisition.offer(original)
+        acquisition.offer(original) // Duplicate completion, not a second owner.
+        org.junit.Assert.assertEquals(0, originalClosed.get())
+        acquisition.offer(competitor) // Different orphan must be retired.
+        org.junit.Assert.assertTrue(
+            competitorDone.await(10L, java.util.concurrent.TimeUnit.SECONDS))
+        org.junit.Assert.assertEquals(1, competingClosed.get())
+        org.junit.Assert.assertTrue(acquisition.adopt(original))
+        acquisition.offer(original) // An adopted socket cannot be retired by stale IO.
+        acquisition.abandon()
+        org.junit.Assert.assertEquals(0, originalClosed.get())
+        RemoteSessionRetirement.retire(original)
+    }
+
+    @Test fun abandonedSessionStillRejectsLateUnownedDelivery() {
+        val closed = java.util.concurrent.atomic.AtomicInteger(0)
+        val done = java.util.concurrent.CountDownLatch(1)
+        val session = AutoCloseable { closed.incrementAndGet(); done.countDown() }
+        val acquisition = RemoteSessionAcquisition<AutoCloseable>()
+        acquisition.abandon()
+        acquisition.offer(session)
+        org.junit.Assert.assertFalse(acquisition.adopt(session))
+        org.junit.Assert.assertTrue(done.await(10L, java.util.concurrent.TimeUnit.SECONDS))
+        org.junit.Assert.assertEquals(1, closed.get())
+    }
+
     @Test fun saveAsCannotTreatReadableOrInvalidUriAsWriteGranted() {
         val gate = dev.expository.transfer.ftps.FtpsToSafSave
         val document = android.net.Uri.parse(
