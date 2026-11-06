@@ -220,12 +220,12 @@ class FtpsUiSmokeTest {
                         "Synthetic FTP initial listing was rejected. Commands=" +
                             observedCommands.toList().take(14).joinToString(",") +
                             ", fixtureFailure=" + fixtureFailure.get())
-                    rule.onAllNodesWithText("FTP listing received", substring = true)
+                    rule.onAllNodesWithText("Connected via unencrypted FTP", substring = true)
                         .fetchSemanticsNodes().isNotEmpty()
                 }
             } catch (error: Exception) {
                 throw AssertionError(
-                    "Synthetic FTP never completed its first listing. Commands=" +
+                    "Initial FTP session never entered connected browse mode. Commands=" +
                         observedCommands.toList().take(14).joinToString(",") +
                         ", fixtureFailure=" + fixtureFailure.get(), error)
             }
