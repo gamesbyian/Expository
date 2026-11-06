@@ -72,9 +72,10 @@ internal fun PlainFtpBrowseCard() {
     }
     // Screen disposal must retire a blocked initial directory read without
     // awaiting a canceled coroutine's blocking IO work.
-    DisposableEffect(pendingLogin) {
-        val current = pendingLogin
-        onDispose { current?.abandon() }
+    DisposableEffect(Unit) {
+        // Read the latest pending lease on teardown, including a login
+        // started immediately before the next composition is applied.
+        onDispose { pendingLogin?.abandon() }
     }
     val owned = session
     DisposableEffect(owned) { onDispose { RemoteSessionRetirement.retire(owned) } }
