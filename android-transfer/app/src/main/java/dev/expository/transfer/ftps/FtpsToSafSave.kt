@@ -1,7 +1,7 @@
 package dev.expository.transfer.ftps
 
 import android.content.ContentResolver
-import android.content.Intent
+import dev.expository.transfer.saf.SafCreatedDocumentWriteGrant
 import android.net.Uri
 import dev.expository.transfer.engine.CopyProof
 import dev.expository.transfer.engine.CopyReceipt
@@ -33,9 +33,7 @@ class FtpsToSafSave(private val resolver: ContentResolver,
          * Callers must pass the ORIGINAL result flags, never manufacture them.
          */
         fun acceptsPickerWriteResult(uri: Uri?, flags: Int): Boolean =
-            uri?.scheme == ContentResolver.SCHEME_CONTENT &&
-                !uri.authority.isNullOrBlank() &&
-                flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0
+            SafCreatedDocumentWriteGrant.accepts(uri, flags)
     }
 
     fun copy(
