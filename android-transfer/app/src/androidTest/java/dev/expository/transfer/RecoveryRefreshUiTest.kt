@@ -195,7 +195,7 @@ class RecoveryRefreshUiTest {
 
     @Test fun allIndexedPrivateRecoveryRecordsHaveReachableReviewActions() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val digests = (0 until 14).map {
+        val digests = (0 until 38).map {
             UUID.randomUUID().toString().replace("-", "").repeat(2)
         }
         val journals = digests.map { digest ->
@@ -219,10 +219,21 @@ class RecoveryRefreshUiTest {
                 journals[i].beginAttempt(digest, "paged_review_test_" + i)
             }
             val before = ownedFiles.map { it.readBytes() }
-            val indexed = dev.expository.transfer.journal.AttemptRecoveryIndex
-                .recover(context).reviewReferences.size
-            assertTrue("Fixture requires at least fourteen indexed records",
-                indexed >= 14)
+            val firstWindow = dev.expository.transfer.journal.AttemptRecoveryIndex
+                .recover(context)
+            val indexed = firstWindow.totalReferenceCount
+            assertTrue("Fixture requires at least thirty-eight indexed records",
+                indexed >= 38L)
+            assertEquals(32, firstWindow.reviewReferences.size)
+            val secondWindow = dev.expository.transfer.journal.AttemptRecoveryIndex
+                .recover(context, referenceWindow = 1)
+            assertEquals(indexed, secondWindow.totalReferenceCount)
+            assertEquals(1, secondWindow.referenceWindow)
+            assertTrue(secondWindow.reviewReferences.isNotEmpty())
+            assertTrue("Each bounded window owns distinct private journal keys",
+                firstWindow.reviewReferences.mapNotNull { it.recordKey }
+                    .intersect(secondWindow.reviewReferences.mapNotNull {
+                        it.recordKey }.toSet()).isEmpty())
             rule.setContent {
                 MaterialTheme {
                     Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -237,7 +248,11 @@ class RecoveryRefreshUiTest {
             rule.onNodeWithText("Show review references").performClick()
             val firstPage = "Review references 1–12 of " + indexed + "."
             val secondPage = "Review references 13–" +
-                minOf(24, indexed) + " of " + indexed + "."
+                minOf(24L, indexed) + " of " + indexed + "."
+            val thirdPage = "Review references 25–" +
+                minOf(32L, indexed) + " of " + indexed + "."
+            val secondWindowFirstPage = "Review references 33–" +
+                minOf(44L, indexed) + " of " + indexed + "."
             rule.onNodeWithText(firstPage).assertExists()
             rule.onNodeWithText("Inspect folder for record 1 …",
                 substring = true).assertExists()
@@ -248,10 +263,30 @@ class RecoveryRefreshUiTest {
                 substring = true).assertExists()
             rule.onNodeWithText("Inspect folder for record 14 …",
                 substring = true).assertExists()
+            rule.onNodeWithText("Next review records").performScrollTo()
+                .performClick()
+            rule.onNodeWithText(thirdPage).assertExists()
+            rule.onNodeWithText("Inspect folder for record 32 …",
+                substring = true).assertExists()
+            // The formerly hidden 33rd+ journal must now be reachable by
+            // a new bounded index scan, never by keeping all 38 decrypted.
+            rule.onNodeWithText("Next 32 review records").performScrollTo()
+                .performClick()
+            rule.waitUntil(20_000L) {
+                rule.onAllNodesWithText(secondWindowFirstPage)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            rule.onNodeWithText(secondWindowFirstPage).assertExists()
+            rule.onNodeWithText("Inspect folder for record 33 …",
+                substring = true).assertExists()
             rule.onNodeWithText("Inspect folder for record 1 …",
                 substring = true).assertDoesNotExist()
-            rule.onNodeWithText("Previous review records").performScrollTo()
+            rule.onNodeWithText("Previous 32 review records").performScrollTo()
                 .performClick()
+            rule.waitUntil(20_000L) {
+                rule.onAllNodesWithText(firstPage)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
             rule.onNodeWithText(firstPage).assertExists()
             // A private page must be forgotten on hide/reopen, without a
             // retained URI, transfer replay or journal mutation.
@@ -261,7 +296,7 @@ class RecoveryRefreshUiTest {
                 substring = true).assertDoesNotExist()
             rule.onNodeWithText("Show review references").performClick()
             rule.onNodeWithText(firstPage).assertExists()
-            assertTrue("Browsing must leave all fourteen journals unresolved",
+            assertTrue("Browsing must leave all thirty-eight journals unresolved",
                 journals.all { it.current()?.state == JournalState.ATTEMPT_RECORDED })
             ownedFiles.forEachIndexed { i, file ->
                 org.junit.Assert.assertArrayEquals(

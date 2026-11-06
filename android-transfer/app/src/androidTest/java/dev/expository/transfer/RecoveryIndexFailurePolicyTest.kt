@@ -149,6 +149,16 @@ class RecoveryIndexFailurePolicyTest {
             assertEquals(40, summary.damagedOrUnrecognized)
             assertEquals(32, summary.reviewReferences.size)
             assertEquals(9, summary.additionalReviewCount)
+            assertEquals(41L, summary.totalReferenceCount)
+            assertEquals(0, summary.referenceWindow)
+            // The remaining orphan hints can now be inspected on demand,
+            // without promoting them or increasing the 32-row memory cap.
+            val nextWindow = AttemptRecoveryIndex.recover(isolated, referenceWindow = 1)
+            assertEquals(1, nextWindow.referenceWindow)
+            assertEquals(41L, nextWindow.totalReferenceCount)
+            assertEquals(9, nextWindow.reviewReferences.size)
+            assertEquals(32, nextWindow.additionalReviewCount)
+            assertTrue(nextWindow.reviewReferences.none { it.recordKey == digest })
             assertEquals(digest,
                 summary.reviewReferences.first().recordKey)
             assertTrue(summary.reviewReferences.first().status
