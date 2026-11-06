@@ -310,7 +310,7 @@ internal fun PlainFtpBrowseCard() {
                         explicitlyApproved = false
                         password = ""
                         busy = false
-                        status = "FTP browse stopped; connection closed. Reconnect to browse again. No transfer started."
+                        status = "FTP browse stopped; previous connection is being retired. Reconnect to browse again. No transfer started."
                     }) { Text("Stop browsing and disconnect") }
             }
             Text(status,
