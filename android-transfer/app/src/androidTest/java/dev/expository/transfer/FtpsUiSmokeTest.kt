@@ -605,12 +605,19 @@ class FtpsUiSmokeTest {
             }
             val listener = (tls.serverSocketFactory.createServerSocket(
                 0, 1, java.net.InetAddress.getByName("127.0.0.1"))
-                as SSLServerSocket).apply { soTimeout = 12_000 }
+                as SSLServerSocket).apply {
+                soTimeout = 12_000
+                // Test key authorizes RSA PKCS#1 signing. TLS 1.2 is an
+                // explicitly supported secure compatibility mode; TLS 1.3
+                // requires RSA-PSS certificates for RSA authentication.
+                enabledProtocols = arrayOf("TLSv1.2")
+            }
             serverSocket = listener
             val controlReady = java.util.concurrent.CountDownLatch(1)
             val cwdReached = java.util.concurrent.CountDownLatch(1)
             val controlClosed = java.util.concurrent.CountDownLatch(1)
             val sawQuit = java.util.concurrent.atomic.AtomicBoolean(false)
+            val serverFailure = java.util.concurrent.atomic.AtomicReference("none")
             val server = Thread {
                 try {
                     listener.accept().use { raw ->
@@ -640,13 +647,18 @@ class FtpsUiSmokeTest {
                             }
                         }
                     }
-                } catch (_: Exception) { /* Disconnect ends a stalled CWD */ }
-                finally { controlClosed.countDown() }
+                } catch (failure: Exception) {
+                    // Do not serialize raw exception messages, endpoint
+                    // names, credentials or certificate contents into CI.
+                    serverFailure.set(failure.javaClass.simpleName + "/" +
+                        (failure.cause?.javaClass?.simpleName ?: "none"))
+                } finally { controlClosed.countDown() }
             }
             server.isDaemon = true
             server.start()
             val socketClient = dev.expository.transfer.ftps.SecureFtps.configuredClient(
-                dev.expository.transfer.ftps.FtpsMode.IMPLICIT_TLS)
+                dev.expository.transfer.ftps.FtpsMode.IMPLICIT_TLS,
+                dev.expository.transfer.ftps.FtpsTlsPolicy.TLS12_ONLY)
             client = socketClient
             socketClient.setTrustManager(object : javax.net.ssl.X509TrustManager {
                 override fun checkServerTrusted(
@@ -670,7 +682,16 @@ class FtpsUiSmokeTest {
                 socketClient.isEndpointCheckingEnabled)
             org.junit.Assert.assertTrue("Remote verification must remain enabled",
                 socketClient.isRemoteVerificationEnabled)
-            socketClient.connect("localhost", listener.localPort)
+            val connection = runCatching {
+                socketClient.connect("localhost", listener.localPort)
+            }
+            if (connection.isFailure) {
+                controlClosed.await(2L, java.util.concurrent.TimeUnit.SECONDS)
+                throw AssertionError(
+                    "TEST_PINNED_TLS_HANDSHAKE_FAILED client=" +
+                        connection.exceptionOrNull()?.javaClass?.simpleName +
+                        " server=" + serverFailure.get())
+            }
             org.junit.Assert.assertTrue("Pinned TLS handshake must actually complete",
                 controlReady.await(5L, java.util.concurrent.TimeUnit.SECONDS))
             org.junit.Assert.assertTrue("Synthetic FTP account must authenticate",
