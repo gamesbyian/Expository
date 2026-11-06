@@ -1144,7 +1144,31 @@ internal fun SftpBrowseCard(
                             else "2000-item safety cap reached; some entries remain unseen.")
                     } else "Remote listing received; select a file to Save As."
                 }.onFailure {
-                    status = "Unable to browse. Server permission, connection or listing may have changed."
+                    // A failed navigation/refresh cannot preserve the old
+                    // directory's selectable rows or read-only reviewed
+                    // actions as though the server listing were still fresh.
+                    // Even a harmless CWD/permission refusal leaves no
+                    // authoritative membership of the attempted folder.
+                    // The winning generation alone can invalidate state.
+                    page = null
+                    browseLimit = SftpBrowseBounds.INITIAL
+                    fileFilter = ""
+                    pendingFile = null
+                    pendingSaveWitness = null
+                    pendingPeerUpload = null
+                    pendingPeerDownload = null
+                    pendingPickedUpload = null
+                    peerBatchSelection = SftpBatchSelection()
+                    pendingPeerBatch = null
+                    pendingRelay = null
+                    pendingRelayBatch = null
+                    pendingMove = null
+                    showRenamePreview = false
+                    onRemoteSource(null)
+                    onRemoteBatchSource(null)
+                    status = "Remote listing failed. Previously displayed files and " +
+                        "pending reviews were cleared. Retry a read-only " +
+                        "browse or reconnect; no transfer was started."
                 }
                 busy = false // Only the winning request owns the busy state.
             }
