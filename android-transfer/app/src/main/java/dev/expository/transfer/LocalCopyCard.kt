@@ -40,6 +40,7 @@ import dev.expository.transfer.planner.FrozenCopyCommand
 import dev.expository.transfer.planner.LocationKey
 import dev.expository.transfer.planner.LocationKind
 import dev.expository.transfer.saf.SafSingleDocumentCopy
+import dev.expository.transfer.saf.SafCreatedDocumentWriteGrant
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 import dev.expository.transfer.journal.ProtectedRecoveryContext
 import dev.expository.transfer.journal.ProtectedRecoveryContextStore
@@ -241,14 +242,20 @@ fun LocalCopyCard(
         // followed by a new selection, Share or reentrant launcher event.
         pendingSaveApproval = null
         val targetUri = result.data?.data
+        val pickerResultFlags = result.data?.flags ?: 0
+        val writeGranted = SafCreatedDocumentWriteGrant.accepts(
+            targetUri, pickerResultFlags)
         val dispatch = if (result.resultCode == Activity.RESULT_OK &&
-            targetUri != null) approval?.let { owner ->
+            targetUri != null && writeGranted) approval?.let { owner ->
             ClaimedCopyDispatch.claim {
                 owner.claimOnce(selected, selectionRevision, currentShareEpoch())
             }
         } else null
         if (result.resultCode != Activity.RESULT_OK || targetUri == null) {
             status = "Save As canceled. No transfer started."
+        } else if (!writeGranted) {
+            status = "Android Save As returned no fresh WRITE grant. No Copy started; " +
+                "the picker may have created an empty document."
         } else if (dispatch == null) {
             status = "Source selection changed while Save As was open. No copy started. The picker may have created an empty document."
         } else {
@@ -268,12 +275,13 @@ fun LocalCopyCard(
                         continueRequested = { foregroundCopyAllowed(permit, job) },
                         prepare = { index ->
                             check(index == 0)
-                            // ACTION_CREATE_DOCUMENT's selected URI has a real
-                            // OS grant; this adapter alone rechecks its plan,
-                            // journals and independently reads back bytes.
+                            // Require original CREATE_DOCUMENT WRITE evidence
+                            // again within the adapter before any provider
+                            // observation, journal or stream operation.
                             ClaimedCopyDispatch.Prepared(null) {
                                 var lastProgress = 0L
-                                service.copy(sourceUri, targetUri,
+                                service.copyPickedDocument(sourceUri, targetUri,
+                                    pickerResultFlags = pickerResultFlags,
                                     continueRequested = {
                                         foregroundCopyAllowed(permit, job)
                                     },
