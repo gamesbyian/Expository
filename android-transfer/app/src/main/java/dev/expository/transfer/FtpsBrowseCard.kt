@@ -261,11 +261,39 @@ fun FtpsBrowseCard() {
                             (if (limit < FtpsBrowseBounds.MAX) "load next 200 to inspect more."
                              else "2,000-item safety cap reached.")
                     else "Secure MLSD listing. Files still require separate MLST proof before Save As."
-                }.onFailure {
-                    status = "Unable to browse securely. No plaintext fallback was attempted."
+                }.onFailure { error ->
+                    // A failed CWD/listing cannot leave old selectable rows
+                    // under a now-unproven view. Hide all stale children and
+                    // one-shot picker witnesses before further user action.
+                    page = null
+                    pendingFile = null
+                    pendingSaveWitness = null
+                    browseLimit = FtpsBrowseBounds.INITIAL
+                    fileFilter = ""
+                    if (FtpsDegradedListingPolicy.permitsManualMlst(error)) {
+                        // The adapter verified CWD before the narrowly
+                        // classified listing-command refusal. Preserve only
+                        // the authenticated control session and offer a
+                        // NEW, separately authoritative MLST file inquiry.
+                        folder = next
+                        status = "Encrypted FTPS session remains connected, " +
+                            "but this folder's listing command was refused. " +
+                            "No files were observed. Enter an exact absolute " +
+                            "file path for a separate MLST check, or disconnect."
+                    } else {
+                        // Never continue from a TLS, data-socket, CWD, ACL,
+                        // malformed or unknown response as though the
+                        // previously viewed directory were still current.
+                        session = null
+                        sessionId = ""
+                        status = "Secure directory browsing failed; FTPS " +
+                            "session disconnected. Reconnect before trying " +
+                            "again. No plaintext fallback was attempted."
+                    }
                 }
+                // A stale coroutine must not unlock a different session.
+                busy = false
             }
-            busy = false
         }
     }
 
