@@ -44,10 +44,11 @@ fun RecoveryStatusCard() {
     var unreadable by remember { mutableStateOf(false) }
     var refreshSerial by remember { mutableIntStateOf(0) }
     var showReviewReferences by remember { mutableStateOf(false) }
-    // The encrypted recovery index can expose up to 32 identifiable records.
-    // Keep the visible page bounded, but never strand records 13–32 behind a
-    // hardcoded take(12). This is UI-only state, never saved authority.
+    // One 32-reference window is materialized at a time; 12 visible rows
+    // within it. This recovers discoverability beyond 32 without eagerly
+    // decrypting an unbounded number of private records or storing a grant.
     var reviewPageIndex by remember { mutableIntStateOf(0) }
+    var referenceWindow by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     // A one-shot, display-only review ticket bound to the full PRIVATE
     // journal key, not its potentially colliding 12-character display suffix.
@@ -284,7 +285,7 @@ fun RecoveryStatusCard() {
             }
         }
     }
-    LaunchedEffect(context, refreshSerial) {
+    LaunchedEffect(context, refreshSerial, referenceWindow) {
         inspectionJob?.cancel()
         inspectionJob = null
         inspectionRunning = false
@@ -299,9 +300,18 @@ fun RecoveryStatusCard() {
         status = null
         unreadable = false
         val result = withContext(Dispatchers.IO) {
-            runCatching { AttemptRecoveryIndex.recover(context) }
+            runCatching { AttemptRecoveryIndex.recover(context, referenceWindow) }
         }
-        result.onSuccess { status = it }.onFailure { unreadable = true }
+        result.onSuccess { recovered ->
+            val lastWindow = ((recovered.totalReferenceCount - 1L)
+                .coerceAtLeast(0L) / AttemptRecoveryIndex.MAX_REVIEW_REFERENCES)
+                .coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            if (referenceWindow > lastWindow) {
+                // Journal cleanup or a concurrent writer may shrink the
+                // index. Re-scan the last valid page, never show stale rows.
+                referenceWindow = lastWindow
+            } else status = recovered
+        }.onFailure { unreadable = true }
     }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
@@ -345,7 +355,10 @@ fun RecoveryStatusCard() {
                             sourceByteRelation = null
                             sourceInspectionMessage = null
                         }
-                        if (showReviewReferences) reviewPageIndex = 0
+                        if (showReviewReferences) {
+                            reviewPageIndex = 0
+                            referenceWindow = 0
+                        }
                         showReviewReferences = !showReviewReferences
                     }) {
                     Text(if (showReviewReferences) "Hide review references"
@@ -364,14 +377,17 @@ fun RecoveryStatusCard() {
                     val shownPage = reviewPageIndex.coerceIn(0, totalPages - 1)
                     val pageStart = shownPage * pageSize
                     val pageEnd = minOf(pageStart + pageSize, totalReferences)
+                    val globalOffset = review.referenceWindow.toLong() *
+                        AttemptRecoveryIndex.MAX_REVIEW_REFERENCES
                     if (totalReferences > 0) {
-                        Text("Review references " + (pageStart + 1) + "–" +
-                            pageEnd + " of " + totalReferences + ".",
+                        Text("Review references " + (globalOffset + pageStart + 1) +
+                            "–" + (globalOffset + pageEnd) + " of " +
+                            review.totalReferenceCount + ".",
                             style = MaterialTheme.typography.bodySmall)
                     }
                     review.reviewReferences.drop(pageStart).take(pageSize)
                         .forEachIndexed { index, entry ->
-                        val displayNumber = pageStart + index + 1
+                        val displayNumber = globalOffset + pageStart + index + 1
                         Text("Record " + displayNumber + " · …" + entry.opaqueSuffix +
                             " · " + entry.status,
                             style = MaterialTheme.typography.bodySmall)
@@ -508,10 +524,44 @@ fun RecoveryStatusCard() {
                             onClick = { navigateReviewPage(shownPage + 1) }
                         ) { Text("Next review records") }
                     }
-                    val unindexed = review.additionalReviewCount
-                    if (unindexed > 0) Text("$unindexed additional uncertain/unreadable " +
-                        "record(s) have no individually inspectable private reference. " +
-                        "No automatic cleanup or retry is available.",
+                    if (review.totalReferenceCount >
+                            AttemptRecoveryIndex.MAX_REVIEW_REFERENCES) {
+                        Text("Index window " + (review.referenceWindow + 1) +
+                            " of " + ((review.totalReferenceCount - 1L) /
+                                AttemptRecoveryIndex.MAX_REVIEW_REFERENCES + 1L) +
+                            " (at most 32 private references loaded per window).",
+                            style = MaterialTheme.typography.bodySmall)
+                        Button(
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            enabled = review.referenceWindow > 0 &&
+                                inspectionTicket == null &&
+                                sourceInspectionTicket == null && !inspectionRunning,
+                            onClick = {
+                                navigateReviewPage(0)
+                                referenceWindow = review.referenceWindow - 1
+                            }
+                        ) { Text("Previous 32 review records") }
+                        Button(
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            enabled = (review.referenceWindow.toLong() + 1L) *
+                                AttemptRecoveryIndex.MAX_REVIEW_REFERENCES <
+                                review.totalReferenceCount &&
+                                inspectionTicket == null &&
+                                sourceInspectionTicket == null && !inspectionRunning,
+                            onClick = {
+                                navigateReviewPage(0)
+                                referenceWindow = review.referenceWindow + 1
+                            }
+                        ) { Text("Next 32 review records") }
+                    }
+                    val otherWindows = review.totalReferenceCount -
+                        review.reviewReferences.size
+                    val unindexed = (review.additionalReviewCount.toLong() -
+                        otherWindows).coerceAtLeast(0L)
+                    if (unindexed > 0L) Text("$unindexed additional damaged or " +
+                        "unrecognizable record(s) have no trustworthy private " +
+                        "reference to inspect. Other indexed records are reachable " +
+                        "through the window controls. No automatic retry or cleanup.",
                         style = MaterialTheme.typography.bodySmall)
                 }
             }
@@ -553,6 +603,7 @@ fun RecoveryStatusCard() {
                     sourceInspectionTicket = null
                     sourceByteRelation = null
                     sourceInspectionMessage = null
+                    referenceWindow = 0
                     refreshSerial++
                 }
             ) { Text("Refresh transfer status") }
