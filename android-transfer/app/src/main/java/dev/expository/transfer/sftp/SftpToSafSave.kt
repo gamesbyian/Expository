@@ -38,6 +38,7 @@ class SftpToSafSave(private val resolver: ContentResolver,
         absoluteFile: String,
         destination: Uri,
         pickerResultFlags: Int,
+        expectedSourceRevision: String,
         continueRequested: () -> Boolean,
         onProgress: (Long) -> Unit = {}
     ): CopyReceipt {
@@ -48,14 +49,21 @@ class SftpToSafSave(private val resolver: ContentResolver,
         // Fail before remote stat, journal creation or any destination write.
         if (!acceptsPickerWriteResult(destination, pickerResultFlags))
             return CopyReceipt("", CopyProof.BLOCKED, 0L, "PICKER_WRITE_GRANT_UNPROVEN")
+        if (expectedSourceRevision.isBlank())
+            return CopyReceipt("", CopyProof.BLOCKED, 0L, "REVIEWED_SFTP_SOURCE_UNPROVEN")
 
         val firstTime = System.currentTimeMillis()
         val firstStat = try { session.statFile(absoluteFile) }
             catch (_: Exception) {
                 return CopyReceipt("", CopyProof.BLOCKED, 0L, "SOURCE_STAT_UNAVAILABLE")
             }
+        if (firstStat.revision != expectedSourceRevision)
+            return CopyReceipt("", CopyProof.BLOCKED, 0L, "REVIEWED_SFTP_SOURCE_CHANGED")
         fun plan(now: Long): TransferPlan {
             val current = session.statFile(absoluteFile)
+            require(current.revision == expectedSourceRevision) {
+                "REVIEWED_SFTP_SOURCE_CHANGED"
+            }
             val saved = observer.observe(destination)
             val read = CapabilityProof(Support.SUPPORTED, "authenticated-pinned-sftp", firstTime + 60_000)
             val write = CapabilityProof(Support.SUPPORTED, "create-document-picker", firstTime + 60_000)
