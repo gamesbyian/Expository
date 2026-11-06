@@ -104,6 +104,121 @@ class FtpsUiSmokeTest {
         }
     }
 
+    @Test fun stalledPlainFtpDirectoryCanBeStoppedWithoutReusingControlSocket() {
+        // Fully disposable FTP control/data fixture, no external endpoint,
+        // writes, downloads, production credentials or authentic source.
+        val local = java.net.InetAddress.getByName("127.0.0.1")
+        val listener = java.net.ServerSocket(0, 1, local)
+        val secondMlsd = java.util.concurrent.CountDownLatch(1)
+        val releaseSecond = java.util.concurrent.CountDownLatch(1)
+        val worker = Thread {
+            var passive: java.net.ServerSocket? = null
+            try {
+                listener.accept().use { control ->
+                    control.soTimeout = 25_000
+                    val reader = java.io.BufferedReader(
+                        java.io.InputStreamReader(control.getInputStream(),
+                            java.nio.charset.StandardCharsets.UTF_8))
+                    val output = control.getOutputStream()
+                    fun reply(line: String) {
+                        output.write((line + "\r\n").toByteArray(
+                            java.nio.charset.StandardCharsets.UTF_8))
+                        output.flush()
+                    }
+                    var firstListing = true
+                    reply("220 Synthetic FTP test service")
+                    while (true) {
+                        val line = reader.readLine() ?: break
+                        when (line.substringBefore(' ').uppercase()) {
+                            "USER" -> reply("331 Password required")
+                            "PASS" -> reply("230 Synthetic login accepted")
+                            "TYPE" -> reply("200 Binary mode")
+                            "CWD" -> reply("250 Directory exists")
+                            "SYST" -> reply("215 UNIX Type: L8")
+                            "PWD" -> reply("257 \"/\"")
+                            "FEAT" -> reply("211 End")
+                            "OPTS" -> reply("200 Option accepted")
+                            "EPSV", "PASV" -> {
+                                passive?.close()
+                                passive = java.net.ServerSocket(0, 1, local)
+                                passive?.soTimeout = 5_000
+                                val port = passive!!.localPort
+                                if (line.startsWith("PASV")) {
+                                    reply("227 Entering Passive Mode (127,0,0,1," +
+                                        (port / 256) + "," + (port % 256) + ")")
+                                } else {
+                                    reply("229 Entering Extended Passive Mode (|||$port|)")
+                                }
+                            }
+                            "MLSD", "LIST" -> {
+                                if (firstListing) {
+                                    reply("150 Synthetic directory transfer")
+                                    passive!!.accept().use { data ->
+                                        data.getOutputStream().write(
+                                            ("type=file;size=9;modify=20260101000000; synthetic.txt\r\n")
+                                                .toByteArray(java.nio.charset.StandardCharsets.UTF_8))
+                                    }
+                                    passive?.close()
+                                    passive = null
+                                    firstListing = false
+                                    reply("226 Directory transfer complete")
+                                } else {
+                                    secondMlsd.countDown()
+                                    // Deliberate stall on *same* control socket.
+                                    releaseSecond.await(18L, java.util.concurrent.TimeUnit.SECONDS)
+                                    reply("425 Read-only listing canceled")
+                                }
+                            }
+                            "QUIT" -> { reply("221 Good bye"); break }
+                            else -> reply("502 Command unavailable")
+                        }
+                    }
+                }
+            } catch (_: Exception) { /* synthetic fixture is closing */ }
+            finally {
+                runCatching { passive?.close() }
+            }
+        }
+        worker.isDaemon = true
+        worker.start()
+        try {
+            rule.setContent {
+                MaterialTheme {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        PlainFtpBrowseCard()
+                    }
+                }
+            }
+            rule.onNodeWithTag("plain-ftp-host").performTextInput("127.0.0.1")
+            rule.onNodeWithTag("plain-ftp-port").performTextReplacement(
+                listener.localPort.toString())
+            rule.onNodeWithTag("plain-ftp-user").performTextInput("synthetic-user")
+            rule.onNodeWithTag("plain-ftp-password").performTextInput("synthetic-only")
+            rule.onNodeWithText("I accept plaintext credential exposure (required)")
+                .performScrollTo().performClick()
+            rule.onNodeWithText("Connect insecurely").performScrollTo().performClick()
+            rule.waitUntil(12_000L) {
+                rule.onAllNodesWithText("FTP listing received", substring = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            rule.onNodeWithText("synthetic.txt").assertExists()
+            rule.onNodeWithText("Refresh").performScrollTo().performClick()
+            org.junit.Assert.assertTrue("Second FTP listing must stall",
+                secondMlsd.await(5L, java.util.concurrent.TimeUnit.SECONDS))
+            rule.onNodeWithText("Stop browsing and disconnect")
+                .performScrollTo().performClick()
+            rule.onNodeWithText("FTP browse stopped", substring = true).assertExists()
+            rule.onNodeWithText("Connect insecurely").assertExists()
+            rule.onNodeWithText("synthetic.txt").assertDoesNotExist()
+            rule.onNodeWithText("I accept plaintext credential exposure (required)")
+                .assertExists()
+        } finally {
+            releaseSecond.countDown()
+            listener.close()
+            worker.join(3000L)
+        }
+    }
+
     private fun pendingFtpsLoginCanBeCanceled() {
         // Disposable FTPS localhost fixture never sends a TLS/FTP greeting.
         // No credentials can be transmitted or authenticated.
