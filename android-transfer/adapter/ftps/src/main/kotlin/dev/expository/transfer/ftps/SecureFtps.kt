@@ -352,7 +352,10 @@ class FtpsSession internal constructor(private val client: FTPSClient) : AutoClo
 
     override fun close() {
         if (!client.isConnected) return
-        runCatching { client.logout() }
+        // Close the transport FIRST. QUIT/logout waits for a server reply;
+        // if an initial listing is stalled, attempting logout would queue
+        // another command on the blocked control channel and delay Cancel.
+        // Closing this retired session never retries or changes remote files.
         runCatching { client.disconnect() }
     }
 }

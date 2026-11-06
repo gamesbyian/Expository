@@ -65,9 +65,17 @@ internal fun PlainFtpBrowseCard() {
     var descending by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var loginJob by remember { mutableStateOf<Job?>(null) }
+    var pendingLogin by remember { mutableStateOf<RemoteSessionAcquisition<PlainFtpSession>?>(null) }
     var browseJob by remember { mutableStateOf<Job?>(null) }
     var status by remember {
         mutableStateOf("Plain FTP is insecure. Prefer pinned SFTP or certificate-validated FTPS.")
+    }
+    // Screen disposal must retire a blocked initial directory read without
+    // awaiting a canceled coroutine's blocking IO work.
+    DisposableEffect(Unit) {
+        // Read the latest pending lease on teardown, including a login
+        // started immediately before the next composition is applied.
+        onDispose { pendingLogin?.abandon() }
     }
     val owned = session
     DisposableEffect(owned) { onDispose { RemoteSessionRetirement.retire(owned) } }
@@ -163,6 +171,7 @@ internal fun PlainFtpBrowseCard() {
                         busy = true
                         status = "Connecting by explicitly approved unencrypted FTP…"
                         val acquisition = RemoteSessionAcquisition<PlainFtpSession>()
+                        pendingLogin = acquisition
                         loginJob = scope.launch {
                             try {
                             val result = withContext(Dispatchers.IO) {
@@ -172,19 +181,18 @@ internal fun PlainFtpBrowseCard() {
                                         val live = PlainFtp.connect(
                                             PlainFtpTarget(chosenHost, chosenPort),
                                             chosenUser, secret, explicitlyApproved = approved)
-                                        try {
-                                            val listing = live.browseReadOnly(checkedRoot)
-                                            acquisition.offer(live)
-                                            live to listing
-                                        } catch (failure: Exception) {
-                                            live.close()
-                                            throw failure
-                                        }
+                                        // Register immediately: cancellation must close
+                                        // an authenticated socket even when the FIRST
+                                        // directory command stalls indefinitely.
+                                        acquisition.offer(live)
+                                        val listing = live.browseReadOnly(checkedRoot)
+                                        live to listing
                                     }
                                 } finally { secret.fill('\u0000') }
                             }
                             result.onSuccess { (live, listing) ->
                                 if (!acquisition.adopt(live)) return@onSuccess
+                                if (pendingLogin === acquisition) pendingLogin = null
                                 session = live
                                 folder = chosenRoot
                                 page = listing
@@ -199,6 +207,7 @@ internal fun PlainFtpBrowseCard() {
                                 // worker's finally. Clear captured credentials here too.
                                 secret.fill('\u0000')
                                 acquisition.abandon()
+                                if (pendingLogin === acquisition) pendingLogin = null
                                 if (loginJob === coroutineContext[Job]) loginJob = null
                             }
                         }
@@ -207,6 +216,10 @@ internal fun PlainFtpBrowseCard() {
                 if (loginJob != null) {
                     Button(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                         onClick = {
+                            // Do not wait for a blocked withContext(IO) to
+                            // return before closing the authenticated socket.
+                            pendingLogin?.abandon()
+                            pendingLogin = null
                             loginJob?.cancel()
                             loginJob = null
                             busy = false

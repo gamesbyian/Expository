@@ -107,6 +107,94 @@ class FtpsUiSmokeTest {
         }
     }
 
+    @Test fun cancelInitialFtpListingClosesAuthenticatedSocketBeforeListingReply() {
+        // Login succeeds on an entirely disposable localhost endpoint, then
+        // the very FIRST CWD hangs. No data channel, file operation, or real
+        // credentials. Cancel must retire the already-authenticated socket,
+        // not wait for the server's 30-second response timeout or send QUIT.
+        val local = java.net.InetAddress.getByName("127.0.0.1")
+        val listener = java.net.ServerSocket(0, 1, local)
+        val initialCwd = java.util.concurrent.CountDownLatch(1)
+        val controlClosed = java.util.concurrent.CountDownLatch(1)
+        val sawQuit = java.util.concurrent.atomic.AtomicBoolean(false)
+        val commands = java.util.concurrent.ConcurrentLinkedQueue<String>()
+        val server = Thread {
+            try {
+                listener.accept().use { control ->
+                    control.soTimeout = 12_000
+                    val reader = java.io.BufferedReader(
+                        java.io.InputStreamReader(control.getInputStream(),
+                            java.nio.charset.StandardCharsets.UTF_8))
+                    val output = control.getOutputStream()
+                    fun reply(value: String) {
+                        output.write((value + "\r\n").toByteArray(
+                            java.nio.charset.StandardCharsets.UTF_8))
+                        output.flush()
+                    }
+                    reply("220 Disposable FTP service")
+                    while (true) {
+                        val command = reader.readLine() ?: break
+                        val verb = command.substringBefore(' ').uppercase()
+                        commands.add(verb) // Only command types, never credentials.
+                        when (verb) {
+                            "USER" -> reply("331 Proceed")
+                            "PASS" -> reply("230 Accepted locally")
+                            "TYPE" -> reply("200 Binary accepted")
+                            "CWD" -> {
+                                initialCwd.countDown()
+                                // Deliberately do not reply. Read again to
+                                // observe client-driven socket shutdown.
+                            }
+                            "QUIT" -> sawQuit.set(true) // No reply intentionally.
+                            else -> reply("200 Synthetic control response")
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                // A socket reset after canceled CWD is also positive proof
+                // that the control transport was retired.
+            } finally {
+                controlClosed.countDown()
+            }
+        }
+        server.isDaemon = true
+        server.start()
+        try {
+            rule.setContent {
+                MaterialTheme {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        PlainFtpBrowseCard()
+                    }
+                }
+            }
+            rule.onNodeWithTag("plain-ftp-host").performTextInput("127.0.0.1")
+            rule.onNodeWithTag("plain-ftp-port")
+                .performTextReplacement(listener.localPort.toString())
+            rule.onNodeWithTag("plain-ftp-user").performTextInput("synthetic-user")
+            rule.onNodeWithTag("plain-ftp-password").performTextInput("synthetic-secret")
+            rule.onNodeWithText("I accept plaintext credential exposure (required)")
+                .performScrollTo().performClick()
+            rule.onNodeWithText("Connect insecurely").performScrollTo().performClick()
+            org.junit.Assert.assertTrue(
+                "First authenticated FTP directory command must be observed",
+                initialCwd.await(8L, java.util.concurrent.TimeUnit.SECONDS))
+            rule.onNodeWithText("Cancel connection").performScrollTo().performClick()
+            rule.onNodeWithText("FTP login canceled.", substring = true).assertExists()
+            org.junit.Assert.assertTrue(
+                "Canceled initial directory read must release its control socket",
+                controlClosed.await(6L, java.util.concurrent.TimeUnit.SECONDS))
+            org.junit.Assert.assertFalse(
+                "Do not send QUIT on an already blocked control channel",
+                sawQuit.get())
+            rule.onNodeWithText("Connect insecurely").assertExists()
+            rule.onNodeWithText("I accept plaintext credential exposure (required)")
+                .assertExists()
+        } finally {
+            listener.close()
+            server.join(2500L)
+        }
+    }
+
     @Test fun stalledPlainFtpDirectoryCanBeStoppedWithoutReusingControlSocket() {
         // Fully disposable FTP control/data fixture, no external endpoint,
         // writes, downloads, production credentials or authentic source.
