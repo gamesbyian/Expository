@@ -13,7 +13,8 @@ object FtpsLabSuite {
         when (args.singleOrNull()) {
             "reject-untrusted" -> rejectUntrustedCertificate()
             "trusted-read" -> verifyTrustedEncryptedRead()
-            else -> error("Expected reject-untrusted or trusted-read")
+            "trusted-direct-read" -> verifyTrustedDirectFileAfterListingsRefused()
+            else -> error("Expected reject-untrusted, trusted-read or trusted-direct-read")
         }
     }
 
@@ -31,6 +32,45 @@ object FtpsLabSuite {
         } finally {
             if (client.isConnected) client.disconnect()
         }
+    }
+
+    /**
+     * An authenticated server can refuse both MLSD and LIST (e.g. 502)
+     * while permitting a separately observed MLST and protected RETR.
+     * This opt-in lab requires full TLS/hostname verification and the same
+     * encrypted, read-only fixture as the normal directory route.
+     */
+    private fun verifyTrustedDirectFileAfterListingsRefused() {
+        check(System.getProperty("javax.net.ssl.trustStore")?.isNotBlank() == true) {
+            "Explicit synthetic truststore required"
+        }
+        SecureFtps.connect(
+            FtpsTarget("localhost", 2122),
+            "synthetic",
+            "synthetic-secret".toCharArray()
+        ).use { session ->
+            val refused = runCatching {
+                session.browseReadOnly("/")
+            }.exceptionOrNull()
+            check(refused != null &&
+                FtpsDegradedListingPolicy.permitsManualMlst(refused)) {
+                "Refused directory commands must never become authoritative empty listing"
+            }
+            val remote = session.statFile("/synthetic.txt")
+            val expected = "FTPS synthetic fixture\n".toByteArray(Charsets.UTF_8)
+            check(remote.name == "synthetic.txt" &&
+                remote.size == expected.size.toLong() && remote.revision.isNotBlank()) {
+                "Separately authenticated MLST must bind exact remote identity"
+            }
+            val bytes = session.openRead("/synthetic.txt").use { it.readBytes() }
+            check(bytes.contentEquals(expected)) {
+                "Protected direct RETR or final command completion did not verify"
+            }
+            check(session.statFile("/synthetic.txt").revision == remote.revision) {
+                "Direct-file source changed during controlled encrypted read"
+            }
+        }
+        println("PASS FTPS lab rejected MLSD/LIST, authoritative MLST and encrypted RETR")
     }
 
     private fun verifyTrustedEncryptedRead() {
