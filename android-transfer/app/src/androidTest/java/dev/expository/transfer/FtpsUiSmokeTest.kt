@@ -55,6 +55,33 @@ class FtpsUiSmokeTest {
             android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION))
     }
 
+    @Test fun sftpAndFtpsShareExactlyTheSameAndroidWriteGrantPolicy() {
+        val sftp = dev.expository.transfer.sftp.SftpToSafSave
+        val ftps = dev.expository.transfer.ftps.FtpsToSafSave
+        val shared = dev.expository.transfer.saf.SafCreatedDocumentWriteGrant
+        val valid = android.net.Uri.parse(
+            "content://synthetic.remote.saveas/document/created-7")
+        val invalid = android.net.Uri.parse("file:///tmp/created-7")
+        val write = android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val read = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+        val persist = android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        val examples = listOf(
+            valid to write, valid to (read or write), valid to read,
+            valid to persist, valid to 0, invalid to write, null to write
+        )
+        examples.forEach { (uri, flags) ->
+            val required = shared.accepts(uri, flags)
+            org.junit.Assert.assertEquals(
+                "SFTP may not invent document write permission", required,
+                sftp.acceptsPickerWriteResult(uri, flags))
+            org.junit.Assert.assertEquals(
+                "FTPS must obey the identical system-picker policy", required,
+                ftps.acceptsPickerWriteResult(uri, flags))
+        }
+        org.junit.Assert.assertTrue(sftp.acceptsPickerWriteResult(valid, write))
+        org.junit.Assert.assertFalse(sftp.acceptsPickerWriteResult(valid, read))
+    }
+
     @Test fun directFtpsFilePathRequiresCheckedAbsoluteFileCandidate() {
         val parse = FtpsDirectFileSelection.Companion
         val valid = parse.checked("/pub/example/readme.txt")
