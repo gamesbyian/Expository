@@ -109,7 +109,7 @@ class FtpsUiSmokeTest {
         // writes, downloads, production credentials or authentic source.
         val local = java.net.InetAddress.getByName("127.0.0.1")
         val listener = java.net.ServerSocket(0, 1, local)
-        val secondMlsd = java.util.concurrent.CountDownLatch(1)
+        val secondListing = java.util.concurrent.CountDownLatch(1)
         val releaseSecond = java.util.concurrent.CountDownLatch(1)
         val worker = Thread {
             var passive: java.net.ServerSocket? = null
@@ -150,12 +150,15 @@ class FtpsUiSmokeTest {
                                     reply("229 Entering Extended Passive Mode (|||$port|)")
                                 }
                             }
-                            "MLSD", "LIST" -> {
+                            // Intentionally force the production MLSD->LIST
+                            // compatibility view; neither listing authorizes writes.
+                            "MLSD" -> reply("502 MLSD unavailable in test fixture")
+                            "LIST" -> {
                                 if (firstListing) {
                                     reply("150 Synthetic directory transfer")
                                     passive!!.accept().use { data ->
                                         data.getOutputStream().write(
-                                            ("type=file;size=9;modify=20260101000000; synthetic.txt\r\n")
+                                            ("-rw-r--r-- 1 owner group 9 Jan 01 00:00 synthetic.txt\r\n")
                                                 .toByteArray(java.nio.charset.StandardCharsets.UTF_8))
                                     }
                                     passive?.close()
@@ -163,7 +166,7 @@ class FtpsUiSmokeTest {
                                     firstListing = false
                                     reply("226 Directory transfer complete")
                                 } else {
-                                    secondMlsd.countDown()
+                                    secondListing.countDown()
                                     // Deliberate stall on *same* control socket.
                                     releaseSecond.await(18L, java.util.concurrent.TimeUnit.SECONDS)
                                     reply("425 Read-only listing canceled")
@@ -204,7 +207,7 @@ class FtpsUiSmokeTest {
             rule.onNodeWithText("synthetic.txt").assertExists()
             rule.onNodeWithText("Refresh").performScrollTo().performClick()
             org.junit.Assert.assertTrue("Second FTP listing must stall",
-                secondMlsd.await(5L, java.util.concurrent.TimeUnit.SECONDS))
+                secondListing.await(5L, java.util.concurrent.TimeUnit.SECONDS))
             rule.onNodeWithText("Stop browsing and disconnect")
                 .performScrollTo().performClick()
             rule.onNodeWithText("FTP browse stopped", substring = true).assertExists()
