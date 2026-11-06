@@ -115,6 +115,25 @@ class FtpsSafeFailure internal constructor(
     val stage: String, val kind: String, val numericReply: Int
 ) : IOException("FTPS_${stage}_${kind}_REPLY_${numericReply.toString().padStart(3, '0')}")
 
+/**
+ * A strictly authenticated FTPS control session may survive certain
+ * read-only directory *command* refusals. This allows the user to type an
+ * exact file path and request a separate authoritative MLST observation.
+ * It NEVER treats a failed listing as empty/complete and NEVER authorizes a
+ * transfer, write, plaintext downgrade, or automatic RETR retry.
+ *
+ * TLS/data-socket errors, timeouts, permissions, CWD failures, malformed
+ * listings and unknown codes all invalidate the initial browse journey.
+ */
+object FtpsDegradedListingPolicy {
+    fun permitsManualMlst(error: Throwable): Boolean {
+        val failure = error as? FtpsSafeFailure ?: return false
+        return failure.stage in setOf("LIST", "LIST_PREVIEW") &&
+            failure.kind == "NO_DATA_CONNECTION_OR_COMMAND_REJECTED" &&
+            failure.numericReply in setOf(425, 426, 500, 502, 504)
+    }
+}
+
 internal object FtpsFailureCodes {
     fun classify(stage: String, reply: Int, error: Throwable?): FtpsSafeFailure {
         // Some FTP libraries wrap the TLS exception in an IOException.
