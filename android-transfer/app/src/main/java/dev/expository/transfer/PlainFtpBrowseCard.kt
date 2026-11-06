@@ -65,7 +65,7 @@ internal fun PlainFtpBrowseCard() {
         mutableStateOf("Plain FTP is insecure. Prefer pinned SFTP or certificate-validated FTPS.")
     }
     val owned = session
-    DisposableEffect(owned) { onDispose { owned?.close() } }
+    DisposableEffect(owned) { onDispose { RemoteSessionRetirement.retire(owned) } }
 
     fun browse(next: String, window: Int = FtpsBrowseBounds.INITIAL) {
         val current = session ?: return
@@ -86,10 +86,20 @@ internal fun PlainFtpBrowseCard() {
                         "Incomplete directory preview: more files may be hidden."
                     else "FTP listing received. This session is read-only; names are unencrypted."
                 }.onFailure {
-                    status = "Unable to browse FTP. Connection, path or listing may have changed."
+                    // A failed read-only CWD/listing is not a verified empty
+                    // folder. Hide stale rows, their sorting/filter context,
+                    // and any candidate preview until a fresh read succeeds.
+                    page = null
+                    limit = FtpsBrowseBounds.INITIAL
+                    fileFilter = ""
+                    status = "Unable to browse FTP. Old listing cleared; " +
+                        "the requested folder has not been verified. Retry " +
+                        "browsing or disconnect. No transfer was attempted."
                 }
+                // A callback for an abandoned session must not clear
+                // another session's busy indicator.
+                busy = false
             }
-            busy = false
         }
     }
 
