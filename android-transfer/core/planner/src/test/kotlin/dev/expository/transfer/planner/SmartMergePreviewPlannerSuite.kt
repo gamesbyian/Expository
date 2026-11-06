@@ -88,6 +88,25 @@ object SmartMergePreviewPlannerSuite {
         check(first.collisionRenames == 1)
         check(first.entries.none { it.sharedDirectory })
         check(first.digest == plan(sources, trees).digest)
+        // The emitted review value carries a copied ItemRef. Kotlin's
+        // List<T> is a read-only interface, not an immutable backing
+        // collection: .toList() with 2+ elements can be cast and mutated.
+        // Reject that mutation instead of silently changing displayed
+        // source paths after the digest was computed.
+        val frozenFirst = first.entries.first()
+        check(frozenFirst.source.parent == listOf("Pictures", "A"))
+        check(frozenFirst.source.location.folder == listOf("Pictures", "A"))
+        check(runCatching {
+            (frozenFirst.source.parent as MutableList<String>).add("changed")
+        }.isFailure)
+        check(runCatching {
+            (frozenFirst.source.location.folder as MutableList<String>).clear()
+        }.isFailure)
+        check(runCatching {
+            (first.entries as MutableList<SmartMergePreviewEntry>).clear()
+        }.isFailure)
+        check(frozenFirst.source.parent == listOf("Pictures", "A"))
+        check(first.entries.size == 2 && first.digest == plan(sources, trees).digest)
         check(first.digest != plan(sources, trees, rootName = "Another").digest)
         check(first.digest != plan(basket(b, a),
             listOf(trees[1], trees[0])).digest)
