@@ -10,6 +10,7 @@ import dev.expository.transfer.engine.AtomicAttemptStorage
 import dev.expository.transfer.engine.DurableAttemptJournal
 import dev.expository.transfer.planner.*
 import dev.expository.transfer.saf.SafSingleDocumentCopy
+import dev.expository.transfer.saf.SafCreatedDocumentWriteGrant
 import java.io.FileNotFoundException
 import java.io.FilterInputStream
 import java.io.IOException
@@ -31,11 +32,17 @@ class SftpToSafSave(private val resolver: ContentResolver,
         sessionOpaqueId: String,
         absoluteFile: String,
         destination: Uri,
+        pickerResultFlags: Int,
         continueRequested: () -> Boolean,
         onProgress: (Long) -> Unit = {}
     ): CopyReceipt {
         if (sessionOpaqueId.isBlank() || destination.scheme != ContentResolver.SCHEME_CONTENT)
             return CopyReceipt("", CopyProof.BLOCKED, 0L, "INVALID_SESSION_OR_URI")
+        // The Android system picker must supply this fresh permission; a
+        // content:// URI does not by itself authorize opening an output.
+        // Fail before remote stat, journal creation or any destination write.
+        if (!SafCreatedDocumentWriteGrant.accepts(destination, pickerResultFlags))
+            return CopyReceipt("", CopyProof.BLOCKED, 0L, "PICKER_WRITE_GRANT_UNPROVEN")
 
         val firstTime = System.currentTimeMillis()
         val firstStat = try { session.statFile(absoluteFile) }
