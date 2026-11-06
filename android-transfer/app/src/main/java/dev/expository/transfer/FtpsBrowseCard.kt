@@ -42,6 +42,7 @@ import dev.expository.transfer.ftps.FtpsBrowseBounds
 import dev.expository.transfer.ftps.FtpsTlsPolicy
 import dev.expository.transfer.ftps.FtpsMode
 import dev.expository.transfer.ftps.FtpsPath
+import dev.expository.transfer.ftps.FtpsDegradedListingPolicy
 import dev.expository.transfer.ftps.FtpsSession
 import dev.expository.transfer.ftps.FtpsTarget
 import dev.expository.transfer.ftps.FtpsToSafSave
@@ -397,8 +398,22 @@ fun FtpsBrowseCard() {
                                         val target = FtpsTarget(chosenHost, chosenPort, chosenMode, chosenPolicy)
                                         val root = FtpsPath.checked(chosenRoot)
                                         val live = SecureFtps.connect(target, chosenUser, secret)
-                                        try { live to live.browseReadOnly(root) }
-                                        catch (error: Exception) { live.close(); throw error }
+                                        try {
+                                            // A successfully authenticated control session
+                                            // survives only explicitly classified listing
+                                            // command refusals, not TLS/socket/permission
+                                            // errors. The direct-path UI still needs MLST.
+                                            val listing = try { live.browseReadOnly(root) }
+                                                catch (error: Exception) {
+                                                    if (!FtpsDegradedListingPolicy.permitsManualMlst(error))
+                                                        throw error
+                                                    null
+                                                }
+                                            live to listing
+                                        } catch (error: Exception) {
+                                            live.close()
+                                            throw error
+                                        }
                                     }
                                 } finally { secret.fill('\u0000') }
                             }
@@ -409,10 +424,17 @@ fun FtpsBrowseCard() {
                                 folder = chosenRoot
                                 browseLimit = FtpsBrowseBounds.INITIAL
                                 page = listing
-                                status = if (listing.method == "LIST")
-                                    "Encrypted connection; LIST preview is non-authoritative."
-                                else
-                                    "Encrypted FTPS session and MLSD listing verified."
+                                status = when {
+                                    listing == null -> "Encrypted FTPS session established, " +
+                                        "but its directory listing command failed. No " +
+                                        "items were observed. Enter an exact absolute " +
+                                        "file path to request separate MLST proof before " +
+                                        "Save As, or disconnect."
+                                    listing.method == "LIST" ->
+                                        "Encrypted connection; LIST preview is non-authoritative."
+                                    else ->
+                                        "Encrypted FTPS session and MLSD listing verified."
+                                }
                             }.onFailure {
                                 status = "FTPS connection or listing failed. Check TLS certificate, credentials, port and server permissions."
                             }

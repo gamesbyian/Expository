@@ -288,6 +288,35 @@ object FtpsSecuritySuite {
                 check(result.truncated && result.entries.size == 2)
             }
         }
+        checkCase("only narrow listing command refusals retain authenticated control for MLST") {
+            for (stage in listOf("LIST", "LIST_PREVIEW")) {
+                for (reply in listOf(425, 426, 500, 502, 504)) {
+                    check(FtpsDegradedListingPolicy.permitsManualMlst(
+                        FtpsSafeFailure(stage,
+                            "NO_DATA_CONNECTION_OR_COMMAND_REJECTED", reply)))
+                }
+            }
+            for (stage in listOf("CWD", "STAT", "READ", "READ_FINAL",
+                    "CONNECT", "LIST_UNKNOWN")) {
+                check(!FtpsDegradedListingPolicy.permitsManualMlst(
+                    FtpsSafeFailure(stage,
+                        "NO_DATA_CONNECTION_OR_COMMAND_REJECTED", 425)))
+            }
+            for (kind in listOf("TLS_HANDSHAKE", "TLS_DATA", "TIMEOUT",
+                    "DATA_SOCKET", "IO", "PARSER_OR_POLICY")) {
+                check(!FtpsDegradedListingPolicy.permitsManualMlst(
+                    FtpsSafeFailure("LIST", kind, 425)))
+            }
+            for (code in listOf(0, 220, 421, 450, 451, 530, 550, 599)) {
+                check(!FtpsDegradedListingPolicy.permitsManualMlst(
+                    FtpsSafeFailure("LIST",
+                        "NO_DATA_CONNECTION_OR_COMMAND_REJECTED", code)))
+            }
+            check(!FtpsDegradedListingPolicy.permitsManualMlst(
+                java.io.IOException("untrusted private server reply")))
+            check(!FtpsDegradedListingPolicy.permitsManualMlst(
+                javax.net.ssl.SSLHandshakeException("private TLS error")))
+        }
         checkCase("TLS data error never degrades to legacy LIST") {
             var listCalled = false
             val client = object : org.apache.commons.net.ftp.FTPSClient(false) {
