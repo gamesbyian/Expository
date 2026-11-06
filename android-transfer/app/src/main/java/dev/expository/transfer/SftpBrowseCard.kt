@@ -54,6 +54,7 @@ import dev.expository.transfer.sftp.SftpSession
 import dev.expository.transfer.sftp.SftpTarget
 import dev.expository.transfer.sftp.SftpToSafSave
 import dev.expository.transfer.saf.SafSingleDocumentCopy
+import dev.expository.transfer.saf.SafCreatedDocumentWriteGrant
 import dev.expository.transfer.sftp.SftpRelayCopy
 import dev.expository.transfer.sftp.SftpRelayRequest
 import dev.expository.transfer.sftp.SftpRelayPreflight
@@ -260,6 +261,7 @@ internal fun SftpBrowseCard(
 
     val saveAs = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val target = result.data?.data
+        val pickerResultFlags = result.data?.flags ?: 0
         val live = session
         val path = pendingFile
         val witness = pendingSaveWitness
@@ -272,6 +274,9 @@ internal fun SftpBrowseCard(
             witness?.matches(sessionId, folder, path) != true) {
             busy = false
             status = "Remote file, folder or session changed during Save As. No copy started. The picker may have created an empty document."
+        } else if (!SafCreatedDocumentWriteGrant.accepts(target, pickerResultFlags)) {
+            busy = false
+            status = "Android Save As returned no fresh WRITE grant. No SFTP Copy started; the picker may have created an empty document."
         } else {
             val permit = AtomicBoolean(true)
             continueCopy = permit
@@ -288,6 +293,7 @@ internal fun SftpBrowseCard(
                         AndroidAtomicAttemptStorage(context.applicationContext, digest)
                     }.copy(
                         live, sessionId, path, target,
+                        pickerResultFlags = pickerResultFlags,
                         continueRequested = { permit.get() && active?.isActive == true },
                         onProgress = { bytes ->
                             if (bytes - lastDisplayed >= 256L * 1024L) {
