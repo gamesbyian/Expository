@@ -252,9 +252,10 @@ internal fun SftpBrowseCard(
 
 
     val ownedSession = session
-    DisposableEffect(pendingLogin) {
-        val current = pendingLogin
-        onDispose { current?.abandon() }
+    DisposableEffect(Unit) {
+        // Read the latest pending lease on teardown, including a login
+        // started immediately before the next composition is applied.
+        onDispose { pendingLogin?.abandon() }
     }
     DisposableEffect(ownedSession) {
         onDispose { RemoteSessionRetirement.retire(ownedSession) }
