@@ -33,9 +33,14 @@ data class RecoveryCounts(
     val notStarted: Int,
     val damagedOrUnrecognized: Int,
     val reviewReferences: List<RecoveryReviewReference> = emptyList(),
-    // Count of unlisted attempt/anomaly records only, not corrupt evidence
-    // already reported in a visible review reference's warning.
-    val additionalReviewCount: Int = 0
+    // Count of records not shown in THIS bounded 32-entry window, plus
+    // malformed filenames with no trustworthy private key. Existing first-
+    // window callers keep their historical overflow semantics.
+    val additionalReviewCount: Int = 0,
+    /** Zero-based, in-memory-only offset in windows of 32 candidate records. */
+    val referenceWindow: Int = 0,
+    /** Count of all identifiable review candidates, regardless of window. */
+    val totalReferenceCount: Long = reviewReferences.size.toLong()
 )
 
 /**
@@ -68,7 +73,7 @@ object AttemptRecoveryIndex {
         Regex("transfer_created_child_v1_([0-9a-f]{64})(?:\\.bak|\\.new)?")
     private val sourceBytesPattern =
         Regex("transfer_source_bytes_v1_([0-9a-f]{64})(?:\\.bak|\\.new)?")
-    private const val MAX_REVIEW_REFERENCES = 32
+    const val MAX_REVIEW_REFERENCES = 32
 
     /**
      * A failed directory enumeration must NOT mean an empty journal index.
@@ -121,7 +126,9 @@ object AttemptRecoveryIndex {
                 !sourceBytesPattern.matches(it)
         }
 
-    fun recover(context: Context): RecoveryCounts {
+    fun recover(context: Context, referenceWindow: Int = 0): RecoveryCounts {
+        require(referenceWindow >= 0) { "INVALID_RECOVERY_REFERENCE_WINDOW" }
+        val windowStart = referenceWindow.toLong() * MAX_REVIEW_REFERENCES
         val names = context.noBackupFilesDir.listFiles()?.map { it.name }
             ?: throw IOException("JOURNAL_DIRECTORY_UNREADABLE")
         val digests = journalDigests(names).sorted()
@@ -132,11 +139,18 @@ object AttemptRecoveryIndex {
         // key. A damaged sidecar on an already displayed attempt CAN: it is
         // a warning on that reference, not another hidden record.
         var unlisted = damaged
-        fun reference(digest: String, status: String) {
-            if (details.size >= MAX_REVIEW_REFERENCES) {
+        var referenceCandidates = 0L
+        fun isInCurrentWindow(): Boolean {
+            val ordinal = referenceCandidates++
+            if (ordinal < windowStart ||
+                ordinal >= windowStart + MAX_REVIEW_REFERENCES) {
                 unlisted++
-                return
+                return false
             }
+            return true
+        }
+        fun reference(digest: String, status: String) {
+            if (!isInCurrentWindow()) return
             val hint = runCatching {
                 ProtectedRecoveryContextStore(context).read(digest)
             }
@@ -221,7 +235,7 @@ object AttemptRecoveryIndex {
         for (orphan in (orphanContexts + orphanChildren + orphanBytes)
             .filterNot { it in journalKeys }.sorted()) {
             damaged++
-            if (details.size < MAX_REVIEW_REFERENCES) {
+            if (isInCurrentWindow()) {
                 details += RecoveryReviewReference(
                     orphan.takeLast(12),
                     if (orphan in orphanContexts)
@@ -234,12 +248,10 @@ object AttemptRecoveryIndex {
                     else "An orphan created-child or byte witness is not a transfer receipt. No retry or cleanup.",
                     recordKey = orphan
                 )
-            } else {
-                unlisted++
             }
         }
 
         return RecoveryCounts(uncertain, verified, notStarted, damaged,
-            details.toList(), unlisted)
+            details.toList(), unlisted, referenceWindow, referenceCandidates)
     }
 }
