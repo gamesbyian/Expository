@@ -76,6 +76,10 @@ jobs:
                 # Single's actual OS Open->Create Document journey, isolated
                 # from sibling Dual picker tests to avoid shared DocumentsUI state.
                 LocalPickerPositiveCopyTest#selectAndSaveNewDocumentWithByteVerifiedReadback) ;;
+                # Genuine Android CREATE_DOCUMENT on the Compose SFTP
+                # browser, backed by an app-private pinned SSH loopback
+                # fixture. Isolate it from stateful sibling picker tests.
+                SftpSaveAsRealPickerUiTest#pinnedServerListedFileSavesExactBytesThroughRealDocumentsUi) ;;
                 # The original source must never switch mid-Save As after Share.
                 LocalPickerPositiveCopyTest#incomingShareDuringSaveAsCannotSwitchTheSource) ;;
                 # One isolated foreground Copy state gate, avoiding the known
