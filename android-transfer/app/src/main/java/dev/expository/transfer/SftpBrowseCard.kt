@@ -215,6 +215,7 @@ internal fun SftpBrowseCard(
     var status by remember { mutableStateOf("Enter a known SHA-256 SSH host-key fingerprint. Unknown keys are never trusted automatically.") }
     var busy by remember { mutableStateOf(false) }
     var loginJob by remember { mutableStateOf<Job?>(null) }
+    var browseJob by remember { mutableStateOf<Job?>(null) }
     val peerRelayLocked = session != null && sessionId.isNotBlank() &&
         peerRelaySourceId == sessionId
     var transferred by remember { mutableLongStateOf(0L) }
@@ -1112,12 +1113,16 @@ internal fun SftpBrowseCard(
     fun browseTo(next: String,
         requestedLimit: Int = if (next == folder) browseLimit else SftpBrowseBounds.INITIAL) {
         val live = session ?: return
+        // A single SSH session cannot safely execute overlapping directory
+        // reads, and one busy state cannot own two command completions.
+        if (busy || browseJob != null) return
         val limit = runCatching { SftpBrowseBounds.requireValid(requestedLimit) }
             .getOrNull() ?: return
         val generation = browseGeneration.incrementAndGet()
         busy = true
         status = "Loading remote directory…"
-        scope.launch {
+        browseJob = scope.launch {
+            try {
             val result = withContext(Dispatchers.IO) {
                 runCatching { live.browse(next, maxEntries = limit) }
             }
@@ -1173,6 +1178,9 @@ internal fun SftpBrowseCard(
                         "browse or reconnect; no transfer was started."
                 }
                 busy = false // Only the winning request owns the busy state.
+            }
+            } finally {
+                if (browseJob === coroutineContext[Job]) browseJob = null
             }
         }
     }
@@ -2451,6 +2459,45 @@ internal fun SftpBrowseCard(
                         "still use separate, stricter write preflights and may be blocked.",
                         style = MaterialTheme.typography.bodySmall)
                 }
+            }
+            if (browseJob != null) {
+                Button(
+                    enabled = !peerRelayLocked,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    onClick = {
+                        // The blocked directory read may still be using this
+                        // session on IO. Never reuse that SSH channel for a
+                        // fresh command. Retire the entire authority instead.
+                        browseGeneration.incrementAndGet()
+                        browseJob?.cancel()
+                        browseJob = null
+                        session = null
+                        sessionId = ""
+                        page = null
+                        browseLimit = SftpBrowseBounds.INITIAL
+                        fileFilter = ""
+                        directFilePath = ""
+                        pendingFile = null
+                        pendingSaveWitness = null
+                        pendingUploadWitness = null
+                        pendingPeerUpload = null
+                        pendingPeerDownload = null
+                        pendingPickedUpload = null
+                        pendingMove = null
+                        pendingPeerBatch = null
+                        peerBatchSelection = SftpBatchSelection()
+                        pendingRelay = null
+                        pendingRelayBatch = null
+                        singleDeviceTarget = null
+                        singleDestinationPickerWitness = null
+                        singleDestinationGeneration++
+                        onRemoteSource(null)
+                        onRemoteBatchSource(null)
+                        showRenamePreview = false
+                        busy = false
+                        status = "SFTP browse stopped; pinned session is being retired. Reconnect before browsing or transferring. No new operation started."
+                    }
+                ) { Text("Stop browsing and disconnect") }
             }
             if (continueCopy != null) {
                 Text(transferKind + ": " + transferred + " bytes written (not verified)",
