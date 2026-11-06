@@ -30,6 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -2271,7 +2272,7 @@ internal fun SftpBrowseCard(
                 OutlinedTextField(
                     value = directFilePath,
                     onValueChange = { directFilePath = it.take(4096) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("sftp-direct-file-path"),
                     enabled = !busy && !peerRelayLocked,
                     label = { Text("Absolute SFTP file path") },
                     singleLine = true)
