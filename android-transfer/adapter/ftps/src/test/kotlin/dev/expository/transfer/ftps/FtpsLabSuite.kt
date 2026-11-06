@@ -49,12 +49,19 @@ object FtpsLabSuite {
             "synthetic",
             "synthetic-secret".toCharArray()
         ).use { session ->
-            val refused = runCatching {
-                session.browseReadOnly("/")
-            }.exceptionOrNull()
-            check(refused != null &&
-                FtpsDegradedListingPolicy.permitsManualMlst(refused)) {
-                "Refused directory commands must never become authoritative empty listing"
+            val listing = runCatching { session.browseReadOnly("/") }
+            listing.onSuccess { preview ->
+                // Commons Net may represent a 502 LIST command as an empty
+                // read-only preview rather than throwing. Either outcome
+                // must remain non-authoritative and must not authorize Copy.
+                check(preview.method == "LIST" &&
+                    !preview.authoritative && preview.entries.isEmpty()) {
+                    "Refused listings must not become authoritative empty directories"
+                }
+            }.onFailure { refusal ->
+                check(FtpsDegradedListingPolicy.permitsManualMlst(refusal)) {
+                    "Only narrow listing-command refusals may retain manual MLST"
+                }
             }
             val remote = session.statFile("/synthetic.txt")
             val expected = "FTPS synthetic fixture\n".toByteArray(Charsets.UTF_8)
