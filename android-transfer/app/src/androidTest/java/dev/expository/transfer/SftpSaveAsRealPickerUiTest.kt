@@ -91,7 +91,12 @@ class SftpSaveAsRealPickerUiTest {
             device.wait(Until.hasObject(By.pkg("com.android.documentsui")),
                 3_000L) ||
             device.wait(Until.hasObject(By.text("Recent")), 3_000L) ||
-            device.wait(Until.hasObject(By.text("Downloads")), 3_000L)
+            device.wait(Until.hasObject(By.text("Downloads")), 3_000L) ||
+            // Some Google APIs emulator picker versions foreground their
+            // DocumentsUI activity using the Android system package.
+            // This alternate host was already accepted by the genuine
+            // local CreateDocument E2; a return to this app never counts.
+            device.currentPackageName == "android"
 
         fun clickText(label: String) {
             repeat(5) {
@@ -157,7 +162,15 @@ class SftpSaveAsRealPickerUiTest {
             compose.onNodeWithText(remoteName).assertExists()
             compose.onNodeWithText("Save As…")
                 .performSemanticsAction(SemanticsActions.OnClick)
-            assertTrue("Android Create Document picker must open", pickerVisible())
+            val pickerOpened = pickerVisible()
+            if (!pickerOpened) {
+                val renderedState = runCatching {
+                    compose.onRoot(useUnmergedTree = true).printToString().take(1800)
+                }.getOrDefault("semantics unavailable")
+                error("Android Create Document picker missing; foreground=" +
+                    (device.currentPackageName ?: "none") +
+                    " ; app-state=" + renderedState)
+            }
             // Navigate to a disposable Downloads document and use a unique
             // target name to guarantee no existing file can be replaced.
             (device.findObject(By.desc("Show roots"))
