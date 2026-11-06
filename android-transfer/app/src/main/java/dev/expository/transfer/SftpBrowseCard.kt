@@ -250,7 +250,7 @@ internal fun SftpBrowseCard(
 
     val ownedSession = session
     DisposableEffect(ownedSession) {
-        onDispose { ownedSession?.close() }
+        onDispose { RemoteSessionRetirement.retire(ownedSession) }
     }
 
     // This is separate from the opposite pane's Android grant. Single-view
