@@ -30,7 +30,6 @@ import org.apache.sshd.sftp.server.DirectoryHandle
 import org.apache.sshd.server.session.ServerSession
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.util.Date
 import java.util.UUID
