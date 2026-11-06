@@ -152,7 +152,9 @@ internal fun PlainFtpBrowseCard() {
                         explicitlyApproved = false
                         busy = true
                         status = "Connecting by explicitly approved unencrypted FTP…"
+                        val acquisition = RemoteSessionAcquisition<PlainFtpSession>()
                         scope.launch {
+                            try {
                             val result = withContext(Dispatchers.IO) {
                                 try {
                                     runCatching {
@@ -160,8 +162,11 @@ internal fun PlainFtpBrowseCard() {
                                         val live = PlainFtp.connect(
                                             PlainFtpTarget(chosenHost, chosenPort),
                                             chosenUser, secret, explicitlyApproved = approved)
-                                        try { live to live.browseReadOnly(checkedRoot) }
-                                        catch (failure: Exception) {
+                                        try {
+                                            val listing = live.browseReadOnly(checkedRoot)
+                                            acquisition.offer(live)
+                                            live to listing
+                                        } catch (failure: Exception) {
                                             live.close()
                                             throw failure
                                         }
@@ -169,6 +174,7 @@ internal fun PlainFtpBrowseCard() {
                                 } finally { secret.fill('\u0000') }
                             }
                             result.onSuccess { (live, listing) ->
+                                if (!acquisition.adopt(live)) return@onSuccess
                                 session = live
                                 folder = chosenRoot
                                 page = listing
@@ -178,6 +184,9 @@ internal fun PlainFtpBrowseCard() {
                                 status = "FTP connection or listing failed. No other protocol attempted."
                             }
                             busy = false
+                            } finally {
+                                acquisition.abandon()
+                            }
                         }
                     }
                 ) { Text(if (busy) "Connecting…" else "Connect insecurely") }
