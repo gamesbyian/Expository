@@ -133,6 +133,7 @@ fun FtpsBrowseCard() {
     var pendingSaveWitness by remember { mutableStateOf<FtpsPickerWitness?>(null) }
     var busy by remember { mutableStateOf(false) }
     var loginJob by remember { mutableStateOf<Job?>(null) }
+    var browseJob by remember { mutableStateOf<Job?>(null) }
     var transferred by remember { mutableLongStateOf(0L) }
     var continueCopy by remember { mutableStateOf<AtomicBoolean?>(null) }
     var status by remember {
@@ -238,11 +239,13 @@ fun FtpsBrowseCard() {
     fun browseTo(next: String,
         requestedLimit: Int = if (next == folder) browseLimit else FtpsBrowseBounds.INITIAL) {
         val live = session ?: return
+        if (busy || browseJob != null) return
         val limit = runCatching { FtpsBrowseBounds.requireValid(requestedLimit) }
             .getOrNull() ?: return
         busy = true
         status = "Loading encrypted remote listing…"
-        scope.launch {
+        browseJob = scope.launch {
+            try {
             val result = withContext(Dispatchers.IO) {
                 runCatching { live.browseReadOnly(next, maxEntries = limit) }
             }
@@ -295,6 +298,9 @@ fun FtpsBrowseCard() {
                 }
                 // A stale coroutine must not unlock a different session.
                 busy = false
+            }
+            } finally {
+                if (browseJob === coroutineContext[Job]) browseJob = null
             }
         }
     }
@@ -591,6 +597,25 @@ fun FtpsBrowseCard() {
                         "legacy LIST is never authoritative for mutations.",
                         style = MaterialTheme.typography.bodySmall)
                 }
+            }
+            if (browseJob != null) {
+                Button(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    onClick = {
+                        // A canceled control-channel read must never race a
+                        // new FTPS command on the same session.
+                        browseJob?.cancel()
+                        browseJob = null
+                        session = null // Socket retirement happens on IO.
+                        sessionId = ""
+                        page = null
+                        pendingFile = null
+                        pendingSaveWitness = null
+                        directFilePath = ""
+                        fileFilter = ""
+                        browseLimit = FtpsBrowseBounds.INITIAL
+                        busy = false
+                        status = "FTPS browse stopped; secure session closed. Reconnect before browsing or Save As. No copy started."
+                    }) { Text("Stop browsing and disconnect") }
             }
             if (continueCopy != null) {
                 Text("Written: " + transferred + " bytes (not yet verified)",
