@@ -48,7 +48,13 @@ import org.junit.runner.RunWith
 class SftpSaveAsRealPickerUiTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun pinnedServerListedFileSavesExactBytesThroughRealDocumentsUi() {
+    @Test fun pinnedServerListedFileSavesExactBytesThroughRealDocumentsUi() =
+        runVerifiedSaveAs(viaExactTypedPath = false)
+
+    @Test fun pinnedServerDirectFilePathSavesExactBytesThroughRealDocumentsUi() =
+        runVerifiedSaveAs(viaExactTypedPath = true)
+
+    private fun runVerifiedSaveAs(viaExactTypedPath: Boolean) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val resolver = context.contentResolver
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
@@ -158,10 +164,20 @@ class SftpSaveAsRealPickerUiTest {
                 compose.onAllNodesWithText("Pinned SFTP session authenticated",
                     substring = true).fetchSemanticsNodes().isNotEmpty()
             }
-            // A genuine live authenticated SFTP listing exposes the file.
+            // Both actions use the real authenticated SFTP session and
+            // the same revision-pinned journaled Save As implementation.
+            // The typed-path route must not derive file authority from a
+            // directory listing, even when a listing happens to exist.
             compose.onNodeWithText(remoteName).assertExists()
-            compose.onNodeWithText("Save As…")
-                .performSemanticsAction(SemanticsActions.OnClick)
+            if (viaExactTypedPath) {
+                compose.onNodeWithTag("sftp-direct-file-path")
+                    .performTextReplacement("/" + remoteName)
+                compose.onNodeWithText("Verify path and Save As…")
+                    .performSemanticsAction(SemanticsActions.OnClick)
+            } else {
+                compose.onNodeWithText("Save As…")
+                    .performSemanticsAction(SemanticsActions.OnClick)
+            }
             val pickerOpened = pickerVisible()
             if (!pickerOpened) {
                 error("Android Create Document picker missing; foreground=" +
