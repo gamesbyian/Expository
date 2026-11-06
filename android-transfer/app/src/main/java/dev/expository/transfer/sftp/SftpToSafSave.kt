@@ -27,6 +27,11 @@ class SftpToSafSave(private val resolver: ContentResolver,
     private val storageForPlan: (String) -> AtomicAttemptStorage) {
     private val observer = SafSingleDocumentCopy(resolver)
 
+    companion object {
+        fun acceptsPickerWriteResult(uri: Uri?, flags: Int): Boolean =
+            SafCreatedDocumentWriteGrant.accepts(uri, flags)
+    }
+
     fun copy(
         session: SftpSession,
         sessionOpaqueId: String,
@@ -41,7 +46,7 @@ class SftpToSafSave(private val resolver: ContentResolver,
         // The Android system picker must supply this fresh permission; a
         // content:// URI does not by itself authorize opening an output.
         // Fail before remote stat, journal creation or any destination write.
-        if (!SafCreatedDocumentWriteGrant.accepts(destination, pickerResultFlags))
+        if (!acceptsPickerWriteResult(destination, pickerResultFlags))
             return CopyReceipt("", CopyProof.BLOCKED, 0L, "PICKER_WRITE_GRANT_UNPROVEN")
 
         val firstTime = System.currentTimeMillis()
