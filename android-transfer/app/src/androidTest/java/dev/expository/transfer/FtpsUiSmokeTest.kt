@@ -11,9 +11,20 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import dev.expository.transfer.sftp.SftpAndroidCompat
+import dev.expository.transfer.sftp.SftpHostKeyPin
+import java.nio.file.Files
+import java.security.KeyPairGenerator
+import org.apache.sshd.common.file.virtualfs.VirtualFileSystemFactory
+import org.apache.sshd.common.keyprovider.KeyPairProvider
+import org.apache.sshd.server.SshServer
+import org.apache.sshd.server.auth.password.PasswordAuthenticator
+import org.apache.sshd.sftp.server.SftpSubsystemFactory
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -93,9 +104,9 @@ class FtpsUiSmokeTest {
         }
     }
 
-    private fun pendingSecureLoginCanBeCanceled(sftp: Boolean) {
-        // Disposable loopback fixture never sends the SSH or FTP greeting.
-        // Neither client can authenticate or transmit a password.
+    private fun pendingFtpsLoginCanBeCanceled() {
+        // Disposable FTPS localhost fixture never sends a TLS/FTP greeting.
+        // No credentials can be transmitted or authenticated.
         val socket = java.net.ServerSocket(
             0, 1, java.net.InetAddress.getByName("127.0.0.1"))
         val received = java.util.concurrent.CountDownLatch(1)
@@ -109,12 +120,12 @@ class FtpsUiSmokeTest {
             } catch (_: Exception) { /* synthetic server shutdown */ }
         }
         worker.start()
-        val prefix = if (sftp) "sftp-login-" else "ftps-login-"
+        val prefix = "ftps-login-"
         try {
             rule.setContent {
                 MaterialTheme {
                     Column(Modifier.verticalScroll(rememberScrollState())) {
-                        if (sftp) SftpBrowseCard() else FtpsBrowseCard()
+                        FtpsBrowseCard()
                     }
                 }
             }
@@ -123,30 +134,20 @@ class FtpsUiSmokeTest {
             rule.onNodeWithTag(prefix + "port").performTextInput(socket.localPort.toString())
             rule.onNodeWithTag(prefix + "user").performTextInput("synthetic-user")
             rule.onNodeWithTag(prefix + "password").performTextInput("synthetic-secret")
-            if (sftp) {
-                rule.onNodeWithTag(prefix + "pin")
-                    .performTextInput("SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
-            }
             rule.onNodeWithText("Connect securely").performScrollTo().performClick()
             // First MINA SSH client startup can initialize providers before
             // the TCP connect is scheduled. Do not mistake cold startup for
             // failure while the authenticated socket is still pending.
             val reached = received.await(
-                if (sftp) 12L else 5L, java.util.concurrent.TimeUnit.SECONDS)
-            val rejected = rule.onAllNodesWithText(
-                "Connection rejected.", substring = true)
-                .fetchSemanticsNodes().isNotEmpty()
-            org.junit.Assert.assertTrue(
-                "Isolated socket not reached (secure login rejected early: $rejected)",
-                reached)
+                5L, java.util.concurrent.TimeUnit.SECONDS)
+            org.junit.Assert.assertTrue("FTPS socket not reached", reached)
             rule.waitUntil(5_000L) {
                 rule.onAllNodesWithText("Cancel connection")
                     .fetchSemanticsNodes().isNotEmpty()
             }
             rule.onNodeWithText("Cancel connection").performScrollTo().performClick()
             rule.onNodeWithText(
-                if (sftp) "SFTP login canceled." else "FTPS login canceled.",
-                substring = true).assertExists()
+                "FTPS login canceled.", substring = true).assertExists()
             rule.onNodeWithText("Connect securely").assertExists()
             // No authenticated session: the screen must stay in login mode.
             rule.onNodeWithTag(prefix + "password").assertExists()
@@ -157,11 +158,69 @@ class FtpsUiSmokeTest {
         }
     }
 
+    private fun pendingSftpLoginCanBeCanceledAgainstPinnedLoopback() {
+        // Follow the known-good installed SFTP Save As fixture. Authenticate
+        // the ephemeral loopback server key, then hold its password challenge
+        // open so the user can cancel without any authenticated session.
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        SftpAndroidCompat.configurePrivateHome(context.applicationContext.filesDir.toPath())
+        val root = Files.createTempDirectory(context.cacheDir.toPath(), "sftp-cancel-e2-")
+        val hostKey = KeyPairGenerator.getInstance("RSA").apply {
+            initialize(2048)
+        }.generateKeyPair()
+        val authenticationReached = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val server = SshServer.setUpDefaultServer().apply {
+            host = "127.0.0.1"
+            port = 0
+            keyPairProvider = KeyPairProvider.wrap(hostKey)
+            passwordAuthenticator = PasswordAuthenticator { _, _, _ ->
+                authenticationReached.countDown()
+                release.await(20L, java.util.concurrent.TimeUnit.SECONDS)
+                false // Do not authorize any remote file access.
+            }
+            subsystemFactories = listOf(SftpSubsystemFactory.Builder().build())
+            fileSystemFactory = VirtualFileSystemFactory(root)
+        }
+        try {
+            server.start()
+            rule.setContent {
+                MaterialTheme {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        SftpBrowseCard()
+                    }
+                }
+            }
+            val inputs = listOf(
+                "sftp-login-host" to "127.0.0.1",
+                "sftp-login-port" to server.port.toString(),
+                "sftp-login-user" to "synthetic-user",
+                "sftp-login-password" to "synthetic-secret",
+                "sftp-login-pin" to SftpHostKeyPin.observed(hostKey.public)
+            )
+            inputs.forEach { (tag, value) ->
+                rule.onNodeWithTag(tag).performTextReplacement(value)
+            }
+            rule.onNodeWithText("Connect securely").performScrollTo().performClick()
+            org.junit.Assert.assertTrue(
+                "Pinned SSH server did not reach its synthetic auth gate",
+                authenticationReached.await(15L, java.util.concurrent.TimeUnit.SECONDS))
+            rule.onNodeWithText("Cancel connection").performScrollTo().performClick()
+            rule.onNodeWithText("SFTP login canceled.", substring = true).assertExists()
+            rule.onNodeWithText("Connect securely").assertExists()
+            rule.onNodeWithTag("sftp-login-password").assertExists()
+        } finally {
+            release.countDown()
+            runCatching { server.stop(true) }
+            Files.deleteIfExists(root)
+        }
+    }
+
     @Test fun pendingFtpsLoginCancelDoesNotAuthenticateOrAdoptSocket() =
-        pendingSecureLoginCanBeCanceled(false)
+        pendingFtpsLoginCanBeCanceled()
 
     @Test fun pendingSftpLoginCancelDoesNotAuthenticateOrAdoptSocket() =
-        pendingSecureLoginCanBeCanceled(true)
+        pendingSftpLoginCanBeCanceledAgainstPinnedLoopback()
 
     @Test fun protocolSelectorHasStrictSecureModesAndNoAutomaticConnection() {
         rule.setContent { MaterialTheme { FtpsBrowseCard() } }
