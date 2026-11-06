@@ -1746,6 +1746,45 @@ internal fun SftpBrowseCard(
                         }) { Text("Cancel connection") }
                 }
             } else {
+            if (browseJob != null) {
+                Button(
+                    enabled = !peerRelayLocked,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    onClick = {
+                        // The blocked directory read may still be using this
+                        // session on IO. Never reuse that SSH channel for a
+                        // fresh command. Retire the entire authority instead.
+                        browseGeneration.incrementAndGet()
+                        browseJob?.cancel()
+                        browseJob = null
+                        session = null
+                        sessionId = ""
+                        page = null
+                        browseLimit = SftpBrowseBounds.INITIAL
+                        fileFilter = ""
+                        directFilePath = ""
+                        pendingFile = null
+                        pendingSaveWitness = null
+                        pendingUploadWitness = null
+                        pendingPeerUpload = null
+                        pendingPeerDownload = null
+                        pendingPickedUpload = null
+                        pendingMove = null
+                        pendingPeerBatch = null
+                        peerBatchSelection = SftpBatchSelection()
+                        pendingRelay = null
+                        pendingRelayBatch = null
+                        singleDeviceTarget = null
+                        singleDestinationPickerWitness = null
+                        singleDestinationGeneration++
+                        onRemoteSource(null)
+                        onRemoteBatchSource(null)
+                        showRenamePreview = false
+                        busy = false
+                        status = "SFTP browse stopped; pinned session is being retired. Reconnect before browsing or transferring. No new operation started."
+                    }
+                ) { Text("Stop browsing and disconnect") }
+            }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(enabled = !busy && !peerRelayLocked, onClick = {
                         session = null
@@ -2459,45 +2498,6 @@ internal fun SftpBrowseCard(
                         "still use separate, stricter write preflights and may be blocked.",
                         style = MaterialTheme.typography.bodySmall)
                 }
-            }
-            if (browseJob != null) {
-                Button(
-                    enabled = !peerRelayLocked,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                    onClick = {
-                        // The blocked directory read may still be using this
-                        // session on IO. Never reuse that SSH channel for a
-                        // fresh command. Retire the entire authority instead.
-                        browseGeneration.incrementAndGet()
-                        browseJob?.cancel()
-                        browseJob = null
-                        session = null
-                        sessionId = ""
-                        page = null
-                        browseLimit = SftpBrowseBounds.INITIAL
-                        fileFilter = ""
-                        directFilePath = ""
-                        pendingFile = null
-                        pendingSaveWitness = null
-                        pendingUploadWitness = null
-                        pendingPeerUpload = null
-                        pendingPeerDownload = null
-                        pendingPickedUpload = null
-                        pendingMove = null
-                        pendingPeerBatch = null
-                        peerBatchSelection = SftpBatchSelection()
-                        pendingRelay = null
-                        pendingRelayBatch = null
-                        singleDeviceTarget = null
-                        singleDestinationPickerWitness = null
-                        singleDestinationGeneration++
-                        onRemoteSource(null)
-                        onRemoteBatchSource(null)
-                        showRenamePreview = false
-                        busy = false
-                        status = "SFTP browse stopped; pinned session is being retired. Reconnect before browsing or transferring. No new operation started."
-                    }
-                ) { Text("Stop browsing and disconnect") }
             }
             if (continueCopy != null) {
                 Text(transferKind + ": " + transferred + " bytes written (not verified)",
