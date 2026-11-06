@@ -93,6 +93,68 @@ class FtpsUiSmokeTest {
         }
     }
 
+    private fun pendingSecureLoginCanBeCanceled(sftp: Boolean) {
+        // Disposable loopback fixture never sends the SSH or FTP greeting.
+        // Neither client can authenticate or transmit a password.
+        val socket = java.net.ServerSocket(
+            0, 1, java.net.InetAddress.getByName("127.0.0.1"))
+        val received = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val worker = Thread {
+            try {
+                socket.accept().use {
+                    received.countDown()
+                    release.await(10L, java.util.concurrent.TimeUnit.SECONDS)
+                }
+            } catch (_: Exception) { /* synthetic server shutdown */ }
+        }
+        worker.start()
+        val prefix = if (sftp) "sftp-login-" else "ftps-login-"
+        try {
+            rule.setContent {
+                MaterialTheme {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        if (sftp) SftpBrowseCard() else FtpsBrowseCard()
+                    }
+                }
+            }
+            rule.onNodeWithTag(prefix + "host").performTextInput("127.0.0.1")
+            rule.onNodeWithTag(prefix + "port").performTextClearance()
+            rule.onNodeWithTag(prefix + "port").performTextInput(socket.localPort.toString())
+            rule.onNodeWithTag(prefix + "user").performTextInput("synthetic-user")
+            rule.onNodeWithTag(prefix + "password").performTextInput("synthetic-secret")
+            if (sftp) {
+                rule.onNodeWithTag(prefix + "pin")
+                    .performTextInput("SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+            }
+            rule.onNodeWithText("Connect securely").performScrollTo().performClick()
+            org.junit.Assert.assertTrue(
+                "Connection must reach the isolated local fixture",
+                received.await(5L, java.util.concurrent.TimeUnit.SECONDS))
+            rule.waitUntil(5_000L) {
+                rule.onAllNodesWithText("Cancel connection")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            rule.onNodeWithText("Cancel connection").performScrollTo().performClick()
+            rule.onNodeWithText(
+                if (sftp) "SFTP login canceled." else "FTPS login canceled.",
+                substring = true).assertExists()
+            rule.onNodeWithText("Connect securely").assertExists()
+            // No authenticated session: the screen must stay in login mode.
+            rule.onNodeWithTag(prefix + "password").assertExists()
+        } finally {
+            release.countDown()
+            socket.close()
+            worker.join(3000L)
+        }
+    }
+
+    @Test fun pendingFtpsLoginCancelDoesNotAuthenticateOrAdoptSocket() =
+        pendingSecureLoginCanBeCanceled(false)
+
+    @Test fun pendingSftpLoginCancelDoesNotAuthenticateOrAdoptSocket() =
+        pendingSecureLoginCanBeCanceled(true)
+
     @Test fun protocolSelectorHasStrictSecureModesAndNoAutomaticConnection() {
         rule.setContent { MaterialTheme { FtpsBrowseCard() } }
         rule.onNodeWithText("FTPS server → Save to device").assertExists()
