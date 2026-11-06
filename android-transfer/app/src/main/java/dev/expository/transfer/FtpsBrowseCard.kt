@@ -133,6 +133,7 @@ fun FtpsBrowseCard() {
     var pendingSaveWitness by remember { mutableStateOf<FtpsPickerWitness?>(null) }
     var busy by remember { mutableStateOf(false) }
     var loginJob by remember { mutableStateOf<Job?>(null) }
+    var pendingLogin by remember { mutableStateOf<RemoteSessionAcquisition<FtpsSession>?>(null) }
     var browseJob by remember { mutableStateOf<Job?>(null) }
     var transferred by remember { mutableLongStateOf(0L) }
     var continueCopy by remember { mutableStateOf<AtomicBoolean?>(null) }
@@ -140,6 +141,12 @@ fun FtpsBrowseCard() {
         mutableStateOf("FTPS requires a trusted TLS certificate and encrypted data channel. No plaintext fallback.")
     }
 
+    // Screen disposal must retire a blocked initial directory read without
+    // awaiting a canceled coroutine's blocking IO work.
+    DisposableEffect(pendingLogin) {
+        val current = pendingLogin
+        onDispose { current?.abandon() }
+    }
     val owned = session
     DisposableEffect(owned) {
         onDispose { RemoteSessionRetirement.retire(owned) }
@@ -432,6 +439,7 @@ fun FtpsBrowseCard() {
                         busy = true
                         status = "Validating TLS control and protected data connection…"
                         val acquisition = RemoteSessionAcquisition<FtpsSession>()
+                        pendingLogin = acquisition
                         loginJob = scope.launch {
                             try {
                             val result = withContext(Dispatchers.IO) {
@@ -457,6 +465,7 @@ fun FtpsBrowseCard() {
                             }
                             result.onSuccess { (live, listing) ->
                                 if (!acquisition.adopt(live)) return@onSuccess
+                                if (pendingLogin === acquisition) pendingLogin = null
                                 session = live
                                 directFilePath = ""
                                 sessionId = UUID.randomUUID().toString()
@@ -483,6 +492,7 @@ fun FtpsBrowseCard() {
                                 // worker's finally. Clear captured credentials here too.
                                 secret.fill('\u0000')
                                 acquisition.abandon()
+                                if (pendingLogin === acquisition) pendingLogin = null
                                 if (loginJob === coroutineContext[Job]) loginJob = null
                             }
                         }
@@ -490,6 +500,10 @@ fun FtpsBrowseCard() {
                 if (loginJob != null) {
                     Button(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                         onClick = {
+                            // Do not wait for a blocked withContext(IO) to
+                            // return before closing the authenticated socket.
+                            pendingLogin?.abandon()
+                            pendingLogin = null
                             loginJob?.cancel()
                             loginJob = null
                             busy = false
