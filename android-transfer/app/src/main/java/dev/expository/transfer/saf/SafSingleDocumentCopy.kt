@@ -89,6 +89,26 @@ class SafSingleDocumentCopy(private val resolver: ContentResolver,
                 DestinationWitness.SAF_NEW_DOCUMENT_PICKER)), checkedAt)
     }
 
+    /**
+     * ACTION_CREATE_DOCUMENT-specific, one-shot Save As entry point.
+     * Existing reviewed SAF operations may have their own separately
+     * validated grant/authority and continue to use copy(); a system-picked
+     * new document MUST pass its original result flags here instead of
+     * inferring write access from the URI.
+     *
+     * A refused grant returns BLOCKED before provider observation, journal,
+     * stream or progress/cancellation callbacks.
+     */
+    fun copyPickedDocument(
+        source: Uri, destination: Uri, pickerResultFlags: Int,
+        continueRequested: () -> Boolean,
+        onProgress: (Long) -> Unit = {}
+    ): CopyReceipt {
+        if (!SafCreatedDocumentWriteGrant.accepts(destination, pickerResultFlags))
+            return CopyReceipt("", CopyProof.BLOCKED, 0L, "PICKER_WRITE_GRANT_UNPROVEN")
+        return copy(source, destination, continueRequested, onProgress)
+    }
+
     fun copy(
         source: Uri, destination: Uri,
         continueRequested: () -> Boolean,
