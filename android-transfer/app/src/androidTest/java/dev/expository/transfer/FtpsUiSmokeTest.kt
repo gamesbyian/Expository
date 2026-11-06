@@ -462,12 +462,14 @@ class FtpsUiSmokeTest {
     @Test fun pendingSftpLoginCancelDoesNotAuthenticateOrAdoptSocket() =
         pendingSftpLoginCanBeCanceledAgainstPinnedLoopback()
 
-    @Test fun implicitFtpsRejectsRuntimeGeneratedUntrustedTlsCertificate() {
+    @Test(timeout = 90_000L)
+    fun implicitFtpsRejectsRuntimeGeneratedUntrustedTlsCertificate() {
         // Real TLS handshake on loopback. Generate a short-lived test-only
         // identity in AndroidKeyStore at runtime; no certificate, private key,
         // credential or endpoint is checked into the repository or artifacts.
         val alias = "ftps-test-untrusted-" + UUID.randomUUID()
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        try {
         val now = System.currentTimeMillis()
         val generator = KeyPairGenerator.getInstance("RSA", "AndroidKeyStore")
         generator.initialize(
@@ -487,8 +489,29 @@ class FtpsUiSmokeTest {
             KeyManagerFactory.getDefaultAlgorithm()).apply {
             init(store, null)
         }
+        val original = keyManagers.keyManagers.filterIsInstance<javax.net.ssl.X509KeyManager>()
+            .first()
+        val certificateChosen = java.util.concurrent.atomic.AtomicBoolean(false)
+        val tracked = object : javax.net.ssl.X509KeyManager {
+            override fun getClientAliases(type: String?, issuers: Array<java.security.Principal>?) =
+                original.getClientAliases(type, issuers)
+            override fun chooseClientAlias(types: Array<String>?,
+                issuers: Array<java.security.Principal>?, socket: java.net.Socket?) =
+                original.chooseClientAlias(types, issuers, socket)
+            override fun getServerAliases(type: String?, issuers: Array<java.security.Principal>?) =
+                original.getServerAliases(type, issuers)
+            override fun chooseServerAlias(type: String?, issuers: Array<java.security.Principal>?,
+                socket: java.net.Socket?) =
+                original.chooseServerAlias(type, issuers, socket).also { selected ->
+                    if (selected != null) certificateChosen.set(true)
+                }
+            override fun getCertificateChain(name: String?) =
+                original.getCertificateChain(name)
+            override fun getPrivateKey(name: String?) =
+                original.getPrivateKey(name)
+        }
         val tls = SSLContext.getInstance("TLS").apply {
-            init(keyManagers.keyManagers, null, null)
+            init(arrayOf(tracked), null, null)
         }
         val socket = (tls.serverSocketFactory.createServerSocket(
             0, 1, java.net.InetAddress.getByName("127.0.0.1"))
@@ -531,6 +554,9 @@ class FtpsUiSmokeTest {
                 rule.onAllNodesWithText("FTPS connection or listing failed",
                     substring = true).fetchSemanticsNodes().isNotEmpty()
             }
+            org.junit.Assert.assertTrue(
+                "Fixture must present a selected certificate, not merely fail TLS setup",
+                certificateChosen.get())
             org.junit.Assert.assertFalse(
                 "Self-signed unknown TLS identity must not authenticate",
                 serverAuthenticated.get())
@@ -539,6 +565,8 @@ class FtpsUiSmokeTest {
         } finally {
             socket.close()
             server.join(2500L)
+        }
+        } finally {
             store.deleteEntry(alias)
         }
     }
