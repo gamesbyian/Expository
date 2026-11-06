@@ -442,9 +442,19 @@ object SmartMergePreviewPlanner {
                     }
                     siblings[key] = kind
                     val mapped = parentTarget + name
-                    val frozen = entry.source.copy(parent = entry.source.parent.toList(),
+                    // The public preview must not retain mutable alias
+                    // paths from a caller-supplied recursive inventory. A
+                    // Kotlin .toList() of 2+ elements may be backed by a
+                    // mutable ArrayList, even though the API type is List.
+                    // Freeze both source paths just like mapped paths and
+                    // capability snapshots, so later UI/caller mutation
+                    // cannot silently change review contents after hashing.
+                    val frozen = entry.source.copy(
+                        parent = Collections.unmodifiableList(
+                            entry.source.parent.toList()),
                         location = entry.source.location.copy(
-                            folder = entry.source.location.folder.toList(),
+                            folder = Collections.unmodifiableList(
+                                entry.source.location.folder.toList()),
                             capabilities = Collections.unmodifiableMap(
                                 entry.source.location.capabilities.toMap())))
                     planned += SmartMergePreviewEntry(index, frozen,
