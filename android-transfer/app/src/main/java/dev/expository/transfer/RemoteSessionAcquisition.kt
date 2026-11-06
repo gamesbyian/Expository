@@ -18,15 +18,21 @@ internal class RemoteSessionAcquisition<T : AutoCloseable> {
     private val lock = Any()
     private var abandoned = false
     private var adopted = false
+    private var adoptedSession: T? = null
     private var pending: T? = null
 
     /** Called immediately after the worker has fully prepared the session. */
     fun offer(candidate: T) {
         val reject = synchronized(lock) {
-            if (abandoned || adopted || pending != null) true
-            else {
-                pending = candidate
-                false
+            when {
+                // A duplicate callback for the same object must not close
+                // a connection the UI already owns or can still adopt.
+                adoptedSession === candidate || pending === candidate -> false
+                abandoned || adopted || pending != null -> true
+                else -> {
+                    pending = candidate
+                    false
+                }
             }
         }
         if (reject) RemoteSessionRetirement.retire(candidate)
@@ -38,6 +44,7 @@ internal class RemoteSessionAcquisition<T : AutoCloseable> {
         else {
             pending = null
             adopted = true
+            adoptedSession = candidate
             true
         }
     }
