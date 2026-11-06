@@ -48,6 +48,25 @@ import java.util.Comparator
  */
 @RunWith(AndroidJUnit4::class)
 class SftpRelayAndroidLoopbackTest {
+    @Test fun singleSaveAsWitnessBindsFileSessionAndReviewedRevision() {
+        val reviewed = SftpSaveAsWitness(
+            "pinned-sftp-session", "/docs", "/docs/episode.mkv", "42:123456:false")
+        assertTrue(reviewed.matches(
+            "pinned-sftp-session", "/docs", "/docs/episode.mkv"))
+        assertFalse(reviewed.matches(
+            "replacement-session", "/docs", "/docs/episode.mkv"))
+        assertFalse(reviewed.matches(
+            "pinned-sftp-session", "/music", "/docs/episode.mkv"))
+        assertFalse(reviewed.matches(
+            "pinned-sftp-session", "/docs", "/docs/episode-new.mkv"))
+        assertFalse(reviewed.copy(revision = "").matches(
+            "pinned-sftp-session", "/docs", "/docs/episode.mkv"))
+        assertFalse(reviewed.copy(sessionId = "").matches(
+            "", "/docs", "/docs/episode.mkv"))
+        assertFalse(reviewed.copy(file = "").matches(
+            "pinned-sftp-session", "/docs", ""))
+    }
+
     @Test fun twoPinnedAndroidSessionsRelayBytesAndPreserveOriginal() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val root = Files.createTempDirectory(context.cacheDir.toPath(), "relay-e2-")
@@ -109,6 +128,28 @@ class SftpRelayAndroidLoopbackTest {
                         relay.prepare(request) == null)
                     assertTrue("Source version changes invalidate review",
                         relay.prepare(request.copy(sourceRevision = "stale")) == null)
+                    // A one-file Android Save As launched from the
+                    // previously observed SFTP listing must refuse a
+                    // changed revision BEFORE journal, resolver or streams.
+                    // The fake content URI is intentionally providerless:
+                    // any attempt to open it would be a test failure.
+                    val blocked = dev.expository.transfer.sftp.SftpToSafSave(
+                        context.contentResolver) { _ ->
+                            error("STALE_SFTP_SOURCE_MUST_NOT_CREATE_JOURNAL")
+                    }.copy(
+                        source, "android-e2-source-session",
+                        "/synthetic-source.bin",
+                        Uri.parse("content://unregistered.review.target/document/no-write"),
+                        pickerResultFlags =
+                            android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                        expectedSourceRevision = observation.revision + "-stale",
+                        continueRequested = { error("STALE_SOURCE_MUST_NOT_STREAM") })
+                    assertEquals(CopyProof.BLOCKED, blocked.proof)
+                    assertEquals("REVIEWED_SFTP_SOURCE_CHANGED", blocked.reason)
+                    assertEquals(0L, blocked.bytesWritten)
+                    assertArrayEquals(bytes,
+                        Files.readAllBytes(root.resolve("synthetic-source.bin")))
+
                 }
             }
         } finally {
