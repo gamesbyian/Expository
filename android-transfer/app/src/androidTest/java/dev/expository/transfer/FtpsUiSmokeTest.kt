@@ -50,7 +50,7 @@ class FtpsUiSmokeTest {
             try {
                 listener.accept().use {
                     accepted.countDown()
-                    release.await(10L, java.util.concurrent.TimeUnit.SECONDS)
+                    release.await(25L, java.util.concurrent.TimeUnit.SECONDS)
                 }
             } catch (_: Exception) { /* test fixture shutdown */ }
         }
@@ -128,9 +128,17 @@ class FtpsUiSmokeTest {
                     .performTextInput("SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
             }
             rule.onNodeWithText("Connect securely").performScrollTo().performClick()
+            // First MINA SSH client startup can initialize providers before
+            // the TCP connect is scheduled. Do not mistake cold startup for
+            // failure while the authenticated socket is still pending.
+            val reached = received.await(
+                if (sftp) 12L else 5L, java.util.concurrent.TimeUnit.SECONDS)
+            val rejected = rule.onAllNodesWithText(
+                "Connection rejected.", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
             org.junit.Assert.assertTrue(
-                "Connection must reach the isolated local fixture",
-                received.await(5L, java.util.concurrent.TimeUnit.SECONDS))
+                "Isolated socket not reached (secure login rejected early: $rejected)",
+                reached)
             rule.waitUntil(5_000L) {
                 rule.onAllNodesWithText("Cancel connection")
                     .fetchSemanticsNodes().isNotEmpty()
