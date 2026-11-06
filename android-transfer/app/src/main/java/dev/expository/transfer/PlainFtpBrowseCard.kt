@@ -36,8 +36,10 @@ import dev.expository.transfer.ftps.PlainFtp
 import dev.expository.transfer.ftps.PlainFtpSession
 import dev.expository.transfer.ftps.PlainFtpTarget
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 
 /**
  * Opt-in insecure FTP is intentionally browse-only. FTP credentials and
@@ -61,6 +63,7 @@ internal fun PlainFtpBrowseCard() {
     var sortMode by remember { mutableStateOf(FtpsFolderSort.NAME) }
     var descending by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    var loginJob by remember { mutableStateOf<Job?>(null) }
     var status by remember {
         mutableStateOf("Plain FTP is insecure. Prefer pinned SFTP or certificate-validated FTPS.")
     }
@@ -153,7 +156,7 @@ internal fun PlainFtpBrowseCard() {
                         busy = true
                         status = "Connecting by explicitly approved unencrypted FTP…"
                         val acquisition = RemoteSessionAcquisition<PlainFtpSession>()
-                        scope.launch {
+                        loginJob = scope.launch {
                             try {
                             val result = withContext(Dispatchers.IO) {
                                 try {
@@ -186,10 +189,20 @@ internal fun PlainFtpBrowseCard() {
                             busy = false
                             } finally {
                                 acquisition.abandon()
+                                if (loginJob === coroutineContext[Job]) loginJob = null
                             }
                         }
                     }
                 ) { Text(if (busy) "Connecting…" else "Connect insecurely") }
+                if (loginJob != null) {
+                    Button(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        onClick = {
+                            loginJob?.cancel()
+                            loginJob = null
+                            busy = false
+                            status = "FTP login canceled. A late socket will be closed; no transfer attempted."
+                        }) { Text("Cancel connection") }
+                }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
