@@ -199,6 +199,35 @@ class LocalPickerCancelSmokeTest {
         org.junit.Assert.assertFalse(readablePickedSource(unscoped, read))
         org.junit.Assert.assertFalse(readablePickedSource(missingAuthority, read))
         org.junit.Assert.assertFalse(readablePickedSource(null, read))
+        // Source READ and destination WRITE are independently issued grants.
+        // A selected content URI with only READ cannot start Save As.
+        val destination = android.net.Uri.parse(
+            "content://synthetic.destination/document/created")
+        val gate = dev.expository.transfer.saf.SafCreatedDocumentWriteGrant
+        assertTrue(gate.accepts(destination, write))
+        assertTrue(gate.accepts(destination, read or write))
+        org.junit.Assert.assertFalse(gate.accepts(destination, read))
+        org.junit.Assert.assertFalse(gate.accepts(destination, 0))
+        org.junit.Assert.assertFalse(gate.accepts(null, write))
+        org.junit.Assert.assertFalse(gate.accepts(unscoped, write))
+        org.junit.Assert.assertFalse(gate.accepts(missingAuthority, write))
+        val provider = InstrumentationRegistry.getInstrumentation().targetContext
+            .contentResolver
+        val saver = dev.expository.transfer.saf.SafSingleDocumentCopy(provider)
+        var callbackInvoked = false
+        val rejected = saver.copyPickedDocument(good, destination,
+            pickerResultFlags = read,
+            continueRequested = {
+                callbackInvoked = true
+                true
+            })
+        org.junit.Assert.assertEquals(
+            dev.expository.transfer.engine.CopyProof.BLOCKED, rejected.proof)
+        org.junit.Assert.assertEquals("PICKER_WRITE_GRANT_UNPROVEN", rejected.reason)
+        org.junit.Assert.assertEquals(0L, rejected.bytesWritten)
+        org.junit.Assert.assertFalse(
+            "A missing destination WRITE grant must block before any callbacks",
+            callbackInvoked)
         // No picker grant alone can turn an arbitrary URI into a selected
         // source; the production callback also waits for fresh observation.
     }
