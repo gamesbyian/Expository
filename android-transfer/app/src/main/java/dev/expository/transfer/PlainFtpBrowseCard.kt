@@ -172,14 +172,12 @@ internal fun PlainFtpBrowseCard() {
                                         val live = PlainFtp.connect(
                                             PlainFtpTarget(chosenHost, chosenPort),
                                             chosenUser, secret, explicitlyApproved = approved)
-                                        try {
-                                            val listing = live.browseReadOnly(checkedRoot)
-                                            acquisition.offer(live)
-                                            live to listing
-                                        } catch (failure: Exception) {
-                                            live.close()
-                                            throw failure
-                                        }
+                                        // Register immediately: cancellation must close
+                                        // an authenticated socket even when the FIRST
+                                        // directory command stalls indefinitely.
+                                        acquisition.offer(live)
+                                        val listing = live.browseReadOnly(checkedRoot)
+                                        live to listing
                                     }
                                 } finally { secret.fill('\u0000') }
                             }
