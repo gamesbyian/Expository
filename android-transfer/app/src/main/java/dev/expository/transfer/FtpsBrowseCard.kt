@@ -614,7 +614,7 @@ fun FtpsBrowseCard() {
                         fileFilter = ""
                         browseLimit = FtpsBrowseBounds.INITIAL
                         busy = false
-                        status = "FTPS browse stopped; secure session closed. Reconnect before browsing or Save As. No copy started."
+                        status = "FTPS browse stopped; secure session is being retired. Reconnect before browsing or Save As. No copy started."
                     }) { Text("Stop browsing and disconnect") }
             }
             if (continueCopy != null) {
