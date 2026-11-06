@@ -215,6 +215,7 @@ internal fun SftpBrowseCard(
     var status by remember { mutableStateOf("Enter a known SHA-256 SSH host-key fingerprint. Unknown keys are never trusted automatically.") }
     var busy by remember { mutableStateOf(false) }
     var loginJob by remember { mutableStateOf<Job?>(null) }
+    var pendingLogin by remember { mutableStateOf<RemoteSessionAcquisition<SftpSession>?>(null) }
     var browseJob by remember { mutableStateOf<Job?>(null) }
     val peerRelayLocked = session != null && sessionId.isNotBlank() &&
         peerRelaySourceId == sessionId
@@ -251,6 +252,10 @@ internal fun SftpBrowseCard(
 
 
     val ownedSession = session
+    DisposableEffect(pendingLogin) {
+        val current = pendingLogin
+        onDispose { current?.abandon() }
+    }
     DisposableEffect(ownedSession) {
         onDispose { RemoteSessionRetirement.retire(ownedSession) }
     }
@@ -1683,6 +1688,7 @@ internal fun SftpBrowseCard(
                         busy = true
                         status = "Connecting with strict host-key verification…"
                         val acquisition = RemoteSessionAcquisition<SftpSession>()
+                        pendingLogin = acquisition
                         loginJob = scope.launch {
                             try {
                             val result = withContext(Dispatchers.IO) {
@@ -1704,6 +1710,7 @@ internal fun SftpBrowseCard(
                             }
                             result.onSuccess { (live, directory) ->
                                 if (!acquisition.adopt(live)) return@onSuccess
+                                if (pendingLogin === acquisition) pendingLogin = null
                                 session = live
                                 directFilePath = ""
                                 sessionId = UUID.randomUUID().toString()
@@ -1731,6 +1738,7 @@ internal fun SftpBrowseCard(
                                 // worker's finally. Clear captured credentials here too.
                                 secret.fill('\u0000')
                                 acquisition.abandon()
+                                if (pendingLogin === acquisition) pendingLogin = null
                                 if (loginJob === coroutineContext[Job]) loginJob = null
                             }
                         }
@@ -1738,6 +1746,10 @@ internal fun SftpBrowseCard(
                 if (loginJob != null) {
                     Button(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                         onClick = {
+                            // Do not wait for a blocked withContext(IO) to
+                            // return before closing the authenticated socket.
+                            pendingLogin?.abandon()
+                            pendingLogin = null
                             loginJob?.cancel()
                             loginJob = null
                             busy = false
