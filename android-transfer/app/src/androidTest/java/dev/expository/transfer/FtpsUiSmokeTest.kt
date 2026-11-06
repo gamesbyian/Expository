@@ -70,6 +70,52 @@ class FtpsUiSmokeTest {
             "One retired session is closed once", 1, count.get())
     }
 
+    @Test fun canceledConnectionLeaseClosesOrphansWithoutAdoptingThem() {
+        fun disposable(
+            closed: java.util.concurrent.atomic.AtomicInteger,
+            latch: java.util.concurrent.CountDownLatch
+        ) = AutoCloseable {
+            closed.incrementAndGet()
+            latch.countDown()
+        }
+        val earlyCount = java.util.concurrent.atomic.AtomicInteger(0)
+        val earlyDone = java.util.concurrent.CountDownLatch(1)
+        val early = disposable(earlyCount, earlyDone)
+        val first = RemoteSessionAcquisition<AutoCloseable>()
+        first.offer(early)
+        first.abandon()
+        first.abandon()
+        org.junit.Assert.assertFalse("Cancelled UI cannot adopt old login",
+            first.adopt(early))
+        org.junit.Assert.assertTrue(
+            earlyDone.await(10L, java.util.concurrent.TimeUnit.SECONDS))
+        org.junit.Assert.assertEquals(1, earlyCount.get())
+
+        val lateCount = java.util.concurrent.atomic.AtomicInteger(0)
+        val lateDone = java.util.concurrent.CountDownLatch(1)
+        val late = disposable(lateCount, lateDone)
+        val second = RemoteSessionAcquisition<AutoCloseable>()
+        second.abandon()
+        second.offer(late) // IO finished after UI cancellation.
+        org.junit.Assert.assertFalse(second.adopt(late))
+        org.junit.Assert.assertTrue(
+            lateDone.await(10L, java.util.concurrent.TimeUnit.SECONDS))
+        org.junit.Assert.assertEquals(1, lateCount.get())
+
+        val adoptedCount = java.util.concurrent.atomic.AtomicInteger(0)
+        val adoptedDone = java.util.concurrent.CountDownLatch(1)
+        val adopted = disposable(adoptedCount, adoptedDone)
+        val third = RemoteSessionAcquisition<AutoCloseable>()
+        third.offer(adopted)
+        org.junit.Assert.assertTrue(third.adopt(adopted))
+        third.abandon() // UI now owns this; only later disposal may close.
+        org.junit.Assert.assertEquals(0, adoptedCount.get())
+        RemoteSessionRetirement.retire(adopted)
+        org.junit.Assert.assertTrue(
+            adoptedDone.await(10L, java.util.concurrent.TimeUnit.SECONDS))
+        org.junit.Assert.assertEquals(1, adoptedCount.get())
+    }
+
     @Test fun saveAsCannotTreatReadableOrInvalidUriAsWriteGranted() {
         val gate = dev.expository.transfer.ftps.FtpsToSafSave
         val document = android.net.Uri.parse(

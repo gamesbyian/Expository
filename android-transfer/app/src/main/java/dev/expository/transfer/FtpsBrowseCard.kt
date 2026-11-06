@@ -419,7 +419,9 @@ fun FtpsBrowseCard() {
                         password = ""
                         busy = true
                         status = "Validating TLS control and protected data connection…"
+                        val acquisition = RemoteSessionAcquisition<FtpsSession>()
                         scope.launch {
+                            try {
                             val result = withContext(Dispatchers.IO) {
                                 try {
                                     runCatching {
@@ -437,6 +439,7 @@ fun FtpsBrowseCard() {
                                                         throw error
                                                     null
                                                 }
+                                            acquisition.offer(live)
                                             live to listing
                                         } catch (error: Exception) {
                                             live.close()
@@ -446,6 +449,7 @@ fun FtpsBrowseCard() {
                                 } finally { secret.fill('\u0000') }
                             }
                             result.onSuccess { (live, listing) ->
+                                if (!acquisition.adopt(live)) return@onSuccess
                                 session = live
                                 directFilePath = ""
                                 sessionId = UUID.randomUUID().toString()
@@ -467,6 +471,9 @@ fun FtpsBrowseCard() {
                                 status = "FTPS connection or listing failed. Check TLS certificate, credentials, port and server permissions."
                             }
                             busy = false
+                            } finally {
+                                acquisition.abandon()
+                            }
                         }
                     }) { Text(if (busy) "Connecting…" else "Connect securely") }
             } else {
