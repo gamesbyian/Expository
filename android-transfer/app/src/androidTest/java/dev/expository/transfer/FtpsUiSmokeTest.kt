@@ -18,6 +18,18 @@ import org.junit.runner.RunWith
 class FtpsUiSmokeTest {
     @get:Rule val rule = createComposeRule()
 
+    @Test fun explicitlyInsecureFtpRemainsReadOnlyAndRequiresOptIn() {
+        rule.setContent { MaterialTheme { PlainFtpBrowseCard() } }
+        rule.onNodeWithText("Plain FTP is insecure", substring = true).assertExists()
+        rule.onNodeWithText("cannot download, upload, rename, move or delete files",
+            substring = true).assertExists()
+        rule.onNodeWithText("I accept plaintext credential exposure (required)")
+            .assertExists()
+        // No session or network attempt is created just by composing this UI.
+        rule.onNodeWithText("FTP host").assertExists()
+        rule.onNodeWithText("Connect insecurely").assertExists()
+    }
+
     @Test fun protocolSelectorHasStrictSecureModesAndNoAutomaticConnection() {
         rule.setContent { MaterialTheme { FtpsBrowseCard() } }
         rule.onNodeWithText("FTPS server → Save to device").assertExists()
