@@ -139,7 +139,7 @@ fun FtpsBrowseCard() {
 
     val owned = session
     DisposableEffect(owned) {
-        onDispose { owned?.close() }
+        onDispose { RemoteSessionRetirement.retire(owned) }
     }
 
     val saveAs = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->

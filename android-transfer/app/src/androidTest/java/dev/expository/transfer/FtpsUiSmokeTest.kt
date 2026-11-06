@@ -33,6 +33,31 @@ class FtpsUiSmokeTest {
         rule.onNodeWithText("FTPS requires a trusted TLS certificate", substring = true)
             .assertExists()
     }
+    @Test fun retiredSecureSessionNeverBlocksComposeMainThread() {
+        val started = java.util.concurrent.CountDownLatch(1)
+        val wasMain = java.util.concurrent.atomic.AtomicBoolean(true)
+        val count = java.util.concurrent.atomic.AtomicInteger(0)
+        val disposable = AutoCloseable {
+            wasMain.set(android.os.Looper.myLooper() ==
+                android.os.Looper.getMainLooper())
+            count.incrementAndGet()
+            started.countDown()
+        }
+        androidx.test.platform.app.InstrumentationRegistry
+            .getInstrumentation().runOnMainSync {
+                RemoteSessionRetirement.retire(null)
+                RemoteSessionRetirement.retire(disposable)
+            }
+        org.junit.Assert.assertTrue(
+            "A retired session must be closed promptly by IO cleanup",
+            started.await(10L, java.util.concurrent.TimeUnit.SECONDS))
+        org.junit.Assert.assertFalse(
+            "Network logout/socket shutdown must never run on Compose main",
+            wasMain.get())
+        org.junit.Assert.assertEquals(
+            "One retired session is closed once", 1, count.get())
+    }
+
     @Test fun saveAsCannotTreatReadableOrInvalidUriAsWriteGranted() {
         val gate = dev.expository.transfer.ftps.FtpsToSafSave
         val document = android.net.Uri.parse(
