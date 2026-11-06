@@ -164,12 +164,8 @@ class SftpSaveAsRealPickerUiTest {
                 .performSemanticsAction(SemanticsActions.OnClick)
             val pickerOpened = pickerVisible()
             if (!pickerOpened) {
-                val renderedState = runCatching {
-                    compose.onRoot(useUnmergedTree = true).printToString().take(1800)
-                }.getOrDefault("semantics unavailable")
                 error("Android Create Document picker missing; foreground=" +
-                    (device.currentPackageName ?: "none") +
-                    " ; app-state=" + renderedState)
+                    (device.currentPackageName ?: "none"))
             }
             // Navigate to a disposable Downloads document and use a unique
             // target name to guarantee no existing file can be replaced.
