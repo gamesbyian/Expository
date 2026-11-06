@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodes
@@ -110,6 +111,22 @@ class SftpSaveAsRealPickerUiTest {
             error("EXPECTED_SYSTEM_PICKER_CONTROL_MISSING")
         }
 
+        fun replaceCreateDocumentName() {
+            repeat(5) {
+                val field = device.wait(
+                    Until.findObject(By.clazz("android.widget.EditText")), 3_000L)
+                if (field != null) {
+                    try {
+                        field.text = outputName
+                        return
+                    } catch (_: StaleObjectException) {
+                        device.waitForIdle(300L)
+                    }
+                }
+            }
+            error("SYNTHETIC_SFTP_CREATE_DOCUMENT_NAME_FIELD_MISSING")
+        }
+
         try {
             server.start()
             val verifiedBefore = AttemptRecoveryIndex.recover(context).verifiedReceipts
@@ -150,18 +167,7 @@ class SftpSaveAsRealPickerUiTest {
                 ?: device.findObject(By.descContains("navigation")))?.click()
             if (device.wait(Until.hasObject(By.text("Downloads")), 8_000L))
                 clickText("Downloads")
-            repeat(5) {
-                val field = device.wait(
-                    Until.findObject(By.clazz("android.widget.EditText")), 3_000L)
-                if (field != null) {
-                    try {
-                        field.text = outputName
-                        return@repeat
-                    } catch (_: StaleObjectException) {
-                        device.waitForIdle(300L)
-                    }
-                }
-            }
+            replaceCreateDocumentName()
             val saveLabel = if (device.wait(Until.hasObject(By.text("Save")), 5_000L))
                 "Save" else "SAVE"
             clickText(saveLabel)
