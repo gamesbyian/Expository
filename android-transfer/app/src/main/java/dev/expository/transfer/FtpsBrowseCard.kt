@@ -131,6 +131,7 @@ fun FtpsBrowseCard() {
     var pendingFile by remember { mutableStateOf<String?>(null) }
     var pendingSaveWitness by remember { mutableStateOf<FtpsPickerWitness?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var loginJob by remember { mutableStateOf<Job?>(null) }
     var transferred by remember { mutableLongStateOf(0L) }
     var continueCopy by remember { mutableStateOf<AtomicBoolean?>(null) }
     var status by remember {
@@ -420,7 +421,7 @@ fun FtpsBrowseCard() {
                         busy = true
                         status = "Validating TLS control and protected data connection…"
                         val acquisition = RemoteSessionAcquisition<FtpsSession>()
-                        scope.launch {
+                        loginJob = scope.launch {
                             try {
                             val result = withContext(Dispatchers.IO) {
                                 try {
@@ -472,10 +473,23 @@ fun FtpsBrowseCard() {
                             }
                             busy = false
                             } finally {
+                                // Cancellation before IO dispatch never enters the
+                                // worker's finally. Clear captured credentials here too.
+                                secret.fill('\u0000')
                                 acquisition.abandon()
+                                if (loginJob === coroutineContext[Job]) loginJob = null
                             }
                         }
                     }) { Text(if (busy) "Connecting…" else "Connect securely") }
+                if (loginJob != null) {
+                    Button(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        onClick = {
+                            loginJob?.cancel()
+                            loginJob = null
+                            busy = false
+                            status = "FTPS login canceled. Any late TLS session will be retired."
+                        }) { Text("Cancel connection") }
+                }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(enabled = !busy, onClick = {

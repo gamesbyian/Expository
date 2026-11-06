@@ -214,6 +214,7 @@ internal fun SftpBrowseCard(
     var showRenamePreview by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Enter a known SHA-256 SSH host-key fingerprint. Unknown keys are never trusted automatically.") }
     var busy by remember { mutableStateOf(false) }
+    var loginJob by remember { mutableStateOf<Job?>(null) }
     val peerRelayLocked = session != null && sessionId.isNotBlank() &&
         peerRelaySourceId == sessionId
     var transferred by remember { mutableLongStateOf(0L) }
@@ -1669,7 +1670,7 @@ internal fun SftpBrowseCard(
                         busy = true
                         status = "Connecting with strict host-key verification…"
                         val acquisition = RemoteSessionAcquisition<SftpSession>()
-                        scope.launch {
+                        loginJob = scope.launch {
                             try {
                             val result = withContext(Dispatchers.IO) {
                                 try {
@@ -1714,10 +1715,23 @@ internal fun SftpBrowseCard(
                             }
                             busy = false
                             } finally {
+                                // Cancellation before IO dispatch never enters the
+                                // worker's finally. Clear captured credentials here too.
+                                secret.fill('\u0000')
                                 acquisition.abandon()
+                                if (loginJob === coroutineContext[Job]) loginJob = null
                             }
                         }
                     }) { Text(if (busy) "Connecting…" else "Connect securely") }
+                if (loginJob != null) {
+                    Button(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        onClick = {
+                            loginJob?.cancel()
+                            loginJob = null
+                            busy = false
+                            status = "SFTP login canceled. Any late pinned session will be retired."
+                        }) { Text("Cancel connection") }
+                }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(enabled = !busy && !peerRelayLocked, onClick = {

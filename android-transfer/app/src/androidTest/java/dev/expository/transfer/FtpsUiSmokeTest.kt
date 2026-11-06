@@ -1,7 +1,16 @@
 package dev.expository.transfer
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -28,6 +37,60 @@ class FtpsUiSmokeTest {
         // No session or network attempt is created just by composing this UI.
         rule.onNodeWithText("FTP host").assertExists()
         rule.onNodeWithText("Connect insecurely").assertExists()
+    }
+
+    @Test fun plainFtpPendingLoginCanBeCanceledWhileSocketWaitsForGreeting() {
+        // Disposable localhost socket never sends an FTP greeting, so no
+        // username/password is transmitted and connection remains pending.
+        val listener = java.net.ServerSocket(
+            0, 1, java.net.InetAddress.getByName("127.0.0.1"))
+        val accepted = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val server = Thread {
+            try {
+                listener.accept().use {
+                    accepted.countDown()
+                    release.await(10L, java.util.concurrent.TimeUnit.SECONDS)
+                }
+            } catch (_: Exception) { /* test fixture shutdown */ }
+        }
+        server.start()
+        try {
+            rule.setContent {
+                MaterialTheme {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        PlainFtpBrowseCard()
+                    }
+                }
+            }
+            rule.onNodeWithTag("plain-ftp-host").performTextInput("127.0.0.1")
+            rule.onNodeWithTag("plain-ftp-port").performTextClearance()
+            rule.onNodeWithTag("plain-ftp-port")
+                .performTextInput(listener.localPort.toString())
+            rule.onNodeWithTag("plain-ftp-user").performTextInput("synthetic-user")
+            rule.onNodeWithTag("plain-ftp-password").performTextInput("synthetic-only")
+            rule.onNodeWithText("I accept plaintext credential exposure (required)")
+                .performScrollTo().performClick()
+            rule.onNodeWithText("Connect insecurely").performScrollTo().performClick()
+            org.junit.Assert.assertTrue(
+                "An isolated localhost pending socket must be reached",
+                accepted.await(5L, java.util.concurrent.TimeUnit.SECONDS))
+            rule.waitUntil(5_000L) {
+                rule.onAllNodesWithText("Cancel connection")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            rule.onNodeWithText("Cancel connection")
+                .performScrollTo().performClick()
+            rule.onNodeWithText("FTP login canceled.", substring = true)
+                .assertExists()
+            rule.onNodeWithText("Connect insecurely").assertExists()
+            rule.onNodeWithText("I accept plaintext credential exposure (required)")
+                .assertExists()
+        } finally {
+            release.countDown()
+            listener.close()
+            server.join(3000L)
+        }
     }
 
     @Test fun protocolSelectorHasStrictSecureModesAndNoAutomaticConnection() {

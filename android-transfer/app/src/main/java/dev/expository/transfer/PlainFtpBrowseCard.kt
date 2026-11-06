@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -36,8 +37,10 @@ import dev.expository.transfer.ftps.PlainFtp
 import dev.expository.transfer.ftps.PlainFtpSession
 import dev.expository.transfer.ftps.PlainFtpTarget
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 
 /**
  * Opt-in insecure FTP is intentionally browse-only. FTP credentials and
@@ -61,6 +64,7 @@ internal fun PlainFtpBrowseCard() {
     var sortMode by remember { mutableStateOf(FtpsFolderSort.NAME) }
     var descending by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    var loginJob by remember { mutableStateOf<Job?>(null) }
     var status by remember {
         mutableStateOf("Plain FTP is insecure. Prefer pinned SFTP or certificate-validated FTPS.")
     }
@@ -114,21 +118,22 @@ internal fun PlainFtpBrowseCard() {
             if (session == null) {
                 OutlinedTextField(host, { host = it; explicitlyApproved = false },
                     label = { Text("FTP host") }, enabled = !busy, singleLine = true,
-                    modifier = Modifier.fillMaxWidth())
+                    modifier = Modifier.fillMaxWidth().testTag("plain-ftp-host"))
                 OutlinedTextField(port, { port = it; explicitlyApproved = false },
                     label = { Text("Port") }, enabled = !busy, singleLine = true,
-                    modifier = Modifier.fillMaxWidth())
+                    modifier = Modifier.fillMaxWidth().testTag("plain-ftp-port"))
                 OutlinedTextField(startFolder,
                     { startFolder = it; explicitlyApproved = false },
                     label = { Text("Starting folder (absolute path)") },
                     enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(username, { username = it; explicitlyApproved = false },
                     label = { Text("Username") }, enabled = !busy, singleLine = true,
-                    modifier = Modifier.fillMaxWidth())
+                    modifier = Modifier.fillMaxWidth().testTag("plain-ftp-user"))
                 OutlinedTextField(password, { password = it; explicitlyApproved = false },
                     label = { Text("Password (session only)") },
                     visualTransformation = PasswordVisualTransformation(),
-                    enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("plain-ftp-password"))
                 Button(enabled = !busy,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                     onClick = { explicitlyApproved = !explicitlyApproved }) {
@@ -153,7 +158,7 @@ internal fun PlainFtpBrowseCard() {
                         busy = true
                         status = "Connecting by explicitly approved unencrypted FTP…"
                         val acquisition = RemoteSessionAcquisition<PlainFtpSession>()
-                        scope.launch {
+                        loginJob = scope.launch {
                             try {
                             val result = withContext(Dispatchers.IO) {
                                 try {
@@ -185,11 +190,24 @@ internal fun PlainFtpBrowseCard() {
                             }
                             busy = false
                             } finally {
+                                // Cancellation before IO dispatch never enters the
+                                // worker's finally. Clear captured credentials here too.
+                                secret.fill('\u0000')
                                 acquisition.abandon()
+                                if (loginJob === coroutineContext[Job]) loginJob = null
                             }
                         }
                     }
                 ) { Text(if (busy) "Connecting…" else "Connect insecurely") }
+                if (loginJob != null) {
+                    Button(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        onClick = {
+                            loginJob?.cancel()
+                            loginJob = null
+                            busy = false
+                            status = "FTP login canceled. A late socket will be closed; no transfer attempted."
+                        }) { Text("Cancel connection") }
+                }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(enabled = !busy, modifier = Modifier.heightIn(min = 48.dp),
