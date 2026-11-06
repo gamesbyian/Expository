@@ -120,6 +120,20 @@ internal data class PendingPeerSftpDownload(
  * existing Save As from silently adopting a different file version while
  * the Android picker is open. Metadata equality is still not byte identity.
  */
+/** An untrusted absolute SFTP path is not yet an observed file. */
+internal data class SftpDirectFileSelection(
+    val path: String, val displayName: String
+) {
+    companion object {
+        fun checked(candidate: String): SftpDirectFileSelection? = runCatching {
+            val path = SftpPath.requireAbsolute(candidate)
+            require(path != "/") { "FILE_PATH_REQUIRED" }
+            val name = SftpPath.validateChild(path.substringAfterLast('/'))
+            SftpDirectFileSelection(path, name)
+        }.getOrNull()
+    }
+}
+
 internal data class SftpSaveAsWitness(
     val sessionId: String,
     val folder: String,
@@ -182,6 +196,7 @@ internal fun SftpBrowseCard(
     var browseLimit by remember { mutableStateOf(SftpBrowseBounds.INITIAL) }
     val browseGeneration = remember { AtomicLong(0L) }
     var fileFilter by remember { mutableStateOf("") }
+    var directFilePath by remember { mutableStateOf("") }
     var sortMode by remember { mutableStateOf(SftpFolderSort.NAME) }
     var descending by remember { mutableStateOf(false) }
     var pendingFile by remember { mutableStateOf<String?>(null) }
@@ -349,6 +364,72 @@ internal fun SftpBrowseCard(
         }
     }
 
+
+    /** One session-only checked STAT for either a listed or typed file. */
+    fun beginVerifiedSftpSaveAs(rawPath: String, reviewedRevision: String? = null) {
+        val candidate = SftpDirectFileSelection.checked(rawPath)
+        if (candidate == null) {
+            status = "Enter a valid absolute SFTP file path without traversal or controls."
+            return
+        }
+        val live = session
+        if (live == null || sessionId.isBlank() || busy || peerRelayLocked) {
+            status = "Finish the current SFTP operation or reconnect before Save As."
+            return
+        }
+        val frozenSessionId = sessionId
+        val frozenFolder = folder
+        pendingFile = null
+        pendingSaveWitness = null
+        busy = true
+        status = "Checking authenticated SFTP file metadata before Android Save As…"
+        scope.launch {
+            val observed = withContext(Dispatchers.IO) {
+                runCatching { live.statFile(candidate.path) }
+            }
+            if (session !== live || sessionId != frozenSessionId ||
+                folder != frozenFolder) {
+                if (session === live) {
+                    busy = false
+                    status = "SFTP session or folder changed. Save As canceled."
+                }
+                return@launch
+            }
+            observed.onSuccess { file ->
+                if (reviewedRevision != null &&
+                    file.revision != reviewedRevision) {
+                    busy = false
+                    status = "The SFTP file changed since the listing was observed. " +
+                        "Refresh and select it again. No Android document was created."
+                } else {
+                    pendingFile = candidate.path
+                    pendingSaveWitness = SftpSaveAsWitness(
+                        frozenSessionId, frozenFolder, candidate.path, file.revision)
+                    val extension = candidate.displayName
+                        .substringAfterLast('.', "").lowercase()
+                    val mime = MimeTypeMap.getSingleton()
+                        .getMimeTypeFromExtension(extension)
+                        ?: "application/octet-stream"
+                    try {
+                        saveAs.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = mime
+                            putExtra(Intent.EXTRA_TITLE, candidate.displayName)
+                        })
+                        status = "Choose a NEW Android document for the verified SFTP source."
+                    } catch (_: Exception) {
+                        pendingFile = null
+                        pendingSaveWitness = null
+                        busy = false
+                        status = "Android Save As picker unavailable. Nothing transferred."
+                    }
+                }
+            }.onFailure {
+                busy = false
+                status = "SFTP file metadata unavailable. No Android picker opened."
+            }
+        }
+    }
 
     /**
      * One foreground upload batch from Android's scoped file picker.
@@ -1577,6 +1658,7 @@ internal fun SftpBrowseCard(
                             }
                             result.onSuccess { (live, directory) ->
                                 session = live
+                                directFilePath = ""
                                 sessionId = UUID.randomUUID().toString()
                                 singleDestinationPickerWitness = null
                                 singleDeviceTarget = null
@@ -1603,6 +1685,7 @@ internal fun SftpBrowseCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(enabled = !busy && !peerRelayLocked, onClick = {
                         session = null
+                        directFilePath = ""
                         sessionId = ""
                         singleDestinationPickerWitness = null
                         singleDeviceTarget = null
@@ -2159,6 +2242,25 @@ internal fun SftpBrowseCard(
                         "the other pane relays files. Cancel the transfer there to stop.",
                         style = MaterialTheme.typography.bodySmall)
                 }
+                Text("Save an exact SFTP file path",
+                    style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(
+                    value = directFilePath,
+                    onValueChange = { directFilePath = it.take(4096) },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !busy && !peerRelayLocked,
+                    label = { Text("Absolute SFTP file path") },
+                    singleLine = true)
+                Button(
+                    enabled = !busy && !peerRelayLocked && session != null &&
+                        directFilePath.isNotBlank(),
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    onClick = { beginVerifiedSftpSaveAs(directFilePath) }
+                ) { Text("Verify path and Save As…") }
+                Text("For files absent from truncated listings: a typed path " +
+                    "requires authenticated SFTP STAT before the new-document " +
+                    "picker. The remote source is never modified.",
+                    style = MaterialTheme.typography.bodySmall)
                 // These controls only reorder the observed preview. Source
                 // membership, mutations and copy preflights still consult the
                 // original listing and independently refreshed server proofs.
@@ -2214,23 +2316,8 @@ internal fun SftpBrowseCard(
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Button(enabled = !busy && !peerRelayLocked, modifier = Modifier.heightIn(min = 48.dp),
                                         onClick = {
-                                            // Bind the Save As action to the
-                                            // exact observed revision, rather
-                                            // than silently accepting a file
-                                            // replaced during the OS picker.
-                                            pendingFile = path
-                                            pendingSaveWitness = SftpSaveAsWitness(
-                                                sessionId, folder, path, entry.revision)
-                                            busy = true
-                                            val extension = entry.name.substringAfterLast('.', "").lowercase()
-                                            val mime = MimeTypeMap.getSingleton()
-                                                .getMimeTypeFromExtension(extension)
-                                                ?: "application/octet-stream"
-                                            saveAs.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                                                addCategory(Intent.CATEGORY_OPENABLE)
-                                                type = mime
-                                                putExtra(Intent.EXTRA_TITLE, entry.name)
-                                            })
+                                            beginVerifiedSftpSaveAs(
+                                                path, reviewedRevision = entry.revision)
                                         }) { Text("Save As…") }
                                     if (allowRemoteSelection) {
                                         Button(enabled = !busy && !peerRelayLocked && session != null &&

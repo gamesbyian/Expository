@@ -48,6 +48,29 @@ import java.util.Comparator
  */
 @RunWith(AndroidJUnit4::class)
 class SftpRelayAndroidLoopbackTest {
+    @Test fun directSftpPathHasBoundedAndNontraversingFileIdentity() {
+        val parse = SftpDirectFileSelection.Companion
+        val valid = parse.checked("/media/Season 01/episode.mkv")
+        assertNotNull(valid)
+        assertEquals("/media/Season 01/episode.mkv", valid?.path)
+        assertEquals("episode.mkv", valid?.displayName)
+        assertEquals("Résumé.txt",
+            parse.checked("/docs/Résumé.txt")?.displayName)
+        val maxBytes = "é".repeat(127) + "x"
+        assertEquals(maxBytes, parse.checked("/" + maxBytes)?.displayName)
+        for (bad in listOf(
+            "", "media/episode.mkv", "/", "/media/", "/media//episode.mkv",
+            "/media/../episode.mkv", "/media/./episode.mkv",
+            "/media/bad\\name", "/media/bad\nname",
+            "/media/" + "é".repeat(128),
+            "/media/" + "x".repeat(256), "/" + "x".repeat(4097)
+        )) {
+            org.junit.Assert.assertNull(
+                "Malformed direct SFTP path must not reach STAT or Android",
+                parse.checked(bad))
+        }
+    }
+
     @Test fun singleSaveAsWitnessBindsFileSessionAndReviewedRevision() {
         val reviewed = SftpSaveAsWitness(
             "pinned-sftp-session", "/docs", "/docs/episode.mkv", "42:123456:false")
@@ -100,6 +123,10 @@ class SftpRelayAndroidLoopbackTest {
                 SecureSftp.connect(target, "test-account",
                     "disposable-test-secret".toCharArray()).use { destination ->
                     val observation = source.statFile("/synthetic-source.bin")
+                    val directPath = requireNotNull(SftpDirectFileSelection.checked(
+                        "/synthetic-source.bin"))
+                    assertEquals(observation.revision,
+                        source.statFile(directPath.path).revision)
                     val request = SftpRelayRequest(
                         source, "android-e2-source-session", "/",
                         "/synthetic-source.bin", observation.revision,
