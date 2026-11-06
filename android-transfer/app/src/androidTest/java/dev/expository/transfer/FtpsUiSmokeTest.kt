@@ -25,6 +25,9 @@ import org.apache.sshd.common.keyprovider.KeyPairProvider
 import org.apache.sshd.server.SshServer
 import org.apache.sshd.server.auth.password.PasswordAuthenticator
 import org.apache.sshd.sftp.server.SftpSubsystemFactory
+import org.apache.sshd.sftp.server.SftpEventListener
+import org.apache.sshd.sftp.server.DirectoryHandle
+import org.apache.sshd.server.session.ServerSession
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -478,6 +481,86 @@ class FtpsUiSmokeTest {
         org.junit.Assert.assertFalse("Operator cancellation must suppress progress",
             FtpsCopyProgressGate.belongsToActiveCopy(
                 permit, permit, sessionMatches = true, busy = true))
+    }
+
+    @Test fun stalledPinnedSftpDirectoryCanBeStoppedWithoutReusingSession() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        SftpAndroidCompat.configurePrivateHome(context.applicationContext.filesDir.toPath())
+        val root = Files.createTempDirectory(context.cacheDir.toPath(), "sftp-browse-stop-e2-")
+        val source = root.resolve("synthetic-listing.txt")
+        val bytes = ByteArray(129) { (it xor 39).toByte() }
+        Files.write(source, bytes)
+        val holdNextListing = java.util.concurrent.atomic.AtomicBoolean(false)
+        val listingHeld = java.util.concurrent.CountDownLatch(1)
+        val releaseListing = java.util.concurrent.CountDownLatch(1)
+        val observer = object : SftpEventListener {
+            override fun readingEntries(
+                session: ServerSession, remoteHandle: String,
+                localHandle: DirectoryHandle
+            ) {
+                if (holdNextListing.get()) {
+                    listingHeld.countDown()
+                    releaseListing.await(20L, java.util.concurrent.TimeUnit.SECONDS)
+                }
+            }
+        }
+        val hostKey = KeyPairGenerator.getInstance("RSA").apply {
+            initialize(2048)
+        }.generateKeyPair()
+        val server = SshServer.setUpDefaultServer().apply {
+            host = "127.0.0.1"
+            port = 0
+            keyPairProvider = KeyPairProvider.wrap(hostKey)
+            passwordAuthenticator = PasswordAuthenticator { user, password, _ ->
+                user == "synthetic-user" && password == "synthetic-only"
+            }
+            val factory = SftpSubsystemFactory.Builder().build()
+            factory.addSftpEventListener(observer)
+            subsystemFactories = listOf(factory)
+            fileSystemFactory = VirtualFileSystemFactory(root)
+        }
+        try {
+            server.start()
+            rule.setContent {
+                MaterialTheme {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        SftpBrowseCard()
+                    }
+                }
+            }
+            listOf(
+                "sftp-login-host" to "127.0.0.1",
+                "sftp-login-port" to server.port.toString(),
+                "sftp-login-user" to "synthetic-user",
+                "sftp-login-password" to "synthetic-only",
+                "sftp-login-pin" to SftpHostKeyPin.observed(hostKey.public)
+            ).forEach { (tag, value) ->
+                rule.onNodeWithTag(tag).performTextReplacement(value)
+            }
+            rule.onNodeWithText("Connect securely").performScrollTo().performClick()
+            rule.waitUntil(20_000L) {
+                rule.onAllNodesWithText("Pinned SFTP session authenticated",
+                    substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            rule.onNodeWithText("synthetic-listing.txt").assertExists()
+            holdNextListing.set(true)
+            rule.onNodeWithText("Refresh").performScrollTo().performClick()
+            org.junit.Assert.assertTrue("Authenticated read-only listing must stall",
+                listingHeld.await(8L, java.util.concurrent.TimeUnit.SECONDS))
+            rule.onNodeWithText("Stop browsing and disconnect")
+                .performScrollTo().performClick()
+            rule.onNodeWithText("SFTP browse stopped", substring = true).assertExists()
+            rule.onNodeWithText("Connect securely").assertExists()
+            rule.onNodeWithText("synthetic-listing.txt").assertDoesNotExist()
+            org.junit.Assert.assertArrayEquals(
+                "Stopping a browse must preserve remote source bytes",
+                bytes, Files.readAllBytes(source))
+        } finally {
+            releaseListing.countDown()
+            runCatching { server.stop(true) }
+            Files.deleteIfExists(source)
+            Files.deleteIfExists(root)
+        }
     }
 
     @Test fun pickerWitnessRefusesChangedSessionFolderSourceOrUnobservedRevision() {
