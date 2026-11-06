@@ -571,6 +571,133 @@ class FtpsUiSmokeTest {
         }
     }
 
+    @Test(timeout = 90_000L)
+    fun pinnedTestCertificateKeepsFtpsControlTlsWhileStalledCwdCanDisconnect() {
+        // Test-only explicit trust of EXACTLY one generated certificate.
+        // Production SecureFtps.connect continues using Android system trust;
+        // the actual positive client here is configuredClient() with a
+        // per-instance pinned test trust manager. No global trust switches.
+        val alias = "ftps-test-pinned-" + UUID.randomUUID()
+        val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        var serverSocket: SSLServerSocket? = null
+        var client: org.apache.commons.net.ftp.FTPSClient? = null
+        try {
+            val now = System.currentTimeMillis()
+            val generator = KeyPairGenerator.getInstance("RSA", "AndroidKeyStore")
+            generator.initialize(
+                KeyGenParameterSpec.Builder(alias,
+                    KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY)
+                    .setKeySize(2048)
+                    .setDigests(KeyProperties.DIGEST_SHA256)
+                    .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PKCS1)
+                    .setCertificateSubject(X500Principal("CN=localhost"))
+                    .setCertificateSerialNumber(java.math.BigInteger.valueOf(now))
+                    .setCertificateNotBefore(Date(now - 30_000L))
+                    .setCertificateNotAfter(Date(now + 120_000L))
+                    .build()
+            )
+            generator.generateKeyPair()
+            val expected = store.getCertificate(alias) as java.security.cert.X509Certificate
+            val keyManagers = KeyManagerFactory.getInstance(
+                KeyManagerFactory.getDefaultAlgorithm()).apply { init(store, null) }
+            val tls = SSLContext.getInstance("TLS").apply {
+                init(keyManagers.keyManagers, null, null)
+            }
+            val listener = (tls.serverSocketFactory.createServerSocket(
+                0, 1, java.net.InetAddress.getByName("127.0.0.1"))
+                as SSLServerSocket).apply { soTimeout = 12_000 }
+            serverSocket = listener
+            val controlReady = java.util.concurrent.CountDownLatch(1)
+            val cwdReached = java.util.concurrent.CountDownLatch(1)
+            val controlClosed = java.util.concurrent.CountDownLatch(1)
+            val sawQuit = java.util.concurrent.atomic.AtomicBoolean(false)
+            val server = Thread {
+                try {
+                    listener.accept().use { raw ->
+                        val socket = raw as javax.net.ssl.SSLSocket
+                        socket.soTimeout = 15_000
+                        socket.startHandshake()
+                        controlReady.countDown()
+                        val reader = java.io.BufferedReader(
+                            java.io.InputStreamReader(socket.getInputStream(),
+                                java.nio.charset.StandardCharsets.UTF_8))
+                        val output = socket.getOutputStream()
+                        fun reply(line: String) {
+                            output.write((line + "\r\n").toByteArray(
+                                java.nio.charset.StandardCharsets.UTF_8))
+                            output.flush()
+                        }
+                        reply("220 Synthetic pinned TLS FTP service")
+                        while (true) {
+                            val command = reader.readLine() ?: break
+                            when (command.substringBefore(' ').uppercase()) {
+                                "USER" -> reply("331 Password required")
+                                "PASS" -> reply("230 Locally authorized")
+                                "PBSZ", "PROT", "TYPE" -> reply("200 Protected operation accepted")
+                                "CWD" -> cwdReached.countDown()
+                                "QUIT" -> sawQuit.set(true)
+                                else -> reply("502 Unsupported disposable command")
+                            }
+                        }
+                    }
+                } catch (_: Exception) { /* Disconnect ends a stalled CWD */ }
+                finally { controlClosed.countDown() }
+            }
+            server.isDaemon = true
+            server.start()
+            val socketClient = dev.expository.transfer.ftps.SecureFtps.configuredClient(
+                dev.expository.transfer.ftps.FtpsMode.IMPLICIT_TLS)
+            client = socketClient
+            socketClient.setTrustManager(object : javax.net.ssl.X509TrustManager {
+                override fun checkServerTrusted(
+                    chain: Array<java.security.cert.X509Certificate>, type: String
+                ) {
+                    if (chain.size != 1 ||
+                        !java.security.MessageDigest.isEqual(
+                            chain[0].encoded, expected.encoded))
+                        throw java.security.cert.CertificateException(
+                            "TEST_ONLY_CERTIFICATE_PIN_MISMATCH")
+                }
+                override fun checkClientTrusted(
+                    chain: Array<java.security.cert.X509Certificate>, type: String
+                ) {
+                    throw java.security.cert.CertificateException(
+                        "CLIENT_CERTIFICATE_NOT_AUTHORIZED")
+                }
+                override fun getAcceptedIssuers() = arrayOf(expected)
+            })
+            org.junit.Assert.assertTrue("Production hostname policy must remain enabled",
+                socketClient.isEndpointCheckingEnabled)
+            org.junit.Assert.assertTrue("Remote verification must remain enabled",
+                socketClient.isRemoteVerificationEnabled)
+            socketClient.connect("localhost", listener.localPort)
+            org.junit.Assert.assertTrue("Pinned TLS handshake must actually complete",
+                controlReady.await(5L, java.util.concurrent.TimeUnit.SECONDS))
+            org.junit.Assert.assertTrue("Synthetic FTP account must authenticate",
+                socketClient.login("synthetic-user", "synthetic-secret"))
+            socketClient.execPBSZ(0L)
+            socketClient.execPROT("P")
+            org.junit.Assert.assertTrue("Binary mode must be established",
+                socketClient.setFileType(org.apache.commons.net.ftp.FTP.BINARY_FILE_TYPE))
+            val reader = Thread {
+                runCatching { socketClient.changeWorkingDirectory("/") }
+            }
+            reader.isDaemon = true
+            reader.start()
+            org.junit.Assert.assertTrue("First authenticated FTPS CWD must stall",
+                cwdReached.await(7L, java.util.concurrent.TimeUnit.SECONDS))
+            socketClient.disconnect() // Same transport retirement action used by FtpsSession.close.
+            org.junit.Assert.assertTrue("Retired protected control socket must close promptly",
+                controlClosed.await(6L, java.util.concurrent.TimeUnit.SECONDS))
+            org.junit.Assert.assertFalse("No blocking QUIT after stalled FTPS CWD", sawQuit.get())
+            reader.join(2500L)
+        } finally {
+            runCatching { client?.disconnect() }
+            runCatching { serverSocket?.close() }
+            store.deleteEntry(alias)
+        }
+    }
+
     @Test fun protocolSelectorHasStrictSecureModesAndNoAutomaticConnection() {
         rule.setContent { MaterialTheme { FtpsBrowseCard() } }
         rule.onNodeWithText("FTPS server → Save to device").assertExists()
