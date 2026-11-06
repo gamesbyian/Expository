@@ -711,6 +711,85 @@ class FtpsUiSmokeTest {
                 permit, permit, sessionMatches = true, busy = true))
     }
 
+    @Test fun cancelInitialPinnedSftpListingRetiresAuthenticatedTransport() {
+        // Deliberately suspend the FIRST real SFTP readDir after a valid
+        // pinned-SSH login. Unlike a greetingless socket, this proves
+        // cancellation after verified authentication but before UI adoption.
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        SftpAndroidCompat.configurePrivateHome(context.applicationContext.filesDir.toPath())
+        val root = Files.createTempDirectory(context.cacheDir.toPath(), "sftp-initial-cancel-")
+        val source = root.resolve("retained-source.bin")
+        val expected = ByteArray(129) { ((it * 11 + 7) and 255).toByte() }
+        Files.write(source, expected)
+        val listingEntered = java.util.concurrent.CountDownLatch(1)
+        val releaseListing = java.util.concurrent.CountDownLatch(1)
+        val remoteSession =
+            java.util.concurrent.atomic.AtomicReference<ServerSession?>(null)
+        val listener = object : SftpEventListener {
+            override fun readingEntries(
+                session: ServerSession, remoteHandle: String,
+                localHandle: DirectoryHandle
+            ) {
+                remoteSession.set(session)
+                listingEntered.countDown()
+                releaseListing.await(20L, java.util.concurrent.TimeUnit.SECONDS)
+            }
+        }
+        val hostKey = KeyPairGenerator.getInstance("RSA").apply {
+            initialize(2048)
+        }.generateKeyPair()
+        val server = SshServer.setUpDefaultServer().apply {
+            host = "127.0.0.1"
+            port = 0
+            keyPairProvider = KeyPairProvider.wrap(hostKey)
+            passwordAuthenticator = PasswordAuthenticator { user, password, _ ->
+                user == "synthetic-user" && password == "synthetic-only"
+            }
+            val factory = SftpSubsystemFactory.Builder().build()
+            factory.addSftpEventListener(listener)
+            subsystemFactories = listOf(factory)
+            fileSystemFactory = VirtualFileSystemFactory(root)
+        }
+        try {
+            server.start()
+            rule.setContent {
+                MaterialTheme {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        SftpBrowseCard()
+                    }
+                }
+            }
+            listOf(
+                "sftp-login-host" to "127.0.0.1",
+                "sftp-login-port" to server.port.toString(),
+                "sftp-login-user" to "synthetic-user",
+                "sftp-login-password" to "synthetic-only",
+                "sftp-login-pin" to SftpHostKeyPin.observed(hostKey.public)
+            ).forEach { (tag, value) ->
+                rule.onNodeWithTag(tag).performTextReplacement(value)
+            }
+            rule.onNodeWithText("Connect securely").performScrollTo().performClick()
+            org.junit.Assert.assertTrue(
+                "Authenticated first SFTP readDir must reach the disposable server",
+                listingEntered.await(12L, java.util.concurrent.TimeUnit.SECONDS))
+            rule.onNodeWithText("Cancel connection").performScrollTo().performClick()
+            rule.onNodeWithText("SFTP login canceled.", substring = true).assertExists()
+            rule.onNodeWithText("Connect securely").assertExists()
+            rule.onNodeWithText("retained-source.bin").assertDoesNotExist()
+            rule.waitUntil(8_000L) {
+                remoteSession.get()?.isOpen == false
+            }
+            org.junit.Assert.assertArrayEquals(
+                "Canceled initial listing must preserve remote bytes",
+                expected, Files.readAllBytes(source))
+        } finally {
+            releaseListing.countDown()
+            runCatching { server.stop(true) }
+            Files.deleteIfExists(source)
+            Files.deleteIfExists(root)
+        }
+    }
+
     @Test fun stalledPinnedSftpDirectoryCanBeStoppedWithoutReusingSession() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         SftpAndroidCompat.configurePrivateHome(context.applicationContext.filesDir.toPath())
