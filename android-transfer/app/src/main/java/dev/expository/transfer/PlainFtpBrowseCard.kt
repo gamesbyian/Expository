@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -117,21 +118,22 @@ internal fun PlainFtpBrowseCard() {
             if (session == null) {
                 OutlinedTextField(host, { host = it; explicitlyApproved = false },
                     label = { Text("FTP host") }, enabled = !busy, singleLine = true,
-                    modifier = Modifier.fillMaxWidth())
+                    modifier = Modifier.fillMaxWidth().testTag("plain-ftp-host"))
                 OutlinedTextField(port, { port = it; explicitlyApproved = false },
                     label = { Text("Port") }, enabled = !busy, singleLine = true,
-                    modifier = Modifier.fillMaxWidth())
+                    modifier = Modifier.fillMaxWidth().testTag("plain-ftp-port"))
                 OutlinedTextField(startFolder,
                     { startFolder = it; explicitlyApproved = false },
                     label = { Text("Starting folder (absolute path)") },
                     enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(username, { username = it; explicitlyApproved = false },
                     label = { Text("Username") }, enabled = !busy, singleLine = true,
-                    modifier = Modifier.fillMaxWidth())
+                    modifier = Modifier.fillMaxWidth().testTag("plain-ftp-user"))
                 OutlinedTextField(password, { password = it; explicitlyApproved = false },
                     label = { Text("Password (session only)") },
                     visualTransformation = PasswordVisualTransformation(),
-                    enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    enabled = !busy, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("plain-ftp-password"))
                 Button(enabled = !busy,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                     onClick = { explicitlyApproved = !explicitlyApproved }) {
