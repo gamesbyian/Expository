@@ -1668,7 +1668,9 @@ internal fun SftpBrowseCard(
                         password = "" // never retain the entered string for the session
                         busy = true
                         status = "Connecting with strict host-key verification…"
+                        val acquisition = RemoteSessionAcquisition<SftpSession>()
                         scope.launch {
+                            try {
                             val result = withContext(Dispatchers.IO) {
                                 try {
                                     runCatching {
@@ -1676,12 +1678,19 @@ internal fun SftpBrowseCard(
                                             SftpHostKeyPin(chosenPin))
                                         val root = SftpPath.requireAbsolute(chosenFolder)
                                         val live = SecureSftp.connect(target, chosenUser, secret)
-                                        try { live to live.browse(root) }
-                                        catch (e: Exception) { live.close(); throw e }
+                                        try {
+                                            val listing = live.browse(root)
+                                            acquisition.offer(live)
+                                            live to listing
+                                        } catch (e: Exception) {
+                                            live.close()
+                                            throw e
+                                        }
                                     }
                                 } finally { secret.fill('\u0000') }
                             }
                             result.onSuccess { (live, directory) ->
+                                if (!acquisition.adopt(live)) return@onSuccess
                                 session = live
                                 directFilePath = ""
                                 sessionId = UUID.randomUUID().toString()
@@ -1704,6 +1713,9 @@ internal fun SftpBrowseCard(
                                 status = "Connection rejected. Confirm credentials, reachability and your independently verified SHA-256 host-key pin."
                             }
                             busy = false
+                            } finally {
+                                acquisition.abandon()
+                            }
                         }
                     }) { Text(if (busy) "Connecting…" else "Connect securely") }
             } else {
