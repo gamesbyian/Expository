@@ -65,6 +65,7 @@ internal fun PlainFtpBrowseCard() {
     var descending by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var loginJob by remember { mutableStateOf<Job?>(null) }
+    var browseJob by remember { mutableStateOf<Job?>(null) }
     var status by remember {
         mutableStateOf("Plain FTP is insecure. Prefer pinned SFTP or certificate-validated FTPS.")
     }
@@ -73,10 +74,11 @@ internal fun PlainFtpBrowseCard() {
 
     fun browse(next: String, window: Int = FtpsBrowseBounds.INITIAL) {
         val current = session ?: return
-        if (busy) return
+        if (busy || browseJob != null) return
         busy = true
         status = "Reading an unencrypted FTP directory preview…"
-        scope.launch {
+        browseJob = scope.launch {
+            try {
             val observed = withContext(Dispatchers.IO) {
                 runCatching { current.browseReadOnly(next, window) }
             }
@@ -103,6 +105,9 @@ internal fun PlainFtpBrowseCard() {
                 // A callback for an abandoned session must not clear
                 // another session's busy indicator.
                 busy = false
+            }
+            } finally {
+                if (browseJob === coroutineContext[Job]) browseJob = null
             }
         }
     }
@@ -290,6 +295,23 @@ internal fun PlainFtpBrowseCard() {
                     Text("Folder preview incomplete. Never infer absent files from this listing.",
                         style = MaterialTheme.typography.bodySmall)
                 }
+            }
+            if (browseJob != null) {
+                Button(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    onClick = {
+                        // Never send a second command over the still-blocked
+                        // FTP control channel. Retire its entire authority.
+                        browseJob?.cancel()
+                        browseJob = null
+                        session = null // DisposableEffect closes off main.
+                        page = null
+                        fileFilter = ""
+                        limit = FtpsBrowseBounds.INITIAL
+                        explicitlyApproved = false
+                        password = ""
+                        busy = false
+                        status = "FTP browse stopped; previous connection is being retired. Reconnect to browse again. No transfer started."
+                    }) { Text("Stop browsing and disconnect") }
             }
             Text(status,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
