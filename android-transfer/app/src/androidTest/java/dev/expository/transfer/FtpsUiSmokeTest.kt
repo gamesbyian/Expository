@@ -152,6 +152,41 @@ class FtpsUiSmokeTest {
         org.junit.Assert.assertEquals(1, closed.get())
     }
 
+    @Test fun workerOfferRacingCancellationRetiresExactlyOnce() {
+        // A blocked IO operation can complete at the same instant its
+        // Compose owner is canceled. Exercise both synchronized outcomes
+        // without a network, relying on real Android IO retirement.
+        repeat(32) { iteration ->
+            val acquisition = RemoteSessionAcquisition<AutoCloseable>()
+            val count = java.util.concurrent.atomic.AtomicInteger(0)
+            val closed = java.util.concurrent.CountDownLatch(1)
+            val session = AutoCloseable {
+                count.incrementAndGet()
+                closed.countDown()
+            }
+            val start = java.util.concurrent.CyclicBarrier(2)
+            val worker = Thread {
+                start.await(5L, java.util.concurrent.TimeUnit.SECONDS)
+                acquisition.offer(session)
+            }
+            worker.start()
+            start.await(5L, java.util.concurrent.TimeUnit.SECONDS)
+            acquisition.abandon()
+            worker.join(5000L)
+            org.junit.Assert.assertFalse(
+                "Worker must terminate for round $iteration", worker.isAlive)
+            org.junit.Assert.assertFalse(
+                "Canceled owner must not adopt for round $iteration",
+                acquisition.adopt(session))
+            org.junit.Assert.assertTrue(
+                "Orphan must retire for round $iteration",
+                closed.await(10L, java.util.concurrent.TimeUnit.SECONDS))
+            org.junit.Assert.assertEquals(
+                "Orphan closes exactly once for round $iteration",
+                1, count.get())
+        }
+    }
+
     @Test fun saveAsCannotTreatReadableOrInvalidUriAsWriteGranted() {
         val gate = dev.expository.transfer.ftps.FtpsToSafSave
         val document = android.net.Uri.parse(
