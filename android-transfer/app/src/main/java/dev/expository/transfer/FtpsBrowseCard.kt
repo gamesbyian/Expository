@@ -473,6 +473,9 @@ fun FtpsBrowseCard() {
                             }
                             busy = false
                             } finally {
+                                // Cancellation before IO dispatch never enters the
+                                // worker's finally. Clear captured credentials here too.
+                                secret.fill('\u0000')
                                 acquisition.abandon()
                                 if (loginJob === coroutineContext[Job]) loginJob = null
                             }
