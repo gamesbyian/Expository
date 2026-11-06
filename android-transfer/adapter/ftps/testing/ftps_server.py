@@ -23,21 +23,41 @@ def main() -> None:
     # Read/list/traverse only; no upload, rename, directory creation or delete.
     authorizer.add_user("synthetic", "synthetic-secret", str(root), perm="elr")
 
+    # Only 127.0.0.1 and explicitly selected disposable test ports.
+    # The second fixture models a server whose directory commands refuse
+    # listings even though MLST and encrypted RETR remain available.
+    listing_denied = os.environ.get("FTPS_FIXTURE_DENY_LISTINGS") == "1"
+    control_port = int(os.environ.get("FTPS_FIXTURE_PORT", "2121"))
+    if control_port not in (2121, 2122):
+        raise ValueError("FTPS fixture allows only two localhost control ports")
+
     class FixtureHandler(TLS_FTPHandler):
-        pass
+        def ftp_MLSD(self, path):
+            if listing_denied:
+                self.respond("502 Synthetic MLSD deliberately unavailable")
+                return
+            return super().ftp_MLSD(path)
+
+        def ftp_LIST(self, path):
+            if listing_denied:
+                self.respond("502 Synthetic LIST deliberately unavailable")
+                return
+            return super().ftp_LIST(path)
 
     FixtureHandler.authorizer = authorizer
     FixtureHandler.certfile = str(cert)
     FixtureHandler.keyfile = str(key)
     FixtureHandler.tls_control_required = True
     FixtureHandler.tls_data_required = True
-    FixtureHandler.passive_ports = range(30100, 30116)
+    FixtureHandler.passive_ports = (
+        range(30120, 30136) if listing_denied else range(30100, 30116)
+    )
     FixtureHandler.banner = "Synthetic explicit FTPS verification only"
     FixtureHandler.timeout = 30
     FixtureHandler.dtp_timeout = 30
     FixtureHandler.max_login_attempts = 2
 
-    server = FTPServer(("127.0.0.1", 2121), FixtureHandler)
+    server = FTPServer(("127.0.0.1", control_port), FixtureHandler)
     server.max_cons = 4
     server.max_cons_per_ip = 4
     try:
