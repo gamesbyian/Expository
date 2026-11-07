@@ -91,14 +91,6 @@ internal object FtpsCopyProgressGate {
         presentedPermit === expectedPermit
 }
 
-/** Independent of coroutine completion: a stopped MLST cannot approve Save As. */
-internal object FtpsMetadataVerificationGate {
-    fun isCurrent(expectedSession: Any, session: Any?,
-        expectedJob: Job?, pendingJob: Job?): Boolean =
-        expectedSession === session && expectedJob != null &&
-            expectedJob === pendingJob && expectedJob.isActive
-}
-
 /** A separately typed remote path never obtains write authority from a listing. */
 internal data class FtpsDirectFileSelection(val path: String, val displayName: String) {
     companion object {
@@ -351,7 +343,7 @@ fun FtpsBrowseCard() {
             }
             // A canceled blocking MLST can eventually finish, but must
             // never open a picker or publish a witness after Stop/disconnect.
-            if (!FtpsMetadataVerificationGate.isCurrent(
+            if (!RemoteMetadataVerificationGate.isCurrent(
                     live, session, coroutineContext[Job], metadataJob)) return@launch
             result.onSuccess { observation ->
                     // Only MLST success binds the exact path+revision to the

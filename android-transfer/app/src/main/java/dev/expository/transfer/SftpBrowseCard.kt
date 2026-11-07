@@ -217,6 +217,7 @@ internal fun SftpBrowseCard(
     var loginJob by remember { mutableStateOf<Job?>(null) }
     var pendingLogin by remember { mutableStateOf<RemoteSessionAcquisition<SftpSession>?>(null) }
     var browseJob by remember { mutableStateOf<Job?>(null) }
+    var metadataJob by remember { mutableStateOf<Job?>(null) }
     val peerRelayLocked = session != null && sessionId.isNotBlank() &&
         peerRelaySourceId == sessionId
     var transferred by remember { mutableLongStateOf(0L) }
@@ -255,7 +256,10 @@ internal fun SftpBrowseCard(
     DisposableEffect(Unit) {
         // Read the latest pending lease on teardown, including a login
         // started immediately before the next composition is applied.
-        onDispose { pendingLogin?.abandon() }
+        onDispose {
+            pendingLogin?.abandon()
+            metadataJob?.cancel()
+        }
     }
     DisposableEffect(ownedSession) {
         onDispose { RemoteSessionRetirement.retire(ownedSession) }
@@ -392,19 +396,24 @@ internal fun SftpBrowseCard(
         pendingSaveWitness = null
         busy = true
         status = "Checking authenticated SFTP file metadata before Android Save As…"
-        scope.launch {
-            val observed = withContext(Dispatchers.IO) {
-                runCatching { live.statFile(candidate.path) }
-            }
-            if (session !== live || sessionId != frozenSessionId ||
-                folder != frozenFolder) {
-                if (session === live) {
-                    busy = false
-                    status = "SFTP session or folder changed. Save As canceled."
+        metadataJob = scope.launch {
+            try {
+                val observed = withContext(Dispatchers.IO) {
+                    runCatching { live.statFile(candidate.path) }
                 }
-                return@launch
-            }
-            observed.onSuccess { file ->
+                // A stalled SSH STAT can finish after cancellation. Its
+                // result must not reauthorize Android Save As, including
+                // on the SAME session after a newer metadata request.
+                if (!RemoteMetadataVerificationGate.isCurrent(
+                        live, session, coroutineContext[Job], metadataJob) ||
+                    sessionId != frozenSessionId || folder != frozenFolder) {
+                    if (session === live && metadataJob === coroutineContext[Job]) {
+                        busy = false
+                        status = "SFTP session or folder changed. Save As canceled."
+                    }
+                    return@launch
+                }
+                observed.onSuccess { file ->
                 if (reviewedRevision != null &&
                     file.revision != reviewedRevision) {
                     busy = false
@@ -433,9 +442,12 @@ internal fun SftpBrowseCard(
                         status = "Android Save As picker unavailable. Nothing transferred."
                     }
                 }
-            }.onFailure {
-                busy = false
-                status = "SFTP file metadata unavailable. No Android picker opened."
+                }.onFailure {
+                    busy = false
+                    status = "SFTP file metadata unavailable. No Android picker opened."
+                }
+            } finally {
+                if (metadataJob === coroutineContext[Job]) metadataJob = null
             }
         }
     }
@@ -1758,6 +1770,45 @@ internal fun SftpBrowseCard(
                         }) { Text("Cancel connection") }
                 }
             } else {
+            if (metadataJob != null) {
+                Button(
+                    enabled = !peerRelayLocked,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    onClick = {
+                        // Disconnect and retire the held SSH channel. Cancel
+                        // the owning job and clear every derived source and
+                        // transfer authority before a late STAT can return.
+                        metadataJob?.cancel()
+                        metadataJob = null
+                        browseGeneration.incrementAndGet()
+                        session = null
+                        sessionId = ""
+                        page = null
+                        browseLimit = SftpBrowseBounds.INITIAL
+                        fileFilter = ""
+                        directFilePath = ""
+                        pendingFile = null
+                        pendingSaveWitness = null
+                        pendingUploadWitness = null
+                        pendingPeerUpload = null
+                        pendingPeerDownload = null
+                        pendingPickedUpload = null
+                        pendingMove = null
+                        pendingPeerBatch = null
+                        peerBatchSelection = SftpBatchSelection()
+                        pendingRelay = null
+                        pendingRelayBatch = null
+                        singleDeviceTarget = null
+                        singleDestinationPickerWitness = null
+                        singleDestinationGeneration++
+                        onRemoteSource(null)
+                        onRemoteBatchSource(null)
+                        showRenamePreview = false
+                        busy = false
+                        status = "SFTP file verification stopped; pinned session is being retired. No Android picker or Copy started. Reconnect to retry."
+                    }
+                ) { Text("Stop file verification and disconnect") }
+            }
             if (browseJob != null) {
                 Button(
                     enabled = !peerRelayLocked,

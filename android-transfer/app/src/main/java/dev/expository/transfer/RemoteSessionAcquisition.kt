@@ -58,3 +58,14 @@ internal class RemoteSessionAcquisition<T : AutoCloseable> {
         RemoteSessionRetirement.retire(orphan)
     }
 }
+
+/** A blocking remote metadata request can return after its UI job was
+ * canceled or the session was replaced. Never turn such a result into
+ * Android picker authorization. Applied to both FTPS MLST and SFTP STAT.
+ */
+internal object RemoteMetadataVerificationGate {
+    fun isCurrent(expectedSession: Any, session: Any?,
+        expectedJob: kotlinx.coroutines.Job?, pendingJob: kotlinx.coroutines.Job?): Boolean =
+        expectedSession === session && expectedJob != null &&
+            expectedJob === pendingJob && expectedJob.isActive
+}

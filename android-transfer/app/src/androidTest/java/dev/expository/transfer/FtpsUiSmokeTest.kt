@@ -748,32 +748,57 @@ class FtpsUiSmokeTest {
         val nextJob = kotlinx.coroutines.Job()
         try {
             org.junit.Assert.assertTrue(
-                FtpsMetadataVerificationGate.isCurrent(
+                RemoteMetadataVerificationGate.isCurrent(
                     originalSession, originalSession, oldJob, oldJob))
             org.junit.Assert.assertFalse(
                 "Disconnect revokes source and picker authority",
-                FtpsMetadataVerificationGate.isCurrent(
+                RemoteMetadataVerificationGate.isCurrent(
                     originalSession, null, oldJob, oldJob))
             org.junit.Assert.assertFalse(
                 "A different FTPS login never inherits an old MLST",
-                FtpsMetadataVerificationGate.isCurrent(
+                RemoteMetadataVerificationGate.isCurrent(
                     originalSession, replacementSession, oldJob, oldJob))
             org.junit.Assert.assertFalse(
                 "A new verification of the same session invalidates the old one",
-                FtpsMetadataVerificationGate.isCurrent(
+                RemoteMetadataVerificationGate.isCurrent(
                     originalSession, originalSession, oldJob, nextJob))
             oldJob.cancel()
             org.junit.Assert.assertFalse(
                 "Canceled IO finishing late cannot open the OS picker",
-                FtpsMetadataVerificationGate.isCurrent(
+                RemoteMetadataVerificationGate.isCurrent(
                     originalSession, originalSession, oldJob, oldJob))
             org.junit.Assert.assertFalse(
                 "Missing job is never a valid Save As authority",
-                FtpsMetadataVerificationGate.isCurrent(
+                RemoteMetadataVerificationGate.isCurrent(
                     originalSession, originalSession, null, null))
         } finally {
             oldJob.cancel()
             nextJob.cancel()
+        }
+    }
+
+    @Test fun stoppedSftpStatCannotAuthorizeNewOrReusedSaveAs() {
+        // The same metadata-completion fence applies to authenticated pinned
+        // SFTP STAT. A close or subsequent request makes an old result inert.
+        val originalPinnedSession = Any()
+        val differentPinnedSession = Any()
+        val blockedStat = kotlinx.coroutines.Job()
+        val replacementStat = kotlinx.coroutines.Job()
+        try {
+            org.junit.Assert.assertTrue(RemoteMetadataVerificationGate.isCurrent(
+                originalPinnedSession, originalPinnedSession, blockedStat, blockedStat))
+            org.junit.Assert.assertFalse(RemoteMetadataVerificationGate.isCurrent(
+                originalPinnedSession, differentPinnedSession, blockedStat, blockedStat))
+            org.junit.Assert.assertFalse(RemoteMetadataVerificationGate.isCurrent(
+                originalPinnedSession, null, blockedStat, blockedStat))
+            org.junit.Assert.assertFalse(RemoteMetadataVerificationGate.isCurrent(
+                originalPinnedSession, originalPinnedSession, blockedStat, replacementStat))
+            blockedStat.cancel()
+            org.junit.Assert.assertFalse(RemoteMetadataVerificationGate.isCurrent(
+                originalPinnedSession, originalPinnedSession, blockedStat, blockedStat))
+        } finally {
+            blockedStat.cancel()
+            replacementStat.cancel()
         }
     }
 
