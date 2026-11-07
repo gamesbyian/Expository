@@ -34,8 +34,9 @@ object PlainFtp {
     ): PlainFtpSession {
         require(explicitlyApproved) { "PLAINTEXT_FTP_CONSENT_REQUIRED" }
         require(username.isNotBlank() && username.length <= 255 &&
+            FtpsPath.wellFormedUnicode(username) &&
             username.none { it.code < 32 || it.code == 127 }) { "INVALID_USER" }
-        require(password.isNotEmpty() &&
+        require(password.isNotEmpty() && FtpsPath.wellFormedUnicode(password) &&
             password.none { it.code < 32 || it.code == 127 }) { "INVALID_SECRET" }
         val client = configuredClient()
         try {
