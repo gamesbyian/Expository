@@ -181,10 +181,13 @@ class AndroidContentProviderCopyTest {
                 storageForPlan = { digest ->
                     AndroidAtomicAttemptStorage(isolated, digest)
                 },
-                recordRecoveryContext = { digest, from, to, provider ->
+                recordRecoveryContext = { digest, from, to, provider, sourceUri ->
                     store.recordNew(digest,
                         dev.expository.transfer.journal.ProtectedRecoveryContext(
-                            "SAF_PICKER_COPY", from, to, provider))
+                            "SAF_PICKER_COPY", from, to, provider,
+                            sourceDocumentFingerprint =
+                                dev.expository.transfer.journal.RecoverySourceDocumentIdentity
+                                    .fingerprint(sourceUri)))
                 })
             val permit = AtomicBoolean(true)
             val receipt = copy.copy(source, target,
