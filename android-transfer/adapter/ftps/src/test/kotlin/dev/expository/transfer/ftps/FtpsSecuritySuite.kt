@@ -62,6 +62,32 @@ object FtpsSecuritySuite {
                 check(runCatching { FtpsPath.checkedChild(name) }.isFailure)
             }
         }
+        checkCase("malformed Unicode never aliases FTPS host, child or absolute path") {
+            val malformed = listOf(
+                charArrayOf(0xD800.toChar()).concatToString(),
+                charArrayOf(0xDC00.toChar()).concatToString(),
+                "item" + 0xD800.toChar() + "name",
+                "item" + 0xDC00.toChar() + "name",
+                charArrayOf(0xD800.toChar(), 'x', 0xDC00.toChar()).concatToString()
+            )
+            for (name in malformed) {
+                check(runCatching { FtpsPath.checkedChild(name) }.isFailure)
+                check(runCatching { FtpsPath.checked("/safe/" + name) }.isFailure)
+                check(runCatching { FtpsTarget(name) }.isFailure)
+            }
+            val emoji = charArrayOf(0xD83D.toChar(), 0xDCC1.toChar()).concatToString()
+            check(FtpsPath.checkedChild("file-" + emoji) == "file-" + emoji)
+            check(FtpsPath.checked("/safe/file-" + emoji) == "/safe/file-" + emoji)
+            val broken = org.apache.commons.net.ftp.FTPFile().apply {
+                this.name = "source" + 0xD800.toChar()
+                this.type = org.apache.commons.net.ftp.FTPFile.FILE_TYPE
+            }
+            check(runCatching {
+                FtpsMlsdEntries.decode(arrayOf(broken))
+            }.isFailure) {
+                "Server-supplied malformed MLSD name must never enter an action"
+            }
+        }
         checkCase("FTPS RETR requires final completion even after reading all bytes") {
             var complete = true
             var finalChecks = 0
