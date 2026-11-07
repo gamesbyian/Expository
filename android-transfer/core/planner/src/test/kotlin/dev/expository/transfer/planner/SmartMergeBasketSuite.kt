@@ -51,6 +51,28 @@ object SmartMergeBasketSuite {
         inspectFresh(observed.map { SmartMergeFreshObservation(it, generation) }, nowMillis)
 
     @JvmStatic fun main(args: Array<String>) {
+        // Malformed UTF-16 must never enter M1 or M2: the JVM's default
+        // UTF-8 encoder replaces lone surrogates, collapsing distinct
+        // display names to identical digest bytes. Valid surrogate pairs
+        // (supplementary Unicode code points) remain supported.
+        val malformed = listOf(
+            charArrayOf(0xD800.toChar()).concatToString(),
+            charArrayOf(0xDC00.toChar()).concatToString(),
+            "bad" + 0xD800.toChar() + "name",
+            "bad" + 0xDC00.toChar() + "name",
+            charArrayOf(0xD800.toChar(), 'x', 0xDC00.toChar()).concatToString()
+        )
+        for (name in malformed) {
+            check(!SmartMergeNameRules.validComponent(name))
+            check(SmartMergeFolder.capture(WorkspacePane.A,
+                picked(name, id = "malformed-" + name.length), 1L, NOW) == null)
+        }
+        val supplementary = "archive-" +
+            charArrayOf(0xD83D.toChar(), 0xDCC1.toChar()).concatToString()
+        check(SmartMergeNameRules.validComponent(supplementary))
+        check(SmartMergeFolder.capture(WorkspacePane.A,
+            picked(supplementary), 1L, NOW) != null)
+
         val original = SmartMergeBasket.empty()
         check(original.folders.isEmpty() && !original.hasMinimumSources)
         val one = original.add(collect(picked("2024")))
