@@ -777,6 +777,103 @@ class FtpsUiSmokeTest {
         }
     }
 
+    @Test(timeout = 90_000L)
+    fun authenticatedPinnedSftpStatCanStopWithoutOpeningAndroidPicker() {
+        // Genuine installed Compose→pinned SSH→SFTP STAT. Hold only the
+        // SECOND-phase STAT, after a successful initial directory listing.
+        // Stop must promptly retire SSH before the held STAT is released,
+        // never launch ACTION_CREATE_DOCUMENT and preserve source bytes.
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        SftpAndroidCompat.configurePrivateHome(
+            context.applicationContext.filesDir.toPath())
+        val root = Files.createTempDirectory(
+            context.cacheDir.toPath(), "sftp-held-stat-e2-")
+        val source = root.resolve("retained-source.bin")
+        val original = ByteArray(173) { ((it * 23 + 19) and 255).toByte() }
+        Files.write(source, original)
+        val holdStat = java.util.concurrent.atomic.AtomicBoolean(false)
+        val statReached = java.util.concurrent.CountDownLatch(1)
+        val releaseStat = java.util.concurrent.CountDownLatch(1)
+        val seenSession =
+            java.util.concurrent.atomic.AtomicReference<ServerSession?>(null)
+        val observer = object : SftpEventListener {
+            override fun received(session: ServerSession, type: Int, id: Int) {
+                if (type == org.apache.sshd.sftp.common.SftpConstants.SSH_FXP_STAT &&
+                    holdStat.get()) {
+                    seenSession.set(session)
+                    statReached.countDown()
+                    releaseStat.await(20L, java.util.concurrent.TimeUnit.SECONDS)
+                }
+            }
+        }
+        val hostKey = KeyPairGenerator.getInstance("RSA").apply {
+            initialize(2048)
+        }.generateKeyPair()
+        val server = SshServer.setUpDefaultServer().apply {
+            host = "127.0.0.1"
+            port = 0
+            keyPairProvider = KeyPairProvider.wrap(hostKey)
+            passwordAuthenticator = PasswordAuthenticator { user, password, _ ->
+                user == "synthetic-user" && password == "synthetic-only"
+            }
+            val factory = SftpSubsystemFactory.Builder().build()
+            factory.addSftpEventListener(observer)
+            subsystemFactories = listOf(factory)
+            fileSystemFactory = VirtualFileSystemFactory(root)
+        }
+        try {
+            server.start()
+            rule.setContent {
+                MaterialTheme {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        SftpBrowseCard()
+                    }
+                }
+            }
+            listOf(
+                "sftp-login-host" to "127.0.0.1",
+                "sftp-login-port" to server.port.toString(),
+                "sftp-login-user" to "synthetic-user",
+                "sftp-login-password" to "synthetic-only",
+                "sftp-login-pin" to SftpHostKeyPin.observed(hostKey.public)
+            ).forEach { (tag, value) ->
+                rule.onNodeWithTag(tag).performTextReplacement(value)
+            }
+            rule.onNodeWithText("Connect securely").performScrollTo().performClick()
+            rule.waitUntil(15_000L) {
+                rule.onAllNodesWithText("Pinned SFTP session authenticated",
+                    substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            rule.onNodeWithText("retained-source.bin").assertExists()
+            holdStat.set(true)
+            rule.onNodeWithTag("sftp-direct-file-path")
+                .performTextReplacement("/retained-source.bin")
+            rule.onNodeWithText("Verify path and Save As…")
+                .performScrollTo().performClick()
+            org.junit.Assert.assertTrue(
+                "Real authenticated SFTP STAT must reach disposable SSH server",
+                statReached.await(10L, java.util.concurrent.TimeUnit.SECONDS))
+            rule.onNodeWithText("Stop file verification and disconnect")
+                .performScrollTo().performClick()
+            rule.onNodeWithText("SFTP file verification stopped",
+                substring = true).assertExists()
+            rule.onNodeWithText("Connect securely").assertExists()
+            rule.onNodeWithText("Choose a NEW Android document",
+                substring = true).assertDoesNotExist()
+            rule.waitUntil(8_000L) {
+                seenSession.get()?.isOpen == false
+            }
+            org.junit.Assert.assertArrayEquals(
+                "A stopped STAT must not mutate the original remote file",
+                original, Files.readAllBytes(source))
+        } finally {
+            releaseStat.countDown()
+            runCatching { server.stop(true) }
+            Files.deleteIfExists(source)
+            Files.deleteIfExists(root)
+        }
+    }
+
     @Test fun stoppedSftpStatCannotAuthorizeNewOrReusedSaveAs() {
         // The same metadata-completion fence applies to authenticated pinned
         // SFTP STAT. A close or subsequent request makes an old result inert.
