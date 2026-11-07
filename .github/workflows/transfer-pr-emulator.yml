@@ -88,6 +88,9 @@ jobs:
                 # and expensive TLS handshakes without weakening assertions.
                 FtpsUiSmokeTest#implicitFtpsRejectsRuntimeGeneratedUntrustedTlsCertificate) ;;
                 FtpsUiSmokeTest#pinnedTestCertificateKeepsFtpsControlTlsWhileStalledCwdCanDisconnect) ;;
+                # Isolate a genuine disposable pinned SSH + held SFTP STAT
+                # Stop test from unrelated stateful Android UI cases.
+                FtpsUiSmokeTest#authenticatedPinnedSftpStatCanStopWithoutOpeningAndroidPicker) ;;
                 # The original source must never switch mid-Save As after Share.
                 LocalPickerPositiveCopyTest#incomingShareDuringSaveAsCannotSwitchTheSource) ;;
                 # One isolated foreground Copy state gate, avoiding the known
