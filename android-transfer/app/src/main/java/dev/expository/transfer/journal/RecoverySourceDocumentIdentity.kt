@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
+import dev.expository.transfer.saf.SafSingleDocumentCopy
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
@@ -56,9 +57,41 @@ internal object RecoverySourceDocumentIdentity {
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    /** Comparison follows a new READ-granted picker and an independent
-     * metadata/byte observation. This pure identifier check cannot promote
-     * any neutral attempt journal or claim that the old source version exists.
+    /**
+     * Metadata-only independent re-observation under a NEW picker READ grant.
+     * This still works if the old attempt never completed a source stream or
+     * the file exceeds the separate 64-MiB manual byte-comparison cap.
+     * No bytes are read, no grant/URI is stored and no journal is modified.
+     */
+    fun inspect(
+        resolver: ContentResolver,
+        picked: Uri,
+        pickerFlags: Int,
+        recorded: String?,
+        continueRequested: () -> Boolean = { true }
+    ): RecoverySourceDocumentRelation {
+        if (!continueRequested() ||
+            !RecoveryManualSourceInspector.acceptsPickerResult(picked, pickerFlags))
+            return RecoverySourceDocumentRelation.INDETERMINATE
+        if (recorded == null) return RecoverySourceDocumentRelation.NO_RECORDED_DOCUMENT_ID
+        if (!DIGEST.matches(recorded)) return RecoverySourceDocumentRelation.INDETERMINATE
+        val observer = SafSingleDocumentCopy(resolver)
+        val first = runCatching { observer.observe(picked) }.getOrNull()
+            ?: return RecoverySourceDocumentRelation.INDETERMINATE
+        if (!continueRequested()) return RecoverySourceDocumentRelation.INDETERMINATE
+        val comparison = compare(recorded, picked, pickerFlags)
+        if (comparison == RecoverySourceDocumentRelation.INDETERMINATE)
+            return comparison
+        val second = runCatching { observer.observe(picked) }.getOrNull()
+            ?: return RecoverySourceDocumentRelation.INDETERMINATE
+        if (!continueRequested() || first != second)
+            return RecoverySourceDocumentRelation.INDETERMINATE
+        return comparison
+    }
+
+    /** The bare identifier comparison is pure and intended for tests and
+     * already independently observed sources. It cannot promote a journal,
+     * supply provider access or claim an immutable source version.
      */
     fun compare(recorded: String?, picked: Uri?, pickerFlags: Int):
         RecoverySourceDocumentRelation {
