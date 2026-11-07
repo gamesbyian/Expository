@@ -55,16 +55,23 @@ object SmartMergeBasketSuite {
         // UTF-8 encoder replaces lone surrogates, collapsing distinct
         // display names to identical digest bytes. Valid surrogate pairs
         // (supplementary Unicode code points) remain supported.
-        val malformed = listOf("\\uD800", "\\uDC00", "bad\\uD800name",
-            "bad\\uDC00name", "\\uD800x\\uDC00")
+        val malformed = listOf(
+            charArrayOf(0xD800.toChar()).concatToString(),
+            charArrayOf(0xDC00.toChar()).concatToString(),
+            "bad" + 0xD800.toChar() + "name",
+            "bad" + 0xDC00.toChar() + "name",
+            charArrayOf(0xD800.toChar(), 'x', 0xDC00.toChar()).concatToString()
+        )
         for (name in malformed) {
             check(!SmartMergeNameRules.validComponent(name))
             check(SmartMergeFolder.capture(WorkspacePane.A,
                 picked(name, id = "malformed-" + name.length), 1L, NOW) == null)
         }
-        check(SmartMergeNameRules.validComponent("archive-\\uD83D\\uDCC1"))
+        val supplementary = "archive-" +
+            charArrayOf(0xD83D.toChar(), 0xDCC1.toChar()).concatToString()
+        check(SmartMergeNameRules.validComponent(supplementary))
         check(SmartMergeFolder.capture(WorkspacePane.A,
-            picked("archive-\\uD83D\\uDCC1"), 1L, NOW) != null)
+            picked(supplementary), 1L, NOW) != null)
 
         val original = SmartMergeBasket.empty()
         check(original.folders.isEmpty() && !original.hasMinimumSources)
