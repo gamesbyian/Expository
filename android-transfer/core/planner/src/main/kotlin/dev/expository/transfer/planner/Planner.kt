@@ -123,9 +123,31 @@ private fun itemStamp(i: ItemRef): List<String> =
 
 private fun validComponent(name: String): Boolean {
     return name.isNotBlank() && name != "." && name != ".." &&
+        SmartMergeNameRules.wellFormedUtf16(name) &&
         name.toByteArray(StandardCharsets.UTF_8).size <= 255 &&
         name.none { it == '/' || it == '\\' || it.code < 32 || it.code == 127 }
 }
+
+/**
+ * All opaque authority/revision/permission strings are part of the transfer
+ * digest, not just visible child names. A malformed surrogate can collapse to
+ * the same UTF-8 bytes as '?' before hashing, aliasing two separate scopes.
+ * Reject instead of granting an executable review from lossy serialization.
+ */
+private fun validLocationStamp(location: LocationRef): Boolean =
+    (listOf(location.key.authorityId, location.key.rootId,
+        location.key.containerId, location.key.grantId.orEmpty(),
+        location.revision, location.verifiedNamespace.orEmpty(),
+        location.verifiedStorageDomain.orEmpty()) +
+        location.folder +
+        location.capabilities.values.map { it.observationId })
+        .all(SmartMergeNameRules::wellFormedUtf16)
+
+private fun validItemStamp(item: ItemRef): Boolean =
+    validLocationStamp(item.location) &&
+        (listOf(item.key.authorityId, item.key.opaqueItemId,
+            item.key.version, item.name) + item.parent)
+            .all(SmartMergeNameRules::wellFormedUtf16)
 
 private fun DestinationListing?.orEmptyNames(): List<String> = this?.siblings ?: emptyList()
 
@@ -145,7 +167,8 @@ object OperationPlanner {
         if (sources.isEmpty()) blockers += "EMPTY_SELECTION"
         if (sources.map { it.key }.toSet().size != sources.size) blockers += "DUPLICATE_SOURCE_ID"
         val listing = request.destinationListing?.let { it.copy(siblings = it.siblings.toList()) }
-        if (listing == null || !listing.complete || listing.revision.isBlank())
+        if (listing == null || !listing.complete || listing.revision.isBlank() ||
+            !SmartMergeNameRules.wellFormedUtf16(listing.revision))
             blockers += "DESTINATION_LISTING_NOT_VERIFIED"
         else if (listing.witness == DestinationWitness.SAF_NEW_DOCUMENT_PICKER) {
             // ACTION_CREATE_DOCUMENT is a user-authorized NEW document, not an
@@ -171,12 +194,14 @@ object OperationPlanner {
             if (listing.siblings.size != existing.size)
                 blockers += "AMBIGUOUS_DESTINATION_SIBLINGS"
         }
-        if (dest.key.authorityId.isBlank() || dest.key.rootId.isBlank() ||
+        if (!validLocationStamp(dest) ||
+            dest.key.authorityId.isBlank() || dest.key.rootId.isBlank() ||
             dest.key.containerId.isBlank() ||
             dest.revision.isBlank() || dest.folder.any { !validComponent(it) }) blockers += "DESTINATION_IDENTITY"
         if (!dest.supports(Capability.WRITE, nowMillis)) blockers += "DESTINATION_WRITE_NOT_PROVEN"
         for (item in sources) {
-            if (item.key.authorityId != item.location.key.authorityId ||
+            if (!validItemStamp(item) ||
+                item.key.authorityId != item.location.key.authorityId ||
                 item.location.key.rootId.isBlank() ||
                 item.location.key.containerId.isBlank() ||
                 item.location.key.authorityId.isBlank() ||
