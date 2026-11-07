@@ -476,8 +476,16 @@ class FtpsUiSmokeTest {
             KeyGenParameterSpec.Builder(alias,
                 KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY)
                 .setKeySize(2048)
-                .setDigests(KeyProperties.DIGEST_SHA256)
-                .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PKCS1)
+                // Android TLS may sign an already-hashed handshake transcript.
+                // AndroidKeyStore requires DIGEST_NONE for that code path;
+                // a SHA-256-only key can fail before FTP authentication.
+                // These authorizations are for the disposable test key only.
+                .setDigests(KeyProperties.DIGEST_NONE,
+                    KeyProperties.DIGEST_SHA256, KeyProperties.DIGEST_SHA384,
+                    KeyProperties.DIGEST_SHA512)
+                .setSignaturePaddings(
+                    KeyProperties.SIGNATURE_PADDING_RSA_PKCS1,
+                    KeyProperties.SIGNATURE_PADDING_RSA_PSS)
                 .setCertificateSubject(X500Principal("CN=localhost"))
                 .setCertificateSerialNumber(java.math.BigInteger.valueOf(now))
                 .setCertificateNotBefore(Date(now - 30_000L))
