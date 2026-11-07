@@ -53,5 +53,7 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     // Disposable localhost SSH daemon is instrumentation-only, never shipped in the app.
     androidTestImplementation("org.apache.sshd:sshd-sftp:2.20.0")
+    // Test-only API for disposable pinned FTPS control-channel instrumentation.
+    androidTestImplementation("commons-net:commons-net:3.13.0")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
