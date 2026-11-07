@@ -86,6 +86,10 @@ class PagedLocationIndex private constructor(
 
     private fun saneOpaque(value: String?, maxBytes: Int): Boolean =
         value != null && value.isNotBlank() &&
+            // Invalid UTF-16 may be replaced by the Java UTF-8 encoder.
+            // A provider's distinct names, IDs or cursors must never alias
+            // in a mutation-capable complete listing.
+            SmartMergeNameRules.wellFormedUtf16(value) &&
             value.toByteArray(StandardCharsets.UTF_8).size <= maxBytes &&
             value.none { it.code < 32 || it.code == 127 }
 
