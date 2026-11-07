@@ -4,7 +4,6 @@ import android.content.ContentResolver
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
-import dev.expository.transfer.saf.SafSingleDocumentCopy
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
@@ -58,10 +57,60 @@ internal object RecoverySourceDocumentIdentity {
     }
 
     /**
-     * Metadata-only independent re-observation under a NEW picker READ grant.
-     * This still works if the old attempt never completed a source stream or
-     * the file exceeds the separate 64-MiB manual byte-comparison cap.
-     * No bytes are read, no grant/URI is stored and no journal is modified.
+     * A generic display-only SAF reader can synthesize fallback labels when a
+     * provider returns no row. That is NOT sufficient for identity review.
+     * Require an actual DocumentsProvider row with the exact requested ID.
+     * Return only an ephemeral metadata digest; do not log provider values.
+     */
+    private fun observedMetadata(resolver: ContentResolver, picked: Uri): ByteArray? {
+        val expectedId = runCatching { DocumentsContract.getDocumentId(picked) }.getOrNull()
+            ?: return null
+        val columns = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED
+        )
+        return try {
+            resolver.query(picked, columns, null, null, null)?.use { cursor ->
+                if (!cursor.moveToFirst()) return null
+                val idIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                if (idIndex < 0 || cursor.isNull(idIndex) ||
+                    cursor.getString(idIndex) != expectedId) return null
+                val digest = MessageDigest.getInstance("SHA-256")
+                digest.update("EXPOSITORY_FRESH_SOURCE_METADATA_V1".toByteArray(StandardCharsets.US_ASCII))
+                for (column in columns) {
+                    val index = cursor.getColumnIndex(column)
+                    val value = if (index < 0 || cursor.isNull(index)) null
+                        else cursor.getString(index)
+                    // Refuse a metadata alias from lossy UTF-8 conversion.
+                    if (value != null && !StandardCharsets.UTF_8.newEncoder().canEncode(value))
+                        return null
+                    digest.update(if (value == null) 0.toByte() else 1.toByte())
+                    if (value != null) {
+                        val bytes = value.toByteArray(StandardCharsets.UTF_8)
+                        digest.update(byteArrayOf(
+                            (bytes.size ushr 24).toByte(), (bytes.size ushr 16).toByte(),
+                            (bytes.size ushr 8).toByte(), bytes.size.toByte()
+                        ))
+                        digest.update(bytes)
+                    }
+                }
+                if (cursor.moveToNext()) return null
+                digest.digest()
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Fresh READ-granted, metadata-only independent source-ID inspection.
+     * Works without a recorded source-byte digest or for files over 64 MiB.
+     * A query failure, missing row, mismatched provider-reported ID or
+     * metadata drift cannot be described as matching the original source.
+     * No stream is opened, grant/URI saved or old journal changed.
      */
     fun inspect(
         resolver: ContentResolver,
@@ -74,24 +123,22 @@ internal object RecoverySourceDocumentIdentity {
             !RecoveryManualSourceInspector.acceptsPickerResult(picked, pickerFlags))
             return RecoverySourceDocumentRelation.INDETERMINATE
         if (recorded == null) return RecoverySourceDocumentRelation.NO_RECORDED_DOCUMENT_ID
-        if (!DIGEST.matches(recorded)) return RecoverySourceDocumentRelation.INDETERMINATE
-        val observer = SafSingleDocumentCopy(resolver)
-        val first = runCatching { observer.observe(picked) }.getOrNull()
+        if (!DIGEST.matches(recorded) || fingerprint(picked) == null)
+            return RecoverySourceDocumentRelation.INDETERMINATE
+        val first = observedMetadata(resolver, picked)
             ?: return RecoverySourceDocumentRelation.INDETERMINATE
         if (!continueRequested()) return RecoverySourceDocumentRelation.INDETERMINATE
-        val comparison = compare(recorded, picked, pickerFlags)
-        if (comparison == RecoverySourceDocumentRelation.INDETERMINATE)
-            return comparison
-        val second = runCatching { observer.observe(picked) }.getOrNull()
+        val relation = compare(recorded, picked, pickerFlags)
+        if (relation == RecoverySourceDocumentRelation.INDETERMINATE) return relation
+        val second = observedMetadata(resolver, picked)
             ?: return RecoverySourceDocumentRelation.INDETERMINATE
-        if (!continueRequested() || first != second)
+        if (!continueRequested() || !MessageDigest.isEqual(first, second))
             return RecoverySourceDocumentRelation.INDETERMINATE
-        return comparison
+        return relation
     }
 
-    /** The bare identifier comparison is pure and intended for tests and
-     * already independently observed sources. It cannot promote a journal,
-     * supply provider access or claim an immutable source version.
+    /** Bare comparison is pure and reserved for tests or a caller with its
+     * own independently observed identity. It is NOT provider authority.
      */
     fun compare(recorded: String?, picked: Uri?, pickerFlags: Int):
         RecoverySourceDocumentRelation {
