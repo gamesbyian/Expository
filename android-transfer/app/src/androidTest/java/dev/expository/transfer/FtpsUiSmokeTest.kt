@@ -860,6 +860,11 @@ class FtpsUiSmokeTest {
             rule.onNodeWithText("Connect securely").assertExists()
             rule.onNodeWithText("Choose a NEW Android document",
                 substring = true).assertDoesNotExist()
+            org.junit.Assert.assertEquals(
+                "A canceled STAT must not foreground Android DocumentsUI",
+                context.packageName,
+                androidx.test.uiautomator.UiDevice.getInstance(
+                    InstrumentationRegistry.getInstrumentation()).currentPackageName)
             rule.waitUntil(8_000L) {
                 seenSession.get()?.isOpen == false
             }
