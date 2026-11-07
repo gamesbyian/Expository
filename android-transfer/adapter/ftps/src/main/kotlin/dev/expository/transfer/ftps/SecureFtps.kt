@@ -32,6 +32,7 @@ data class FtpsTarget(
 ) {
     init {
         require(host.isNotBlank() && host.length <= 253 &&
+            FtpsPath.wellFormedUnicode(host) &&
             host.none { it.isWhitespace() || it == '/' || it == '\\' ||
                 it == '@' || it == ':' || it.code < 32 || it.code == 127 }) { "INVALID_HOST" }
         require(port in 1..65535) { "INVALID_PORT" }
@@ -85,14 +86,36 @@ object FtpsBrowseBounds {
 
 /** Remote names are never normalized by guessing OS path semantics. */
 object FtpsPath {
+    // Java's default UTF-8 conversion replaces unpaired UTF-16 surrogates
+    // with '?'. Two distinct FTPS server names or a typed source path could
+    // otherwise collapse to one wire identity before MLST/RETR verification.
+    // Keep valid supplementary Unicode codepoints, reject broken pairs.
+    internal fun wellFormedUnicode(value: String): Boolean {
+        var index = 0
+        while (index < value.length) {
+            when {
+                Character.isHighSurrogate(value[index]) -> {
+                    if (index + 1 >= value.length ||
+                        !Character.isLowSurrogate(value[index + 1])) return false
+                    index += 2
+                }
+                Character.isLowSurrogate(value[index]) -> return false
+                else -> index++
+            }
+        }
+        return true
+    }
+
     fun checkedChild(name: String): String {
         require(name.isNotBlank() && name != "." && name != ".." &&
+            wellFormedUnicode(name) &&
             name.toByteArray(StandardCharsets.UTF_8).size <= 255 &&
             name.none { it == '/' || it == '\\' || it.code < 32 || it.code == 127 }) { "INVALID_REMOTE_CHILD_NAME" }
         return name
     }
     fun checked(absolute: String): String {
         require(absolute.startsWith("/") && absolute.length <= 4096) { "PATH_MUST_BE_ABSOLUTE" }
+        require(wellFormedUnicode(absolute)) { "PATH_MALFORMED_UTF16" }
         require(absolute.none { it == '\\' || it.code < 32 || it.code == 127 }) {
             "PATH_CONTROL_CHAR"
         }
