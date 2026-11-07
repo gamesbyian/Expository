@@ -53,21 +53,29 @@ object SftpPath {
     // surrogates. Reject invalid code-unit sequences before they can turn
     // distinct picked names, exact source paths or hostnames into the
     // same SSH/SFTP wire identity. Valid supplementary characters stay legal.
-    internal fun wellFormedUnicode(value: String): Boolean {
+    // Check password CharArray in place, without creating an extra immutable
+    // secret String merely to detect a broken Unicode code-unit sequence.
+    private inline fun unicodePairsValid(length: Int, charAt: (Int) -> Char): Boolean {
         var index = 0
-        while (index < value.length) {
+        while (index < length) {
             when {
-                Character.isHighSurrogate(value[index]) -> {
-                    if (index + 1 >= value.length ||
-                        !Character.isLowSurrogate(value[index + 1])) return false
+                Character.isHighSurrogate(charAt(index)) -> {
+                    if (index + 1 >= length ||
+                        !Character.isLowSurrogate(charAt(index + 1))) return false
                     index += 2
                 }
-                Character.isLowSurrogate(value[index]) -> return false
+                Character.isLowSurrogate(charAt(index)) -> return false
                 else -> index++
             }
         }
         return true
     }
+
+    internal fun wellFormedUnicode(value: String): Boolean =
+        unicodePairsValid(value.length) { value[it] }
+
+    internal fun wellFormedUnicode(value: CharArray): Boolean =
+        unicodePairsValid(value.size) { value[it] }
 
     fun requireAbsolute(path: String): String {
         require(path.startsWith("/") && wellFormedUnicode(path) &&
@@ -104,8 +112,11 @@ object SecureSftp {
         }
 
     fun connect(target: SftpTarget, username: String, password: CharArray): SftpSession {
-        require(username.isNotBlank() && username.none { it == '\n' || it == '\r' || it == '\u0000' })
-        require(password.isNotEmpty() && password.none { it == '\n' || it == '\r' || it == '\u0000' })
+        require(username.isNotBlank() && username.length <= 255 &&
+            SftpPath.wellFormedUnicode(username) &&
+            username.none { it.code < 32 || it.code == 127 }) { "INVALID_USER" }
+        require(password.isNotEmpty() && SftpPath.wellFormedUnicode(password) &&
+            password.none { it == '\n' || it == '\r' || it == '\u0000' }) { "INVALID_SECRET" }
         val client = configuredClient(target.trustedHostKey)
         var session: ClientSession? = null
         try {
