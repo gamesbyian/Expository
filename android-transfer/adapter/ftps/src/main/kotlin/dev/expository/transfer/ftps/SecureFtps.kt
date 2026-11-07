@@ -90,21 +90,29 @@ object FtpsPath {
     // with '?'. Two distinct FTPS server names or a typed source path could
     // otherwise collapse to one wire identity before MLST/RETR verification.
     // Keep valid supplementary Unicode codepoints, reject broken pairs.
-    internal fun wellFormedUnicode(value: String): Boolean {
+    // Validate CharArray credentials directly: converting a malformed
+    // password to String first leaves an unnecessary immutable secret copy.
+    private inline fun unicodePairsValid(length: Int, charAt: (Int) -> Char): Boolean {
         var index = 0
-        while (index < value.length) {
+        while (index < length) {
             when {
-                Character.isHighSurrogate(value[index]) -> {
-                    if (index + 1 >= value.length ||
-                        !Character.isLowSurrogate(value[index + 1])) return false
+                Character.isHighSurrogate(charAt(index)) -> {
+                    if (index + 1 >= length ||
+                        !Character.isLowSurrogate(charAt(index + 1))) return false
                     index += 2
                 }
-                Character.isLowSurrogate(value[index]) -> return false
+                Character.isLowSurrogate(charAt(index)) -> return false
                 else -> index++
             }
         }
         return true
     }
+
+    internal fun wellFormedUnicode(value: String): Boolean =
+        unicodePairsValid(value.length) { value[it] }
+
+    internal fun wellFormedUnicode(value: CharArray): Boolean =
+        unicodePairsValid(value.size) { value[it] }
 
     fun checkedChild(name: String): String {
         require(name.isNotBlank() && name != "." && name != ".." &&
@@ -202,8 +210,10 @@ object SecureFtps {
         target: FtpsTarget, username: String, password: CharArray
     ): FtpsSession {
         require(username.isNotBlank() && username.length <= 255 &&
-            username.none { it == '\n' || it == '\r' || it == '\u0000' }) { "INVALID_USER" }
-        require(password.isNotEmpty() && password.none { it == '\r' || it == '\n' || it == '\u0000' }) {
+            FtpsPath.wellFormedUnicode(username) &&
+            username.none { it.code < 32 || it.code == 127 }) { "INVALID_USER" }
+        require(password.isNotEmpty() && FtpsPath.wellFormedUnicode(password) &&
+            password.none { it == '\r' || it == '\n' || it == '\u0000' }) {
             "INVALID_SECRET"
         }
         val client = configuredClient(target.mode, target.tlsPolicy)
