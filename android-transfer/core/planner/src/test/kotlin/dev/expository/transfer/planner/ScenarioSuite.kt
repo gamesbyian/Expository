@@ -77,6 +77,75 @@ object ScenarioSuite {
             check(RecoveryProviderRelation.entries.size == 3)
         }
 
+        test("malformed Unicode in operation identity and revision can never authorize Copy") {
+            val from = remote()
+            val to = remote(folder = listOf("Movies"))
+            val base = makeRequest(listOf(file("valid.mkv", from)), to)
+            check(OperationPlanner.transfer(base, NOW).executable)
+            val malformed = listOf(
+                charArrayOf(0xD800.toChar()).concatToString(),
+                charArrayOf(0xDC00.toChar()).concatToString(),
+                charArrayOf(0xD800.toChar(), 'x', 0xDC00.toChar()).concatToString()
+            )
+            for (bad in malformed) {
+                fun blocked(request: TransferRequest, reason: String) {
+                    val result = OperationPlanner.transfer(request, NOW)
+                    check(!result.executable && reason in result.blockers) {
+                        "A malformed opaque identity must never yield executable Copy"
+                    }
+                }
+                val destinationVariants = listOf(
+                    to.copy(key = to.key.copy(authorityId = "server" + bad)),
+                    to.copy(key = to.key.copy(rootId = "root" + bad)),
+                    to.copy(key = to.key.copy(containerId = "folder" + bad)),
+                    to.copy(key = to.key.copy(grantId = "grant" + bad)),
+                    to.copy(revision = "rev" + bad),
+                    to.copy(verifiedNamespace = "ns" + bad),
+                    to.copy(verifiedStorageDomain = "domain" + bad),
+                    to.copy(capabilities = to.capabilities.mapValues { (_, p) ->
+                        p.copy(observationId = "observation" + bad)
+                    }),
+                    to.copy(folder = listOf("Movies" + bad))
+                )
+                destinationVariants.forEach {
+                    blocked(base.copy(destination = it), "DESTINATION_IDENTITY")
+                }
+                val item = base.sources.single()
+                val sourceVariants = listOf(
+                    item.copy(key = item.key.copy(authorityId = "server" + bad)),
+                    item.copy(key = item.key.copy(opaqueItemId = "child" + bad)),
+                    item.copy(key = item.key.copy(version = "version" + bad)),
+                    item.copy(location = from.copy(key =
+                        from.key.copy(grantId = "grant" + bad))),
+                    item.copy(location = from.copy(revision = "revision" + bad)),
+                    item.copy(location = from.copy(verifiedNamespace = "ns" + bad)),
+                    item.copy(location = from.copy(verifiedStorageDomain = "domain" + bad)),
+                    item.copy(location = from.copy(capabilities =
+                        from.capabilities.mapValues { (_, p) ->
+                            p.copy(observationId = "observation" + bad)
+                        })),
+                    item.copy(name = "episode" + bad + ".mkv"),
+                    item.copy(parent = listOf("Downloads" + bad))
+                )
+                sourceVariants.forEach {
+                    blocked(base.copy(sources = listOf(it)), "SOURCE_IDENTITY")
+                }
+                blocked(base.copy(destinationListing = DestinationListing(
+                    "revision" + bad, true, emptyList())),
+                    "DESTINATION_LISTING_NOT_VERIFIED")
+                blocked(base.copy(destinationListing = DestinationListing(
+                    "clean", true, listOf("other" + bad))),
+                    "INVALID_DESTINATION_SIBLING")
+            }
+            val emoji = charArrayOf(0xD83D.toChar(), 0xDCC1.toChar()).concatToString()
+            val validSource = file("episode" + emoji + ".mkv", from)
+            val verified = OperationPlanner.transfer(
+                makeRequest(listOf(validSource), to), NOW)
+            check(verified.executable)
+            check(OperationPlanner.revalidate(verified,
+                makeRequest(listOf(validSource), to), NOW))
+        }
+
         test("N08 same-server COPY does not rename") {
             val l = remote()
             val dst = remote(folder = listOf("Movies"))
