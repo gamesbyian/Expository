@@ -33,6 +33,9 @@ data class SafDocumentObservation(
  */
 class SafSingleDocumentCopy(private val resolver: ContentResolver,
     private val recordRecoveryContext: ((String, String, String, String, Uri) -> Unit)? = null,
+    // An optional private witness sealed only after both source and target
+    // streams have fully closed. The underlying engine supplies the byte hash.
+    private val recordSourceBytes: ((String, Long, ByteArray) -> Unit)? = null,
     // Keep the existing single-argument storage factory as the LAST lambda
     // parameter: older callers may use SafSingleDocumentCopy(resolver) { ... }.
     private val storageForPlan: ((String) -> AtomicAttemptStorage)? = null
@@ -146,6 +149,14 @@ class SafSingleDocumentCopy(private val resolver: ContentResolver,
                 resolver.openOutputStream(destination, "w") ?: throw FileNotFoundException()
             override fun openDestinationReadBack(): InputStream? =
                 resolver.openInputStream(destination)
+            override fun onSourceBytesClosed(bytesWritten: Long, sourceSha256: ByteArray) {
+                // Never create orphan recovery evidence for an unjournaled
+                // in-memory Copy. In production this is an encrypted
+                // one-shot sidecar, and any failed commit leaves the write
+                // UNCERTAIN before destination verification.
+                if (storageForPlan != null)
+                    recordSourceBytes?.invoke(initialPlan.digest, bytesWritten, sourceSha256)
+            }
         }
         val factory = storageForPlan ?: return ForegroundCopyEngine.copy(
             initialPlan, fresh, streams, continueRequested, onProgress)

@@ -177,6 +177,8 @@ class AndroidContentProviderCopyTest {
             val bytes = ByteArray(131_179) { i -> ((i * 37 + 13) and 255).toByte() }
             write(source, bytes)
             val store = dev.expository.transfer.journal.ProtectedRecoveryContextStore(isolated)
+            val sourceBytesStore =
+                dev.expository.transfer.journal.ProtectedTransferredBytesEvidenceStore(isolated)
             val copy = SafSingleDocumentCopy(resolver,
                 storageForPlan = { digest ->
                     AndroidAtomicAttemptStorage(isolated, digest)
@@ -188,6 +190,9 @@ class AndroidContentProviderCopyTest {
                             sourceDocumentFingerprint =
                                 dev.expository.transfer.journal.RecoverySourceDocumentIdentity
                                     .fingerprint(sourceUri)))
+                },
+                recordSourceBytes = { digest, length, sha256 ->
+                    sourceBytesStore.recordNew(digest, length, sha256)
                 })
             val permit = AtomicBoolean(true)
             val receipt = copy.copy(source, target,
@@ -196,6 +201,8 @@ class AndroidContentProviderCopyTest {
             assertEquals(CopyProof.UNCERTAIN, receipt.proof)
             val recovery = AttemptRecoveryIndex.recover(isolated)
             assertEquals(1, recovery.requiresReview)
+            assertEquals("A partial source read must never be sealed as completed bytes",
+                null, sourceBytesStore.read(receipt.planDigest))
             val detail = recovery.reviewReferences.single().context
             assertTrue("Encrypted context must explain the target to the operator",
                 detail != null && detail.operation == "SAF_PICKER_COPY")
@@ -215,6 +222,73 @@ class AndroidContentProviderCopyTest {
                 journal.beginAttempt(receipt.planDigest, "forbidden_duplicate_attempt")
             }.isFailure)
             assertArrayEquals(bytes, read(source))
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+            resolver.delete(target, null, null)
+            resolver.delete(source, null, null)
+        }
+    }
+
+    @Test fun completedSingleSaveAsSourceBytesAreEncryptedBeforeVerifiedReceipt() {
+        val source = createPendingFixture()
+        val target = createPendingFixture()
+        val sandbox = java.io.File(context.cacheDir, "single-source-byte-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(context) {
+            override fun getNoBackupFilesDir(): java.io.File = sandbox
+        }
+        try {
+            val original = ByteArray(131_179) { i -> ((i * 29 + 13) and 255).toByte() }
+            write(source, original)
+            val hints = dev.expository.transfer.journal.ProtectedRecoveryContextStore(isolated)
+            val sourceStore =
+                dev.expository.transfer.journal.ProtectedTransferredBytesEvidenceStore(isolated)
+            val copy = SafSingleDocumentCopy(resolver,
+                storageForPlan = { digest ->
+                    AndroidAtomicAttemptStorage(isolated, digest)
+                },
+                recordRecoveryContext = { digest, from, to, provider, sourceUri ->
+                    hints.recordNew(digest,
+                        dev.expository.transfer.journal.ProtectedRecoveryContext(
+                            "SAF_PICKER_COPY", from, to, provider,
+                            sourceDocumentFingerprint =
+                                dev.expository.transfer.journal.RecoverySourceDocumentIdentity
+                                    .fingerprint(sourceUri)))
+                },
+                recordSourceBytes = { digest, length, sha256 ->
+                    sourceStore.recordNew(digest, length, sha256)
+                })
+            val result = copy.copy(source, target, continueRequested = { true })
+            assertEquals("Fully re-read destination must be independently verified",
+                CopyProof.BYTES_VERIFIED, result.proof)
+            val evidence = requireNotNull(sourceStore.read(result.planDigest))
+            val expectedHash = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(original).joinToString("") { "%02x".format(it) }
+            assertEquals(original.size.toLong(), evidence.byteCount)
+            assertEquals(expectedHash, evidence.sourceSha256Hex)
+            val hint = requireNotNull(hints.read(result.planDigest))
+            assertEquals("SAF_PICKER_COPY", hint.operation)
+            val encrypted = java.io.File(sandbox,
+                "transfer_source_bytes_v1_" + result.planDigest).readBytes()
+            val ciphertext = String(encrypted, Charsets.ISO_8859_1)
+            assertTrue("Source stream hash must be sealed, never plain in private files",
+                !ciphertext.contains(expectedHash) && !ciphertext.contains(source.toString()))
+            assertEquals(JournalState.VERIFIED,
+                DurableAttemptJournal(AndroidAtomicAttemptStorage(isolated,
+                    result.planDigest)).recoverAfterRestart()?.state)
+            val recovery = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, recovery.verifiedReceipts)
+            assertEquals(0, recovery.requiresReview)
+            assertArrayEquals("Source bytes must be preserved after recovery evidence",
+                original, read(source))
+            assertArrayEquals("Destination must independently match exact bytes",
+                original, read(target))
+            assertTrue("A completed old journal cannot be replayed",
+                runCatching {
+                    DurableAttemptJournal(AndroidAtomicAttemptStorage(isolated,
+                        result.planDigest)).beginAttempt(result.planDigest, "forbidden_replay")
+                }.isFailure)
         } finally {
             sandbox.listFiles()?.forEach { it.delete() }
             sandbox.delete()
