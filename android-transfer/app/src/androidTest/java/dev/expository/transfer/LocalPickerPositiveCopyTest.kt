@@ -189,6 +189,15 @@ class LocalPickerPositiveCopyTest {
                 "provider document-ID fingerprint in V3 without persisting URI/grant",
                 recovery.sourceDocumentFingerprint?.matches(
                     Regex("[0-9a-f]{64}")) == true)
+            val completed = requireNotNull(
+                dev.expository.transfer.journal.ProtectedTransferredBytesEvidenceStore(context)
+                    .read(newlySealed.single()))
+            val expectedSha256 = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(bytes).joinToString("") { "%02x".format(it) }
+            assertEquals("The real system-picker Copy must seal the complete source " +
+                "length before destination readback", bytes.size.toLong(), completed.byteCount)
+            assertEquals("Source bytes must be independently hashed and encrypted",
+                expectedSha256, completed.sourceSha256Hex)
             findDestination()?.let { target ->
                 assertArrayEquals("MediaStore mirror must match if discoverable", bytes,
                     resolver.openInputStream(target)!!.use { it.readBytes() })
