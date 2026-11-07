@@ -83,6 +83,11 @@ jobs:
                 # Independent exact direct-path Save As through the same
                 # production pinned-SFTP and real Android system picker.
                 SftpSaveAsRealPickerUiTest#pinnedServerDirectFilePathSavesExactBytesThroughRealDocumentsUi) ;;
+                # Two independent localhost-only FTPS trust and control-socket
+                # regressions. Isolate their runtime AndroidKeyStore identities
+                # and expensive TLS handshakes without weakening assertions.
+                FtpsUiSmokeTest#implicitFtpsRejectsRuntimeGeneratedUntrustedTlsCertificate) ;;
+                FtpsUiSmokeTest#pinnedTestCertificateKeepsFtpsControlTlsWhileStalledCwdCanDisconnect) ;;
                 # The original source must never switch mid-Save As after Share.
                 LocalPickerPositiveCopyTest#incomingShareDuringSaveAsCannotSwitchTheSource) ;;
                 # One isolated foreground Copy state gate, avoiding the known
