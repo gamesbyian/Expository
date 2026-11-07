@@ -544,7 +544,7 @@ class RecoveryIndexFailurePolicyTest {
             assertTrue(runCatching { store.recordNew(digest, hint) }.isFailure)
             assertTrue(runCatching {
                 store.recordNew("c".repeat(64),
-                    hint.copy(operation = "SAF_DUAL_COPY"))
+                    hint.copy(operation = "SAF_RECURSIVE_COPY"))
             }.isFailure)
             assertTrue(runCatching {
                 store.recordNew("d".repeat(64),
@@ -552,6 +552,85 @@ class RecoveryIndexFailurePolicyTest {
             }.isFailure)
             assertTrue(!File(sandbox,
                 "transfer_recovery_context_v1_" + "c".repeat(64)).exists())
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
+    @Test fun protectedV4SourceMetadataIsEncryptedBackwardCompatibleAndNonExecutable() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "metadata-v4-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val source = android.net.Uri.parse(
+            "content://synthetic.recovery.provider/document/id%3Aone")
+        val identity = dev.expository.transfer.journal.RecoverySourceDocumentIdentity
+        val sourceId = requireNotNull(identity.fingerprint(source))
+        val metadata = "a".repeat(64)
+        val base = dev.expository.transfer.journal.ProtectedRecoveryContext(
+            "SAF_PICKER_COPY", "Original", "Created", "synthetic",
+            sourceDocumentFingerprint = sourceId,
+            sourceMetadataFingerprint = metadata)
+        val store = dev.expository.transfer.journal.ProtectedRecoveryContextStore(isolated)
+        try {
+            val v2Key = "1".repeat(64)
+            val v3Key = "2".repeat(64)
+            val v4Key = "3".repeat(64)
+            store.recordNew(v2Key, base.copy(
+                sourceDocumentFingerprint = null, sourceMetadataFingerprint = null))
+            store.recordNew(v3Key, base.copy(sourceMetadataFingerprint = null))
+            store.recordNew(v4Key, base)
+            assertEquals(null, store.read(v2Key)?.sourceDocumentFingerprint)
+            assertEquals(null, store.read(v3Key)?.sourceMetadataFingerprint)
+            assertEquals(base, store.read(v4Key))
+            val encrypted = File(sandbox,
+                "transfer_recovery_context_v1_" + v4Key).readBytes()
+            val raw = String(encrypted, Charsets.ISO_8859_1)
+            assertTrue(!raw.contains(metadata) && !raw.contains(sourceId) &&
+                !raw.contains("Original") && !raw.contains("synthetic.recovery.provider"))
+            assertEquals(
+                dev.expository.transfer.journal.RecoverySourceMetadataRelation
+                    .INDETERMINATE,
+                identity.inspectMetadata(app.contentResolver, source,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION, metadata))
+            assertEquals(
+                dev.expository.transfer.journal.RecoverySourceMetadataRelation
+                    .INDETERMINATE,
+                identity.inspectMetadata(app.contentResolver, source, 0, metadata))
+            assertEquals(
+                dev.expository.transfer.journal.RecoverySourceMetadataRelation
+                    .NO_RECORDED_METADATA,
+                identity.inspectMetadata(app.contentResolver, source,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION, null))
+            assertEquals(null, identity.captureMetadata(app.contentResolver, source))
+            val rejected = listOf(
+                base.copy(sourceDocumentFingerprint = null),
+                base.copy(sourceMetadataFingerprint = "malformed"),
+                base.copy(sourceMetadataFingerprint = "A".repeat(64)),
+                base.copy(operation = "SAF_RECURSIVE_COPY"),
+                base.copy(sourceMetadataFingerprint = "b".repeat(65))
+            )
+            rejected.forEachIndexed { index, hint ->
+                val id = (index + 4).toString().repeat(64)
+                assertTrue(runCatching { store.recordNew(id, hint) }.isFailure)
+                assertTrue(!File(sandbox,
+                    "transfer_recovery_context_v1_" + id).exists())
+            }
+            // The new metadata witness cannot reenter the old write attempt.
+            val journal = DurableAttemptJournal(
+                dev.expository.transfer.journal.AndroidAtomicAttemptStorage(isolated, v4Key))
+            journal.confirm(v4Key)
+            journal.beginAttempt(v4Key, "metadata_v4_test")
+            val index = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(metadata,
+                index.sourceInspectionReference(v4Key)?.context?.sourceMetadataFingerprint)
+            assertEquals(JournalState.ATTEMPT_RECORDED, journal.current()?.state)
+            assertTrue(runCatching {
+                journal.beginAttempt(v4Key, "replay_forbidden")
+            }.isFailure)
         } finally {
             sandbox.listFiles()?.forEach { it.delete() }
             sandbox.delete()
