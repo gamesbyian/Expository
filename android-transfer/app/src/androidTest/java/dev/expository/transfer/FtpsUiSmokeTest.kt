@@ -738,6 +738,45 @@ class FtpsUiSmokeTest {
         rule.onNodeWithText("FTPS requires a trusted TLS certificate", substring = true)
             .assertExists()
     }
+    @Test fun stoppedMlstCannotApproveAStaleSaveAsPicker() {
+        // This gate runs on Compose main after blocking network MLST returns.
+        // Identity, Job ownership and cancellation must all still match
+        // before a callback can create an Android destination document.
+        val originalSession = Any()
+        val replacementSession = Any()
+        val oldJob = kotlinx.coroutines.Job()
+        val nextJob = kotlinx.coroutines.Job()
+        try {
+            org.junit.Assert.assertTrue(
+                FtpsMetadataVerificationGate.isCurrent(
+                    originalSession, originalSession, oldJob, oldJob))
+            org.junit.Assert.assertFalse(
+                "Disconnect revokes source and picker authority",
+                FtpsMetadataVerificationGate.isCurrent(
+                    originalSession, null, oldJob, oldJob))
+            org.junit.Assert.assertFalse(
+                "A different FTPS login never inherits an old MLST",
+                FtpsMetadataVerificationGate.isCurrent(
+                    originalSession, replacementSession, oldJob, oldJob))
+            org.junit.Assert.assertFalse(
+                "A new verification of the same session invalidates the old one",
+                FtpsMetadataVerificationGate.isCurrent(
+                    originalSession, originalSession, oldJob, nextJob))
+            oldJob.cancel()
+            org.junit.Assert.assertFalse(
+                "Canceled IO finishing late cannot open the OS picker",
+                FtpsMetadataVerificationGate.isCurrent(
+                    originalSession, originalSession, oldJob, oldJob))
+            org.junit.Assert.assertFalse(
+                "Missing job is never a valid Save As authority",
+                FtpsMetadataVerificationGate.isCurrent(
+                    originalSession, originalSession, null, null))
+        } finally {
+            oldJob.cancel()
+            nextJob.cancel()
+        }
+    }
+
     @Test fun retiredSecureSessionNeverBlocksComposeMainThread() {
         val started = java.util.concurrent.CountDownLatch(1)
         val wasMain = java.util.concurrent.atomic.AtomicBoolean(true)

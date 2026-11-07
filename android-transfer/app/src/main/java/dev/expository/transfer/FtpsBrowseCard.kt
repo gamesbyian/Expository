@@ -91,6 +91,14 @@ internal object FtpsCopyProgressGate {
         presentedPermit === expectedPermit
 }
 
+/** Independent of coroutine completion: a stopped MLST cannot approve Save As. */
+internal object FtpsMetadataVerificationGate {
+    fun isCurrent(expectedSession: Any, session: Any?,
+        expectedJob: Job?, pendingJob: Job?): Boolean =
+        expectedSession === session && expectedJob != null &&
+            expectedJob === pendingJob && expectedJob.isActive
+}
+
 /** A separately typed remote path never obtains write authority from a listing. */
 internal data class FtpsDirectFileSelection(val path: String, val displayName: String) {
     companion object {
@@ -135,6 +143,7 @@ fun FtpsBrowseCard() {
     var loginJob by remember { mutableStateOf<Job?>(null) }
     var pendingLogin by remember { mutableStateOf<RemoteSessionAcquisition<FtpsSession>?>(null) }
     var browseJob by remember { mutableStateOf<Job?>(null) }
+    var metadataJob by remember { mutableStateOf<Job?>(null) }
     var transferred by remember { mutableLongStateOf(0L) }
     var continueCopy by remember { mutableStateOf<AtomicBoolean?>(null) }
     var status by remember {
@@ -146,7 +155,12 @@ fun FtpsBrowseCard() {
     DisposableEffect(Unit) {
         // Read the latest pending lease on teardown, including a login
         // started immediately before the next composition is applied.
-        onDispose { pendingLogin?.abandon() }
+        onDispose {
+            pendingLogin?.abandon()
+            // The pending MLST may be blocked in network IO. Its session is
+            // retired separately by the owned-session disposal effect.
+            metadataJob?.cancel()
+        }
     }
     val owned = session
     DisposableEffect(owned) {
@@ -330,15 +344,16 @@ fun FtpsBrowseCard() {
         pendingFile = null
         pendingSaveWitness = null
         status = "Checking authoritative remote MLST metadata before Save As…"
-        scope.launch {
+        metadataJob = scope.launch {
+            try {
             val result = withContext(Dispatchers.IO) {
                 runCatching { live.statFile(candidate.path) }
             }
-            if (session !== live) {
-                busy = false
-                status = "FTPS session changed. Save canceled."
-            } else {
-                result.onSuccess { observation ->
+            // A canceled blocking MLST can eventually finish, but must
+            // never open a picker or publish a witness after Stop/disconnect.
+            if (!FtpsMetadataVerificationGate.isCurrent(
+                    live, session, coroutineContext[Job], metadataJob)) return@launch
+            result.onSuccess { observation ->
                     // Only MLST success binds the exact path+revision to the
                     // existing one-shot Android CREATE_DOCUMENT review.
                     pendingFile = candidate.path
@@ -362,12 +377,14 @@ fun FtpsBrowseCard() {
                         busy = false
                         status = "Android Save As picker unavailable. Nothing was transferred."
                     }
-                }.onFailure {
-                    pendingFile = null
-                    pendingSaveWitness = null
-                    busy = false
-                    status = "Remote MLST file identity unavailable. No Android document created."
-                }
+            }.onFailure {
+                pendingFile = null
+                pendingSaveWitness = null
+                busy = false
+                status = "Remote MLST file identity unavailable. No Android document created."
+            }
+            } finally {
+                if (metadataJob === coroutineContext[Job]) metadataJob = null
             }
         }
     }
@@ -607,6 +624,27 @@ fun FtpsBrowseCard() {
                         "legacy LIST is never authoritative for mutations.",
                         style = MaterialTheme.typography.bodySmall)
                 }
+            }
+            if (metadataJob != null) {
+                Button(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    onClick = {
+                        // A blocked MLST command must not keep the user
+                        // captive. Invalidate the operation before canceling
+                        // its coroutine; close the authenticated control socket
+                        // on IO via the owned-session retirement effect.
+                        metadataJob?.cancel()
+                        metadataJob = null
+                        session = null
+                        sessionId = ""
+                        page = null
+                        pendingFile = null
+                        pendingSaveWitness = null
+                        directFilePath = ""
+                        fileFilter = ""
+                        browseLimit = FtpsBrowseBounds.INITIAL
+                        busy = false
+                        status = "FTPS file verification stopped; secure session is being retired. No Save As picker or Copy started. Reconnect to retry."
+                    }) { Text("Stop file verification and disconnect") }
             }
             if (browseJob != null) {
                 Button(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
