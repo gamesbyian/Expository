@@ -65,6 +65,33 @@ object SftpSecuritySuite {
             check(SftpPath.childPath("/safe", "archive-" + emoji) ==
                 "/safe/archive-" + emoji)
         }
+        checkCase("SFTP login refuses malformed Unicode credentials before starting SSH") {
+            val target = SftpTarget("example.invalid", trustedHostKey = pin)
+            val malformed = listOf(
+                charArrayOf(0xD800.toChar()),
+                charArrayOf(0xDC00.toChar()),
+                charArrayOf(0xD800.toChar(), 'a', 0xDC00.toChar())
+            )
+            for (broken in malformed) {
+                val badUser = runCatching {
+                    SecureSftp.connect(target, "account" + broken.concatToString(), charArrayOf('p'))
+                }.exceptionOrNull()
+                check(badUser is IllegalArgumentException && badUser.message == "INVALID_USER")
+                val badSecret = runCatching {
+                    SecureSftp.connect(target, "account", broken)
+                }.exceptionOrNull()
+                check(badSecret is IllegalArgumentException && badSecret.message == "INVALID_SECRET")
+            }
+            val supplementary = charArrayOf(0xD83D.toChar(), 0xDCC1.toChar())
+            check(SftpPath.wellFormedUnicode(supplementary))
+            check(SftpPath.wellFormedUnicode("user-" + supplementary.concatToString()))
+            check(!SftpPath.wellFormedUnicode(malformed.last()))
+            for (invalid in listOf("account\u001bcommand", "account\u007f", "a".repeat(256))) {
+                check(runCatching {
+                    SecureSftp.connect(target, invalid, charArrayOf('p'))
+                }.exceptionOrNull()?.message == "INVALID_USER")
+            }
+        }
         checkCase("bounded incremental listing windows keep narrow compatibility") {
             check(SftpBrowseBounds.requireValid(64) == 64) // manual smoke compatibility
             check(SftpBrowseBounds.next(200) == 400)
