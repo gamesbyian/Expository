@@ -74,6 +74,7 @@ import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 import dev.expository.transfer.journal.ProtectedRecoveryContext
 import dev.expository.transfer.journal.ProtectedRecoveryContextStore
 import dev.expository.transfer.journal.RecoveryTreeRootIdentity
+import dev.expository.transfer.journal.RecoverySourceDocumentIdentity
 import dev.expository.transfer.journal.RecoveryCreatedChildIdentity
 import dev.expository.transfer.journal.ProtectedCreatedChildWitnessStore
 import dev.expository.transfer.journal.ProtectedTransferredBytesEvidenceStore
@@ -1663,7 +1664,18 @@ private fun DeveloperPreview(
                                         .recordNew(digest, ProtectedRecoveryContext(
                                             "SAF_DUAL_COPY", sourceName, targetName, provider,
                                             RecoveryTreeRootIdentity.fingerprint(
-                                                current.request.targetTree)))
+                                                current.request.targetTree),
+                                            sourceDocumentFingerprint = runCatching {
+                                                // This item was selected from a
+                                                // verified source tree under its
+                                                // original transient grant.
+                                                // Seal only a one-way provider
+                                                // document ID, never its URI.
+                                                RecoverySourceDocumentIdentity.fingerprint(
+                                                    DocumentsContract.buildDocumentUriUsingTree(
+                                                        current.request.sourceTree,
+                                                        current.request.sourceDocumentId))
+                                            }.getOrNull()))
                                 },
                                 recordCreatedChild = {
                                     digest, tree, parentId, childId, name ->
