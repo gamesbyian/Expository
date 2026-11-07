@@ -36,7 +36,7 @@ data class ProtectedRecoveryContext(
     val destinationLabel: String,
     val destinationProvider: String,
     val destinationTreeRootFingerprint: String? = null,
-    /** Available only for eligible one-file SAF Copy source selections. */
+    /** Optional on independently reviewed one-file or Dual SAF Copy sources. */
     val sourceDocumentFingerprint: String? = null
 ) {
     // These labels are separately encrypted at rest, but their generated
@@ -114,7 +114,7 @@ class ProtectedRecoveryContextStore(context: Context) {
                 (context.destinationTreeRootFingerprint == null ||
                     TREE_ROOT_FINGERPRINT.matches(context.destinationTreeRootFingerprint)) &&
                 (context.sourceDocumentFingerprint == null ||
-                    (context.operation == "SAF_PICKER_COPY" &&
+                    (context.operation in setOf("SAF_PICKER_COPY", "SAF_DUAL_COPY") &&
                         SOURCE_DOCUMENT_FINGERPRINT.matches(context.sourceDocumentFingerprint)))) {
                 "INVALID_RECOVERY_CONTEXT"
             }
@@ -125,7 +125,7 @@ class ProtectedRecoveryContextStore(context: Context) {
                 DataOutputStream(bytes).use { out ->
                     // Keep V2 bytes for operations without source-ID proof.
                     // V3 adds a non-reversible, encrypted source document ID
-                    // only for the one-file Android SAF Copy route.
+                    // for separately journaled, user-reviewed SAF file Copy routes.
                     out.writeByte(if (context.sourceDocumentFingerprint == null) 2 else 3)
                     out.writeUTF(context.operation)
                     out.writeUTF(context.sourceLabel)
@@ -233,7 +233,7 @@ class ProtectedRecoveryContextStore(context: Context) {
                     if (input.available() != 0 ||
                         (root != null && !TREE_ROOT_FINGERPRINT.matches(root)) ||
                         (sourceDocument != null &&
-                            (operation != "SAF_PICKER_COPY" ||
+                            (operation !in setOf("SAF_PICKER_COPY", "SAF_DUAL_COPY") ||
                                 !SOURCE_DOCUMENT_FINGERPRINT.matches(sourceDocument))) ||
                         context.operation !in setOf("SAF_PICKER_COPY", "SAF_RECURSIVE_COPY", "SAF_DUAL_COPY") ||
                         !allowed(context.sourceLabel) ||
