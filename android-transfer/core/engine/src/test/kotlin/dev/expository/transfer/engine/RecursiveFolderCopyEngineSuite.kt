@@ -141,6 +141,35 @@ object RecursiveFolderCopyEngineSuite {
             println("PASS recursive-exec " + label)
             passed++
         }
+        case("malformed UTF-16 recursive components block before any journal or write") {
+            val malformed = listOf(
+                charArrayOf(0xD800.toChar()).concatToString(),
+                charArrayOf(0xDC00.toChar()).concatToString(),
+                charArrayOf(0xD800.toChar(), 'x', 0xDC00.toChar()).concatToString()
+            )
+            for (invalid in malformed) {
+                val invalidName = "Episode" + invalid + ".bin"
+                val original = manifest()
+                val changed = original.copy(entries = original.entries.dropLast(1) +
+                    entry("file", invalidName, ItemKind.FILE,
+                        listOf("Shows", invalidName)))
+                val f = Fake().apply { refresh = { changed } }
+                val result = f.run(changed)
+                check(result.result == RecursiveCopyResult.BLOCKED &&
+                    result.reason == "INVALID_RECURSIVE_ENTRY")
+                check(f.created.isEmpty() && f.journals.isEmpty() &&
+                    "open-dest" !in f.trace)
+            }
+            // Supplementary characters consist of a VALID surrogate pair;
+            // blocking all surrogate code units would wrongly reject them.
+            val emoji = charArrayOf(0xD83D.toChar(), 0xDCC1.toChar()).concatToString()
+            val name = "Episode-" + emoji + ".bin"
+            val valid = manifest().let { it.copy(entries = it.entries.dropLast(1) +
+                entry("file", name, ItemKind.FILE, listOf("Shows", name))) }
+            val accepted = Fake().apply { refresh = { valid } }
+            check(accepted.run(valid).result == RecursiveCopyResult.COMPLETE_VERIFIED)
+            check(accepted.copied!!.contentEquals(content))
+        }
         case("nested and empty folders then file SHA readback, durable receipts") {
             val f = Fake()
             val result = f.run()
