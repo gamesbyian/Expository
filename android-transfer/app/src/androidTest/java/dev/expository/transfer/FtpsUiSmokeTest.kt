@@ -476,16 +476,8 @@ class FtpsUiSmokeTest {
             KeyGenParameterSpec.Builder(alias,
                 KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY)
                 .setKeySize(2048)
-                // Android TLS may sign an already-hashed handshake transcript.
-                // AndroidKeyStore requires DIGEST_NONE for that code path;
-                // a SHA-256-only key can fail before FTP authentication.
-                // These authorizations are for the disposable test key only.
-                .setDigests(KeyProperties.DIGEST_NONE,
-                    KeyProperties.DIGEST_SHA256, KeyProperties.DIGEST_SHA384,
-                    KeyProperties.DIGEST_SHA512)
-                .setSignaturePaddings(
-                    KeyProperties.SIGNATURE_PADDING_RSA_PKCS1,
-                    KeyProperties.SIGNATURE_PADDING_RSA_PSS)
+                .setDigests(KeyProperties.DIGEST_SHA256)
+                .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PKCS1)
                 .setCertificateSubject(X500Principal("CN=localhost"))
                 .setCertificateSerialNumber(java.math.BigInteger.valueOf(now))
                 .setCertificateNotBefore(Date(now - 30_000L))
@@ -591,13 +583,18 @@ class FtpsUiSmokeTest {
         var client: org.apache.commons.net.ftp.FTPSClient? = null
         try {
             val now = System.currentTimeMillis()
-            val generator = KeyPairGenerator.getInstance("RSA", "AndroidKeyStore")
+            // Use a runtime-only P-256 signing key for the positive
+            // encrypted-control fixture. This avoids RSA-specific TLS
+            // handshake signing restrictions in AndroidKeyStore while
+            // retaining real ECDHE_ECDSA TLS and exact certificate trust.
+            // No production trust or hostname check is changed.
+            val generator = KeyPairGenerator.getInstance("EC", "AndroidKeyStore")
             generator.initialize(
                 KeyGenParameterSpec.Builder(alias,
                     KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY)
-                    .setKeySize(2048)
-                    .setDigests(KeyProperties.DIGEST_SHA256)
-                    .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PKCS1)
+                    .setKeySize(256)
+                    .setDigests(KeyProperties.DIGEST_NONE,
+                        KeyProperties.DIGEST_SHA256, KeyProperties.DIGEST_SHA384)
                     .setCertificateSubject(X500Principal("CN=localhost"))
                     .setCertificateSerialNumber(java.math.BigInteger.valueOf(now))
                     .setCertificateNotBefore(Date(now - 30_000L))
@@ -615,9 +612,8 @@ class FtpsUiSmokeTest {
                 0, 1, java.net.InetAddress.getByName("127.0.0.1"))
                 as SSLServerSocket).apply {
                 soTimeout = 12_000
-                // Test key authorizes RSA PKCS#1 signing. TLS 1.2 is an
-                // explicitly supported secure compatibility mode; TLS 1.3
-                // requires RSA-PSS certificates for RSA authentication.
+                // Use the app-supported TLS 1.2 compatibility mode; the
+                // generated P-256 certificate supports ECDSA authentication.
                 enabledProtocols = arrayOf("TLSv1.2")
             }
             serverSocket = listener
