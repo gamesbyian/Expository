@@ -240,9 +240,20 @@ fun RecoveryStatusCard() {
                 val observed = withContext(Dispatchers.IO) {
                     val owner = currentCoroutineContext()
                     runCatching {
-                        RecoveryManualSourceInspector.inspect(
+                        val bytes = RecoveryManualSourceInspector.inspect(
                             context.contentResolver, uri, flags, completed,
                             continueRequested = { owner.isActive })
+                        // Compare the original provider document ID only after
+                        // a successful fresh source read and metadata recheck.
+                        // This never promotes the journal or reuses the grant.
+                        val identity = if (bytes in setOf(
+                                FreshSourceByteRelation.CURRENT_SELECTION_BYTES_MATCH_RECORDED_TRANSFER,
+                                FreshSourceByteRelation.CURRENT_SELECTION_BYTES_DIFFER_FROM_RECORDED_TRANSFER
+                            ) && owner.isActive)
+                            RecoverySourceDocumentIdentity.compare(
+                                reference.context?.sourceDocumentFingerprint, uri, flags)
+                        else RecoverySourceDocumentRelation.INDETERMINATE
+                        bytes to identity
                     }
                 }
                 if (revision != inspectionRevision || !showReviewReferences) return@launch
@@ -253,7 +264,9 @@ fun RecoveryStatusCard() {
                     sourceInspectionMessage =
                         "Source inspection unavailable. The previous transfer remains unresolved."
                 } else {
-                    sourceByteRelation = observed.getOrNull()
+                    sourceByteRelation = observed.getOrNull()?.first
+                    val identityRelation = observed.getOrNull()?.second
+                        ?: RecoverySourceDocumentRelation.INDETERMINATE
                     sourceInspectionMessage = "Fresh source check for record …" +
                         ticket.first.takeLast(12) + ": " + when (sourceByteRelation) {
                             FreshSourceByteRelation.CURRENT_SELECTION_BYTES_MATCH_RECORDED_TRANSFER ->
@@ -280,6 +293,23 @@ fun RecoveryStatusCard() {
                             FreshSourceByteRelation.NO_COMPLETED_TRANSFER_BYTES, null ->
                                 "The old attempt has no comparable successfully closed " +
                                 "source-byte evidence. No matching claim was made."
+                        } + " " + when (identityRelation) {
+                            RecoverySourceDocumentRelation.SAME_RECORDED_DOCUMENT_ID ->
+                                "The fresh Android selection has the SAME provider document " +
+                                "ID as the one originally recorded for this Copy. This " +
+                                "does not establish an unchanged source version, a " +
+                                "destination result, or authorization to retry or delete."
+                            RecoverySourceDocumentRelation.DIFFERENT_RECORDED_DOCUMENT_ID ->
+                                "The selected document has a DIFFERENT provider document " +
+                                "ID from the recorded original. Matching bytes would " +
+                                "not establish original-source identity."
+                            RecoverySourceDocumentRelation.NO_RECORDED_DOCUMENT_ID ->
+                                "No original source document ID was saved for this " +
+                                "operation. This is expected for older records and " +
+                                "non-DocumentsProvider sources."
+                            RecoverySourceDocumentRelation.INDETERMINATE ->
+                                "Original-source identity could not be compared with " +
+                                "a completed, fresh authorized observation."
                         }
                 }
             }
@@ -419,8 +449,10 @@ fun RecoveryStatusCard() {
                         if (entry.transferredBytes != null && entry.recordKey != null) {
                             Text("Optional: compare a newly selected Android document's " +
                                 "current bytes with this record's sealed source-stream " +
-                                "hash (64 MiB limit). This cannot establish original " +
-                                "source identity, destination state, replay or deletion.",
+                                "hash (64 MiB limit). Eligible new one-file records " +
+                                "also compare the original Android document ID. Neither " +
+                                "check establishes source version, destination state, " +
+                                "replay authority or permission to delete.",
                                 style = MaterialTheme.typography.bodySmall)
                             Button(modifier = Modifier.heightIn(min = 48.dp),
                                 enabled = inspectionTicket == null &&
