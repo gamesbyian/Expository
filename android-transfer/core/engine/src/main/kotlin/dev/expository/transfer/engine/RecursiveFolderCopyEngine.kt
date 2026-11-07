@@ -160,7 +160,12 @@ object RecursiveFolderCopyEngine {
         val rootItem = approved.entries.first().source
         val rootLocation = rootItem.location
         fun safeComponent(s: String): Boolean = s.isNotBlank() &&
-            s != "." && s != ".." && s.toByteArray(StandardCharsets.UTF_8).size <= 255 &&
+            s != "." && s != ".." &&
+            // The default encoder silently substitutes '?' for malformed
+            // UTF-16. Refuse that loss of identity before hashing source
+            // paths or preparing any directory/file mutation.
+            StandardCharsets.UTF_8.newEncoder().canEncode(s) &&
+            s.toByteArray(StandardCharsets.UTF_8).size <= 255 &&
             s.none { it == '/' || it == '\\' || it.code < 32 || it.code == 127 }
         for ((position, item) in approved.entries.withIndex()) {
             val key = item.source.location.key
