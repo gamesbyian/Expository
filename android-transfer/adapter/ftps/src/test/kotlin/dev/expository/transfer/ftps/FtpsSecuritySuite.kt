@@ -426,6 +426,31 @@ object FtpsSecuritySuite {
                 SecureFtps.connect(FtpsTarget("example.invalid"), "tester", charArrayOf())
             }.isFailure)
         }
+        checkCase("FTPS login refuses malformed Unicode credentials before network") {
+            val target = FtpsTarget("example.invalid")
+            val brokenHigh = charArrayOf(0xD800.toChar())
+            val brokenLow = charArrayOf(0xDC00.toChar())
+            val brokenSplit = charArrayOf(0xD800.toChar(), 'x', 0xDC00.toChar())
+            for (invalid in listOf(brokenHigh, brokenLow, brokenSplit)) {
+                val badUser = runCatching {
+                    SecureFtps.connect(target, "account" + invalid.concatToString(), charArrayOf('p'))
+                }.exceptionOrNull()
+                check(badUser is IllegalArgumentException &&
+                    badUser.message == "INVALID_USER")
+                val badPassword = runCatching {
+                    SecureFtps.connect(target, "account", invalid)
+                }.exceptionOrNull()
+                check(badPassword is IllegalArgumentException &&
+                    badPassword.message == "INVALID_SECRET")
+            }
+            val validPair = charArrayOf(0xD83D.toChar(), 0xDCC1.toChar())
+            check(FtpsPath.wellFormedUnicode(validPair))
+            check(FtpsPath.wellFormedUnicode("name-" + validPair.concatToString()))
+            check(!FtpsPath.wellFormedUnicode(brokenSplit))
+            check(runCatching {
+                SecureFtps.connect(target, "name\u001bcommand", charArrayOf('p'))
+            }.exceptionOrNull()?.message == "INVALID_USER")
+        }
         checkCase("optional MLSD times sort newest with unknown last, without changing identity") {
             fun file(name: String, seconds: Long?): org.apache.commons.net.ftp.FTPFile =
                 org.apache.commons.net.ftp.FTPFile().apply {
