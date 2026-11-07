@@ -153,7 +153,7 @@ object RecursiveFolderCopyEngineSuite {
                 val changed = original.copy(entries = original.entries.dropLast(1) +
                     entry("file", invalidName, ItemKind.FILE,
                         listOf("Shows", invalidName)))
-                val f = Fake().apply { refresh = { changed } }
+                val f = Fake().apply { refresh = { changed.copy() } }
                 val result = f.run(changed)
                 check(result.result == RecursiveCopyResult.BLOCKED &&
                     result.reason == "INVALID_RECURSIVE_ENTRY")
@@ -166,7 +166,7 @@ object RecursiveFolderCopyEngineSuite {
             val name = "Episode-" + emoji + ".bin"
             val valid = manifest().let { it.copy(entries = it.entries.dropLast(1) +
                 entry("file", name, ItemKind.FILE, listOf("Shows", name))) }
-            val accepted = Fake().apply { refresh = { valid } }
+            val accepted = Fake().apply { refresh = { valid.copy() } }
             check(accepted.run(valid).result == RecursiveCopyResult.COMPLETE_VERIFIED)
             check(accepted.copied!!.contentEquals(content))
         }
