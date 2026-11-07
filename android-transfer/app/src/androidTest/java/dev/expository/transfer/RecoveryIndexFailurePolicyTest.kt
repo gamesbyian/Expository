@@ -460,7 +460,6 @@ class RecoveryIndexFailurePolicyTest {
             override fun getNoBackupFilesDir(): File = sandbox
         }
         val identity = dev.expository.transfer.journal.RecoverySourceDocumentIdentity
-        val relation = dev.expository.transfer.journal.RecoverySourceDocumentRelation
         val original = android.net.Uri.parse(
             "content://synthetic.source.provider/document/account%3Aoriginal")
         val sameFromTree = android.net.Uri.parse(
@@ -476,19 +475,19 @@ class RecoveryIndexFailurePolicyTest {
         assertEquals(64, saved.length)
         assertEquals(saved, identity.fingerprint(sameFromTree))
         assertEquals(null, identity.fingerprint(undocument))
-        assertEquals(relation.SAME_RECORDED_DOCUMENT_ID,
+        assertEquals(dev.expository.transfer.journal.RecoverySourceDocumentRelation.SAME_RECORDED_DOCUMENT_ID,
             identity.compare(saved, sameFromTree, read))
-        assertEquals(relation.DIFFERENT_RECORDED_DOCUMENT_ID,
+        assertEquals(dev.expository.transfer.journal.RecoverySourceDocumentRelation.DIFFERENT_RECORDED_DOCUMENT_ID,
             identity.compare(saved, another, read))
-        assertEquals(relation.DIFFERENT_RECORDED_DOCUMENT_ID,
+        assertEquals(dev.expository.transfer.journal.RecoverySourceDocumentRelation.DIFFERENT_RECORDED_DOCUMENT_ID,
             identity.compare(saved, anotherProvider, read))
-        assertEquals(relation.NO_RECORDED_DOCUMENT_ID,
+        assertEquals(dev.expository.transfer.journal.RecoverySourceDocumentRelation.NO_RECORDED_DOCUMENT_ID,
             identity.compare(null, original, read))
-        assertEquals(relation.INDETERMINATE,
+        assertEquals(dev.expository.transfer.journal.RecoverySourceDocumentRelation.INDETERMINATE,
             identity.compare(saved, original, 0))
-        assertEquals(relation.INDETERMINATE,
+        assertEquals(dev.expository.transfer.journal.RecoverySourceDocumentRelation.INDETERMINATE,
             identity.compare(saved, undocument, read))
-        assertEquals(relation.INDETERMINATE,
+        assertEquals(dev.expository.transfer.journal.RecoverySourceDocumentRelation.INDETERMINATE,
             identity.compare("not-a-digest", original, read))
         val malformed = android.net.Uri.parse(
             "content://synthetic.source.provider/document/%EF%BF%BD")
