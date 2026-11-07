@@ -235,7 +235,8 @@ fun RecoveryStatusCard() {
             val revision = ticket.second
             // A source-ID witness may exist even when the original transfer
             // never closed its input or exceeded the 64-MiB byte-review cap.
-            val completed = reference.transferredBytes
+            val reviewed = requireNotNull(reference)
+            val completed = reviewed.transferredBytes
             sourceByteRelation = null
             sourceInspectionMessage =
                 "Checking current Android source document identity and available " +
@@ -250,7 +251,7 @@ fun RecoveryStatusCard() {
                         // source streams where no byte digest exists.
                         val identity = RecoverySourceDocumentIdentity.inspect(
                             context.contentResolver, uri, flags,
-                            reference.context?.sourceDocumentFingerprint,
+                            reviewed.context?.sourceDocumentFingerprint,
                             continueRequested = { owner.isActive })
                         val bytes = if (completed != null)
                             RecoveryManualSourceInspector.inspect(
