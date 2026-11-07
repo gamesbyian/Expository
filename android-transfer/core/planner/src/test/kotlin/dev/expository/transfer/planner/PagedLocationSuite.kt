@@ -125,6 +125,38 @@ object PagedLocationSuite {
             snap.copy(nextToken = "loop", children = emptyList())).state ==
             LocationIndexState.INVALID)
 
+        // A provider may report a Java String containing an unpaired UTF-16
+        // surrogate. UTF-8 conversion silently substitutes '?', aliasing
+        // distinct remote names/opaque IDs/cursors in a complete index.
+        // Reject the ENTIRE page without retaining partial mutation evidence.
+        val malformedUnicode = listOf(
+            charArrayOf(0xD800.toChar()).concatToString(),
+            charArrayOf(0xDC00.toChar()).concatToString(),
+            charArrayOf(0xD800.toChar(), 'x', 0xDC00.toChar()).concatToString()
+        )
+        for (invalid in malformedUnicode) {
+            blocked(snap.copy(requestedToken = "page-two", nextToken = null,
+                children = listOf(child(local, 2, "File" + invalid + ".bin"))))
+            blocked(snap.copy(requestedToken = "page-two", nextToken = null,
+                children = listOf(child(local, 2).copy(
+                    key = ItemKey(local.key.authorityId, "opaque-" + invalid, "v1")))))
+            blocked(snap.copy(requestedToken = "page-two", nextToken = null,
+                children = listOf(child(local, 2).copy(
+                    key = ItemKey(local.key.authorityId, "id-2", "version-" + invalid)))))
+            blocked(snap.copy(requestedToken = "page-two", nextToken = null,
+                snapshotId = "snapshot-" + invalid,
+                children = listOf(child(local, 2))))
+            blocked(snap.copy(requestedToken = "page-two", nextToken = "cursor-" + invalid,
+                children = listOf(child(local, 2))))
+        }
+        val supplementary = charArrayOf(0xD83D.toChar(), 0xDCC1.toChar()).concatToString()
+        val validUnicodeIndex = PagedLocationIndex.begin(local).append(
+            LocationPage(local, "snapshot-" + supplementary, null, null,
+                listOf(child(local, 1, "media-" + supplementary + ".bin")), true))
+        check(validUnicodeIndex.state == LocationIndexState.COMPLETE)
+        check(validUnicodeIndex.itemRefs()?.single()?.name ==
+            "media-" + supplementary + ".bin")
+
         // Model pairings without granting any Android/Drive/GitHub authority.
         // Backend-specific adapters and verified byte receipts are still needed.
         val git = loc(LocationKind.GITHUB_REPOSITORY, "public-github", grant = "")

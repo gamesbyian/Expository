@@ -14,7 +14,7 @@ internal object SmartMergeNameRules {
     // surrogate. Two distinct provider labels could then share the same
     // byte sequence in a Smart Merge review digest. Reject malformed Unicode
     // before using it in any source/target identity or collision calculation.
-    private fun wellFormedUtf16(value: String): Boolean {
+    internal fun wellFormedUtf16(value: String): Boolean {
         var i = 0
         while (i < value.length) {
             val c = value[i]
