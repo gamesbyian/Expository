@@ -219,11 +219,9 @@ fun RecoveryStatusCard() {
         sourceInspectionTicket = null
         val uri = result.data?.data
         val flags = result.data?.flags ?: 0
-        val reference = ticket?.first?.let { status?.inspectionReference(it) }
+        val reference = ticket?.first?.let { status?.sourceInspectionReference(it) }
         if (ticket == null || ticket.second != inspectionRevision ||
-            !showReviewReferences ||
-            (reference?.transferredBytes == null &&
-                reference?.context?.sourceDocumentFingerprint == null)) {
+            !showReviewReferences || reference == null) {
             sourceInspectionMessage =
                 "Source inspection selection expired. No source bytes were read or changed."
         } else if (result.resultCode != Activity.RESULT_OK || uri == null) {
@@ -454,8 +452,7 @@ fun RecoveryStatusCard() {
                                 style = MaterialTheme.typography.bodySmall)
                         }
                         if (entry.recordKey != null &&
-                            (entry.transferredBytes != null ||
-                                entry.context?.sourceDocumentFingerprint != null)) {
+                            review.sourceInspectionReference(entry.recordKey) != null) {
                             Text(
                                 if (entry.transferredBytes != null)
                                     "Re-select a current source document. Compare its " +
