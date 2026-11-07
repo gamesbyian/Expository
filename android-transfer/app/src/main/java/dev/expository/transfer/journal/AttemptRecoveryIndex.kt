@@ -54,6 +54,20 @@ internal fun RecoveryCounts.inspectionReference(recordKey: String): RecoveryRevi
     }
 
 /**
+ * Source reauthorization has a different minimum evidence requirement from
+ * destination-folder inspection. A valid transferred-byte witness can still
+ * be reviewed when an older or damaged destination-label sidecar is absent;
+ * a V3 original document ID can be reviewed even if no stream completed.
+ * The full private key, not its displayed suffix, remains mandatory.
+ */
+internal fun RecoveryCounts.sourceInspectionReference(recordKey: String): RecoveryReviewReference? =
+    reviewReferences.singleOrNull {
+        it.recordKey != null && it.recordKey == recordKey &&
+            (it.transferredBytes != null ||
+                it.context?.sourceDocumentFingerprint != null)
+    }
+
+/**
  * Read-only reconciliation of private attempt records, on startup or refresh. This cannot inspect
  * remote state or SAF provider identity (journal intentionally has no paths),
  * so it NEVER retries, cleans up, deletes or reports a remote transfer verified.

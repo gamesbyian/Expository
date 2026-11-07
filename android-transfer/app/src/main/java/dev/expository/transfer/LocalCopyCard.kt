@@ -44,6 +44,7 @@ import dev.expository.transfer.saf.SafCreatedDocumentWriteGrant
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
 import dev.expository.transfer.journal.ProtectedRecoveryContext
 import dev.expository.transfer.journal.ProtectedRecoveryContextStore
+import dev.expository.transfer.journal.RecoverySourceDocumentIdentity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -126,9 +127,12 @@ fun LocalCopyCard(
             storageForPlan = { digest ->
                 AndroidAtomicAttemptStorage(app, digest)
             },
-            recordRecoveryContext = { digest, sourceName, destinationName, provider ->
+            recordRecoveryContext = { digest, sourceName, destinationName, provider, sourceUri ->
+                // Only a one-way ID fingerprint enters encrypted recovery
+                // context. The raw source URI/grant remains RAM-only.
                 recovery.recordNew(digest, ProtectedRecoveryContext(
-                    "SAF_PICKER_COPY", sourceName, destinationName, provider))
+                    "SAF_PICKER_COPY", sourceName, destinationName, provider,
+                    sourceDocumentFingerprint = RecoverySourceDocumentIdentity.fingerprint(sourceUri)))
             })
     }
     var selected by remember { mutableStateOf<Uri?>(null) }

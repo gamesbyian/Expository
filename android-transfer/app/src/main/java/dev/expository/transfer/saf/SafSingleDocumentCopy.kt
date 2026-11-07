@@ -32,7 +32,7 @@ data class SafDocumentObservation(
  * results and exist only in memory. No broad file permissions or cloud OAuth.
  */
 class SafSingleDocumentCopy(private val resolver: ContentResolver,
-    private val recordRecoveryContext: ((String, String, String, String) -> Unit)? = null,
+    private val recordRecoveryContext: ((String, String, String, String, Uri) -> Unit)? = null,
     // Keep the existing single-argument storage factory as the LAST lambda
     // parameter: older callers may use SafSingleDocumentCopy(resolver) { ... }.
     private val storageForPlan: ((String) -> AtomicAttemptStorage)? = null
@@ -153,6 +153,8 @@ class SafSingleDocumentCopy(private val resolver: ContentResolver,
             return CopyReceipt(initialPlan.digest, CopyProof.BLOCKED, 0,
                 "SOURCE_OR_DESTINATION_PLAN_NOT_EXECUTABLE")
         // The operator needs a bounded, encrypted context after process death.
+        // Include the original source URI only in the in-process callback so
+        // the app may seal an irreversible provider document-ID fingerprint.
         // This independent record is committed before the attempt journal can
         // record a possible destination write. No URI or grant is persisted.
         if (recordRecoveryContext != null) {
@@ -160,7 +162,8 @@ class SafSingleDocumentCopy(private val resolver: ContentResolver,
                 recordRecoveryContext.invoke(initialPlan.digest,
                     reviewLabel(observe(source).displayName),
                     reviewLabel(observe(destination).displayName),
-                    reviewLabel(destination.authority ?: "Android document provider"))
+                    reviewLabel(destination.authority ?: "Android document provider"),
+                    source)
             } catch (_: Exception) {
                 return CopyReceipt(initialPlan.digest, CopyProof.BLOCKED, 0,
                     "RECOVERY_CONTEXT_UNAVAILABLE")

@@ -10,6 +10,7 @@ import java.io.File
 import java.util.UUID
 import dev.expository.transfer.journal.AttemptRecoveryIndex
 import dev.expository.transfer.journal.inspectionReference
+import dev.expository.transfer.journal.sourceInspectionReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertTrue
@@ -446,6 +447,111 @@ class RecoveryIndexFailurePolicyTest {
             assertTrue(runCatching {
                 journal.beginAttempt(digest, "replay_attempt_blocked")
             }.isFailure)
+        } finally {
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
+        }
+    }
+
+    @Test fun encryptedOriginalSourceDocumentWitnessMatchesOnlyFreshDocumentIdentity() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val sandbox = File(app.cacheDir, "source-id-recovery-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val identity = dev.expository.transfer.journal.RecoverySourceDocumentIdentity
+        val original = android.net.Uri.parse(
+            "content://synthetic.source.provider/document/account%3Aoriginal")
+        val sameFromTree = android.net.Uri.parse(
+            "content://synthetic.source.provider/tree/account%3ARoot/document/account%3Aoriginal")
+        val another = android.net.Uri.parse(
+            "content://synthetic.source.provider/document/account%3Aunrelated")
+        val anotherProvider = android.net.Uri.parse(
+            "content://different.source.provider/document/account%3Aoriginal")
+        val undocument = android.net.Uri.parse(
+            "content://synthetic.source.provider/item/account%3Aoriginal")
+        val read = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+        val saved = requireNotNull(identity.fingerprint(original))
+        assertEquals(64, saved.length)
+        assertEquals(saved, identity.fingerprint(sameFromTree))
+        assertEquals(null, identity.fingerprint(undocument))
+        assertEquals(dev.expository.transfer.journal.RecoverySourceDocumentRelation.SAME_RECORDED_DOCUMENT_ID,
+            identity.compare(saved, sameFromTree, read))
+        assertEquals(dev.expository.transfer.journal.RecoverySourceDocumentRelation.DIFFERENT_RECORDED_DOCUMENT_ID,
+            identity.compare(saved, another, read))
+        assertEquals(dev.expository.transfer.journal.RecoverySourceDocumentRelation.DIFFERENT_RECORDED_DOCUMENT_ID,
+            identity.compare(saved, anotherProvider, read))
+        assertEquals(dev.expository.transfer.journal.RecoverySourceDocumentRelation.NO_RECORDED_DOCUMENT_ID,
+            identity.compare(null, original, read))
+        assertEquals(dev.expository.transfer.journal.RecoverySourceDocumentRelation.INDETERMINATE,
+            identity.compare(saved, original, 0))
+        assertEquals(dev.expository.transfer.journal.RecoverySourceDocumentRelation.INDETERMINATE,
+            identity.compare(saved, undocument, read))
+        assertEquals(dev.expository.transfer.journal.RecoverySourceDocumentRelation.INDETERMINATE,
+            identity.compare("not-a-digest", original, read))
+        // The newer inspector requires an actually readable provider. An
+        // invented content URI does not pass as source reauthorization.
+        assertEquals(dev.expository.transfer.journal.RecoverySourceDocumentRelation.INDETERMINATE,
+            identity.inspect(app.contentResolver, original, read, saved))
+        val malformed = android.net.Uri.parse(
+            "content://synthetic.source.provider/document/%EF%BF%BD")
+        assertTrue(identity.fingerprint(malformed) != saved)
+        val digest = "b".repeat(64)
+        try {
+            val store = dev.expository.transfer.journal.ProtectedRecoveryContextStore(isolated)
+            val hint = dev.expository.transfer.journal.ProtectedRecoveryContext(
+                "SAF_PICKER_COPY", "Original source", "Created destination",
+                "synthetic.destination.provider", sourceDocumentFingerprint = saved)
+            store.recordNew(digest, hint)
+            assertEquals(hint, store.read(digest))
+            val raw = File(sandbox, "transfer_recovery_context_v1_" + digest)
+                .readBytes().toString(Charsets.ISO_8859_1)
+            assertTrue(!raw.contains(saved) && !raw.contains("account:original") &&
+                !raw.contains("synthetic.destination.provider"))
+            val journal = DurableAttemptJournal(
+                dev.expository.transfer.journal.AndroidAtomicAttemptStorage(isolated, digest))
+            journal.confirm(digest)
+            journal.beginAttempt(digest, "source_id_observation")
+            val index = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(1, index.requiresReview)
+            assertEquals(saved,
+                index.inspectionReference(digest)?.context?.sourceDocumentFingerprint)
+            assertEquals(saved,
+                index.sourceInspectionReference(digest)?.context?.sourceDocumentFingerprint)
+            // An old incomplete Copy with only original source-ID proof can
+            // offer source review without a completed transfer byte hash.
+            assertEquals(null, index.sourceInspectionReference(digest)?.transferredBytes)
+            // A missing destination context can still leave authenticated
+            // byte evidence useful for independent source review.
+            val bytesOnly = dev.expository.transfer.journal.RecoveryReviewReference(
+                "test-ref", "Unresolved", recordKey = "e".repeat(64),
+                transferredBytes =
+                    dev.expository.transfer.journal.ProtectedTransferredByteEvidence(
+                        4L, "f".repeat(64)))
+            val withoutDestinationHint = dev.expository.transfer.journal.RecoveryCounts(
+                1, 0, 0, 0, listOf(bytesOnly))
+            assertEquals(null,
+                withoutDestinationHint.inspectionReference("e".repeat(64)))
+            assertTrue(withoutDestinationHint.sourceInspectionReference("e".repeat(64)) != null)
+            assertEquals(null,
+                withoutDestinationHint.sourceInspectionReference("wrong"))
+            // A matching source-ID witness can never resume an old attempt.
+            assertEquals(JournalState.ATTEMPT_RECORDED, journal.current()?.state)
+            assertTrue(runCatching {
+                journal.beginAttempt(digest, "repeat_forbidden")
+            }.isFailure)
+            assertTrue(runCatching { store.recordNew(digest, hint) }.isFailure)
+            assertTrue(runCatching {
+                store.recordNew("c".repeat(64),
+                    hint.copy(operation = "SAF_DUAL_COPY"))
+            }.isFailure)
+            assertTrue(runCatching {
+                store.recordNew("d".repeat(64),
+                    hint.copy(sourceDocumentFingerprint = "invalid"))
+            }.isFailure)
+            assertTrue(!File(sandbox,
+                "transfer_recovery_context_v1_" + "c".repeat(64)).exists())
         } finally {
             sandbox.listFiles()?.forEach { it.delete() }
             sandbox.delete()
