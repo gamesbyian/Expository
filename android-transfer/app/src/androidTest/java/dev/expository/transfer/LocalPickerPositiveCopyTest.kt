@@ -119,6 +119,14 @@ class LocalPickerPositiveCopyTest {
                 clickByText("Downloads", "DOWNLOADS_ROOT")
         }
 
+        // Require an actual original-source ID witness from the real Android
+        // ACTION_OPEN_DOCUMENT selection, not a hand-built test URI.
+        fun savedContextKeys(): Set<String> =
+            context.noBackupFilesDir.list().orEmpty().mapNotNull { name ->
+                Regex("transfer_recovery_context_v1_([0-9a-f]{64})")
+                    .matchEntire(name)?.groupValues?.get(1)
+            }.toSet()
+        val priorContextKeys = savedContextKeys()
         try {
             resolver.openOutputStream(source, "wt")!!.use { it.write(bytes) }
             // This card can be nested below the current viewport in the
@@ -171,6 +179,16 @@ class LocalPickerPositiveCopyTest {
             // and SHA-256 match. Check the destination label separately, and
             // verify a MediaStore row only when this provider exposes one.
             compose.onNodeWithText("Destination: " + targetName).assertExists()
+            val newlySealed = savedContextKeys() - priorContextKeys
+            assertEquals("One private pre-attempt context must be sealed for the " +
+                "real one-file Save As route", 1, newlySealed.size)
+            val recovery = requireNotNull(
+                ProtectedRecoveryContextStore(context).read(newlySealed.single()))
+            assertEquals("SAF_PICKER_COPY", recovery.operation)
+            assertTrue("Real Android Files selection must record the original " +
+                "provider document-ID fingerprint in V3 without persisting URI/grant",
+                recovery.sourceDocumentFingerprint?.matches(
+                    Regex("[0-9a-f]{64}")) == true)
             findDestination()?.let { target ->
                 assertArrayEquals("MediaStore mirror must match if discoverable", bytes,
                     resolver.openInputStream(target)!!.use { it.readBytes() })
