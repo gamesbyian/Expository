@@ -221,7 +221,9 @@ fun RecoveryStatusCard() {
         val flags = result.data?.flags ?: 0
         val reference = ticket?.first?.let { status?.inspectionReference(it) }
         if (ticket == null || ticket.second != inspectionRevision ||
-            !showReviewReferences || reference?.transferredBytes == null) {
+            !showReviewReferences ||
+            (reference?.transferredBytes == null &&
+                reference?.context?.sourceDocumentFingerprint == null)) {
             sourceInspectionMessage =
                 "Source inspection selection expired. No source bytes were read or changed."
         } else if (result.resultCode != Activity.RESULT_OK || uri == null) {
@@ -231,29 +233,33 @@ fun RecoveryStatusCard() {
                 "The selected source has no fresh Android READ grant. No bytes were inspected."
         } else {
             val revision = ticket.second
-            val completed = requireNotNull(reference.transferredBytes)
+            // A source-ID witness may exist even when the original transfer
+            // never closed its input or exceeded the 64-MiB byte-review cap.
+            val completed = reference.transferredBytes
             sourceByteRelation = null
             sourceInspectionMessage =
-                "Checking current selected source bytes (64 MiB maximum), without writing…"
+                "Checking current Android source document identity and available " +
+                "source-byte evidence (64 MiB cap), without writing…"
             inspectionRunning = true
             inspectionJob = scope.launch {
                 val observed = withContext(Dispatchers.IO) {
                     val owner = currentCoroutineContext()
                     runCatching {
-                        val bytes = RecoveryManualSourceInspector.inspect(
-                            context.contentResolver, uri, flags, completed,
+                        // Independent provider/metadata-only source-ID review.
+                        // It remains useful for large files and incomplete
+                        // source streams where no byte digest exists.
+                        val identity = RecoverySourceDocumentIdentity.inspect(
+                            context.contentResolver, uri, flags,
+                            reference.context?.sourceDocumentFingerprint,
                             continueRequested = { owner.isActive })
-                        // Compare the original provider document ID only after
-                        // a successful fresh source read and metadata recheck.
-                        // This never promotes the journal or reuses the grant.
-                        val identity = if (bytes in setOf(
-                                FreshSourceByteRelation.CURRENT_SELECTION_BYTES_MATCH_RECORDED_TRANSFER,
-                                FreshSourceByteRelation.CURRENT_SELECTION_BYTES_DIFFER_FROM_RECORDED_TRANSFER
-                            ) && owner.isActive)
-                            RecoverySourceDocumentIdentity.compare(
-                                reference.context?.sourceDocumentFingerprint, uri, flags)
-                        else RecoverySourceDocumentRelation.INDETERMINATE
-                        bytes to identity
+                        val bytes = if (completed != null)
+                            RecoveryManualSourceInspector.inspect(
+                                context.contentResolver, uri, flags, completed,
+                                continueRequested = { owner.isActive })
+                        else FreshSourceByteRelation.NO_COMPLETED_TRANSFER_BYTES
+                        bytes to if (owner.isActive &&
+                            bytes != FreshSourceByteRelation.INSPECTION_CANCELED)
+                            identity else RecoverySourceDocumentRelation.INDETERMINATE
                     }
                 }
                 if (revision != inspectionRevision || !showReviewReferences) return@launch
@@ -446,14 +452,22 @@ fun RecoveryStatusCard() {
                                 "after interruption or authorize replay or cleanup.",
                                 style = MaterialTheme.typography.bodySmall)
                         }
-                        if (entry.transferredBytes != null && entry.recordKey != null) {
-                            Text("Optional: compare a newly selected Android document's " +
-                                "current bytes with this record's sealed source-stream " +
-                                "hash (64 MiB limit). Eligible new one-file records " +
-                                "also compare the original Android document ID. Neither " +
-                                "check establishes source version, destination state, " +
-                                "replay authority or permission to delete.",
+                        if (entry.recordKey != null &&
+                            (entry.transferredBytes != null ||
+                                entry.context?.sourceDocumentFingerprint != null)) {
+                            Text(
+                                if (entry.transferredBytes != null)
+                                    "Re-select a current source document. Compare its " +
+                                    "bytes with the encrypted old stream hash (64 MiB " +
+                                    "limit) and, where recorded, its Android document ID."
+                                else
+                                    "Re-select a current source document. The old Copy " +
+                                    "has no completed source-byte hash, but its encrypted " +
+                                    "original Android document ID can still be compared.",
                                 style = MaterialTheme.typography.bodySmall)
+                            Text("These checks prove neither an immutable source version " +
+                                "nor destination state, replay authority or permission " +
+                                "to delete.", style = MaterialTheme.typography.bodySmall)
                             Button(modifier = Modifier.heightIn(min = 48.dp),
                                 enabled = inspectionTicket == null &&
                                     sourceInspectionTicket == null &&
