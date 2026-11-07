@@ -588,6 +588,12 @@ class LocalPickerPositiveCopyTest {
                     it.destinationLabel.startsWith("Folder: ") &&
                     it.destinationProvider.isNotBlank()
             })
+            assertTrue("Each real OS-picked Dual source must seal its own " +
+                "encrypted original DocumentsProvider document identity, " +
+                "without changing the existing Copy approval or verified receipt",
+                recovered.all {
+                    it.sourceDocumentFingerprint?.matches(Regex("[0-9a-f]{64}")) == true
+                })
             assertEquals((listOf(sourceName) +
                 (if (fileCount == 2) listOf(extraName) else emptyList())).toSet(),
                 recovered.map { it.sourceLabel }.toSet())
