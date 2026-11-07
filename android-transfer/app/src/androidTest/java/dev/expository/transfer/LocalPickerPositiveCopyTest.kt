@@ -189,6 +189,9 @@ class LocalPickerPositiveCopyTest {
                 "provider document-ID fingerprint in V3 without persisting URI/grant",
                 recovery.sourceDocumentFingerprint?.matches(
                     Regex("[0-9a-f]{64}")) == true)
+            assertTrue("Real original DocumentsProvider metadata must be sealed in V4",
+                recovery.sourceMetadataFingerprint?.matches(
+                    Regex("[0-9a-f]{64}")) == true)
             val completed = requireNotNull(
                 dev.expository.transfer.journal.ProtectedTransferredBytesEvidenceStore(context)
                     .read(newlySealed.single()))
@@ -602,6 +605,11 @@ class LocalPickerPositiveCopyTest {
                 "without changing the existing Copy approval or verified receipt",
                 recovered.all {
                     it.sourceDocumentFingerprint?.matches(Regex("[0-9a-f]{64}")) == true
+                })
+            assertTrue("Every independently picked Dual source must seal its own " +
+                "pre-Copy provider metadata snapshot in V4",
+                recovered.all {
+                    it.sourceMetadataFingerprint?.matches(Regex("[0-9a-f]{64}")) == true
                 })
             assertEquals((listOf(sourceName) +
                 (if (fileCount == 2) listOf(extraName) else emptyList())).toSet(),
