@@ -42,6 +42,29 @@ object SftpSecuritySuite {
             for (v in listOf("", ".", "..", "a/b", "foo\rbar", "foo\tbar", "a\u0001b", "a\u007fb"))
                 check(runCatching { SftpPath.validateChild(v) }.isFailure)
         }
+        checkCase("malformed Unicode never aliases SFTP host, child or absolute source") {
+            val malformed = listOf(
+                charArrayOf(0xD800.toChar()).concatToString(),
+                charArrayOf(0xDC00.toChar()).concatToString(),
+                "file" + 0xD800.toChar() + "name",
+                "file" + 0xDC00.toChar() + "name",
+                charArrayOf(0xD800.toChar(), 'a', 0xDC00.toChar()).concatToString()
+            )
+            for (name in malformed) {
+                check(runCatching { SftpPath.validateChild(name) }.isFailure)
+                check(runCatching { SftpPath.requireAbsolute("/safe/" + name) }.isFailure)
+                check(runCatching { SftpTarget(name, trustedHostKey = pin) }.isFailure)
+                check(runCatching { SftpPath.childPath("/safe", name) }.isFailure)
+                check(runCatching {
+                    SftpMutationListing.requireComplete(
+                        SftpBrowsePage(listOf(SftpRemoteEntry(name, false, 1, 1L)), false))
+                }.isFailure)
+            }
+            val emoji = charArrayOf(0xD83D.toChar(), 0xDCC1.toChar()).concatToString()
+            check(SftpPath.validateChild("archive-" + emoji) == "archive-" + emoji)
+            check(SftpPath.childPath("/safe", "archive-" + emoji) ==
+                "/safe/archive-" + emoji)
+        }
         checkCase("bounded incremental listing windows keep narrow compatibility") {
             check(SftpBrowseBounds.requireValid(64) == 64) // manual smoke compatibility
             check(SftpBrowseBounds.next(200) == 400)

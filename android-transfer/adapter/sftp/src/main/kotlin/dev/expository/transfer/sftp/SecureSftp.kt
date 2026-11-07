@@ -41,6 +41,7 @@ class SftpHostKeyPin(val fingerprint: String) {
 data class SftpTarget(val host: String, val port: Int = 22, val trustedHostKey: SftpHostKeyPin) {
     init {
         require(host.isNotBlank() && host.length <= 253 &&
+            SftpPath.wellFormedUnicode(host) &&
             host.none { it.isWhitespace() || it == '/' || it == '\\' ||
                 it == '@' || it == ':' || it.code < 32 || it.code == 127 }) { "INVALID_HOST" }
         require(port in 1..65535) { "INVALID_PORT" }
@@ -48,8 +49,29 @@ data class SftpTarget(val host: String, val port: Int = 22, val trustedHostKey: 
 }
 
 object SftpPath {
+    // The default Java UTF-8 encoder silently replaces lone UTF-16
+    // surrogates. Reject invalid code-unit sequences before they can turn
+    // distinct picked names, exact source paths or hostnames into the
+    // same SSH/SFTP wire identity. Valid supplementary characters stay legal.
+    internal fun wellFormedUnicode(value: String): Boolean {
+        var index = 0
+        while (index < value.length) {
+            when {
+                Character.isHighSurrogate(value[index]) -> {
+                    if (index + 1 >= value.length ||
+                        !Character.isLowSurrogate(value[index + 1])) return false
+                    index += 2
+                }
+                Character.isLowSurrogate(value[index]) -> return false
+                else -> index++
+            }
+        }
+        return true
+    }
+
     fun requireAbsolute(path: String): String {
-        require(path.startsWith("/") && path.toByteArray(StandardCharsets.UTF_8).size <= 4096)
+        require(path.startsWith("/") && wellFormedUnicode(path) &&
+            path.toByteArray(StandardCharsets.UTF_8).size <= 4096)
         require(path.none { it == '\\' || it.code < 32 || it.code == 127 })
         if (path != "/") require(path.split('/').drop(1).all {
             it.isNotEmpty() && it != "." && it != ".."
@@ -58,6 +80,7 @@ object SftpPath {
     }
     fun validateChild(name: String): String {
         require(name.isNotBlank() && name != "." && name != ".." &&
+            wellFormedUnicode(name) &&
             name.toByteArray(StandardCharsets.UTF_8).size <= 255 &&
             name.none { it == '/' || it == '\\' || it.code < 32 || it.code == 127 }) { "INVALID_SFTP_CHILD" }
         return name
