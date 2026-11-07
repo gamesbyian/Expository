@@ -22,6 +22,25 @@ object PlainFtpSecuritySuite {
             PlainFtp.connect(PlainFtpTarget("example.invalid"), "user",
                 charArrayOf('p'), explicitlyApproved = false)
         }.exceptionOrNull()?.message == "PLAINTEXT_FTP_CONSENT_REQUIRED")
+        // Checked while still offline: malformed UTF-16 must not become
+        // a different UTF-8 account or secret on an insecure control channel.
+        for (invalid in listOf(
+            charArrayOf(0xD800.toChar()),
+            charArrayOf(0xDC00.toChar()),
+            charArrayOf(0xD800.toChar(), 'x', 0xDC00.toChar())
+        )) {
+            val badUser = runCatching {
+                PlainFtp.connect(PlainFtpTarget("example.invalid"),
+                    "account" + invalid.concatToString(), charArrayOf('p'),
+                    explicitlyApproved = true)
+            }.exceptionOrNull()
+            check(badUser is IllegalArgumentException && badUser.message == "INVALID_USER")
+            val badPassword = runCatching {
+                PlainFtp.connect(PlainFtpTarget("example.invalid"),
+                    "account", invalid, explicitlyApproved = true)
+            }.exceptionOrNull()
+            check(badPassword is IllegalArgumentException && badPassword.message == "INVALID_SECRET")
+        }
         val client = object : FTPClient() {
             override fun changeWorkingDirectory(pathname: String): Boolean = pathname == "/safe"
             override fun mlistDir(): Array<FTPFile> = arrayOf(row("one"), row("two"), row("three"))
