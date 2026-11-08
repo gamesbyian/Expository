@@ -183,7 +183,7 @@ class AndroidContentProviderCopyTest {
                 storageForPlan = { digest ->
                     AndroidAtomicAttemptStorage(isolated, digest)
                 },
-                recordRecoveryContext = { digest, from, to, provider, sourceUri ->
+                recordRecoveryContext = { digest, from, to, provider, sourceUri, _ ->
                     store.recordNew(digest,
                         dev.expository.transfer.journal.ProtectedRecoveryContext(
                             "SAF_PICKER_COPY", from, to, provider,
