@@ -32,7 +32,7 @@ data class SafDocumentObservation(
  * results and exist only in memory. No broad file permissions or cloud OAuth.
  */
 class SafSingleDocumentCopy(private val resolver: ContentResolver,
-    private val recordRecoveryContext: ((String, String, String, String, Uri) -> Unit)? = null,
+    private val recordRecoveryContext: ((String, String, String, String, Uri, Uri) -> Unit)? = null,
     // An optional private witness sealed only after both source and target
     // streams have fully closed. The underlying engine supplies the byte hash.
     private val recordSourceBytes: ((String, Long, ByteArray) -> Unit)? = null,
@@ -174,7 +174,7 @@ class SafSingleDocumentCopy(private val resolver: ContentResolver,
                     reviewLabel(observe(source).displayName),
                     reviewLabel(observe(destination).displayName),
                     reviewLabel(destination.authority ?: "Android document provider"),
-                    source)
+                    source, destination)
             } catch (_: Exception) {
                 return CopyReceipt(initialPlan.digest, CopyProof.BLOCKED, 0,
                     "RECOVERY_CONTEXT_UNAVAILABLE")

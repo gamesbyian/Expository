@@ -129,14 +129,16 @@ fun LocalCopyCard(
             storageForPlan = { digest ->
                 AndroidAtomicAttemptStorage(app, digest)
             },
-            recordRecoveryContext = { digest, sourceName, destinationName, provider, sourceUri ->
+            recordRecoveryContext = { digest, sourceName, destinationName, provider, sourceUri, destinationUri ->
                 // Only a one-way ID fingerprint enters encrypted recovery
                 // context. The raw source URI/grant remains RAM-only.
                 recovery.recordNew(digest, ProtectedRecoveryContext(
                     "SAF_PICKER_COPY", sourceName, destinationName, provider,
                     sourceDocumentFingerprint = RecoverySourceDocumentIdentity.fingerprint(sourceUri),
                     sourceMetadataFingerprint = RecoverySourceDocumentIdentity
-                        .captureMetadata(context.contentResolver, sourceUri)))
+                        .captureMetadata(context.contentResolver, sourceUri),
+                    destinationDocumentFingerprint =
+                        RecoverySourceDocumentIdentity.fingerprint(destinationUri)))
             },
             recordSourceBytes = { digest, bytes, sha256 ->
                 sourceBytes.recordNew(digest, bytes, sha256)
