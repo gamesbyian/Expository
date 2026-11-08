@@ -11,6 +11,7 @@ import java.util.UUID
 import dev.expository.transfer.journal.AttemptRecoveryIndex
 import dev.expository.transfer.journal.inspectionReference
 import dev.expository.transfer.journal.sourceInspectionReference
+import dev.expository.transfer.journal.destinationDocumentInspectionReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertTrue
@@ -614,6 +615,108 @@ class RecoveryIndexFailurePolicyTest {
             // No journal or protected context is created by inspection.
         } finally {
             requireNotNull(resolver.call(tree, "reset", null, null))
+        }
+    }
+
+    @Test fun encryptedV5CreatedDocumentCanBePickedButNeverReplayed() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = InstrumentationRegistry.getInstrumentation().context.contentResolver
+        val sandbox = File(app.cacheDir, "created-document-v5-" + UUID.randomUUID())
+        assertTrue(sandbox.mkdirs())
+        val isolated = object : android.content.ContextWrapper(app) {
+            override fun getNoBackupFilesDir(): File = sandbox
+        }
+        val tree = android.net.Uri.parse("content://test.source.scoped/tree/source-root")
+        val original = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, "clip")
+        val other = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, "empty")
+        val identity = dev.expository.transfer.journal.RecoverySourceDocumentIdentity
+        val inspector =
+            dev.expository.transfer.journal.RecoverySingleDestinationDocumentInspector
+        val read = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+        requireNotNull(resolver.call(tree, "reset", null, null))
+        val saved = requireNotNull(identity.fingerprint(original))
+        val evidence = dev.expository.transfer.journal.ProtectedTransferredByteEvidence(
+            137_119L, "f".repeat(64))
+        try {
+            val observation = inspector.inspect(resolver, original, read, saved, null)
+            assertEquals(
+                dev.expository.transfer.journal.RecoverySourceDocumentRelation
+                    .SAME_RECORDED_DOCUMENT_ID,
+                observation.identity)
+            assertEquals(
+                dev.expository.transfer.journal.FreshSourceByteRelation
+                    .NO_COMPLETED_TRANSFER_BYTES,
+                observation.currentBytes)
+            val different = inspector.inspect(resolver, other, read, saved, evidence)
+            assertEquals(
+                dev.expository.transfer.journal.RecoverySourceDocumentRelation
+                    .DIFFERENT_RECORDED_DOCUMENT_ID,
+                different.identity)
+            assertEquals("A different document must not be read for byte evidence",
+                null, different.currentBytes)
+            val unavailable = inspector.inspect(resolver, original, 0, saved, evidence)
+            assertEquals(
+                dev.expository.transfer.journal.RecoverySourceDocumentRelation
+                    .INDETERMINATE,
+                unavailable.identity)
+            assertEquals(null, unavailable.currentBytes)
+            val notReadable = inspector.inspect(resolver, original, read, saved, evidence)
+            assertEquals(
+                dev.expository.transfer.journal.RecoverySourceDocumentRelation
+                    .SAME_RECORDED_DOCUMENT_ID,
+                notReadable.identity)
+            assertEquals(
+                dev.expository.transfer.journal.FreshSourceByteRelation
+                    .SOURCE_READ_UNAVAILABLE,
+                notReadable.currentBytes)
+            val canceled = inspector.inspect(resolver, original, read, saved, evidence) {
+                false
+            }
+            assertEquals(
+                dev.expository.transfer.journal.RecoverySourceDocumentRelation
+                    .INDETERMINATE,
+                canceled.identity)
+            assertEquals(null, canceled.currentBytes)
+            val hint = dev.expository.transfer.journal.ProtectedRecoveryContext(
+                "SAF_PICKER_COPY", "Source", "Destination", "test.source.scoped",
+                sourceDocumentFingerprint = saved,
+                sourceMetadataFingerprint = identity.captureMetadata(resolver, original),
+                destinationDocumentFingerprint = saved)
+            val store = dev.expository.transfer.journal.ProtectedRecoveryContextStore(isolated)
+            val key = "9".repeat(64)
+            store.recordNew(key, hint)
+            assertEquals(hint, store.read(key))
+            val raw = File(sandbox, "transfer_recovery_context_v1_" + key)
+                .readBytes().toString(Charsets.ISO_8859_1)
+            assertTrue(!raw.contains(saved) && !raw.contains("Destination") &&
+                !raw.contains("test.source.scoped"))
+            val journal = DurableAttemptJournal(
+                dev.expository.transfer.journal.AndroidAtomicAttemptStorage(isolated, key))
+            journal.confirm(key)
+            journal.beginAttempt(key, "created_v5_test")
+            val index = AttemptRecoveryIndex.recover(isolated)
+            assertEquals(saved,
+                index.destinationDocumentInspectionReference(key)
+                    ?.context?.destinationDocumentFingerprint)
+            assertEquals(null, index.destinationDocumentInspectionReference("wrong"))
+            assertEquals(JournalState.ATTEMPT_RECORDED, journal.current()?.state)
+            assertTrue(runCatching {
+                journal.beginAttempt(key, "forbidden_replay")
+            }.isFailure)
+            assertTrue(runCatching {
+                store.recordNew("8".repeat(64),
+                    hint.copy(operation = "SAF_DUAL_COPY"))
+            }.isFailure)
+            assertTrue(runCatching {
+                store.recordNew("7".repeat(64),
+                    hint.copy(destinationDocumentFingerprint = "invalid"))
+            }.isFailure)
+            assertTrue(!File(sandbox,
+                "transfer_recovery_context_v1_" + "8".repeat(64)).exists())
+        } finally {
+            requireNotNull(resolver.call(tree, "reset", null, null))
+            sandbox.listFiles()?.forEach { it.delete() }
+            sandbox.delete()
         }
     }
 
