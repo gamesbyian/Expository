@@ -1,9 +1,9 @@
-// Strict dependency locking and failOnDynamicVersions cannot coexist in
-// Gradle 8.13: they are mutually exclusive resolution modes. For the five
-// locked JVM runtime graphs, keep changing-version rejection and let strict
-// lock state reject unreviewed module additions/removals/version drift.
-// All OTHER JVM + Android configurations retain the existing prohibition on
-// both dynamic versions and changing modules.
+// Gradle 8.13 rejects BOTH failOnDynamicVersions and
+// failOnChangingVersions when the same configuration uses dependency locking.
+// The five locked JVM runtime graphs therefore use STRICT lock state and
+// a separate request-level unstable-selector / explicit changing-module guard.
+// Every OTHER JVM + Android configuration retains the original Gradle-native
+// failOnNonReproducibleResolution() prohibition.
 val jvmLockedRuntimeModules = setOf(
     ":core:planner", ":core:engine", ":adapter:ftps", ":adapter:sftp",
     ":testing:fake-endpoints"
@@ -12,7 +12,25 @@ subprojects {
     configurations.configureEach {
         if (project.path in jvmLockedRuntimeModules &&
             name == "runtimeClasspath") {
-            resolutionStrategy.failOnChangingVersions()
+            // Inspect direct AND transitive requests. Strict lock mode
+            // separately refuses changes to the resolved component set.
+            resolutionStrategy.eachDependency {
+                val version = requested.version.orEmpty()
+                if (version.contains('+') || version.contains('[') ||
+                    version.contains('(') || version.startsWith("latest.") ||
+                    version.endsWith("-SNAPSHOT", ignoreCase = true)) {
+                    throw org.gradle.api.GradleException(
+                        "UNSTABLE_LOCKED_JVM_DEPENDENCY_VERSION")
+                }
+            }
+            // Gradle's 'changing' flag can be independent of a version
+            // suffix on explicit top-level external dependencies.
+            dependencies.withType(
+                org.gradle.api.artifacts.ExternalModuleDependency::class.java
+            ).configureEach {
+                if (isChanging) throw org.gradle.api.GradleException(
+                    "CHANGING_LOCKED_JVM_DEPENDENCY")
+            }
         } else {
             resolutionStrategy.failOnNonReproducibleResolution()
         }
