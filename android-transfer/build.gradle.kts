@@ -398,3 +398,56 @@ subprojects {
         dependsOn(rootProject.tasks.named("androidTestRuntimeArtifactInventory"))
     }
 }
+
+/**
+ * W13/#326: observe the full external Android instrumentation-test runtime
+ * MODULE COMPONENT graph, including BOM/platform nodes which have no artifact
+ * file and therefore do not appear in the earlier 90-artifact hash inventory.
+ * This is a review candidate for future STRICT lockfile membership, NOT an
+ * active lock, independent publisher checksum or reproducible-build proof.
+ *
+ * The only executor is the existing required Android lint/compile CI lane.
+ */
+tasks.register("androidTestRuntimeLockBaseline") {
+    group = "verification"
+    description = "List exact external Android instrumentation runtime components for independent version review"
+    val report = layout.buildDirectory.file(
+        "reports/dependencies/android-test-runtime-lock-candidates.txt")
+    outputs.file(report)
+    outputs.upToDateWhen { false }
+    doLast {
+        require(project.findProperty("withAndroid") == "true" &&
+            project.findProject(":app") != null) { "ANDROID_APP_NOT_INCLUDED" }
+        val runtime = project(":app").configurations
+            .findByName("debugAndroidTestRuntimeClasspath")
+            ?: error("MISSING_ANDROID_TEST_RUNTIME")
+        require(runtime.isCanBeResolved) { "ANDROID_TEST_RUNTIME_NOT_RESOLVABLE" }
+        val rows = runtime.incoming.resolutionResult.allComponents
+            .mapNotNull { it.id as?
+                org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+            .map { id ->
+                require(listOf(id.group, id.module, id.version).all {
+                    it.isNotBlank() && !it.contains('\t') &&
+                        !it.contains('\r') && !it.contains('\n')
+                }) { "INVALID_ANDROID_TEST_RUNTIME_MODULE" }
+                "${id.group}:${id.module}:${id.version}=debugAndroidTestRuntimeClasspath"
+            }.toSortedSet()
+        require(rows.size >= 70) { "INCOMPLETE_ANDROID_TEST_RUNTIME_MODULE_GRAPH" }
+        val file = report.get().asFile
+        file.parentFile.mkdirs()
+        file.writeText(
+            "# Observed Android instrumentation runtime module lock candidates V1\n" +
+            "# REVIEW ONLY. No version lock or publisher artifact trust is established.\n" +
+            rows.joinToString("\n", postfix = "\n"), Charsets.UTF_8)
+        println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_COMPONENTS=${rows.size}")
+        println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_BEGIN")
+        rows.forEach { println(it) }
+        println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_END")
+        println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_TRUST=OBSERVED_NOT_APPROVED_OR_LOCKED")
+    }
+}
+subprojects {
+    tasks.matching { it.name == "lintDebug" }.configureEach {
+        dependsOn(rootProject.tasks.named("androidTestRuntimeLockBaseline"))
+    }
+}
