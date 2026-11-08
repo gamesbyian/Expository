@@ -40,6 +40,8 @@ public final class SafRecursiveSyntheticProvider extends ContentProvider {
     }
 
     private final Map<String, Doc> docs = new LinkedHashMap<>();
+    private boolean flipClipDocumentIdAfterTwoQueries = false;
+    private int clipDocumentQueryCount = 0;
     private final Set<String> hiddenMetadata = new HashSet<>();
     private final Map<String, String> metadataNames = new HashMap<>();
     private static final int CREATE = DocumentsContract.Document.FLAG_DIR_SUPPORTS_CREATE;
@@ -51,6 +53,8 @@ public final class SafRecursiveSyntheticProvider extends ContentProvider {
         return new Doc(id, parent, name, false, 0, size, 19L);
     }
     private void reset() {
+        flipClipDocumentIdAfterTwoQueries = false;
+        clipDocumentQueryCount = 0;
         docs.clear();
         hiddenMetadata.clear();
         metadataNames.clear();
@@ -77,6 +81,13 @@ public final class SafRecursiveSyntheticProvider extends ContentProvider {
                 break;
             case "changedName":
                 metadataNames.put("clip", "Modified-after-list.bin");
+                break;
+            case "flipClipIdAfterTwoQueries":
+                // Reproduce a provider claiming a different document ID after
+                // two initially stable observations (no change to URI text).
+                // Test-only metadata fault: never read or mutate real files.
+                flipClipDocumentIdAfterTwoQueries = true;
+                clipDocumentQueryCount = 0;
                 break;
             case "duplicate":
                 docs.put("duplicate", file("duplicate", "shows", "episode.BIN", 0L));
@@ -149,13 +160,15 @@ public final class SafRecursiveSyntheticProvider extends ContentProvider {
                 records.add(doc);
         }
         for (Doc doc : records) {
+            boolean wrongClipId = !children && "clip".equals(doc.id) &&
+                flipClipDocumentIdAfterTwoQueries && ++clipDocumentQueryCount > 2;
             String display = children ? doc.name :
                 metadataNames.getOrDefault(doc.id, doc.name);
             Object[] row = new Object[columns.length];
             for (int i = 0; i < columns.length; ++i) {
                 String col = columns[i];
                 if (DocumentsContract.Document.COLUMN_DOCUMENT_ID.equals(col))
-                    row[i] = doc.id;
+                    row[i] = wrongClipId ? "different-document" : doc.id;
                 else if (DocumentsContract.Document.COLUMN_DISPLAY_NAME.equals(col))
                     row[i] = display;
                 else if (DocumentsContract.Document.COLUMN_MIME_TYPE.equals(col))

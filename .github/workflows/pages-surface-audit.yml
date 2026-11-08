@@ -1,6 +1,15 @@
 name: Expository Pages Surface Audit
+# Source-parity probe uses public HTTPS only; no deployment/write credentials.
+# Automatic runs are narrowly limited to trusted-main changes to the audit
+# tooling itself. Publisher/content updates may precede Pages propagation and
+# must still be qualified by a separately dispatched post-deployment audit.
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pages-surface-audit.yml'
+      - 'scripts/pages-audit.cjs'
 permissions:
   contents: read
 jobs:
@@ -10,6 +19,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
