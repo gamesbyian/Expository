@@ -61,10 +61,10 @@ tasks.register("jvmRuntimeArtifactInventory") {
                     require(fields.all { field ->
                         field.isNotBlank() || field == artifact.classifier.orEmpty()
                     } && fields.none { field ->
-                        field.contains('\\t') || field.contains('\\n') ||
-                            field.contains('\\r')
+                        field.contains('\t') || field.contains('\n') ||
+                            field.contains('\r')
                     }) { "UNSAFE_DEPENDENCY_INVENTORY_FIELD" }
-                    rows += fields.joinToString("\\t")
+                    rows += fields.joinToString("\t")
                 }
             }
         }
@@ -72,9 +72,9 @@ tasks.register("jvmRuntimeArtifactInventory") {
         val output = report.get().asFile
         output.parentFile.mkdirs()
         output.writeText(
-            "# Expository JVM runtime artifact inventory V1\\n" +
-            "# scope\\tgroup\\tname\\tversion\\ttype\\tclassifier\\tsha256\\n" +
-            rows.joinToString("\\n", postfix = "\\n"),
+            "# Expository JVM runtime artifact inventory V1\n" +
+            "# scope\tgroup\tname\tversion\ttype\tclassifier\tsha256\n" +
+            rows.joinToString("\n", postfix = "\n"),
             Charsets.UTF_8)
         println("JVM_RUNTIME_ARTIFACT_INVENTORY_MODULES=5")
         println("JVM_RUNTIME_ARTIFACT_INVENTORY_ROWS=${rows.size}")
