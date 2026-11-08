@@ -78,6 +78,7 @@ internal object SmartMergeSafDestinationInspector {
 
     private fun safeName(name: String): Boolean =
         name.isNotBlank() && name != "." && name != ".." &&
+            StandardCharsets.UTF_8.newEncoder().canEncode(name) &&
             name.toByteArray(StandardCharsets.UTF_8).size <= 255 &&
             name.none { it == '/' || it == '\\' || it.code < 32 || it.code == 127 }
 
@@ -106,7 +107,9 @@ internal object SmartMergeSafDestinationInspector {
                 numeric(DocumentsContract.Document.COLUMN_SIZE),
                 numeric(DocumentsContract.Document.COLUMN_LAST_MODIFIED))
             require(!cursor.moveToNext() && foundId == id &&
-                id.isNotBlank() && id.toByteArray(StandardCharsets.UTF_8).size <= 8192 &&
+                id.isNotBlank() &&
+                StandardCharsets.UTF_8.newEncoder().canEncode(id) &&
+                id.toByteArray(StandardCharsets.UTF_8).size <= 8192 &&
                 !name.isNullOrBlank() && safeName(name) &&
                 !mime.isNullOrBlank() && flags != null) {
                 "MERGE_DESTINATION_METADATA_AMBIGUOUS"
