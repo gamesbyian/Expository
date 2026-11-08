@@ -182,6 +182,32 @@ class SafRecursiveScannerAndroidTest {
                 .children.single().title)
     }
 
+    @Test fun mergeSourceRefusesChildDriftBehindStableRootMetadata() {
+        val e = Environment()
+        val read = Intent.FLAG_GRANT_READ_URI_PERMISSION
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val before = app.noBackupFilesDir.list().orEmpty().toSet()
+        // A real ContentResolver query observes a synthetic provider with a
+        // stable source-root metadata row but different first/second listings.
+        e.mode("sourceChildrenDriftOnSecondPass")
+        assertNull("A changing child set cannot become an accepted M1 source",
+            SmartMergeSafFolderCapture.capture(
+                e.resolver, e.sourceTree, read, WorkspacePane.A, 1L,
+                e.observedAtMillis))
+        val changed = LocalTreeReader.list(e.resolver, e.sourceTree,
+            "source-root", LocalTreeReader.MAX_BROWSE)
+        assertTrue(changed.children.any { it.documentId == "late-source-child" })
+        // Only the provider's synthetic fixture state changed, never app
+        // transfers or persistent review journals.
+        assertEquals(before, app.noBackupFilesDir.list().orEmpty().toSet())
+        e.mode("reset")
+        assertNotNull("A stable independently repeated source listing remains usable",
+            SmartMergeSafFolderCapture.capture(
+                e.resolver, e.sourceTree, read, WorkspacePane.A, 2L,
+                e.observedAtMillis))
+        assertEquals(before, app.noBackupFilesDir.list().orEmpty().toSet())
+    }
+
     @Test fun mergeDestinationRefusesMissingOsGrantsOrProviderCreateAbility() {
         val e = Environment()
         val read = Intent.FLAG_GRANT_READ_URI_PERMISSION
