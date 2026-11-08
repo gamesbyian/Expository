@@ -1,0 +1,9 @@
+# Exact Gradle 8.13 runtimeClasspath resolution baseline from PR #604 CI.
+# Reviewed versions are intentionally strict; update through a new qualification.
+org.apache.sshd:sshd-common:2.20.0=runtimeClasspath
+org.apache.sshd:sshd-core:2.20.0=runtimeClasspath
+org.apache.sshd:sshd-sftp:2.20.0=runtimeClasspath
+org.jetbrains.kotlin:kotlin-stdlib:2.2.20=runtimeClasspath
+org.jetbrains:annotations:13.0=runtimeClasspath
+org.slf4j:jcl-over-slf4j:1.7.36=runtimeClasspath
+org.slf4j:slf4j-api:1.7.36=runtimeClasspath
