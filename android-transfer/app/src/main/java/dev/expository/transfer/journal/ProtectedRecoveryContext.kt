@@ -159,8 +159,7 @@ class ProtectedRecoveryContextStore(context: Context) {
                         // empty strings when an old source lacks those proofs.
                         if (context.sourceDocumentFingerprint == null)
                             out.writeUTF("")
-                        if (context.sourceMetadataFingerprint == null)
-                            out.writeUTF("")
+                        out.writeUTF(context.sourceMetadataFingerprint.orEmpty())
                         out.writeUTF(context.destinationDocumentFingerprint)
                     } else if (context.sourceMetadataFingerprint != null)
                         out.writeUTF(context.sourceMetadataFingerprint)
