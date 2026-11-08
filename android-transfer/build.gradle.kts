@@ -1,10 +1,39 @@
-// Fail closed if any project/adapter dependency resolves through a dynamic
-// version selector or changing module. The rule covers transitive dependencies
-// and both JVM-only and opt-in Android subprojects; it does not substitute for
-// reviewed lockfiles, artifact checksums or a verified Gradle wrapper.
+// Gradle 8.13 rejects BOTH failOnDynamicVersions and
+// failOnChangingVersions when the same configuration uses dependency locking.
+// The five locked JVM runtime graphs therefore use STRICT lock state and
+// a separate request-level unstable-selector / explicit changing-module guard.
+// Every OTHER JVM + Android configuration retains the original Gradle-native
+// failOnNonReproducibleResolution() prohibition.
+val jvmLockedRuntimeModules = setOf(
+    ":core:planner", ":core:engine", ":adapter:ftps", ":adapter:sftp",
+    ":testing:fake-endpoints"
+)
 subprojects {
     configurations.configureEach {
-        resolutionStrategy.failOnNonReproducibleResolution()
+        if (project.path in jvmLockedRuntimeModules &&
+            name == "runtimeClasspath") {
+            // Inspect direct AND transitive requests. Strict lock mode
+            // separately refuses changes to the resolved component set.
+            resolutionStrategy.eachDependency {
+                val version = requested.version.orEmpty()
+                if (version.contains('+') || version.contains('[') ||
+                    version.contains('(') || version.startsWith("latest.") ||
+                    version.endsWith("-SNAPSHOT", ignoreCase = true)) {
+                    throw org.gradle.api.GradleException(
+                        "UNSTABLE_LOCKED_JVM_DEPENDENCY_VERSION")
+                }
+            }
+            // Gradle's 'changing' flag can be independent of a version
+            // suffix on explicit top-level external dependencies.
+            dependencies.withType(
+                org.gradle.api.artifacts.ExternalModuleDependency::class.java
+            ).configureEach {
+                if (isChanging) throw org.gradle.api.GradleException(
+                    "CHANGING_LOCKED_JVM_DEPENDENCY")
+            }
+        } else {
+            resolutionStrategy.failOnNonReproducibleResolution()
+        }
     }
 }
 
@@ -160,5 +189,26 @@ tasks.register("androidDebugRuntimeArtifactInventory") {
 subprojects {
     tasks.matching { it.name == "lintDebug" }.configureEach {
         dependsOn(rootProject.tasks.named("androidDebugRuntimeArtifactInventory"))
+    }
+}
+
+/**
+ * W13/#326: activate precise Gradle 8.13 version locks for all five resolved
+ * JVM production runtime graphs. The committed per-module gradle.lockfile
+ * entries were observed from exact-head Gradle resolution, not guessed from
+ * direct declarations. Strict mode also refuses missing lock state.
+ *
+ * Updating dependencies requires an explicit reviewed lockfile change and
+ * fresh exact-head CI; do not use --write-locks in routine CI.
+ * Android/debug/test/plugin configurations are not covered by this slice.
+ */
+subprojects {
+    if (path in jvmLockedRuntimeModules) {
+        configurations.matching { it.name == "runtimeClasspath" }.configureEach {
+            resolutionStrategy.activateDependencyLocking()
+        }
+        dependencyLocking {
+            lockMode.set(org.gradle.api.artifacts.dsl.LockMode.STRICT)
+        }
     }
 }
