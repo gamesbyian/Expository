@@ -1,6 +1,6 @@
 // Gradle 8.13 rejects BOTH failOnDynamicVersions and
 // failOnChangingVersions when the same configuration uses dependency locking.
-// The five locked JVM runtimes and BOTH Android app runtime variants use
+// The five locked JVM runtimes and all THREE Android app runtime graphs use
 // STRICT lock state plus a request-level unstable-selector/changing guard.
 // Every other JVM + Android configuration retains the original Gradle-native
 // failOnNonReproducibleResolution() prohibition.
@@ -12,7 +12,8 @@ subprojects {
     configurations.configureEach {
         if ((project.path in jvmLockedRuntimeModules && name == "runtimeClasspath") ||
             (project.path == ":app" &&
-                name in setOf("debugRuntimeClasspath", "releaseRuntimeClasspath"))) {
+                name in setOf("debugRuntimeClasspath", "releaseRuntimeClasspath",
+                    "debugAndroidTestRuntimeClasspath"))) {
             // Inspect direct AND transitive requests. Strict lock mode
             // separately refuses changes to the resolved component set.
             resolutionStrategy.eachDependency {
@@ -201,7 +202,7 @@ subprojects {
  *
  * Updating dependencies requires an explicit reviewed lockfile change and
  * fresh exact-head CI; do not use --write-locks in routine CI.
- * Android app debug and release runtime graphs are independently locked
+ * Android app debug, release and instrumentation-test runtime graphs are locked
  * below; Android instrumentation-test and plugin/buildscript configurations
  * remain separate acceptance gates.
  */
@@ -214,12 +215,13 @@ subprojects {
             lockMode.set(org.gradle.api.artifacts.dsl.LockMode.STRICT)
         }
     } else if (path == ":app") {
-        // Captured exact Gradle component sets: debug 109 and release 108
+        // Captured exact Gradle component sets: debug 109, release 108, test 118
         // modules (including BOM/platform-only entries). One shared file
         // retains configuration membership rather than overwriting debug.
         configurations.matching {
             it.name == "debugRuntimeClasspath" ||
-                it.name == "releaseRuntimeClasspath"
+                it.name == "releaseRuntimeClasspath" ||
+                it.name == "debugAndroidTestRuntimeClasspath"
         }.configureEach {
             resolutionStrategy.activateDependencyLocking()
         }
@@ -403,14 +405,14 @@ subprojects {
  * W13/#326: observe the full external Android instrumentation-test runtime
  * MODULE COMPONENT graph, including BOM/platform nodes which have no artifact
  * file and therefore do not appear in the earlier 90-artifact hash inventory.
- * This is a review candidate for future STRICT lockfile membership, NOT an
+ * The reviewed 118-component graph is now STRICT-locked; this diagnostic is NOT an
  * active lock, independent publisher checksum or reproducible-build proof.
  *
  * The only executor is the existing required Android lint/compile CI lane.
  */
 tasks.register("androidTestRuntimeLockBaseline") {
     group = "verification"
-    description = "List exact external Android instrumentation runtime components for independent version review"
+    description = "Verify exact external Android instrumentation runtime locked component selections"
     val report = layout.buildDirectory.file(
         "reports/dependencies/android-test-runtime-lock-candidates.txt")
     outputs.file(report)
@@ -437,13 +439,14 @@ tasks.register("androidTestRuntimeLockBaseline") {
         file.parentFile.mkdirs()
         file.writeText(
             "# Observed Android instrumentation runtime module lock candidates V1\n" +
-            "# REVIEW ONLY. No version lock or publisher artifact trust is established.\n" +
+            "# STRICT test runtime versions; no independent publisher artifact trust is established.\n" +
             rows.joinToString("\n", postfix = "\n"), Charsets.UTF_8)
         println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_COMPONENTS=${rows.size}")
         println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_BEGIN")
         rows.forEach { println(it) }
         println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_END")
-        println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_TRUST=OBSERVED_NOT_APPROVED_OR_LOCKED")
+        println("ANDROID_TEST_RUNTIME_STRICT_LOCK_COMPONENTS_CHECKED=${rows.size}")
+        println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_TRUST=STRICT_VERSION_LOCK_NOT_PUBLISHER_AUTHENTICATION")
     }
 }
 subprojects {
