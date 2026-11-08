@@ -1,6 +1,19 @@
 package dev.expository.transfer
 
 import android.util.AtomicFile
+import dev.expository.transfer.journal.RecoverySourceDocumentIdentity
+import dev.expository.transfer.journal.ProtectedTransferredBytesEvidenceStore
+import dev.expository.transfer.journal.AttemptRecoveryIndex
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.Text
+import androidx.compose.material3.Button
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
+import android.provider.MediaStore
+import android.net.Uri
+import android.content.Intent
+import android.content.ContentValues
+import android.app.Activity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
@@ -249,6 +262,161 @@ class RecoveryRefreshUiTest {
             AtomicFile(journalFile).delete()
             AtomicFile(hintFile).delete()
             AtomicFile(evidenceFile).delete()
+        }
+    }
+
+    /**
+     * Positive E2 for the manual, newly READ-granted created-document review.
+     * Two genuine, independent ACTION_OPEN_DOCUMENT picker returns select the
+     * SAME disposable Android Downloads document. The first supplies only a
+     * one-way original ID witness; the second runs production V5 inspection.
+     *
+     * This does not simulate an interrupted ACTION_CREATE_DOCUMENT, restart,
+     * provider revocation, remote/cloud service or E4 handset. Never mutate
+     * an original VERIFIED journal in order to fake an interrupted Copy.
+     */
+    @Test fun realCreatedDocumentPickerRechecksExactOriginalAndBytesWithoutReplay() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val nonce = UUID.randomUUID().toString().take(12)
+        val name = "expository-created-review-" + nonce + ".bin"
+        val bytes = ByteArray(71_019) { ((it * 37 + 11) and 255).toByte() }
+        val file = requireNotNull(resolver.insert(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI, ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, "application/octet-stream")
+                put(MediaStore.MediaColumns.IS_PENDING, 0)
+            }))
+        val digest = "f".repeat(32) + UUID.randomUUID().toString().replace("-", "")
+        val journalFile = File(context.noBackupFilesDir, "transfer_attempt_" + digest)
+        val hintFile = File(context.noBackupFilesDir,
+            "transfer_recovery_context_v1_" + digest)
+        val bytesFile = File(context.noBackupFilesDir,
+            "transfer_source_bytes_v1_" + digest)
+        val journal = DurableAttemptJournal(AndroidAtomicAttemptStorage(context, digest))
+        val originallyPicked = mutableStateOf<Uri?>(null)
+        val originallyGrantedRead = mutableStateOf(false)
+        val showRecovery = mutableStateOf(false)
+
+        fun selectExactDisposableDocument() {
+            val picker = device.wait(Until.hasObject(
+                By.pkg("com.google.android.documentsui")), 12_000L) ||
+                device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 6_000L) ||
+                device.wait(Until.hasObject(By.text("Recent")), 4_000L) ||
+                device.wait(Until.hasObject(By.text("Downloads")), 4_000L)
+            assertTrue("A real system Files document picker must appear", picker)
+            var item = device.wait(Until.findObject(By.text(name)), 8_000L)
+            if (item == null) {
+                (device.findObject(By.desc("Show roots"))
+                    ?: device.findObject(By.descContains("navigation")))?.click()
+                device.wait(Until.findObject(By.text("Downloads")), 8_000L)?.click()
+                item = device.wait(Until.findObject(By.text(name)), 12_000L)
+            }
+            requireNotNull(item) {
+                "DISPOSABLE_CREATED_REVIEW_DOCUMENT_NOT_VISIBLE_IN_ANDROID_FILES"
+            }.click()
+        }
+
+        try {
+            resolver.openOutputStream(file, "wt")!!.use { it.write(bytes) }
+            rule.setContent {
+                MaterialTheme {
+                    if (!showRecovery.value) {
+                        val picker = rememberLauncherForActivityResult(
+                            ActivityResultContracts.StartActivityForResult()
+                        ) { result ->
+                            if (result.resultCode == Activity.RESULT_OK) {
+                                originallyPicked.value = result.data?.data
+                                originallyGrantedRead.value =
+                                    (result.data?.flags ?: 0) and
+                                        Intent.FLAG_GRANT_READ_URI_PERMISSION != 0
+                            }
+                        }
+                        Button(onClick = {
+                            picker.launch(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                                type = "*/*"
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            })
+                        }) { Text("Select original disposable document") }
+                    } else {
+                        Column(Modifier.verticalScroll(rememberScrollState())) {
+                            RecoveryStatusCard()
+                        }
+                    }
+                }
+            }
+
+            rule.onNodeWithText("Select original disposable document").performClick()
+            selectExactDisposableDocument()
+            rule.waitUntil(15_000L) { originallyPicked.value != null }
+            assertTrue("Original picker must independently grant READ",
+                originallyGrantedRead.value)
+            val originalId = requireNotNull(
+                RecoverySourceDocumentIdentity.fingerprint(
+                    requireNotNull(originallyPicked.value))) {
+                "REAL_DOCUMENT_PROVIDER_ID_NOT_OBSERVED"
+            }
+            assertTrue("Original provider ID stays a non-reversible digest",
+                originalId.matches(Regex("[0-9a-f]{64}")))
+            ProtectedRecoveryContextStore(context).recordNew(digest,
+                ProtectedRecoveryContext("SAF_PICKER_COPY",
+                    "Disposable original", "Disposable created document",
+                    "test.android.provider",
+                    destinationDocumentFingerprint = originalId))
+            journal.confirm(digest)
+            journal.beginAttempt(digest, "created_review_read_only_fixture")
+            val hash = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+            ProtectedTransferredBytesEvidenceStore(context)
+                .recordNew(digest, bytes.size.toLong(), hash)
+            val beforeJournal = journalFile.readBytes()
+            val beforeContext = hintFile.readBytes()
+            val beforeBytes = bytesFile.readBytes()
+
+            val recordIndex = AttemptRecoveryIndex.recover(context)
+                .reviewReferences.indexOfFirst { it.recordKey == digest }
+            assertTrue("New interrupted fixture must be indexed on the first review page",
+                recordIndex in 0..11)
+            rule.runOnUiThread { showRecovery.value = true }
+            rule.waitUntil(15_000L) {
+                rule.onAllNodesWithText("Show review references")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            rule.onNodeWithText("Show review references").performClick()
+            rule.onNodeWithText(
+                "Recheck created document for record " + (recordIndex + 1) +
+                    " …" + digest.takeLast(12)
+            ).performScrollTo().performClick()
+
+            selectExactDisposableDocument()
+            rule.waitUntil(25_000L) {
+                rule.onAllNodesWithText("SAME provider document ID",
+                    substring = true).fetchSemanticsNodes().isNotEmpty() &&
+                rule.onAllNodesWithText("MATCHES the completed",
+                    substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            assertEquals("Even exact independent readback cannot reconcile old attempt",
+                JournalState.ATTEMPT_RECORDED, journal.current()?.state)
+            org.junit.Assert.assertArrayEquals(
+                "New picker selection cannot rewrite the original neutral journal",
+                beforeJournal, journalFile.readBytes())
+            org.junit.Assert.assertArrayEquals(
+                "Encrypted original document identity must remain untouched",
+                beforeContext, hintFile.readBytes())
+            org.junit.Assert.assertArrayEquals(
+                "Encrypted source stream evidence must remain untouched",
+                beforeBytes, bytesFile.readBytes())
+            org.junit.Assert.assertArrayEquals(
+                "READ-only review must not mutate disposable document contents",
+                bytes, resolver.openInputStream(file)!!.use { it.readBytes() })
+        } finally {
+            if (device.currentPackageName != context.packageName)
+                device.pressBack()
+            runCatching { resolver.delete(file, null, null) }
+            AtomicFile(journalFile).delete()
+            AtomicFile(hintFile).delete()
+            AtomicFile(bytesFile).delete()
         }
     }
 
