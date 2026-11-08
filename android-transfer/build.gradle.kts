@@ -1,8 +1,8 @@
 // Gradle 8.13 rejects BOTH failOnDynamicVersions and
 // failOnChangingVersions when the same configuration uses dependency locking.
-// The five locked JVM runtime graphs therefore use STRICT lock state and
-// a separate request-level unstable-selector / explicit changing-module guard.
-// Every OTHER JVM + Android configuration retains the original Gradle-native
+// The five locked JVM runtimes and Android app debug runtime use STRICT lock
+// state plus a request-level unstable-selector/explicit changing-module guard.
+// Every other JVM + Android configuration retains the original Gradle-native
 // failOnNonReproducibleResolution() prohibition.
 val jvmLockedRuntimeModules = setOf(
     ":core:planner", ":core:engine", ":adapter:ftps", ":adapter:sftp",
@@ -10,8 +10,8 @@ val jvmLockedRuntimeModules = setOf(
 )
 subprojects {
     configurations.configureEach {
-        if (project.path in jvmLockedRuntimeModules &&
-            name == "runtimeClasspath") {
+        if ((project.path in jvmLockedRuntimeModules && name == "runtimeClasspath") ||
+            (project.path == ":app" && name == "debugRuntimeClasspath")) {
             // Inspect direct AND transitive requests. Strict lock mode
             // separately refuses changes to the resolved component set.
             resolutionStrategy.eachDependency {
@@ -20,7 +20,7 @@ subprojects {
                     version.contains('(') || version.startsWith("latest.") ||
                     version.endsWith("-SNAPSHOT", ignoreCase = true)) {
                     throw org.gradle.api.GradleException(
-                        "UNSTABLE_LOCKED_JVM_DEPENDENCY_VERSION")
+                        "UNSTABLE_LOCKED_RUNTIME_DEPENDENCY_VERSION")
                 }
             }
             // Gradle's 'changing' flag can be independent of a version
@@ -29,7 +29,7 @@ subprojects {
                 org.gradle.api.artifacts.ExternalModuleDependency::class.java
             ).configureEach {
                 if (isChanging) throw org.gradle.api.GradleException(
-                    "CHANGING_LOCKED_JVM_DEPENDENCY")
+                    "CHANGING_LOCKED_RUNTIME_DEPENDENCY")
             }
         } else {
             resolutionStrategy.failOnNonReproducibleResolution()
@@ -200,7 +200,8 @@ subprojects {
  *
  * Updating dependencies requires an explicit reviewed lockfile change and
  * fresh exact-head CI; do not use --write-locks in routine CI.
- * Android/debug/test/plugin configurations are not covered by this slice.
+ * The app debug runtime is independently locked below; Android test/release
+ * and plugin/buildscript configurations remain separate acceptance gates.
  */
 subprojects {
     if (path in jvmLockedRuntimeModules) {
@@ -210,39 +211,15 @@ subprojects {
         dependencyLocking {
             lockMode.set(org.gradle.api.artifacts.dsl.LockMode.STRICT)
         }
-    }
-}
-
-/**
- * Temporary exact-graph bootstrap for W13/#326. Removed after copying the
- * observed Gradle 8.13 component set into an enforced Android lockfile.
- * The output includes only public Maven coordinates, never local cache paths.
- */
-tasks.register("androidDebugRuntimeVersionBaseline") {
-    group = "verification"
-    doLast {
-        val config = project(":app").configurations.getByName("debugRuntimeClasspath")
-        require(config.isCanBeResolved) { "ANDROID_DEBUG_RUNTIME_NOT_RESOLVABLE" }
-        val components = config.incoming.resolutionResult.allComponents.mapNotNull {
-            val id = it.id as?
-                org.gradle.api.artifacts.component.ModuleComponentIdentifier
-            if (id == null) null else {
-                val fields = listOf(id.group, id.module, id.version)
-                require(fields.all { s -> s.isNotBlank() && !s.contains('=') &&
-                    !s.contains('\n') && !s.contains('\r') &&
-                    !s.contains('\t') }) { "INVALID_ANDROID_RUNTIME_MODULE" }
-                fields.joinToString(":") + "=debugRuntimeClasspath"
-            }
-        }.toSortedSet()
-        require(components.size >= 30) { "INCOMPLETE_ANDROID_RUNTIME_MODULE_GRAPH" }
-        println("ANDROID_DEBUG_LOCK_BASELINE_BEGIN")
-        components.forEach(::println)
-        println("ANDROID_DEBUG_LOCK_BASELINE_END")
-        println("ANDROID_DEBUG_LOCK_BASELINE_ROWS=${components.size}")
-    }
-}
-subprojects {
-    tasks.matching { it.name == "lintDebug" }.configureEach {
-        dependsOn(rootProject.tasks.named("androidDebugRuntimeVersionBaseline"))
+    } else if (path == ":app") {
+        // Generated from the complete resolved Gradle component graph (109
+        // modules including BOM/platform metadata-only components), not
+        // inferred from the 78 downloaded runtime artifacts.
+        configurations.matching { it.name == "debugRuntimeClasspath" }.configureEach {
+            resolutionStrategy.activateDependencyLocking()
+        }
+        dependencyLocking {
+            lockMode.set(org.gradle.api.artifacts.dsl.LockMode.STRICT)
+        }
     }
 }
