@@ -138,21 +138,21 @@ class RecursiveRealPickerCopyUiTest {
         compose.onNodeWithText("Merge remains unavailable",
             substring = true).assertExists()
 
-        // Collecting the second source invalidated old M2 inventories.
-        // Re-read BOTH source roots through their original independent OS
-        // grants, then run the pure non-executing case-folded illustration.
-        fun inspectSource(index: Int) {
-            val tag = "smart-merge-inspect-source-" + index
-            compose.onNodeWithTag("transfer-workspace-scroll")
-                .performScrollToNode(hasTestTag(tag))
-            compose.onNodeWithTag(tag).assertIsEnabled().performClick()
-            compose.waitUntil(30_000L) {
-                compose.onAllNodesWithTag("smart-merge-source-inventory-" + index)
-                    .fetchSemanticsNodes().isNotEmpty()
-            }
+        // The one-action N-source review uses both original independent OS
+        // READ grants, but commits neither partial results nor any file
+        // writes. Source inventory cards only appear after *both* complete.
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-inspect-all"))
+        compose.onNodeWithTag("smart-merge-inspect-all")
+            .assertIsEnabled().performClick()
+        compose.waitUntil(60_000L) {
+            compose.onAllNodesWithTag("smart-merge-source-inventory-0")
+                .fetchSemanticsNodes().isNotEmpty() &&
+            compose.onAllNodesWithTag("smart-merge-source-inventory-1")
+                .fetchSemanticsNodes().isNotEmpty()
         }
-        inspectSource(0)
-        inspectSource(1)
+        compose.onNodeWithText("All 2 source inventories inspected.",
+            substring = true).assertExists()
         compose.onNodeWithTag("transfer-workspace-scroll")
             .performScrollToNode(hasTestTag("smart-merge-illustrate"))
         compose.onNodeWithTag("smart-merge-illustrate")
