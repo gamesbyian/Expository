@@ -68,6 +68,19 @@ internal fun RecoveryCounts.sourceInspectionReference(recordKey: String): Recove
     }
 
 /**
+ * Single Save As has no selected destination tree root or created-child
+ * parent witness. Bind a fresh READ-only document picker to the FULL private
+ * key and its V5 original OS-created document identity instead.
+ */
+internal fun RecoveryCounts.destinationDocumentInspectionReference(
+    recordKey: String
+): RecoveryReviewReference? = reviewReferences.singleOrNull {
+    it.recordKey != null && it.recordKey == recordKey &&
+        it.context?.operation == "SAF_PICKER_COPY" &&
+        it.context.destinationDocumentFingerprint != null
+}
+
+/**
  * Read-only reconciliation of private attempt records, on startup or refresh. This cannot inspect
  * remote state or SAF provider identity (journal intentionally has no paths),
  * so it NEVER retries, cleans up, deletes or reports a remote transfer verified.

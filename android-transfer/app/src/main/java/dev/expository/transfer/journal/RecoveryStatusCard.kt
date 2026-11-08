@@ -61,6 +61,9 @@ fun RecoveryStatusCard() {
     // Neither the picker URI nor permission survives this Compose screen.
     var sourceInspectionTicket by remember { mutableStateOf<Pair<String, Int>?>(null) }
     var sourceInspectionMessage by remember { mutableStateOf<String?>(null) }
+    // One-shot exact created-document review for OS Save As (not tree Copy).
+    var createdDocumentTicket by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    var createdDocumentMessage by remember { mutableStateOf<String?>(null) }
     var sourceByteRelation by remember { mutableStateOf<FreshSourceByteRelation?>(null) }
     // Owned foreground read. Hiding/refreshing a review cancels the job,
     // not merely its result display. No grant, stream or job is persisted.
@@ -77,8 +80,10 @@ fun RecoveryStatusCard() {
         inspectionListing = null
         inspectionMessage = null
         sourceInspectionTicket = null
+        createdDocumentTicket = null
         sourceByteRelation = null
         sourceInspectionMessage = null
+        createdDocumentMessage = null
         reviewPageIndex = page
     }
     val inspector = rememberLauncherForActivityResult(
@@ -212,11 +217,91 @@ fun RecoveryStatusCard() {
             }
         }
     }
+    val pickCreatedDocumentForReadOnlyCheck = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val ticket = createdDocumentTicket
+        createdDocumentTicket = null
+        val uri = result.data?.data
+        val flags = result.data?.flags ?: 0
+        val reference = ticket?.first?.let {
+            status?.destinationDocumentInspectionReference(it)
+        }
+        if (ticket == null || ticket.second != inspectionRevision ||
+            !showReviewReferences || reference == null) {
+            createdDocumentMessage =
+                "Created-document inspection selection expired. No file was touched."
+        } else if (result.resultCode != Activity.RESULT_OK || uri == null) {
+            createdDocumentMessage = "Created-document inspection canceled. No file was changed."
+        } else if (!RecoveryManualSourceInspector.acceptsPickerResult(uri, flags)) {
+            createdDocumentMessage =
+                "The new document selection has no usable Android READ grant."
+        } else {
+            val revision = ticket.second
+            createdDocumentMessage =
+                "Checking the original created document ID and available bytes, read-only…"
+            inspectionRunning = true
+            inspectionJob = scope.launch {
+                val evidence = withContext(Dispatchers.IO) {
+                    val owner = currentCoroutineContext()
+                    runCatching {
+                        RecoverySingleDestinationDocumentInspector.inspect(
+                            context.contentResolver, uri, flags,
+                            reference.context?.destinationDocumentFingerprint,
+                            reference.transferredBytes,
+                            continueRequested = { owner.isActive })
+                    }
+                }
+                if (inspectionRevision != revision || !showReviewReferences) return@launch
+                inspectionJob = null
+                inspectionRunning = false
+                createdDocumentMessage = if (evidence.isFailure) {
+                    "Created-document inspection unavailable; the old attempt remains unresolved."
+                } else {
+                    val observed = evidence.getOrNull()
+                    "Created-document review for record …" + ticket.first.takeLast(12) +
+                        ": " + when (observed?.identity) {
+                            RecoverySourceDocumentRelation.SAME_RECORDED_DOCUMENT_ID ->
+                                "The fresh READ-picked document has the SAME provider " +
+                                "document ID as the original OS-created Save As target."
+                            RecoverySourceDocumentRelation.DIFFERENT_RECORDED_DOCUMENT_ID ->
+                                "This is a DIFFERENT provider document ID. No destination " +
+                                "bytes were read or compared."
+                            RecoverySourceDocumentRelation.NO_RECORDED_DOCUMENT_ID ->
+                                "No original created-document identity is available."
+                            RecoverySourceDocumentRelation.INDETERMINATE, null ->
+                                "Original created-document identity could not be proven."
+                        } + " " + when (observed?.currentBytes) {
+                            FreshSourceByteRelation.CURRENT_SELECTION_BYTES_MATCH_RECORDED_TRANSFER ->
+                                "A fresh bounded read currently MATCHES the completed " +
+                                "original source-stream byte count and SHA-256."
+                            FreshSourceByteRelation.CURRENT_SELECTION_BYTES_DIFFER_FROM_RECORDED_TRANSFER ->
+                                "The currently selected destination bytes DIFFER from " +
+                                "the recorded source stream."
+                            FreshSourceByteRelation.NO_COMPLETED_TRANSFER_BYTES, null ->
+                                "No completed source-byte evidence is available to compare."
+                            FreshSourceByteRelation.BOUNDED_READ_TOO_LARGE ->
+                                "The independent readback exceeds the 64 MiB manual cap."
+                            FreshSourceByteRelation.SOURCE_METADATA_CHANGED_DURING_READ ->
+                                "Provider metadata changed during the read; byte comparison invalid."
+                            FreshSourceByteRelation.SOURCE_READ_UNAVAILABLE ->
+                                "Current destination stream could not be read completely."
+                            FreshSourceByteRelation.INSPECTION_CANCELED ->
+                                "Review was canceled; no content match is valid."
+                            FreshSourceByteRelation.INVALID_SOURCE_GRANT ->
+                                "A fresh document READ grant is required."
+                        } + " No old journal state changes, retries, cleanup, deletion or " +
+                        "cloud synchronization claims follow from this observation."
+                }
+            }
+        }
+    }
     val pickSourceForReadOnlyCheck = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         val ticket = sourceInspectionTicket
         sourceInspectionTicket = null
+        createdDocumentTicket = null
         val uri = result.data?.data
         val flags = result.data?.flags ?: 0
         val reference = ticket?.first?.let { status?.sourceInspectionReference(it) }
@@ -357,8 +442,10 @@ fun RecoveryStatusCard() {
         inspectionListing = null
         inspectionMessage = null
         sourceInspectionTicket = null
+        createdDocumentTicket = null
         sourceByteRelation = null
         sourceInspectionMessage = null
+        createdDocumentMessage = null
         reviewPageIndex = 0
         status = null
         unreadable = false
@@ -415,8 +502,10 @@ fun RecoveryStatusCard() {
                             inspectionListing = null
                             inspectionMessage = null
                             sourceInspectionTicket = null
+        createdDocumentTicket = null
                             sourceByteRelation = null
                             sourceInspectionMessage = null
+        createdDocumentMessage = null
                         }
                         if (showReviewReferences) {
                             reviewPageIndex = 0
@@ -497,6 +586,7 @@ fun RecoveryStatusCard() {
                             Button(modifier = Modifier.heightIn(min = 48.dp),
                                 enabled = inspectionTicket == null &&
                                     sourceInspectionTicket == null &&
+                                    createdDocumentTicket == null &&
                                     !inspectionRunning,
                                 onClick = {
                                     inspectionJob?.cancel()
@@ -521,6 +611,7 @@ fun RecoveryStatusCard() {
                                             })
                                     } catch (_: Exception) {
                                         sourceInspectionTicket = null
+        createdDocumentTicket = null
                                         sourceInspectionMessage =
                                             "Android document picker unavailable. No file was accessed."
                                     }
@@ -529,17 +620,70 @@ fun RecoveryStatusCard() {
                                     " …" + entry.opaqueSuffix)
                             }
                         }
+                        if (entry.recordKey != null &&
+                            review.destinationDocumentInspectionReference(
+                                entry.recordKey) != null) {
+                            Text("This Save As record has a protected original " +
+                                "created-document ID. Re-select that EXACT document " +
+                                "through Android Files. A matching current ID and " +
+                                "optional bounded content hash is observational " +
+                                "only; no resume or deletion can follow.",
+                                style = MaterialTheme.typography.bodySmall)
+                            Button(
+                                modifier = Modifier.heightIn(min = 48.dp),
+                                enabled = inspectionTicket == null &&
+                                    sourceInspectionTicket == null &&
+                                    createdDocumentTicket == null &&
+                                    !inspectionRunning,
+                                onClick = {
+                                    inspectionJob?.cancel()
+                                    inspectionJob = null
+                                    inspectionRunning = false
+                                    inspectionRevision++
+                                    inspectionTicket = null
+                                    sourceInspectionTicket = null
+                                    sourceByteRelation = null
+                                    inspectionListing = null
+                                    inspectionMessage = null
+                                    sourceInspectionMessage = null
+                                    createdDocumentMessage =
+                                        "Choose the originally created Save As " +
+                                        "document for an independent READ-only check."
+                                    createdDocumentTicket =
+                                        requireNotNull(entry.recordKey) to inspectionRevision
+                                    try {
+                                        pickCreatedDocumentForReadOnlyCheck.launch(
+                                            Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                                                type = "*/*"
+                                                addCategory(Intent.CATEGORY_OPENABLE)
+                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            })
+                                    } catch (_: Exception) {
+                                        createdDocumentTicket = null
+                                        createdDocumentMessage =
+                                            "Android document picker unavailable. " +
+                                            "No created document was inspected."
+                                    }
+                                }
+                            ) {
+                                Text("Recheck created document for record " +
+                                    displayNumber + " …" + entry.opaqueSuffix)
+                            }
+                        }
                         if (entry.createdChild != null) {
                             Text("An encrypted post-create child identity was recorded. " +
                                 "Re-select its exact immediate parent folder to compare " +
                                 "the observed child ID. Matching identity is not byte proof.",
                                 style = MaterialTheme.typography.bodySmall)
                         }
-                        if (entry.context != null) {
+                        if (entry.context != null &&
+                            (entry.context.operation != "SAF_PICKER_COPY" ||
+                                entry.context.destinationDocumentFingerprint == null)) {
                             Button(
                                 modifier = Modifier.heightIn(min = 48.dp),
                                 enabled = inspectionTicket == null &&
                                     sourceInspectionTicket == null &&
+                                    createdDocumentTicket == null &&
                                     !inspectionRunning && entry.recordKey != null,
                                 onClick = {
                                     inspectionJob?.cancel()
@@ -551,6 +695,7 @@ fun RecoveryStatusCard() {
                                     inspectionMessage = null
                                     sourceByteRelation = null
                                     sourceInspectionMessage = null
+        createdDocumentMessage = null
                                     try {
                                         inspector.launch(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
                                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -576,6 +721,7 @@ fun RecoveryStatusCard() {
                                 inspectionListing = null
                                 inspectionMessage = null
                                 sourceInspectionTicket = null
+        createdDocumentTicket = null
                                 sourceByteRelation = null
                                 sourceInspectionMessage =
                                     "Read-only inspection stopped. No transfer was changed."
@@ -585,14 +731,16 @@ fun RecoveryStatusCard() {
                         Button(
                             modifier = Modifier.heightIn(min = 48.dp),
                             enabled = shownPage > 0 && inspectionTicket == null &&
-                                sourceInspectionTicket == null && !inspectionRunning,
+                                sourceInspectionTicket == null &&
+                                    createdDocumentTicket == null && !inspectionRunning,
                             onClick = { navigateReviewPage(shownPage - 1) }
                         ) { Text("Previous review records") }
                         Button(
                             modifier = Modifier.heightIn(min = 48.dp),
                             enabled = shownPage < totalPages - 1 &&
                                 inspectionTicket == null &&
-                                sourceInspectionTicket == null && !inspectionRunning,
+                                sourceInspectionTicket == null &&
+                                    createdDocumentTicket == null && !inspectionRunning,
                             onClick = { navigateReviewPage(shownPage + 1) }
                         ) { Text("Next review records") }
                     }
@@ -607,7 +755,8 @@ fun RecoveryStatusCard() {
                             modifier = Modifier.heightIn(min = 48.dp),
                             enabled = review.referenceWindow > 0 &&
                                 inspectionTicket == null &&
-                                sourceInspectionTicket == null && !inspectionRunning,
+                                sourceInspectionTicket == null &&
+                                    createdDocumentTicket == null && !inspectionRunning,
                             onClick = {
                                 navigateReviewPage(0)
                                 status = null
@@ -620,7 +769,8 @@ fun RecoveryStatusCard() {
                                 AttemptRecoveryIndex.MAX_REVIEW_REFERENCES <
                                 review.totalReferenceCount &&
                                 inspectionTicket == null &&
-                                sourceInspectionTicket == null && !inspectionRunning,
+                                sourceInspectionTicket == null &&
+                                    createdDocumentTicket == null && !inspectionRunning,
                             onClick = {
                                 navigateReviewPage(0)
                                 status = null
@@ -638,6 +788,11 @@ fun RecoveryStatusCard() {
                         "through the window controls. No automatic retry or cleanup.",
                         style = MaterialTheme.typography.bodySmall)
                 }
+            }
+            if (showReviewReferences) createdDocumentMessage?.let {
+                Text(it, modifier = Modifier.semantics {
+                    liveRegion = LiveRegionMode.Polite
+                }, style = MaterialTheme.typography.bodySmall)
             }
             if (showReviewReferences) sourceInspectionMessage?.let {
                 Text(it, modifier = Modifier.semantics {
@@ -675,8 +830,10 @@ fun RecoveryStatusCard() {
                     inspectionListing = null
                     inspectionMessage = null
                     sourceInspectionTicket = null
+        createdDocumentTicket = null
                     sourceByteRelation = null
                     sourceInspectionMessage = null
+        createdDocumentMessage = null
                     referenceWindow = 0
                     refreshSerial++
                 }

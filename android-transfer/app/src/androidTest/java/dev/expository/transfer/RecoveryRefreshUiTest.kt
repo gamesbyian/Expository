@@ -11,6 +11,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertCountEquals
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.expository.transfer.journal.RecoveryStatusCard
 import dev.expository.transfer.journal.AndroidAtomicAttemptStorage
@@ -104,6 +105,64 @@ class RecoveryRefreshUiTest {
             AtomicFile(journalFile).delete()
             AtomicFile(hintFile).delete()
             AtomicFile(sourceBytesFile).delete()
+        }
+    }
+
+    @Test fun protectedCreatedDocumentReviewLaunchesRealPickerWithoutAnyReplay() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val digest = "d".repeat(32) + UUID.randomUUID().toString().replace("-", "")
+        val journalFile = File(context.noBackupFilesDir, "transfer_attempt_" + digest)
+        val hintFile = File(context.noBackupFilesDir,
+            "transfer_recovery_context_v1_" + digest)
+        val journal = DurableAttemptJournal(AndroidAtomicAttemptStorage(context, digest))
+        try {
+            ProtectedRecoveryContextStore(context).recordNew(digest,
+                ProtectedRecoveryContext("SAF_PICKER_COPY",
+                    "Test original", "Test created document", "test.provider",
+                    destinationDocumentFingerprint = "a".repeat(64)))
+            journal.confirm(digest)
+            journal.beginAttempt(digest, "dest_document_fixture")
+            val before = hintFile.readBytes()
+            rule.setContent {
+                MaterialTheme {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        RecoveryStatusCard()
+                    }
+                }
+            }
+            rule.waitUntil(10_000L) {
+                rule.onAllNodesWithText("Show review references")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            rule.onNodeWithText("Show review references").performClick()
+            val action = rule.onAllNodesWithText(
+                "Recheck created document for record", substring = true)[0]
+            action.assertExists()
+            // This is a created one-document Save As. It no longer offers
+            // an unrelated directory picker as if that proved the target.
+            rule.onAllNodesWithText("Inspect folder for record", substring = true)
+                .assertCountEquals(0)
+            action.performScrollTo().performClick()
+            val opened = device.wait(Until.hasObject(
+                By.pkg("com.google.android.documentsui")), 12_000L) ||
+                device.wait(Until.hasObject(By.pkg("com.android.documentsui")), 6_000L) ||
+                device.wait(Until.hasObject(By.text("Recent")), 4_000L)
+            assertTrue("Destination recheck must use genuine OS Files picker", opened)
+            device.pressBack()
+            rule.waitUntil(15_000L) {
+                rule.onAllNodesWithText("Created-document inspection canceled",
+                    substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            assertEquals("Canceled destination recheck cannot settle an old attempt",
+                JournalState.ATTEMPT_RECORDED, journal.current()?.state)
+            org.junit.Assert.assertArrayEquals(
+                "Neither viewing nor canceling may rewrite encrypted context",
+                before, hintFile.readBytes())
+        } finally {
+            if (device.currentPackageName != context.packageName) device.pressBack()
+            AtomicFile(journalFile).delete()
+            AtomicFile(hintFile).delete()
         }
     }
 
