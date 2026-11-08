@@ -620,13 +620,65 @@ fun RecoveryStatusCard() {
                                     " …" + entry.opaqueSuffix)
                             }
                         }
+                        if (entry.recordKey != null &&
+                            review.destinationDocumentInspectionReference(
+                                entry.recordKey) != null) {
+                            Text("This Save As record has a protected original " +
+                                "created-document ID. Re-select that EXACT document " +
+                                "through Android Files. A matching current ID and " +
+                                "optional bounded content hash is observational " +
+                                "only; no resume or deletion can follow.",
+                                style = MaterialTheme.typography.bodySmall)
+                            Button(
+                                modifier = Modifier.heightIn(min = 48.dp),
+                                enabled = inspectionTicket == null &&
+                                    sourceInspectionTicket == null &&
+                                    createdDocumentTicket == null &&
+                                    !inspectionRunning,
+                                onClick = {
+                                    inspectionJob?.cancel()
+                                    inspectionJob = null
+                                    inspectionRunning = false
+                                    inspectionRevision++
+                                    inspectionTicket = null
+                                    sourceInspectionTicket = null
+                                    sourceByteRelation = null
+                                    inspectionListing = null
+                                    inspectionMessage = null
+                                    sourceInspectionMessage = null
+                                    createdDocumentMessage =
+                                        "Choose the originally created Save As " +
+                                        "document for an independent READ-only check."
+                                    createdDocumentTicket =
+                                        requireNotNull(entry.recordKey) to inspectionRevision
+                                    try {
+                                        pickCreatedDocumentForReadOnlyCheck.launch(
+                                            Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                                                type = "*/*"
+                                                addCategory(Intent.CATEGORY_OPENABLE)
+                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            })
+                                    } catch (_: Exception) {
+                                        createdDocumentTicket = null
+                                        createdDocumentMessage =
+                                            "Android document picker unavailable. " +
+                                            "No created document was inspected."
+                                    }
+                                }
+                            ) {
+                                Text("Recheck created document for record " +
+                                    displayNumber + " …" + entry.opaqueSuffix)
+                            }
+                        }
                         if (entry.createdChild != null) {
                             Text("An encrypted post-create child identity was recorded. " +
                                 "Re-select its exact immediate parent folder to compare " +
                                 "the observed child ID. Matching identity is not byte proof.",
                                 style = MaterialTheme.typography.bodySmall)
                         }
-                        if (entry.context != null) {
+                        if (entry.context != null &&
+                            (entry.context.operation != "SAF_PICKER_COPY" ||
+                                entry.context.destinationDocumentFingerprint == null)) {
                             Button(
                                 modifier = Modifier.heightIn(min = 48.dp),
                                 enabled = inspectionTicket == null &&
@@ -736,6 +788,11 @@ fun RecoveryStatusCard() {
                         "through the window controls. No automatic retry or cleanup.",
                         style = MaterialTheme.typography.bodySmall)
                 }
+            }
+            if (showReviewReferences) createdDocumentMessage?.let {
+                Text(it, modifier = Modifier.semantics {
+                    liveRegion = LiveRegionMode.Polite
+                }, style = MaterialTheme.typography.bodySmall)
             }
             if (showReviewReferences) sourceInspectionMessage?.let {
                 Text(it, modifier = Modifier.semantics {
