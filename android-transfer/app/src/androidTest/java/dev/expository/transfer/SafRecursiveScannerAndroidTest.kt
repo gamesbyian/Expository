@@ -244,7 +244,7 @@ class SafRecursiveScannerAndroidTest {
         assertTrue("A well-formed surrogate pair remains valid UTF-8", good.complete)
         assertTrue(good.children.any {
             it.documentId == "valid-unicode" &&
-                it.title == "Child-\\uD83E\\uDDAA.bin"
+                it.title == "Child-\uD83E\uDDAA.bin"
         })
         assertNotNull("A valid supplementary character must not block a stable destination",
             SmartMergeSafDestinationInspector.capture(
