@@ -41,6 +41,24 @@ class RecoveryIndexFailurePolicyTest {
                 .digest(original).joinToString("") { "%02x".format(it) }
             val evidence = dev.expository.transfer.journal.ProtectedTransferredByteEvidence(
                 original.size.toLong(), hash)
+            // MediaStore may asynchronously revise indexed metadata just
+            // after its output stream closes on a newly created test row.
+            // The production inspector correctly refuses an apparent match
+            // whenever metadata drifts DURING a read. Retry only that
+            // explicit transient observation; every other outcome remains
+            // exact and cannot be laundered into a pass.
+            fun afterMediaIndexSettles(
+                compared: dev.expository.transfer.journal.ProtectedTransferredByteEvidence
+            ): dev.expository.transfer.journal.FreshSourceByteRelation {
+                var observed = inspector.inspect(resolver, uri, readGrant, compared)
+                repeat(8) {
+                    if (observed != dev.expository.transfer.journal.FreshSourceByteRelation
+                            .SOURCE_METADATA_CHANGED_DURING_READ) return observed
+                    Thread.sleep(300L)
+                    observed = inspector.inspect(resolver, uri, readGrant, compared)
+                }
+                return observed
+            }
             assertTrue(inspector.acceptsPickerResult(uri,
                 android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION))
             assertTrue(!inspector.acceptsPickerResult(uri, 0))
@@ -48,7 +66,7 @@ class RecoveryIndexFailurePolicyTest {
                 android.net.Uri.parse("file:///private/stale.bin"),
                 android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION))
             assertEquals(dev.expository.transfer.journal.FreshSourceByteRelation.CURRENT_SELECTION_BYTES_MATCH_RECORDED_TRANSFER,
-                inspector.inspect(resolver, uri, readGrant, evidence))
+                afterMediaIndexSettles(evidence))
             assertEquals(dev.expository.transfer.journal.FreshSourceByteRelation.INSPECTION_CANCELED,
                 inspector.inspect(resolver, uri, readGrant, evidence,
                     continueRequested = { false }))
@@ -58,7 +76,7 @@ class RecoveryIndexFailurePolicyTest {
                 inspector.inspect(resolver, uri, readGrant, evidence.copy(
                     byteCount = inspector.MAX_MANUAL_BYTES + 1)))
             assertEquals(dev.expository.transfer.journal.FreshSourceByteRelation.CURRENT_SELECTION_BYTES_DIFFER_FROM_RECORDED_TRANSFER,
-                inspector.inspect(resolver, uri, readGrant, evidence.copy(
+                afterMediaIndexSettles(evidence.copy(
                     sourceSha256Hex = "0".repeat(64))))
             assertEquals(dev.expository.transfer.journal.FreshSourceByteRelation.INVALID_SOURCE_GRANT,
                 inspector.inspect(resolver,
