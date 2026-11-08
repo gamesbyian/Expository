@@ -558,6 +558,47 @@ class RecoveryIndexFailurePolicyTest {
         }
     }
 
+    @Test fun freshProviderMetadataComparisonDetectsChangeWithoutAnyWrite() {
+        // The source DocumentsProvider lives inside the disposable Android
+        // test APK. Real ContentResolver calls, no fabricated query results
+        // and no production provider, credential or URI grant persistence.
+        val resolver = InstrumentationRegistry.getInstrumentation().context.contentResolver
+        val tree = android.net.Uri.parse(
+            "content://test.source.scoped/tree/source-root")
+        val document = android.provider.DocumentsContract.buildDocumentUriUsingTree(
+            tree, "clip")
+        val identity = dev.expository.transfer.journal.RecoverySourceDocumentIdentity
+        val read = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+        requireNotNull(resolver.call(tree, "reset", null, null))
+        try {
+            val captured = requireNotNull(identity.captureMetadata(resolver, document))
+            assertEquals(64, captured.length)
+            assertEquals(
+                dev.expository.transfer.journal.RecoverySourceMetadataRelation
+                    .SAME_RECORDED_METADATA,
+                identity.inspectMetadata(resolver, document, read, captured))
+            assertEquals(
+                dev.expository.transfer.journal.RecoverySourceMetadataRelation
+                    .INDETERMINATE,
+                identity.inspectMetadata(resolver, document, 0, captured))
+            assertEquals(
+                dev.expository.transfer.journal.RecoverySourceMetadataRelation
+                    .INDETERMINATE,
+                identity.inspectMetadata(resolver, document, read, captured) { false })
+            requireNotNull(resolver.call(tree, "changedName", null, null))
+            assertEquals(
+                dev.expository.transfer.journal.RecoverySourceMetadataRelation
+                    .DIFFERENT_RECORDED_METADATA,
+                identity.inspectMetadata(resolver, document, read, captured))
+            assertEquals("Provider ID may survive a filename revision",
+                identity.fingerprint(document),
+                identity.fingerprint(document))
+            // No journal or protected context is created by inspection.
+        } finally {
+            requireNotNull(resolver.call(tree, "reset", null, null))
+        }
+    }
+
     @Test fun protectedV4SourceMetadataIsEncryptedBackwardCompatibleAndNonExecutable() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val sandbox = File(app.cacheDir, "metadata-v4-" + UUID.randomUUID())
