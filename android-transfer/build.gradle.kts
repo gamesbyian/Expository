@@ -162,3 +162,47 @@ subprojects {
         dependsOn(rootProject.tasks.named("androidDebugRuntimeArtifactInventory"))
     }
 }
+
+/**
+ * Temporary baseline qualification for W13/#326. Only exact versions of
+ * externally resolved Maven components are printed, not private paths,
+ * provider account data, cache locations or artifact content. This task is
+ * replaced by reviewed checked-in lock state before merge.
+ */
+tasks.register("jvmRuntimeVersionBaseline") {
+    group = "verification"
+    doLast {
+        val paths = listOf(":core:planner", ":core:engine", ":adapter:ftps",
+            ":adapter:sftp", ":testing:fake-endpoints")
+        var total = 0
+        paths.forEach { path ->
+            val config = project(path).configurations.getByName("runtimeClasspath")
+            require(config.isCanBeResolved) { "JVM_RUNTIME_NOT_RESOLVABLE" }
+            val versions = config.incoming.resolutionResult.allComponents.mapNotNull {
+                val id = it.id as?
+                    org.gradle.api.artifacts.component.ModuleComponentIdentifier
+                if (id == null) null else {
+                    require(id.group.isNotBlank() && id.module.isNotBlank() &&
+                        id.version.isNotBlank() &&
+                        listOf(id.group, id.module, id.version).none { name ->
+                            name.contains('\n') || name.contains('\r') ||
+                                name.contains('\t') || name.contains('=')
+                        }) { "UNSAFE_JVM_MODULE_IDENTIFIER" }
+                    "${id.group}:${id.module}:${id.version}=runtimeClasspath"
+                }
+            }.toSortedSet()
+            total += versions.size
+            println("JVM_VERSION_LOCK_BASELINE_BEGIN " + path)
+            versions.forEach(::println)
+            if (versions.isEmpty()) println("empty=runtimeClasspath")
+            println("JVM_VERSION_LOCK_BASELINE_END " + path)
+        }
+        require(total > 0) { "EMPTY_JVM_VERSION_BASELINE" }
+        println("JVM_VERSION_LOCK_BASELINE_TOTAL=" + total)
+    }
+}
+subprojects {
+    tasks.matching { it.name == "check" }.configureEach {
+        dependsOn(rootProject.tasks.named("jvmRuntimeVersionBaseline"))
+    }
+}
