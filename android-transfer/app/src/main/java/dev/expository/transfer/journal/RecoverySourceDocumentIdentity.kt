@@ -22,6 +22,14 @@ internal enum class RecoverySourceDocumentRelation {
     INDETERMINATE
 }
 
+/** Provider metadata is only an advisory observation, not a version or grant. */
+internal enum class RecoverySourceMetadataRelation {
+    SAME_RECORDED_METADATA,
+    DIFFERENT_RECORDED_METADATA,
+    NO_RECORDED_METADATA,
+    INDETERMINATE
+}
+
 internal object RecoverySourceDocumentIdentity {
     private val DIGEST = Regex("[0-9a-f]{64}")
 
@@ -135,6 +143,48 @@ internal object RecoverySourceDocumentIdentity {
         if (!continueRequested() || !MessageDigest.isEqual(first, second))
             return RecoverySourceDocumentRelation.INDETERMINATE
         return relation
+    }
+
+    /**
+     * Seal a repeated, strict provider-row observation before an original
+     * write. The fingerprint omits all raw provider metadata and document IDs.
+     * Provider timestamps/size/name/MIME are mutable and may be absent: even
+     * exact correspondence cannot establish immutable content revision.
+     */
+    fun captureMetadata(
+        resolver: ContentResolver,
+        document: Uri,
+        continueRequested: () -> Boolean = { true }
+    ): String? {
+        if (!continueRequested() || fingerprint(document) == null) return null
+        val first = observedMetadata(resolver, document) ?: return null
+        if (!continueRequested()) return null
+        val second = observedMetadata(resolver, document) ?: return null
+        if (!continueRequested() || !MessageDigest.isEqual(first, second)) return null
+        return first.joinToString("") { "%02x".format(it) }
+    }
+
+    /** Freshly READ-granted metadata comparison, with independent double
+     * observation; never creates a mutable receipt or retries an old job. */
+    fun inspectMetadata(
+        resolver: ContentResolver,
+        picked: Uri,
+        pickerFlags: Int,
+        recorded: String?,
+        continueRequested: () -> Boolean = { true }
+    ): RecoverySourceMetadataRelation {
+        if (!continueRequested() ||
+            !RecoveryManualSourceInspector.acceptsPickerResult(picked, pickerFlags))
+            return RecoverySourceMetadataRelation.INDETERMINATE
+        if (recorded == null) return RecoverySourceMetadataRelation.NO_RECORDED_METADATA
+        if (!DIGEST.matches(recorded)) return RecoverySourceMetadataRelation.INDETERMINATE
+        val current = captureMetadata(resolver, picked, continueRequested)
+            ?: return RecoverySourceMetadataRelation.INDETERMINATE
+        return if (MessageDigest.isEqual(
+                recorded.toByteArray(StandardCharsets.US_ASCII),
+                current.toByteArray(StandardCharsets.US_ASCII)
+            )) RecoverySourceMetadataRelation.SAME_RECORDED_METADATA
+            else RecoverySourceMetadataRelation.DIFFERENT_RECORDED_METADATA
     }
 
     /** Bare comparison is pure and reserved for tests or a caller with its

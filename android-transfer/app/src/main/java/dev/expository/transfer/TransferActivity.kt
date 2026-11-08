@@ -1675,6 +1675,13 @@ private fun DeveloperPreview(
                                                     DocumentsContract.buildDocumentUriUsingTree(
                                                         current.request.sourceTree,
                                                         current.request.sourceDocumentId))
+                                            }.getOrNull(),
+                                            sourceMetadataFingerprint = runCatching {
+                                                RecoverySourceDocumentIdentity.captureMetadata(
+                                                    context.contentResolver,
+                                                    DocumentsContract.buildDocumentUriUsingTree(
+                                                        current.request.sourceTree,
+                                                        current.request.sourceDocumentId))
                                             }.getOrNull()))
                                 },
                                 recordCreatedChild = {

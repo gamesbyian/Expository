@@ -27,8 +27,9 @@ import javax.crypto.spec.GCMParameterSpec
  * therefore the entire record is protected at rest. No URI, document ID,
  * username, path, credential, source bytes, grant or access token is retained.
  * A nullable V2 SHA-256 fingerprint of the destination SAF tree root and
- * optional V3 original source document-ID fingerprint are encrypted with the
- * labels. Neither is a grant, immutable revision, or transfer receipt.
+ * optional V3 original source document-ID fingerprint and V4 observed
+ * source metadata fingerprint are encrypted with the labels. None is a
+ * grant, immutable revision, or transfer receipt.
  */
 data class ProtectedRecoveryContext(
     val operation: String,
@@ -37,7 +38,9 @@ data class ProtectedRecoveryContext(
     val destinationProvider: String,
     val destinationTreeRootFingerprint: String? = null,
     /** Optional on independently reviewed one-file or Dual SAF Copy sources. */
-    val sourceDocumentFingerprint: String? = null
+    val sourceDocumentFingerprint: String? = null,
+    /** Weak original provider-row metadata; never an immutable version. */
+    val sourceMetadataFingerprint: String? = null
 ) {
     // These labels are separately encrypted at rest, but their generated
     // data-class toString previously leaked them into any incidental debug
@@ -67,6 +70,7 @@ class ProtectedRecoveryContextStore(context: Context) {
         private const val MAX_TEXT = 180
         private val TREE_ROOT_FINGERPRINT = Regex("[0-9a-f]{64}")
         private val SOURCE_DOCUMENT_FINGERPRINT = Regex("[0-9a-f]{64}")
+        private val SOURCE_METADATA_FINGERPRINT = Regex("[0-9a-f]{64}")
         private const val IV_LENGTH = 12
         private const val TAG_LENGTH = 128
         private val LOCK = Any()
@@ -115,7 +119,11 @@ class ProtectedRecoveryContextStore(context: Context) {
                     TREE_ROOT_FINGERPRINT.matches(context.destinationTreeRootFingerprint)) &&
                 (context.sourceDocumentFingerprint == null ||
                     (context.operation in setOf("SAF_PICKER_COPY", "SAF_DUAL_COPY") &&
-                        SOURCE_DOCUMENT_FINGERPRINT.matches(context.sourceDocumentFingerprint)))) {
+                        SOURCE_DOCUMENT_FINGERPRINT.matches(context.sourceDocumentFingerprint))) &&
+                (context.sourceMetadataFingerprint == null ||
+                    (context.sourceDocumentFingerprint != null &&
+                        context.operation in setOf("SAF_PICKER_COPY", "SAF_DUAL_COPY") &&
+                        SOURCE_METADATA_FINGERPRINT.matches(context.sourceMetadataFingerprint)))) {
                 "INVALID_RECOVERY_CONTEXT"
             }
             if (targetFile.exists() || File(targetFile.path + ".bak").exists() ||
@@ -126,7 +134,11 @@ class ProtectedRecoveryContextStore(context: Context) {
                     // Keep V2 bytes for operations without source-ID proof.
                     // V3 adds a non-reversible, encrypted source document ID
                     // for separately journaled, user-reviewed SAF file Copy routes.
-                    out.writeByte(if (context.sourceDocumentFingerprint == null) 2 else 3)
+                    out.writeByte(when {
+                        context.sourceMetadataFingerprint != null -> 4
+                        context.sourceDocumentFingerprint != null -> 3
+                        else -> 2
+                    })
                     out.writeUTF(context.operation)
                     out.writeUTF(context.sourceLabel)
                     out.writeUTF(context.destinationLabel)
@@ -134,6 +146,8 @@ class ProtectedRecoveryContextStore(context: Context) {
                     out.writeUTF(context.destinationTreeRootFingerprint.orEmpty())
                     if (context.sourceDocumentFingerprint != null)
                         out.writeUTF(context.sourceDocumentFingerprint)
+                    if (context.sourceMetadataFingerprint != null)
+                        out.writeUTF(context.sourceMetadataFingerprint)
                 }
             }.toByteArray()
             val record = try {
@@ -216,7 +230,7 @@ class ProtectedRecoveryContextStore(context: Context) {
             try {
                 DataInputStream(ByteArrayInputStream(plaintext)).use { input ->
                     val version = input.readUnsignedByte()
-                    if (version !in 1..3)
+                    if (version !in 1..4)
                         throw IOException("RECOVERY_CONTEXT_VERSION_UNSUPPORTED")
                     val operation = input.readUTF()
                     val source = input.readUTF()
@@ -225,16 +239,23 @@ class ProtectedRecoveryContextStore(context: Context) {
                     val root = if (version >= 2)
                         input.readUTF().takeUnless { it.isEmpty() }
                     else null
-                    val sourceDocument = if (version == 3)
+                    val sourceDocument = if (version >= 3)
+                        input.readUTF().takeUnless { it.isEmpty() }
+                    else null
+                    val metadata = if (version == 4)
                         input.readUTF().takeUnless { it.isEmpty() }
                     else null
                     val context = ProtectedRecoveryContext(
-                        operation, source, destination, provider, root, sourceDocument)
+                        operation, source, destination, provider, root,
+                        sourceDocument, metadata)
                     if (input.available() != 0 ||
                         (root != null && !TREE_ROOT_FINGERPRINT.matches(root)) ||
                         (sourceDocument != null &&
                             (operation !in setOf("SAF_PICKER_COPY", "SAF_DUAL_COPY") ||
                                 !SOURCE_DOCUMENT_FINGERPRINT.matches(sourceDocument))) ||
+                        (version == 4 &&
+                            (metadata == null || sourceDocument == null ||
+                                !SOURCE_METADATA_FINGERPRINT.matches(metadata))) ||
                         context.operation !in setOf("SAF_PICKER_COPY", "SAF_RECURSIVE_COPY", "SAF_DUAL_COPY") ||
                         !allowed(context.sourceLabel) ||
                         !allowed(context.destinationLabel) ||

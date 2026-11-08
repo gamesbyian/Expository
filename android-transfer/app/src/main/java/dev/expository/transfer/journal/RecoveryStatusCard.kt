@@ -251,14 +251,25 @@ fun RecoveryStatusCard() {
                             context.contentResolver, uri, flags,
                             reviewed.context?.sourceDocumentFingerprint,
                             continueRequested = { owner.isActive })
+                        val metadata = if (identity ==
+                                RecoverySourceDocumentRelation.SAME_RECORDED_DOCUMENT_ID)
+                            RecoverySourceDocumentIdentity.inspectMetadata(
+                                context.contentResolver, uri, flags,
+                                reviewed.context?.sourceMetadataFingerprint,
+                                continueRequested = { owner.isActive })
+                        else RecoverySourceMetadataRelation.INDETERMINATE
                         val bytes = if (completed != null)
                             RecoveryManualSourceInspector.inspect(
                                 context.contentResolver, uri, flags, completed,
                                 continueRequested = { owner.isActive })
                         else FreshSourceByteRelation.NO_COMPLETED_TRANSFER_BYTES
-                        bytes to if (owner.isActive &&
-                            bytes != FreshSourceByteRelation.INSPECTION_CANCELED)
-                            identity else RecoverySourceDocumentRelation.INDETERMINATE
+                        Triple(bytes,
+                            if (owner.isActive &&
+                                bytes != FreshSourceByteRelation.INSPECTION_CANCELED)
+                                identity else RecoverySourceDocumentRelation.INDETERMINATE,
+                            if (owner.isActive &&
+                                bytes != FreshSourceByteRelation.INSPECTION_CANCELED)
+                                metadata else RecoverySourceMetadataRelation.INDETERMINATE)
                     }
                 }
                 if (revision != inspectionRevision || !showReviewReferences) return@launch
@@ -272,6 +283,8 @@ fun RecoveryStatusCard() {
                     sourceByteRelation = observed.getOrNull()?.first
                     val identityRelation = observed.getOrNull()?.second
                         ?: RecoverySourceDocumentRelation.INDETERMINATE
+                    val metadataRelation = observed.getOrNull()?.third
+                        ?: RecoverySourceMetadataRelation.INDETERMINATE
                     sourceInspectionMessage = "Fresh source check for record …" +
                         ticket.first.takeLast(12) + ": " + when (sourceByteRelation) {
                             FreshSourceByteRelation.CURRENT_SELECTION_BYTES_MATCH_RECORDED_TRANSFER ->
@@ -315,6 +328,21 @@ fun RecoveryStatusCard() {
                             RecoverySourceDocumentRelation.INDETERMINATE ->
                                 "Original-source identity could not be compared with " +
                                 "a completed, fresh authorized observation."
+                        } + " " + when (metadataRelation) {
+                            RecoverySourceMetadataRelation.SAME_RECORDED_METADATA ->
+                                "The same provider document ID now reports MATCHING " +
+                                "name, MIME, size and last-modified metadata compared " +
+                                "with the pre-Copy snapshot. These fields are mutable " +
+                                "and cannot establish an immutable source version."
+                            RecoverySourceMetadataRelation.DIFFERENT_RECORDED_METADATA ->
+                                "The same provider document ID now reports DIFFERENT " +
+                                "metadata than before Copy. No retry or deletion."
+                            RecoverySourceMetadataRelation.NO_RECORDED_METADATA ->
+                                "No original source metadata was recorded for this " +
+                                "operation, as expected for older or unsupported sources."
+                            RecoverySourceMetadataRelation.INDETERMINATE ->
+                                "Original-source metadata could not be compared " +
+                                "under a stable, fresh authorized observation."
                         }
                 }
             }

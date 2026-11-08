@@ -134,7 +134,9 @@ fun LocalCopyCard(
                 // context. The raw source URI/grant remains RAM-only.
                 recovery.recordNew(digest, ProtectedRecoveryContext(
                     "SAF_PICKER_COPY", sourceName, destinationName, provider,
-                    sourceDocumentFingerprint = RecoverySourceDocumentIdentity.fingerprint(sourceUri)))
+                    sourceDocumentFingerprint = RecoverySourceDocumentIdentity.fingerprint(sourceUri),
+                    sourceMetadataFingerprint = RecoverySourceDocumentIdentity
+                        .captureMetadata(context.contentResolver, sourceUri)))
             },
             recordSourceBytes = { digest, bytes, sha256 ->
                 sourceBytes.recordNew(digest, bytes, sha256)
