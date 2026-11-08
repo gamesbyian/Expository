@@ -212,3 +212,37 @@ subprojects {
         }
     }
 }
+
+/**
+ * Temporary exact-graph bootstrap for W13/#326. Removed after copying the
+ * observed Gradle 8.13 component set into an enforced Android lockfile.
+ * The output includes only public Maven coordinates, never local cache paths.
+ */
+tasks.register("androidDebugRuntimeVersionBaseline") {
+    group = "verification"
+    doLast {
+        val config = project(":app").configurations.getByName("debugRuntimeClasspath")
+        require(config.isCanBeResolved) { "ANDROID_DEBUG_RUNTIME_NOT_RESOLVABLE" }
+        val components = config.incoming.resolutionResult.allComponents.mapNotNull {
+            val id = it.id as?
+                org.gradle.api.artifacts.component.ModuleComponentIdentifier
+            if (id == null) null else {
+                val fields = listOf(id.group, id.module, id.version)
+                require(fields.all { s -> s.isNotBlank() && !s.contains('=') &&
+                    !s.contains('\n') && !s.contains('\r') &&
+                    !s.contains('\t') }) { "INVALID_ANDROID_RUNTIME_MODULE" }
+                fields.joinToString(":") + "=debugRuntimeClasspath"
+            }
+        }.toSortedSet()
+        require(components.size >= 30) { "INCOMPLETE_ANDROID_RUNTIME_MODULE_GRAPH" }
+        println("ANDROID_DEBUG_LOCK_BASELINE_BEGIN")
+        components.forEach(::println)
+        println("ANDROID_DEBUG_LOCK_BASELINE_END")
+        println("ANDROID_DEBUG_LOCK_BASELINE_ROWS=${components.size}")
+    }
+}
+subprojects {
+    tasks.matching { it.name == "lintDebug" }.configureEach {
+        dependsOn(rootProject.tasks.named("androidDebugRuntimeVersionBaseline"))
+    }
+}
