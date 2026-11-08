@@ -223,3 +223,37 @@ subprojects {
         }
     }
 }
+
+/**
+ * Temporary W13 release-runtime component observation on the EXISTING
+ * Android lint CI path. Do not merge this reporter: replace with exact
+ * committed strict releaseRuntimeClasspath lock state after real resolution.
+ */
+tasks.register("androidReleaseRuntimeVersionBaseline") {
+    group = "verification"
+    doLast {
+        val config = project(":app").configurations.getByName("releaseRuntimeClasspath")
+        require(config.isCanBeResolved) { "RELEASE_RUNTIME_NOT_RESOLVABLE" }
+        val modules = config.incoming.resolutionResult.allComponents.mapNotNull {
+            val id = it.id as?
+                org.gradle.api.artifacts.component.ModuleComponentIdentifier
+            if (id == null) null else {
+                val names = listOf(id.group, id.module, id.version)
+                require(names.all { n -> n.isNotBlank() && !n.contains('=') &&
+                    !n.contains('\n') && !n.contains('\r') &&
+                    !n.contains('\t') }) { "INVALID_RELEASE_RUNTIME_MODULE" }
+                names.joinToString(":") + "=releaseRuntimeClasspath"
+            }
+        }.toSortedSet()
+        require(modules.size >= 70) { "INCOMPLETE_RELEASE_RUNTIME_MODULE_GRAPH" }
+        println("ANDROID_RELEASE_LOCK_BASELINE_BEGIN")
+        modules.forEach(::println)
+        println("ANDROID_RELEASE_LOCK_BASELINE_END")
+        println("ANDROID_RELEASE_LOCK_BASELINE_ROWS=${modules.size}")
+    }
+}
+subprojects {
+    tasks.matching { it.name == "lintDebug" }.configureEach {
+        dependsOn(rootProject.tasks.named("androidReleaseRuntimeVersionBaseline"))
+    }
+}
