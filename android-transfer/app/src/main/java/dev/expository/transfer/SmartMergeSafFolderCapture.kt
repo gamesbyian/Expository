@@ -55,6 +55,7 @@ internal object SmartMergeSafFolderCapture {
 
     private fun validName(name: String): Boolean =
         name.isNotBlank() && name != "." && name != ".." &&
+            StandardCharsets.UTF_8.newEncoder().canEncode(name) &&
             name.toByteArray(StandardCharsets.UTF_8).size <= 255 &&
             name.none { it == '/' || it == '\\' || it.code < 32 || it.code == 127 }
 
@@ -82,7 +83,9 @@ internal object SmartMergeSafFolderCapture {
                 metadata(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
             ))
             require(!cursor.moveToNext() &&
-                id == rootId && mime == DocumentsContract.Document.MIME_TYPE_DIR &&
+                id == rootId && id != null &&
+                StandardCharsets.UTF_8.newEncoder().canEncode(id) &&
+                mime == DocumentsContract.Document.MIME_TYPE_DIR &&
                 name != null && validName(name)) {
                 "MERGE_SOURCE_ROOT_IDENTITY_AMBIGUOUS"
             }

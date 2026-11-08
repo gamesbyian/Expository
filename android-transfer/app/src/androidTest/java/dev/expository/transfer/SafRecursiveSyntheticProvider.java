@@ -82,6 +82,22 @@ public final class SafRecursiveSyntheticProvider extends ContentProvider {
             case "changedName":
                 metadataNames.put("clip", "Modified-after-list.bin");
                 break;
+            case "malformedSourceRootName":
+                // A lone surrogate is not representable as UTF-8: Java would
+                // silently replace it and alias an unrelated document name.
+                metadataNames.put("source-root", "Source\uD800");
+                break;
+            case "malformedTargetRootName":
+                metadataNames.put("target-root", "Target\uD800");
+                break;
+            case "malformedTargetChildName":
+                docs.put("broken-name", file("broken-name", "target-root",
+                    "Child\uD800", 3L));
+                break;
+            case "supplementaryTargetChildName":
+                docs.put("valid-unicode", file("valid-unicode", "target-root",
+                    "Child-\uD83E\uDDAA.bin", 3L));
+                break;
             case "flipClipIdAfterTwoQueries":
                 // Reproduce a provider claiming a different document ID after
                 // two initially stable observations (no change to URI text).

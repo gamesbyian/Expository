@@ -5,6 +5,7 @@ import android.database.Cursor
 import android.net.Uri
 import android.provider.DocumentsContract
 import java.text.Normalizer
+import java.nio.charset.StandardCharsets
 import java.util.Locale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -140,7 +141,11 @@ internal object LocalTreeReader {
     fun rootId(uri: Uri): String {
         require(validTree(uri)) { "Invalid scoped tree URI" }
         return DocumentsContract.getTreeDocumentId(uri).also {
-            require(it.isNotBlank()) { "Missing tree root" }
+            require(it.isNotBlank() &&
+                StandardCharsets.UTF_8.newEncoder().canEncode(it) &&
+                it.toByteArray(StandardCharsets.UTF_8).size <= 8192) {
+                "Missing or invalid tree root"
+            }
         }
     }
 
@@ -214,6 +219,11 @@ internal object LocalTreeReader {
             // UTF-8 size to avoid hostile Cursor rows exhausting app memory.
             // Filename validity matches immutable planner's byte ceiling.
             if (id.isBlank() || name.isBlank() ||
+                // Java UTF-8 encoders replace lone surrogate code units by
+                // default. Refuse such provider values before using bytes
+                // for document identity or collision/digest comparisons.
+                !StandardCharsets.UTF_8.newEncoder().canEncode(id) ||
+                !StandardCharsets.UTF_8.newEncoder().canEncode(name) ||
                 id.toByteArray(Charsets.UTF_8).size > 8192 ||
                 name.toByteArray(Charsets.UTF_8).size > 255 ||
                 name == "." || name == ".." ||

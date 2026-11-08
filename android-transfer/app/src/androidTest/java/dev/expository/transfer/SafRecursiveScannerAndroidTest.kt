@@ -210,6 +210,50 @@ class SafRecursiveScannerAndroidTest {
         assertNotNull(capture(read or write))
     }
 
+
+    @Test fun smartMergeSafRefusesLossyProviderUnicodeButRetainsValidSupplementaryNames() {
+        val e = Environment()
+        val read = Intent.FLAG_GRANT_READ_URI_PERMISSION
+        val writable = read or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val journalNames = app.noBackupFilesDir.list().orEmpty().toSet()
+        e.mode("malformedSourceRootName")
+        assertNull("A source-root label containing an unpaired surrogate must fail closed",
+            SmartMergeSafFolderCapture.capture(
+                e.resolver, e.sourceTree, read, WorkspacePane.A, 1L,
+                e.observedAtMillis))
+        e.mode("reset")
+        e.mode("malformedTargetRootName")
+        assertNull("A destination-root label cannot be hashed after lossy UTF-8 conversion",
+            SmartMergeSafDestinationInspector.capture(
+                e.resolver, e.targetTree, writable, { e.observedAtMillis }))
+        e.mode("reset")
+        e.mode("malformedTargetChildName")
+        val partial = LocalTreeReader.list(e.resolver, e.targetTree, "target-root",
+            LocalTreeReader.MAX_BROWSE)
+        assertFalse("Malformed child ID/name cannot appear as a complete tree", partial.complete)
+        assertTrue("Reject the invalid child row rather than publishing a lossy name",
+            partial.children.none { it.documentId == "broken-name" })
+        assertNull("Smart Merge destination cannot certify an incomplete parent",
+            SmartMergeSafDestinationInspector.capture(
+                e.resolver, e.targetTree, writable, { e.observedAtMillis }))
+        e.mode("reset")
+        e.mode("supplementaryTargetChildName")
+        val good = LocalTreeReader.list(e.resolver, e.targetTree, "target-root",
+            LocalTreeReader.MAX_BROWSE)
+        assertTrue("A well-formed surrogate pair remains valid UTF-8", good.complete)
+        assertTrue(good.children.any {
+            it.documentId == "valid-unicode" &&
+                it.title == "Child-\uD83E\uDDAA.bin"
+        })
+        assertNotNull("A valid supplementary character must not block a stable destination",
+            SmartMergeSafDestinationInspector.capture(
+                e.resolver, e.targetTree, writable, { e.observedAtMillis }))
+        assertEquals("Read-only validation never creates private transfer attempts",
+            journalNames, app.noBackupFilesDir.list().orEmpty().toSet())
+        e.mode("reset")
+    }
+
     @Test fun mergeDestinationRejectsIncompleteOrChangingParentInventory() {
         val e = Environment()
         val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
