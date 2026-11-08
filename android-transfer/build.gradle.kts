@@ -1,6 +1,6 @@
 // Gradle 8.13 rejects BOTH failOnDynamicVersions and
 // failOnChangingVersions when the same configuration uses dependency locking.
-// The five locked JVM runtimes and BOTH Android app runtime variants use
+// The five locked JVM runtimes and all THREE Android app runtime graphs use
 // STRICT lock state plus a request-level unstable-selector/changing guard.
 // Every other JVM + Android configuration retains the original Gradle-native
 // failOnNonReproducibleResolution() prohibition.
@@ -12,7 +12,8 @@ subprojects {
     configurations.configureEach {
         if ((project.path in jvmLockedRuntimeModules && name == "runtimeClasspath") ||
             (project.path == ":app" &&
-                name in setOf("debugRuntimeClasspath", "releaseRuntimeClasspath"))) {
+                name in setOf("debugRuntimeClasspath", "releaseRuntimeClasspath",
+                    "debugAndroidTestRuntimeClasspath"))) {
             // Inspect direct AND transitive requests. Strict lock mode
             // separately refuses changes to the resolved component set.
             resolutionStrategy.eachDependency {
@@ -201,9 +202,9 @@ subprojects {
  *
  * Updating dependencies requires an explicit reviewed lockfile change and
  * fresh exact-head CI; do not use --write-locks in routine CI.
- * Android app debug and release runtime graphs are independently locked
- * below; Android instrumentation-test and plugin/buildscript configurations
- * remain separate acceptance gates.
+ * Android app debug, release and instrumentation-test runtime graphs are locked
+ * below. Other Android test/compile configurations and plugin/buildscript
+ * configurations remain separate acceptance gates.
  */
 subprojects {
     if (path in jvmLockedRuntimeModules) {
@@ -214,12 +215,13 @@ subprojects {
             lockMode.set(org.gradle.api.artifacts.dsl.LockMode.STRICT)
         }
     } else if (path == ":app") {
-        // Captured exact Gradle component sets: debug 109 and release 108
+        // Captured exact Gradle component sets: debug 109, release 108, test 118
         // modules (including BOM/platform-only entries). One shared file
         // retains configuration membership rather than overwriting debug.
         configurations.matching {
             it.name == "debugRuntimeClasspath" ||
-                it.name == "releaseRuntimeClasspath"
+                it.name == "releaseRuntimeClasspath" ||
+                it.name == "debugAndroidTestRuntimeClasspath"
         }.configureEach {
             resolutionStrategy.activateDependencyLocking()
         }
@@ -396,5 +398,65 @@ tasks.register("androidTestRuntimeArtifactInventory") {
 subprojects {
     tasks.matching { it.name == "lintDebug" }.configureEach {
         dependsOn(rootProject.tasks.named("androidTestRuntimeArtifactInventory"))
+    }
+}
+
+/**
+ * W13/#326: observe the full external Android instrumentation-test runtime
+ * MODULE COMPONENT graph, including BOM/platform nodes which have no artifact
+ * file and therefore do not appear in the earlier 90-artifact hash inventory.
+ * The reviewed 118-component graph is now STRICT-locked. This report lists
+ * selected versions for audit, without proving independent publisher artifact
+ * authenticity, build portability or release reproducibility.
+ *
+ * The only executor is the existing required Android lint/compile CI lane.
+ */
+tasks.register("androidTestRuntimeLockBaseline") {
+    group = "verification"
+    description = "Verify exact external Android instrumentation runtime locked component selections"
+    val report = layout.buildDirectory.file(
+        "reports/dependencies/android-test-runtime-lock-candidates.txt")
+    outputs.file(report)
+    outputs.upToDateWhen { false }
+    doLast {
+        require(project.findProperty("withAndroid") == "true" &&
+            project.findProject(":app") != null) { "ANDROID_APP_NOT_INCLUDED" }
+        val runtime = project(":app").configurations
+            .findByName("debugAndroidTestRuntimeClasspath")
+            ?: error("MISSING_ANDROID_TEST_RUNTIME")
+        require(runtime.isCanBeResolved) { "ANDROID_TEST_RUNTIME_NOT_RESOLVABLE" }
+        val rows = runtime.incoming.resolutionResult.allComponents
+            .mapNotNull { it.id as?
+                org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+            .map { id ->
+                require(listOf(id.group, id.module, id.version).all {
+                    it.isNotBlank() && !it.contains('\t') &&
+                        !it.contains('\r') && !it.contains('\n')
+                }) { "INVALID_ANDROID_TEST_RUNTIME_MODULE" }
+                "${id.group}:${id.module}:${id.version}=debugAndroidTestRuntimeClasspath"
+            }.toSortedSet()
+        require(rows.size >= 70) { "INCOMPLETE_ANDROID_TEST_RUNTIME_MODULE_GRAPH" }
+        val file = report.get().asFile
+        file.parentFile.mkdirs()
+        file.writeText(
+            "# Observed Android instrumentation runtime module lock candidates V1\n" +
+            "# STRICT test runtime versions; no independent publisher artifact trust is established.\n" +
+            rows.joinToString("\n", postfix = "\n"), Charsets.UTF_8)
+        println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_COMPONENTS=${rows.size}")
+        // GAV dump is public-only, but printing 118 version records on every
+        // app compile needlessly grows CI logs. Retain the generated report
+        // and expose the list only for an explicit dependency-review run.
+        if (project.findProperty("showTestRuntimeLockCandidates") == "true") {
+            println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_BEGIN")
+            rows.forEach { println(it) }
+            println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_END")
+        }
+        println("ANDROID_TEST_RUNTIME_STRICT_LOCK_COMPONENTS_CHECKED=${rows.size}")
+        println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_TRUST=STRICT_VERSION_LOCK_NOT_PUBLISHER_AUTHENTICATION")
+    }
+}
+subprojects {
+    tasks.matching { it.name == "lintDebug" }.configureEach {
+        dependsOn(rootProject.tasks.named("androidTestRuntimeLockBaseline"))
     }
 }
