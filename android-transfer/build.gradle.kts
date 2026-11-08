@@ -443,9 +443,14 @@ tasks.register("androidTestRuntimeLockBaseline") {
             "# STRICT test runtime versions; no independent publisher artifact trust is established.\n" +
             rows.joinToString("\n", postfix = "\n"), Charsets.UTF_8)
         println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_COMPONENTS=${rows.size}")
-        println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_BEGIN")
-        rows.forEach { println(it) }
-        println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_END")
+        // GAV dump is public-only, but printing 118 version records on every
+        // app compile needlessly grows CI logs. Retain the generated report
+        // and expose the list only for an explicit dependency-review run.
+        if (project.findProperty("showTestRuntimeLockCandidates") == "true") {
+            println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_BEGIN")
+            rows.forEach { println(it) }
+            println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_END")
+        }
         println("ANDROID_TEST_RUNTIME_STRICT_LOCK_COMPONENTS_CHECKED=${rows.size}")
         println("ANDROID_TEST_RUNTIME_LOCK_CANDIDATE_TRUST=STRICT_VERSION_LOCK_NOT_PUBLISHER_AUTHENTICATION")
     }
