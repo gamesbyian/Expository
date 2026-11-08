@@ -783,6 +783,108 @@ private fun DeveloperPreview(
     }
 
     /**
+     * M2: scan every currently selected source through the SAME scanner used
+     * by the per-source button, sequentially and without new picker grants.
+     *
+     * A half-scanned basket is NOT a complete N-source review. Buffer each
+     * full manifest privately in this foreground coroutine, and publish all
+     * of them together only if every source, original READ proof, basket
+     * membership and current share epoch remain valid at the final boundary.
+     * An error, canceled scan, navigation change or permission expiry leaves
+     * no new inventories and creates no journal, plan or write authority.
+     */
+    fun inspectAllMergeSourceInventories() {
+        if (!mergeSources.hasMinimumSources || mergeInventoryReading != null ||
+            mergeReading || mergeInspecting != null || pendingMergePicker != null ||
+            mergeDestinationReading || pendingMergeDestinationPicker != null ||
+            mergeIllustrationBusy || copyBusy || remoteRelayBusy) return
+        val selectedBasket = mergeSources
+        val selected = selectedBasket.folders.toList()
+        val started = System.currentTimeMillis()
+        fun originalProofCurrent(item: SmartMergeFolder, now: Long): Boolean {
+            val proof = item.source.location.capabilities[Capability.READ]
+            return proof?.valid(now) == true &&
+                now >= proof.expiresAtMillis - 300_000L
+        }
+        if (!selected.all { originalProofCurrent(it, started) }) {
+            clearMergeSourceInventories()
+            mergeMessage = "An original Merge source grant expired. Re-pick it before review."
+            return
+        }
+        clearMergeSourceInventories()
+        val serial = mergeInventorySerial.incrementAndGet()
+        val shareEpoch = currentShareEpoch()
+        val completed = LinkedHashMap<SmartMergeFolder, SmartMergeInventory>(
+            selected.size)
+        mergeInventoryReading = selected.first()
+        mergeMessage = "Inspecting 1 of " + selected.size +
+            " source folders, read-only…"
+        mergeInventoryJob = scope.launch {
+            try {
+                for ((index, item) in selected.withIndex()) {
+                    val startedItem = System.currentTimeMillis()
+                    if (!isActive || mergeInventorySerial.get() != serial ||
+                        mergeSources !== selectedBasket ||
+                        currentShareEpoch() != shareEpoch ||
+                        copyBusy || remoteRelayBusy ||
+                        !originalProofCurrent(item, startedItem)) {
+                        mergeMessage = "Source basket or access changed. " +
+                            "No partial Merge inventory was accepted."
+                        return@launch
+                    }
+                    mergeInventoryReading = item
+                    mergeMessage = "Inspecting " + (index + 1) + " of " +
+                        selected.size + " source folders, read-only…"
+                    val generation = treeReadGeneration.incrementAndGet()
+                    val inventory = withContext(Dispatchers.IO) {
+                        SafRecursiveSourceScanner(context.contentResolver)
+                            .inspectMergeRootInventory(item, generation,
+                                continueRequested = {
+                                    isActive && mergeInventorySerial.get() == serial &&
+                                        currentShareEpoch() == shareEpoch &&
+                                        mergeSources === selectedBasket
+                                })
+                    }
+                    if (!isActive || mergeInventorySerial.get() != serial ||
+                        mergeSources !== selectedBasket ||
+                        currentShareEpoch() != shareEpoch ||
+                        copyBusy || remoteRelayBusy ||
+                        !originalProofCurrent(item, System.currentTimeMillis()) ||
+                        inventory?.manifest?.reviewable != true ||
+                        inventory.collected !== item) {
+                        mergeMessage = "Source " + (index + 1) +
+                            " was incomplete, changed, canceled or expired. " +
+                            "No partial Merge inventory was accepted."
+                        return@launch
+                    }
+                    completed[item] = inventory
+                }
+                // The first grant may have expired while the last source was
+                // scanning. Revalidate every original proof at publication.
+                val finalNow = System.currentTimeMillis()
+                if (!isActive || mergeInventorySerial.get() != serial ||
+                    mergeSources !== selectedBasket ||
+                    currentShareEpoch() != shareEpoch ||
+                    copyBusy || remoteRelayBusy ||
+                    !selected.all { originalProofCurrent(it, finalNow) } ||
+                    completed.size != selected.size) {
+                    mergeMessage = "Source access changed during inspection. " +
+                        "No partial Merge inventory was accepted."
+                    return@launch
+                }
+                mergeSourceInventory = completed.toMap()
+                mergeMessage = "All " + selected.size + " source inventories inspected. " +
+                    "Read-only evidence; this does not authorize Merge."
+            } finally {
+                if (mergeInventorySerial.get() == serial) {
+                    mergeInventoryJob = null
+                    mergeInventoryReading = null
+                }
+            }
+        }
+    }
+
+    /**
      * Show only a non-executable case-folded what-if. The actual, unmodified
      * planner must block on missing SAF case-policy evidence and NOTHING else.
      * No picker grant renewal, provider write, stored path or copied content.
@@ -2189,6 +2291,20 @@ private fun DeveloperPreview(
                                     enabled = true,
                                     modifier = Modifier.testTag("smart-merge-cancel-source"),
                                     onClick = { stopMergeObservation(false) }
+                                )
+                            }
+                            if (mergeSources.hasMinimumSources) {
+                                FolderActionControl(
+                                    label = "Inspect all Merge source contents",
+                                    enabled = !copyBusy && !remoteRelayBusy &&
+                                        !mergeReading && mergeInspecting == null &&
+                                        pendingMergePicker == null &&
+                                        !mergeDestinationReading &&
+                                        pendingMergeDestinationPicker == null &&
+                                        mergeInventoryReading == null &&
+                                        !mergeIllustrationBusy,
+                                    modifier = Modifier.testTag("smart-merge-inspect-all"),
+                                    onClick = { inspectAllMergeSourceInventories() }
                                 )
                             }
                             if (mergeInventoryReading != null) {
