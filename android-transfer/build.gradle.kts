@@ -1,10 +1,21 @@
-// Fail closed if any project/adapter dependency resolves through a dynamic
-// version selector or changing module. The rule covers transitive dependencies
-// and both JVM-only and opt-in Android subprojects; it does not substitute for
-// reviewed lockfiles, artifact checksums or a verified Gradle wrapper.
+// Strict dependency locking and failOnDynamicVersions cannot coexist in
+// Gradle 8.13: they are mutually exclusive resolution modes. For the five
+// locked JVM runtime graphs, keep changing-version rejection and let strict
+// lock state reject unreviewed module additions/removals/version drift.
+// All OTHER JVM + Android configurations retain the existing prohibition on
+// both dynamic versions and changing modules.
+val jvmLockedRuntimeModules = setOf(
+    ":core:planner", ":core:engine", ":adapter:ftps", ":adapter:sftp",
+    ":testing:fake-endpoints"
+)
 subprojects {
     configurations.configureEach {
-        resolutionStrategy.failOnNonReproducibleResolution()
+        if (project.path in jvmLockedRuntimeModules &&
+            name == "runtimeClasspath") {
+            resolutionStrategy.failOnChangingVersions()
+        } else {
+            resolutionStrategy.failOnNonReproducibleResolution()
+        }
     }
 }
 
@@ -173,10 +184,6 @@ subprojects {
  * fresh exact-head CI; do not use --write-locks in routine CI.
  * Android/debug/test/plugin configurations are not covered by this slice.
  */
-val jvmLockedRuntimeModules = setOf(
-    ":core:planner", ":core:engine", ":adapter:ftps", ":adapter:sftp",
-    ":testing:fake-endpoints"
-)
 subprojects {
     if (path in jvmLockedRuntimeModules) {
         configurations.matching { it.name == "runtimeClasspath" }.configureEach {
