@@ -124,6 +124,17 @@ internal object SmartMergeSafFolderCapture {
         }
         val after = readRoot(resolver, tree, id)
         require(before == after) { "MERGE_SOURCE_ROOT_CHANGED_DURING_SCAN" }
+        // An unchanged root metadata row does not mean its child listing is
+        // stable. Require a second complete bounded pass. An insertion,
+        // removal, rename, reported size/revision change or shuffled opaque
+        // identity makes this M1 basket capture untrustworthy.
+        val repeated = LocalTreeReader.list(
+            resolver, tree, id, LocalTreeReader.MAX_BROWSE)
+        val rootFinally = readRoot(resolver, tree, id)
+        require(repeated.complete && !repeated.hasMore &&
+            repeated == children && rootFinally == after) {
+            "MERGE_SOURCE_CHILDREN_CHANGED_DURING_SCAN"
+        }
         val authority = requireNotNull(tree.authority)
         // Weak provider metadata identifies a review snapshot, never
         // stable file bytes or a mutation-authorizing transaction.
