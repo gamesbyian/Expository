@@ -277,6 +277,8 @@ private fun DeveloperPreview(
     // Case-folded illustration is diagnostic only: no source ItemRefs,
     // executable SmartMergePreview, digest or write authority is retained.
     var mergeIllustrationName by remember { mutableStateOf("Combined") }
+    // Auto-suggest only until a human edits the proposal.
+    var mergeNameManuallyEdited by remember { mutableStateOf(false) }
     var mergeIllustrationStructure by remember {
         mutableStateOf(SmartMergeStructure.KEEP_SOURCE_DIRECTORIES)
     }
@@ -580,6 +582,11 @@ private fun DeveloperPreview(
                         val added = mergeSources.add(source)
                         mergeSources = added.basket
                         if (added.status == SmartMergeAddStatus.ADDED) {
+                            if (!mergeNameManuallyEdited) {
+                                mergeIllustrationName =
+                                    SmartMergeNameSuggestions.suggestFromSourceNames(
+                                        mergeSources.folders.map { it.source.name })
+                            }
                             clearMergeSourceInventories()
                             // A source-list mutation invalidates any pending
                             // target review, even though picker grants remain
@@ -873,6 +880,8 @@ private fun DeveloperPreview(
             mergeInspectResults = emptyMap()
             mergeSources = SmartMergeBasket.empty()
             showAllMergeSources = false
+            mergeIllustrationName = "Combined"
+            mergeNameManuallyEdited = false
             mergeMessage = "Merge source basket cleared. No files were changed."
         } else {
             mergeMessage = "Merge source observation stopped. No source was added."
@@ -2366,6 +2375,11 @@ private fun DeveloperPreview(
                                             }
                                             mergeInspectResults = mergeInspectResults - selected
                                             mergeSources = mergeSources.removeAt(index)
+                                            if (!mergeNameManuallyEdited) {
+                                                mergeIllustrationName =
+                                                    SmartMergeNameSuggestions.suggestFromSourceNames(
+                                                        mergeSources.folders.map { it.source.name })
+                                            }
                                             clearMergeSourceInventories()
                                             clearMergeDestination()
                                             mergeMessage = "Source removed; no files changed."
@@ -2400,6 +2414,7 @@ private fun DeveloperPreview(
                                 value = mergeIllustrationName,
                                 onValueChange = {
                                     mergeIllustrationName = it
+                                    mergeNameManuallyEdited = true
                                     clearMergeIllustration()
                                 },
                                 label = { Text("Proposed new Merge folder name") },
@@ -2407,6 +2422,22 @@ private fun DeveloperPreview(
                                 modifier = Modifier.fillMaxWidth()
                                     .testTag("smart-merge-root-name")
                             )
+                            FolderActionControl(
+                                label = "Suggest name from selected folders",
+                                enabled = !mergeIllustrationBusy &&
+                                    !mergeReading && mergeInventoryReading == null,
+                                modifier = Modifier.testTag("smart-merge-suggest-name"),
+                                onClick = {
+                                    mergeIllustrationName =
+                                        SmartMergeNameSuggestions.suggestFromSourceNames(
+                                            mergeSources.folders.map { it.source.name })
+                                    mergeNameManuallyEdited = false
+                                    clearMergeIllustration()
+                                }
+                            )
+                            Text("Suggestions use folder labels, not file contents. " +
+                                "You can edit the proposed name before review.",
+                                style = MaterialTheme.typography.bodySmall)
                             FolderActionControl(
                                 label = if (mergeIllustrationStructure ==
                                     SmartMergeStructure.KEEP_SOURCE_DIRECTORIES)

@@ -73,6 +73,37 @@ object SmartMergeBasketSuite {
         check(SmartMergeFolder.capture(WorkspacePane.A,
             picked(supplementary), 1L, NOW) != null)
 
+        // M2 suggestion text is only an editable name, not content identity.
+        check(SmartMergeNameSuggestions.suggestFromSourceNames(
+            listOf("Family Photos 2023", "Family Photos 2024")) ==
+            "Family Photos 2023–2024")
+        check(SmartMergeNameSuggestions.suggestFromSourceNames(
+            listOf("Family Photos 2024", "Family Photos 2023")) ==
+            "Family Photos 2023–2024")
+        check(SmartMergeNameSuggestions.suggestFromSourceNames(
+            listOf("2022", "2024", "2023")) == "2022–2024 Combined")
+        check(SmartMergeNameSuggestions.suggestFromSourceNames(
+            listOf("Scans", "Scans")) == "Scans Combined")
+        check(SmartMergeNameSuggestions.suggestFromSourceNames(
+            listOf("Tax returns", "Vacation videos")) == "Combined")
+        check(SmartMergeNameSuggestions.suggestFromSourceNames(
+            listOf("Combined")) == "Combined")
+        check(SmartMergeNameSuggestions.suggestFromSourceNames(
+            listOf("Photos/2023", "Photos 2024")) == "Combined")
+        check(SmartMergeNameSuggestions.suggestFromSourceNames(
+            listOf("Family Photos 2023", "Family Photos 2024", "x".repeat(121))) ==
+            "Combined")
+        check(SmartMergeNameSuggestions.suggestFromSourceNames(
+            listOf("Été 2023", "E\u0301te\u0301 2024")) ==
+            "Été 2023–2024")
+        check(SmartMergeNameSuggestions.suggestFromSourceNames(
+            listOf("Archive 2023", "Archive 2024", "Archive 2025")) ==
+            "Archive 2023–2025")
+        check(SmartMergeNameSuggestions.suggestFromSourceNames(
+            List(65) { "Archive" }) == "Combined")
+        check(SmartMergeNameSuggestions.suggestFromSourceNames(
+            listOf("bad" + 0xD800.toChar(), "valid")) == "Combined")
+
         val original = SmartMergeBasket.empty()
         check(original.folders.isEmpty() && !original.hasMinimumSources)
         val one = original.add(collect(picked("2024")))
