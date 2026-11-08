@@ -33,3 +33,38 @@ test('Pages audit rejects credential-bearing, HTTP and traversal URLs',async()=>
  await assert.rejects(auditPages({localHtml:'ok',paths:['../private'],fetchImpl:async()=>page('ok')}),/relative public paths/);
  await assert.rejects(auditPages({localHtml:'ok',fetchImpl:async()=>page('missing',404)}),/unreachable/);
 });
+
+test('canonical ZIP publisher needs its own independent exact-byte Pages GET',async()=>{
+ const index='<html>explorer</html>',publisher='<html>isolated publisher</html>';
+ const seen=[];
+ const fetchImpl=async(url,opts)=>{
+  seen.push({url,method:opts.method,redirect:opts.redirect});
+  if(opts.method!=='GET')throw Error('Unexpected path check');
+  return page(new URL(url).pathname.endsWith('/zip-publisher.html')?publisher:index);
+ };
+ const report=await auditPages({localHtml:index,localPublisherHtml:publisher,fetchImpl,paths:[]});
+ assert.equal(report.parity,true);
+ assert.equal(report.publisher.parity,true);
+ assert.equal(report.publisher.path,'zip-publisher.html');
+ assert.equal(report.publisher.bytes.source,publisher.length);
+ assert.equal(seen.length,2);
+ assert.equal(seen[1].method,'GET');assert.equal(seen[1].redirect,'error');
+ assert.ok(seen[1].url.includes('/Expository/zip-publisher.html?expository_parity='));
+ assert.match(summary(report),/ZIP publisher: \*\*PASS:/);
+});
+test('stale or missing live ZIP publisher is independently refused',async()=>{
+ const index='<html>current explorer</html>',publisher='<html>current writer</html>';
+ const fake=async(url,opts)=>{
+  if(opts.method!=='GET')throw Error('Unexpected HEAD');
+  return page(new URL(url).pathname.endsWith('/zip-publisher.html')?'<html>old writer</html>':index);
+ };
+ const mismatch=await auditPages({localHtml:index,localPublisherHtml:publisher,fetchImpl:fake,paths:[]});
+ assert.equal(mismatch.parity,true);
+ assert.equal(mismatch.publisher.parity,false);
+ assert.match(summary(mismatch),/ZIP publisher: \*\*FAIL:/);
+ await assert.rejects(auditPages({localHtml:index,localPublisherHtml:publisher,paths:[],
+  fetchImpl:async(url)=>page(new URL(url).pathname.endsWith('/zip-publisher.html')?'missing':index,
+    new URL(url).pathname.endsWith('/zip-publisher.html')?404:200)}),/ZIP publisher unreachable/);
+ await assert.rejects(auditPages({localHtml:index,localPublisherHtml:42,
+  fetchImpl:async()=>page(index),paths:[]}),/Canonical ZIP publisher bytes required/);
+});
