@@ -720,6 +720,47 @@ class RecoveryIndexFailurePolicyTest {
         }
     }
 
+    @Test fun createdDocumentIdentityDriftAfterInitialStableObservationRefusesAnyMatch() {
+        // The provider reports the ORIGINAL document ID twice, then changes
+        // its strict COLUMN_DOCUMENT_ID row while retaining the same URI.
+        // Even without usable byte streams, an inspector must not advertise
+        // pre-read SAME_DOCUMENT as a current post-inspection fact.
+        val resolver = InstrumentationRegistry.getInstrumentation().context.contentResolver
+        val tree = android.net.Uri.parse("content://test.source.scoped/tree/source-root")
+        val doc = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, "clip")
+        val identity = dev.expository.transfer.journal.RecoverySourceDocumentIdentity
+        val inspector =
+            dev.expository.transfer.journal.RecoverySingleDestinationDocumentInspector
+        val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+        requireNotNull(resolver.call(tree, "reset", null, null))
+        try {
+            val saved = requireNotNull(identity.fingerprint(doc))
+            // The original ID is still readable before the artificial drift.
+            assertEquals(
+                dev.expository.transfer.journal.RecoverySourceDocumentRelation
+                    .SAME_RECORDED_DOCUMENT_ID,
+                identity.inspect(resolver, doc, flags, saved))
+            requireNotNull(resolver.call(tree, "flipClipIdAfterTwoQueries", null, null))
+            val bytes = dev.expository.transfer.journal.ProtectedTransferredByteEvidence(
+                137_119L, "f".repeat(64))
+            val observed = inspector.inspect(resolver, doc, flags, saved, bytes)
+            assertEquals("A provider ID changed after the initial two queries " +
+                "cannot remain the same original destination",
+                dev.expository.transfer.journal.RecoverySourceDocumentRelation
+                    .INDETERMINATE, observed.identity)
+            assertEquals("No byte observation may attach to a changed document ID",
+                null, observed.currentBytes)
+            // A truthful repeated fresh inspection also fails closed, even
+            // though the URI authority and document path still match.
+            assertEquals(
+                dev.expository.transfer.journal.RecoverySourceDocumentRelation
+                    .INDETERMINATE,
+                identity.inspect(resolver, doc, flags, saved))
+        } finally {
+            requireNotNull(resolver.call(tree, "reset", null, null))
+        }
+    }
+
     @Test fun protectedV4SourceMetadataIsEncryptedBackwardCompatibleAndNonExecutable() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val sandbox = File(app.cacheDir, "metadata-v4-" + UUID.randomUUID())
