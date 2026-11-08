@@ -192,6 +192,10 @@ class LocalPickerPositiveCopyTest {
             assertTrue("Real original DocumentsProvider metadata must be sealed in V4",
                 recovery.sourceMetadataFingerprint?.matches(
                     Regex("[0-9a-f]{64}")) == true)
+            assertTrue("The OS-created Save As destination must retain its " +
+                "original provider document identity only inside encrypted V5",
+                recovery.destinationDocumentFingerprint?.matches(
+                    Regex("[0-9a-f]{64}")) == true)
             val completed = requireNotNull(
                 dev.expository.transfer.journal.ProtectedTransferredBytesEvidenceStore(context)
                     .read(newlySealed.single()))
