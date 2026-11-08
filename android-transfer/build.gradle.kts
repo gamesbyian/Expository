@@ -203,8 +203,8 @@ subprojects {
  * Updating dependencies requires an explicit reviewed lockfile change and
  * fresh exact-head CI; do not use --write-locks in routine CI.
  * Android app debug, release and instrumentation-test runtime graphs are locked
- * below; Android instrumentation-test and plugin/buildscript configurations
- * remain separate acceptance gates.
+ * below. Other Android test/compile configurations and plugin/buildscript
+ * configurations remain separate acceptance gates.
  */
 subprojects {
     if (path in jvmLockedRuntimeModules) {
@@ -405,8 +405,9 @@ subprojects {
  * W13/#326: observe the full external Android instrumentation-test runtime
  * MODULE COMPONENT graph, including BOM/platform nodes which have no artifact
  * file and therefore do not appear in the earlier 90-artifact hash inventory.
- * The reviewed 118-component graph is now STRICT-locked; this diagnostic is NOT an
- * active lock, independent publisher checksum or reproducible-build proof.
+ * The reviewed 118-component graph is now STRICT-locked. This report lists
+ * selected versions for audit, without proving independent publisher artifact
+ * authenticity, build portability or release reproducibility.
  *
  * The only executor is the existing required Android lint/compile CI lane.
  */
