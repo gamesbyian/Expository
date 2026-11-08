@@ -1,7 +1,7 @@
 // Gradle 8.13 rejects BOTH failOnDynamicVersions and
 // failOnChangingVersions when the same configuration uses dependency locking.
-// The five locked JVM runtimes and Android app debug runtime use STRICT lock
-// state plus a request-level unstable-selector/explicit changing-module guard.
+// The five locked JVM runtimes and BOTH Android app runtime variants use
+// STRICT lock state plus a request-level unstable-selector/changing guard.
 // Every other JVM + Android configuration retains the original Gradle-native
 // failOnNonReproducibleResolution() prohibition.
 val jvmLockedRuntimeModules = setOf(
@@ -11,7 +11,8 @@ val jvmLockedRuntimeModules = setOf(
 subprojects {
     configurations.configureEach {
         if ((project.path in jvmLockedRuntimeModules && name == "runtimeClasspath") ||
-            (project.path == ":app" && name == "debugRuntimeClasspath")) {
+            (project.path == ":app" &&
+                name in setOf("debugRuntimeClasspath", "releaseRuntimeClasspath"))) {
             // Inspect direct AND transitive requests. Strict lock mode
             // separately refuses changes to the resolved component set.
             resolutionStrategy.eachDependency {
@@ -200,8 +201,9 @@ subprojects {
  *
  * Updating dependencies requires an explicit reviewed lockfile change and
  * fresh exact-head CI; do not use --write-locks in routine CI.
- * The app debug runtime is independently locked below; Android test/release
- * and plugin/buildscript configurations remain separate acceptance gates.
+ * Android app debug and release runtime graphs are independently locked
+ * below; Android instrumentation-test and plugin/buildscript configurations
+ * remain separate acceptance gates.
  */
 subprojects {
     if (path in jvmLockedRuntimeModules) {
@@ -212,48 +214,17 @@ subprojects {
             lockMode.set(org.gradle.api.artifacts.dsl.LockMode.STRICT)
         }
     } else if (path == ":app") {
-        // Generated from the complete resolved Gradle component graph (109
-        // modules including BOM/platform metadata-only components), not
-        // inferred from the 78 downloaded runtime artifacts.
-        configurations.matching { it.name == "debugRuntimeClasspath" }.configureEach {
+        // Captured exact Gradle component sets: debug 109 and release 108
+        // modules (including BOM/platform-only entries). One shared file
+        // retains configuration membership rather than overwriting debug.
+        configurations.matching {
+            it.name == "debugRuntimeClasspath" ||
+                it.name == "releaseRuntimeClasspath"
+        }.configureEach {
             resolutionStrategy.activateDependencyLocking()
         }
         dependencyLocking {
             lockMode.set(org.gradle.api.artifacts.dsl.LockMode.STRICT)
         }
-    }
-}
-
-/**
- * Temporary W13 release-runtime component observation on the EXISTING
- * Android lint CI path. Do not merge this reporter: replace with exact
- * committed strict releaseRuntimeClasspath lock state after real resolution.
- */
-tasks.register("androidReleaseRuntimeVersionBaseline") {
-    group = "verification"
-    doLast {
-        val config = project(":app").configurations.getByName("releaseRuntimeClasspath")
-        require(config.isCanBeResolved) { "RELEASE_RUNTIME_NOT_RESOLVABLE" }
-        val modules = config.incoming.resolutionResult.allComponents.mapNotNull {
-            val id = it.id as?
-                org.gradle.api.artifacts.component.ModuleComponentIdentifier
-            if (id == null) null else {
-                val names = listOf(id.group, id.module, id.version)
-                require(names.all { n -> n.isNotBlank() && !n.contains('=') &&
-                    !n.contains('\n') && !n.contains('\r') &&
-                    !n.contains('\t') }) { "INVALID_RELEASE_RUNTIME_MODULE" }
-                names.joinToString(":") + "=releaseRuntimeClasspath"
-            }
-        }.toSortedSet()
-        require(modules.size >= 70) { "INCOMPLETE_RELEASE_RUNTIME_MODULE_GRAPH" }
-        println("ANDROID_RELEASE_LOCK_BASELINE_BEGIN")
-        modules.forEach(::println)
-        println("ANDROID_RELEASE_LOCK_BASELINE_END")
-        println("ANDROID_RELEASE_LOCK_BASELINE_ROWS=${modules.size}")
-    }
-}
-subprojects {
-    tasks.matching { it.name == "lintDebug" }.configureEach {
-        dependsOn(rootProject.tasks.named("androidReleaseRuntimeVersionBaseline"))
     }
 }
