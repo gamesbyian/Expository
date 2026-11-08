@@ -228,3 +228,34 @@ subprojects {
         }
     }
 }
+
+/**
+ * Mandatory Android-release graph qualification piggybacking on the EXISTING
+ * PR SDK/Gradle job, without packaging or signing a release artifact. The
+ * full resolvedArtifacts query causes Gradle to enforce STRICT release
+ * lockfile state, not merely compile the configuration's Kotlin DSL.
+ */
+tasks.register("androidReleaseRuntimeLockCheck") {
+    group = "verification"
+    doLast {
+        require(project.findProperty("withAndroid") == "true" &&
+            project.findProject(":app") != null) { "ANDROID_APP_NOT_INCLUDED" }
+        val runtime = project(":app").configurations.getByName("releaseRuntimeClasspath")
+        require(runtime.isCanBeResolved) { "ANDROID_RELEASE_RUNTIME_NOT_RESOLVABLE" }
+        val artifacts = runtime.resolvedConfiguration.resolvedArtifacts
+        val count = runtime.incoming.resolutionResult.allComponents.count {
+            it.id is org.gradle.api.artifacts.component.ModuleComponentIdentifier
+        }
+        require(artifacts.isNotEmpty() && count >= 70) {
+            "INCOMPLETE_ANDROID_RELEASE_RUNTIME_RESOLUTION"
+        }
+        println("ANDROID_RELEASE_RUNTIME_LOCK_COMPONENTS_CHECKED=${count}")
+        println("ANDROID_RELEASE_RUNTIME_ARTIFACTS_RESOLVED=${artifacts.size}")
+        println("ANDROID_RELEASE_RUNTIME_LOCK_TRUST=VERSION_SELECTION_NOT_PUBLISHER_AUTHENTICITY")
+    }
+}
+subprojects {
+    tasks.matching { it.name == "lintDebug" }.configureEach {
+        dependsOn(rootProject.tasks.named("androidReleaseRuntimeLockCheck"))
+    }
+}
