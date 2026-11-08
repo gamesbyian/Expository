@@ -42,6 +42,8 @@ public final class SafRecursiveSyntheticProvider extends ContentProvider {
     private final Map<String, Doc> docs = new LinkedHashMap<>();
     private boolean flipClipDocumentIdAfterTwoQueries = false;
     private int clipDocumentQueryCount = 0;
+    private boolean driftSourceChildrenSecondPass = false;
+    private int sourceChildrenReadCount = 0;
     private final Set<String> hiddenMetadata = new HashSet<>();
     private final Map<String, String> metadataNames = new HashMap<>();
     private static final int CREATE = DocumentsContract.Document.FLAG_DIR_SUPPORTS_CREATE;
@@ -55,6 +57,8 @@ public final class SafRecursiveSyntheticProvider extends ContentProvider {
     private void reset() {
         flipClipDocumentIdAfterTwoQueries = false;
         clipDocumentQueryCount = 0;
+        driftSourceChildrenSecondPass = false;
+        sourceChildrenReadCount = 0;
         docs.clear();
         hiddenMetadata.clear();
         metadataNames.clear();
@@ -81,6 +85,12 @@ public final class SafRecursiveSyntheticProvider extends ContentProvider {
                 break;
             case "changedName":
                 metadataNames.put("clip", "Modified-after-list.bin");
+                break;
+            case "sourceChildrenDriftOnSecondPass":
+                // Test-only fault: the root's metadata stays unchanged, but
+                // a new direct child appears on its second listing query.
+                driftSourceChildrenSecondPass = true;
+                sourceChildrenReadCount = 0;
                 break;
             case "malformedSourceRootName":
                 // A lone surrogate is not representable as UTF-8: Java would
@@ -157,6 +167,11 @@ public final class SafRecursiveSyntheticProvider extends ContentProvider {
             throw new IllegalArgumentException("UNKNOWN_SYNTHETIC_URI");
         String container = segments.get(pos + 1);
         boolean children = "children".equals(segments.get(segments.size() - 1));
+        if (children && "source-root".equals(container) &&
+            driftSourceChildrenSecondPass && ++sourceChildrenReadCount == 2) {
+            docs.put("late-source-child", file("late-source-child",
+                "source-root", "Appeared-between-scans.bin", 1L));
+        }
         String[] columns = projection != null ? projection : new String[] {
             DocumentsContract.Document.COLUMN_DOCUMENT_ID,
             DocumentsContract.Document.COLUMN_DISPLAY_NAME,
