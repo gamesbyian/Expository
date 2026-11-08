@@ -82,3 +82,11 @@ tasks.register("jvmRuntimeArtifactInventory") {
         println("JVM_RUNTIME_ARTIFACT_INVENTORY_TRUST=LOCAL_HASHES_NOT_PUBLISHER_VERIFICATION")
     }
 }
+
+// Existing JVM check invocations exercise this inventory against real
+// resolved artifacts, not a hand-authored fixture or an unchecked build task.
+subprojects {
+    tasks.matching { it.name == "check" }.configureEach {
+        dependsOn(rootProject.tasks.named("jvmRuntimeArtifactInventory"))
+    }
+}
