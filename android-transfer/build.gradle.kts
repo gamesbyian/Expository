@@ -328,3 +328,73 @@ subprojects {
         dependsOn(rootProject.tasks.named("androidReleaseRuntimeArtifactInventory"))
     }
 }
+
+/**
+ * W13/#326: snapshot actual EXTERNAL Android instrumentation-test runtime
+ * artifacts. Production debug/release runtime inventories exclude test-only
+ * libraries and cannot establish the instrumented APK's resolved graph.
+ * This hashes current LOCAL bytes for future independent provenance review;
+ * it does not authenticate publication, lock versions or sign an APK.
+ *
+ * Use the existing mandatory Android CI SDK/Gradle job, no extra workflow.
+ */
+tasks.register("androidTestRuntimeArtifactInventory") {
+    group = "verification"
+    description = "Hash resolved Android instrumentation-test runtime external artifacts for later publisher review"
+    val report = layout.buildDirectory.file("reports/dependencies/android-test-runtime-artifacts.tsv")
+    outputs.file(report)
+    outputs.upToDateWhen { false }
+    doLast {
+        require(project.findProperty("withAndroid") == "true" &&
+            project.findProject(":app") != null) { "ANDROID_APP_NOT_INCLUDED" }
+        val app = project(":app")
+        val runtime = app.configurations.findByName("debugAndroidTestRuntimeClasspath")
+            ?: error("MISSING_ANDROID_TEST_RUNTIME")
+        require(runtime.isCanBeResolved) { "ANDROID_TEST_RUNTIME_NOT_RESOLVABLE" }
+        val rows = sortedSetOf<String>()
+        runtime.resolvedConfiguration.resolvedArtifacts.forEach { artifact ->
+            if (artifact.id.componentIdentifier is
+                org.gradle.api.artifacts.component.ModuleComponentIdentifier) {
+                val id = artifact.moduleVersion.id
+                require(id.group.isNotBlank() && id.name.isNotBlank() &&
+                    id.version.isNotBlank()) { "UNIDENTIFIED_ANDROID_DEPENDENCY" }
+                require(artifact.file.isFile) { "ANDROID_DEPENDENCY_ARTIFACT_UNAVAILABLE" }
+                val digest = java.security.MessageDigest.getInstance("SHA-256")
+                artifact.file.inputStream().use { input ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val n = input.read(buffer)
+                        if (n < 0) break
+                        if (n > 0) digest.update(buffer, 0, n)
+                    }
+                }
+                val fields = listOf(":app:debugAndroidTestRuntimeClasspath", id.group,
+                    id.name, id.version, artifact.type,
+                    artifact.classifier.orEmpty(),
+                    digest.digest().joinToString("") { "%02x".format(it) })
+                require(fields.none { field ->
+                    field.contains('\t') || field.contains('\n') ||
+                        field.contains('\r')
+                }) { "UNSAFE_ANDROID_DEPENDENCY_INVENTORY_FIELD" }
+                rows += fields.joinToString("\t")
+            }
+        }
+        require(rows.isNotEmpty()) { "NO_ANDROID_TEST_RUNTIME_ARTIFACTS" }
+        val output = report.get().asFile
+        output.parentFile.mkdirs()
+        output.writeText(
+            "# Expository Android instrumentation-test runtime artifact inventory V1\n" +
+            "# scope\tgroup\tname\tversion\ttype\tclassifier\tsha256\n" +
+            rows.joinToString("\n", postfix = "\n"), Charsets.UTF_8)
+        println("ANDROID_TEST_RUNTIME_ARTIFACT_INVENTORY_ROWS=${rows.size}")
+        println("ANDROID_TEST_RUNTIME_ARTIFACT_INVENTORY_PATH=build/reports/dependencies/android-test-runtime-artifacts.tsv")
+        println("ANDROID_TEST_RUNTIME_ARTIFACT_INVENTORY_TRUST=LOCAL_HASHES_NOT_PUBLISHER_VERIFICATION")
+    }
+}
+
+
+subprojects {
+    tasks.matching { it.name == "lintDebug" }.configureEach {
+        dependsOn(rootProject.tasks.named("androidTestRuntimeArtifactInventory"))
+    }
+}
