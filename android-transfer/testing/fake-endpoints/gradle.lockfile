@@ -1,0 +1,4 @@
+# Exact Gradle 8.13 runtimeClasspath resolution baseline from PR #604 CI.
+# Reviewed versions are intentionally strict; update through a new qualification.
+org.jetbrains.kotlin:kotlin-stdlib:2.2.20=runtimeClasspath
+org.jetbrains:annotations:13.0=runtimeClasspath
