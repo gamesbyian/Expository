@@ -118,6 +118,13 @@ class RecursiveRealPickerCopyUiTest {
             compose.onAllNodesWithText("Smart Merge · 2 source folder(s)")
                 .fetchSemanticsNodes().isNotEmpty()
         }
+        // The name control is a real editable, non-executing UI action
+        // available only after 2+ independent picked source folders.
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-suggest-name"))
+        compose.onNodeWithTag("smart-merge-suggest-name")
+            .assertIsEnabled().performClick()
+        compose.onNodeWithTag("smart-merge-root-name").assertExists()
         visiblePicker("smart-merge-pick-destination", "Expository Dual Target Lab")
         compose.waitUntil(30_000L) {
             compose.onAllNodesWithTag("smart-merge-destination-summary")
