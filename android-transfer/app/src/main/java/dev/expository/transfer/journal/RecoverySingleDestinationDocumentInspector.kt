@@ -53,6 +53,20 @@ internal object RecoverySingleDestinationDocumentInspector {
             return RecoverySingleDestinationObservation(
                 RecoverySourceDocumentRelation.INDETERMINATE,
                 FreshSourceByteRelation.INSPECTION_CANCELED)
+        // A provider may change its document-ID row between the initial
+        // identity observation and byte inspection, even when the URI text
+        // stays the same. Reauthorize the identity AFTER the read attempt as
+        // well. Never attach a stale byte comparison to a now-ambiguous ID.
+        // This also applies when the completed-byte witness is missing or the
+        // stream cannot be read: the UI must not claim the original document
+        // still exists on the basis of a pre-read snapshot alone.
+        val afterReadIdentity = RecoverySourceDocumentIdentity.inspect(
+            resolver, newlyPicked, pickerResultFlags, originalDocumentFingerprint,
+            continueRequested)
+        if (!continueRequested() ||
+            afterReadIdentity != RecoverySourceDocumentRelation.SAME_RECORDED_DOCUMENT_ID)
+            return RecoverySingleDestinationObservation(
+                RecoverySourceDocumentRelation.INDETERMINATE, null)
         return RecoverySingleDestinationObservation(identity, bytes)
     }
 }

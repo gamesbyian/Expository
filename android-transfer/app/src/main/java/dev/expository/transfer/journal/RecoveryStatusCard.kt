@@ -278,8 +278,10 @@ fun RecoveryStatusCard() {
                             FreshSourceByteRelation.CURRENT_SELECTION_BYTES_DIFFER_FROM_RECORDED_TRANSFER ->
                                 "The currently selected destination bytes DIFFER from " +
                                 "the recorded source stream."
-                            FreshSourceByteRelation.NO_COMPLETED_TRANSFER_BYTES, null ->
+                            FreshSourceByteRelation.NO_COMPLETED_TRANSFER_BYTES ->
                                 "No completed source-byte evidence is available to compare."
+                            null ->
+                                "No trustworthy destination byte comparison is available for this review."
                             FreshSourceByteRelation.BOUNDED_READ_TOO_LARGE ->
                                 "The independent readback exceeds the 64 MiB manual cap."
                             FreshSourceByteRelation.SOURCE_METADATA_CHANGED_DURING_READ ->
