@@ -190,6 +190,26 @@ async function inspectDestination(token,repo,base,prefix,source,signal){
  if(collisions.length)throw Error('Existing files or directory conflicts: '+collisions.slice(0,8).join(', ')+(collisions.length>8?' …':''));
  return {repo,base,head,treeSha,entries};
 }
+/**
+ * GitHub's default 40-hex Git blob ID is SHA-1 over
+ * "blob <byte length>\0" followed by the exact file bytes.
+ * WebCrypto is used for Git object identity correspondence, not as a
+ * collision-resistant security signature. The selected Blob is immutable,
+ * and processing is bounded by the existing 16 MiB member cap.
+ */
+async function gitBlobIdentity(blob){
+ if(!(blob instanceof Blob)||blob.size>MAX_SINGLE)
+  throw Error('Selected file cannot be verified within the publisher limit.');
+ if(typeof crypto==='undefined'||!crypto.subtle?.digest)
+  throw Error('This browser cannot verify Git blob identities; publication stopped.');
+ const bytes=new Uint8Array(await blob.arrayBuffer());
+ const header=new TextEncoder().encode('blob '+bytes.byteLength+'\0');
+ const payload=new Uint8Array(header.length+bytes.length);
+ payload.set(header);
+ payload.set(bytes,header.length);
+ const digest=new Uint8Array(await crypto.subtle.digest('SHA-1',payload));
+ return Array.from(digest,b=>b.toString(16).padStart(2,'0')).join('')
+}
 function encodeBlob(blob){
  return new Promise((resolve,reject)=>{
   const reader=new FileReader();
@@ -203,8 +223,8 @@ function encodeBlob(blob){
  * every uploaded path to its exact Git blob object ID. No retry or mutation:
  * an ambiguous result after ref creation must remain review-required.
  *
- * This verifies Git object identities returned by GitHub, not independently
- * downloaded original bytes or the unmodified contents of the base branch.
+ * This checks returned Git object IDs against upload expectations, without
+ * downloading branch bytes again or proving the base tree is unchanged.
  */
 async function verifyPublishedBranch(plan,token,branch,commitSha,treeSha,uploaded,signal){
  const root='/repos/'+plan.repo;
@@ -239,11 +259,18 @@ async function writeNewBranch(plan,token,branch,onProgress,signal){
  const entries=[];
  for(let i=0;i<plan.entries.length;i++){
   if(signal?.aborted)throw Error('Publishing cancelled before branch creation.');
-  const file=plan.entries[i];onProgress('Uploading '+(i+1)+'/'+plan.entries.length+' · '+file.path);
+  const file=plan.entries[i];onProgress('Verifying and uploading '+(i+1)+'/'+plan.entries.length+' · '+file.path);
+  // Compute the Git object ID from the chosen bytes first. The server
+  // acknowledgement and the later readback must both agree with this ID.
+  const expectedSha=await gitBlobIdentity(file.blob);
+  if(signal?.aborted)throw Error('Publishing cancelled before branch creation.');
   const content=await encodeBlob(file.blob);
+  if(signal?.aborted)throw Error('Publishing cancelled before branch creation.');
   const result=await github(token,'POST',prefix+'/git/blobs',{content,encoding:'base64'},signal);
-  if(!/^[a-f0-9]{40}$/i.test(result?.sha||''))throw Error('Blob creation failed integrity response.');
-  entries.push({path:file.path,mode:'100644',type:'blob',sha:result.sha})
+  if(!/^[a-f0-9]{40}$/i.test(result?.sha||'')||
+    result.sha.toLowerCase()!==expectedSha)
+   throw Error('GitHub blob identity differs from the selected file bytes. No branch was created.');
+  entries.push({path:file.path,mode:'100644',type:'blob',sha:expectedSha})
  }
  onProgress('Preparing an atomic tree and commit…');
  const newTree=await github(token,'POST',prefix+'/git/trees',{base_tree:plan.treeSha,tree:entries},signal);

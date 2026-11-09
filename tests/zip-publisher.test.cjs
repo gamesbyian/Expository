@@ -6,9 +6,9 @@ assert.ok(source,'Publisher inline source present');
 const start=source.indexOf('const MAX_FILES='),end=source.indexOf('function renderIncoming(){',start);
 assert.ok(start>=0&&end>start,'Publisher pure logic boundary present');
 const SHA={head:'a'.repeat(40),tree:'b'.repeat(40),blob:'c'.repeat(40),newTree:'d'.repeat(40),commit:'e'.repeat(40)};
-function setup(respond){
+function setup(respond,cryptoImpl=require('node:crypto').webcrypto){
  const calls=[];
- const context=vm.createContext({Blob,URL,TextEncoder,TextDecoder,Uint8Array,FileReader:class{
+ const context=vm.createContext({Blob,URL,TextEncoder,TextDecoder,Uint8Array,crypto:cryptoImpl,FileReader:class{
   readAsDataURL(blob){blob.arrayBuffer().then(bytes=>{this.result='data:application/octet-stream;base64,'+Buffer.from(bytes).toString('base64');this.onload()}).catch(e=>this.onerror?.(e))}
  },fetch:async(url,options)=>{
   calls.push({url,options,body:options.body?JSON.parse(options.body):undefined});
@@ -19,7 +19,7 @@ function setup(respond){
   return new Response(JSON.stringify(answer??mock(url,options,calls)),
    {status:200,headers:{'content-type':'application/json'}});
  }});
- vm.runInContext(source.slice(start,end)+'\nglobalThis.published={wellFormedUtf16,cleanPath,repoPath,branchPath,resolveEntries,findCollisions,inspectDestination,writeNewBranch,verifyPublishedBranch,boundedGithubJson};',context);
+ vm.runInContext(source.slice(start,end)+'\nglobalThis.published={wellFormedUtf16,cleanPath,repoPath,branchPath,resolveEntries,findCollisions,inspectDestination,writeNewBranch,verifyPublishedBranch,gitBlobIdentity,boundedGithubJson};',context);
  return {api:context.published,calls};
 }
 function mock(url,options,calls){
@@ -41,7 +41,12 @@ function mock(url,options,calls){
    ...(treeWrite?.body.tree||[])
   ]};
  }
- if(url.endsWith('/git/blobs'))return {sha:SHA.blob};
+ if(url.endsWith('/git/blobs')){
+  const source=Buffer.from(JSON.parse(options.body).content,'base64');
+  const actual=require('node:crypto').createHash('sha1')
+   .update(Buffer.from('blob '+source.length+'\0')).update(source).digest('hex');
+  return {sha:actual};
+ }
  if(url.endsWith('/git/trees'))return {sha:SHA.newTree};
  if(url.endsWith('/git/commits'))return {sha:SHA.commit};
  if(url.endsWith('/git/refs'))return {ref:options.body?JSON.parse(options.body).ref:'',object:{sha:SHA.commit}};
@@ -233,6 +238,41 @@ test('an unavailable post-creation GitHub read remains uncertain, never auto-ret
  assert.equal(calls.filter(x=>x.options.method==='POST').length,4);
  assert.equal(calls.filter(x=>x.url.includes('/git/ref/heads/expository/')).length,1,
   'the post-ref read must never be automatically replayed');
+});
+
+test('local Git blob identities match independent git hash-object vectors',async()=>{
+ const {api}=setup();
+ assert.equal(await api.gitBlobIdentity(new Blob(['hello world\n'])),
+  '3b18e512dba79e4c8300dd08aeb37f8e728b8dad');
+ assert.equal(await api.gitBlobIdentity(new Blob([])),
+  'e69de29bb2d1d6434b8b29ae775ad8c2e48c5391');
+ assert.equal(await api.gitBlobIdentity(new Blob(['abc'])),
+  'f2ba8f84ab5c1bce84a7b441cb1959cfc7093b7f');
+});
+
+test('GitHub blob SHA disagreement stops before creating a tree, commit or branch',async()=>{
+ const {api,calls}=setup((url,options)=>{
+  if(options.method==='POST'&&url.endsWith('/git/blobs'))
+   return {sha:'f'.repeat(40)};
+ });
+ const plan=await api.inspectDestination('synthetic-token','owner/repo',
+  'main','assets',[file('hello.txt','hello world\n')]);
+ await assert.rejects(
+  api.writeNewBranch(plan,'synthetic-token','expository/zip-demo',()=>{}),
+  /blob identity differs from the selected file bytes/);
+ assert.deepEqual(calls.filter(x=>x.options.method==='POST').map(x=>x.url.split('/').at(-1)),
+  ['blobs'],'no tree, commit or ref write after inconsistent blob');
+});
+
+test('a browser without SHA-1 digest support cannot start publication',async()=>{
+ const {api,calls}=setup(undefined,{});
+ const plan=await api.inspectDestination('synthetic-token','owner/repo',
+  'main','',[file('safe.txt')]);
+ await assert.rejects(
+  api.writeNewBranch(plan,'synthetic-token','expository/zip-demo',()=>{}),
+  /cannot verify Git blob identities/);
+ assert.ok(calls.every(x=>x.options.method==='GET'),
+  'missing local verification support must never initiate a write');
 });
 
 test('new branch writer refuses a moved base branch before mutating Git objects',async()=>{
