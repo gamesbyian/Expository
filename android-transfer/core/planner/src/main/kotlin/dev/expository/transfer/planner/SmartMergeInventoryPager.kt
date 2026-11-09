@@ -59,6 +59,11 @@ object SmartMergeInventoryPager {
         if (entries.size !in 1..RecursiveFolderCopyPlanner.MAX_ITEMS ||
             manifest.files < 0 || manifest.directories < 1 ||
             manifest.files + manifest.directories != entries.size ||
+            manifest.files != entries.count { it.source.kind == ItemKind.FILE } ||
+            manifest.directories != entries.count {
+                it.source.kind == ItemKind.DIRECTORY
+            } ||
+            !Regex("[0-9a-f]{64}").matches(manifest.digest) ||
             entries.first().source != selected.source ||
             entries.first().relativePath != listOf(selected.source.name) ||
             query.length > MAX_QUERY_LENGTH ||
@@ -66,9 +71,26 @@ object SmartMergeInventoryPager {
             offset < 0 || offset % PAGE_SIZE != 0)
             return null
 
+        // A syntactically valid page prefix is insufficient. Validate
+        // identity and attachment for the COMPLETE claimed snapshot before
+        // displaying a single row. A duplicated provider document or path,
+        // detached descendant, or forged file/directory count must never be
+        // presented to the user as a coherent original source inventory.
+        val observedPaths = hashSetOf<List<String>>()
+        val observedIds = hashSetOf<Pair<String, String>>()
+        val parentsByPath = entries.filter {
+            it.source.kind == ItemKind.DIRECTORY
+        }.associate { it.relativePath to it.source }
         if (entries.any { entry ->
                 val path = entry.relativePath
                 path.isEmpty() ||
+                !observedPaths.add(path) ||
+                !observedIds.add(entry.source.key.authorityId to
+                    entry.source.key.opaqueItemId) ||
+                entry.source.key.opaqueItemId.isBlank() ||
+                (path.size > 1 &&
+                    parentsByPath[path.dropLast(1)]?.key?.opaqueItemId !=
+                        entry.source.location.key.containerId) ||
                     path.size > RecursiveFolderCopyPlanner.MAX_DEPTH ||
                     path.first() != selected.source.name ||
                     path.last() != entry.source.name ||
