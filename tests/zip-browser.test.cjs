@@ -7,7 +7,7 @@ const path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 const start=source.indexOf('const ZIP_MAX_BYTES='),end=source.indexOf('const $=id=>',start);
 assert.ok(start>=0&&end>start,'ZIP reader is embedded in the browser application');
-const context=vm.createContext({Blob,Uint8Array,DataView,TextDecoder,Response,DecompressionStream,withMediaType:b=>b});
+const context=vm.createContext({Blob,Uint8Array,DataView,TextDecoder,TextEncoder,Response,DecompressionStream,withMediaType:b=>b});
 vm.runInContext(source.slice(start,end)+'\nglobalThis.exposed={zipManifest,zipDecodeName,unzipMember,zipCRC,zipSafeForDevice,zipShareSelected};',context);
 const {zipManifest,zipDecodeName,unzipMember,zipCRC,zipSafeForDevice,zipShareSelected}=context.exposed;
 function archive(name='pictures/hello.txt',body='Hello from ZIP',crcOverride,flags=0){
@@ -116,6 +116,27 @@ test('ZIP parser rejects an EOCD whose comment length disagrees with the bytes',
   data.writeUInt16LE(2,data.length-2);
  });
  await assert.rejects(zipManifest(blob),/ZIP comment|central directory/);
+});
+test('local ZIP extraction refuses version-control internals and path escape tricks',()=>{
+ for(const name of [
+  '.git/hooks/post-checkout','repo/.GIT/config','projects/.svn/wc.db',
+  '.hg/hgrc','sub\\\\path.txt','a/b\\\\c.txt','folder/CON.txt'
+ ]){
+  assert.equal(zipSafeForDevice(name),false,name+' must not be written through a picked directory');
+ }
+ assert.equal(zipSafeForDevice('archive/.gitkeep'),true,
+  'an ordinary filename with a VCS-like prefix is not itself control metadata');
+ assert.equal(zipSafeForDevice('package/.github/workflows/check.yml'),true,
+  'ordinary GitHub workflow files are regular archived content');
+});
+test('local ZIP extraction verifies UTF-8 byte limits on every path component',()=>{
+ assert.equal(zipSafeForDevice('é'.repeat(127)+'.txt'),false,
+  '258 UTF-8 bytes exceed a portable 255-byte component');
+ assert.equal(zipSafeForDevice('é'.repeat(125)+'.txt'),true,
+  'a portable 254-byte component remains accepted');
+ const oversized=Array(17).fill('a'.repeat(245)).join('/');
+ assert.equal(zipSafeForDevice(oversized),false,
+  'overall output path exceeding 4096 bytes is refused');
 });
 test('ZIP parser rejects a mismatched central directory size',async()=>{
  const blob=await mutate(archive(),data=>{
