@@ -64,7 +64,7 @@ class PagedLocationIndex private constructor(
             PagedLocationIndex(
                 location.copy(
                     folder = Collections.unmodifiableList(location.folder.toList()),
-                    capabilities = Collections.unmodifiableMap(location.capabilities.toMap())), 
+                    capabilities = Collections.unmodifiableMap(location.capabilities.toMap())),
                 LocationIndexState.OPEN, null, null, emptyList(), emptySet(), null
             )
     }
