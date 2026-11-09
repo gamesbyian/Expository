@@ -912,7 +912,9 @@ test('whole-source global line jump crosses 500k sections and highlights the ori
  assert.ok(app.state.sourceSegment>0);
  wrap=get('previewBody').children[0];
  const viewer=wrap.children[1], pager=viewer.children.find(x=>x.className==='code-pages');
- assert.match(pager.children[1].textContent,/7600/);
+ const pageNumbers=pager.children[1].textContent.match(/^(\d+)–(\d+) \/ /);
+ assert.ok(pageNumbers,'global pager reports mounted line range');
+ assert.ok(Number(pageNumbers[1])<=7600&&Number(pageNumbers[2])>=7600,'target line is inside mounted window');
  const current=viewer.children.at(-1).children.find(x=>x.className==='code-line code-find-current');
  assert.ok(current,'target line must be mounted and highlighted');
  assert.equal(current.children[0].textContent,'7600');
