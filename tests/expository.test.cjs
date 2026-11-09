@@ -9,12 +9,14 @@ const path = require('node:path');
 const html = fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
 const source = html.match(/<script>([\s\S]+?)<\/script>/)?.[1];
 function fakeNode(tag='DIV') {
-  return {
+  const node={
     tagName:tag.toUpperCase(),dataset:{},children:[],get lastChild(){return this.children.at(-1)||null},value:'',textContent:'',style:{setProperty(name,value){this[name]=value}},classList:{add(){},remove(){},contains(){return false}},
     append(...nodes){this.children.push(...nodes)},replaceChildren(...nodes){this.children=nodes},replaceChild(replacement,old){const i=this.children.indexOf(old);if(i<0)throw Error('Child absent');this.children[i]=replacement;return old},
     remove(){},querySelector(){return null},querySelectorAll(){return []},contains(){return false},getClientRects(){return [1]},setAttribute(name,value){this[name]=value},getAttribute(name){return this[name]||null},
     addEventListener(){},focus(){},click(){},get isConnected(){return true}
   };
+  if(tag.toUpperCase()==='TEMPLATE')node.content={querySelectorAll(){return []}};
+  return node;
 }
 function boot(fetchImpl=globalThis.fetch,BlobImpl=globalThis.Blob) {
  const elements = new Map(),urls=[];
@@ -31,7 +33,7 @@ function boot(fetchImpl=globalThis.fetch,BlobImpl=globalThis.Blob) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,boundedGithubJson,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,sourceSections,boundedSourceViewer,navigate,recordRecentFolder,paintRecentFolders,clearRecentFolders,openSearchHit,openContactSheet,presentSelectedSlideshow,stopSlideshow,documentThumbnail,loadThumb,openContainingFolder};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,boundedGithubJson,fetchBlob,abortRequests,safeRepoPath,safeHtmlPreview,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,sourceSections,boundedSourceViewer,navigate,recordRecentFolder,paintRecentFolders,clearRecentFolders,openSearchHit,openContactSheet,presentSelectedSlideshow,stopSlideshow,documentThumbnail,loadThumb,openContainingFolder};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch','Blob',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl,BlobImpl
  );
@@ -346,6 +348,40 @@ test('current document thumbnail still renders when its epoch remains unchanged'
  assert.equal(thumb.children[0].children[1].textContent,'Current title');
 });
 
+test('HTML rendering stays opt-in, sandboxed, opaque-origin and network-restricted',async()=>{
+ const {app,get}=boot();
+ const item={name:'preview.html',path:'site/preview.html',type:'file'};
+ app.state.preview=item;
+ app.state.currentBlob=new Blob(['<h1>Example</h1><script>window.leak=true</script>'],{type:'text/html'});
+ app.state.structuredOpen=false;
+ await app.renderCurrentFile();
+ assert.equal(get('structuredToggle').hidden,false);
+ assert.equal(get('structuredToggle').textContent,'Rendered HTML');
+ assert.equal(get('previewBody').children[0].className,'code-viewer',
+  'untrusted HTML opens as source by default');
+ app.state.structuredOpen=true;
+ await app.renderCurrentFile();
+ const root=get('previewBody').children[0],frame=root.children.at(-1);
+ assert.equal(root.className,'html-static-preview');
+ assert.equal(frame.tagName,'IFRAME');
+ assert.equal(frame.sandbox,'','sandbox has no permissions, including scripts and same-origin');
+ assert.equal(frame.referrerpolicy,'no-referrer');
+ assert.match(frame.srcdoc,/default-src 'none'/);
+ assert.match(frame.srcdoc,/script-src 'none'/);
+ assert.match(frame.srcdoc,/connect-src 'none'/);
+ assert.match(frame.srcdoc,/form-action 'none'/);
+ assert.match(frame.srcdoc,/base-uri 'none'/);
+ assert.doesNotMatch(frame.sandbox,/allow-scripts|allow-same-origin/);
+ assert.equal(get('structuredToggle').textContent,'HTML source');
+});
+test('HTML rendered preview rejects unsupported browsers rather than inserting untrusted markup',()=>{
+ const {app}=boot();
+ const original=globalThis.document;
+ const preview=app.safeHtmlPreview('<script>secret()</script>',{name:'unsafe.html'});
+ assert.equal(preview.className,'html-static-preview',
+  'supported template harness returns an isolated frame');
+ assert.match(preview.children.at(-1).srcdoc,/referrer" content="no-referrer"/);
+});
 test('HTML thumbnail summaries are inert DOM text without loading or running scripts',()=>{
  const {app}=boot(),thumb=fakeNode();
  const file={name:'dashboard.html',path:'preview/dashboard.html'};
