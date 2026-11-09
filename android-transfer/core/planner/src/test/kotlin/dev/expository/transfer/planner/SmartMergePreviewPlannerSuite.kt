@@ -86,6 +86,50 @@ object SmartMergePreviewPlannerSuite {
         check(first.entries.map { it.targetPath.single() } ==
             listOf("report.txt", "report (2).txt"))
         check(first.collisionRenames == 1)
+        // Browse the exact already-complete M2 snapshot without another
+        // provider query, grant renewal, private path logging or merge plan.
+        // Pages are bounded independently of the aggregate 10,000-entry cap.
+        val filesForPages = (1..25).map { number ->
+            entry(a.source, listOf("item" + number.toString().padStart(2, '0') +
+                ".txt"))
+        }
+        val pagedInventory = inventory(a, *filesForPages.toTypedArray())
+        val page1 = requireNotNull(SmartMergeInventoryPager.page(a, pagedInventory, 0))
+        val page2 = requireNotNull(SmartMergeInventoryPager.page(a, pagedInventory, 12))
+        val page3 = requireNotNull(SmartMergeInventoryPager.page(a, pagedInventory, 24))
+        check(page1.totalEntries == 26 && page1.entries.size == 12 &&
+            page1.nextOffset == 12 && page1.entries.first().position == 1)
+        check(page1.entries.first().kind == ItemKind.DIRECTORY)
+        check(page1.entries.first().relativePath == listOf("A"))
+        check(page2.entries.size == 12 && page2.nextOffset == 24 &&
+            page2.entries.first().position == 13)
+        check(page3.entries.size == 2 && page3.nextOffset == null &&
+            page3.entries.last().position == 26)
+        check(page3.entries.last().relativePath == listOf("A", "item25.txt"))
+        check(SmartMergeInventoryPager.page(a, pagedInventory, -12) == null)
+        check(SmartMergeInventoryPager.page(a, pagedInventory, 1) == null)
+        check(SmartMergeInventoryPager.page(a, pagedInventory, 26) == null)
+        check(SmartMergeInventoryPager.page(a, pagedInventory, Int.MAX_VALUE) == null)
+        check(SmartMergeInventoryPager.page(b, pagedInventory, 0) == null)
+        val secondCapture = source("A", "saf-A")
+        check(SmartMergeInventoryPager.page(secondCapture, pagedInventory, 0) == null)
+        check(SmartMergeInventoryPager.page(a,
+            pagedInventory.copy(manifest = pagedInventory.manifest.copy(
+                blockers = listOf("PROVIDER_LISTING_CHANGED"))), 0) == null)
+        // Even a corrupt LAST row invalidates the first displayed page.
+        check(SmartMergeInventoryPager.page(a,
+            inventory(a, *filesForPages.dropLast(1).toTypedArray(),
+                entry(a.source, listOf("../unsafe.txt"))), 0) == null)
+        check(runCatching {
+            (page1.entries as MutableList<SmartMergeInventoryDisplayEntry>).clear()
+        }.isFailure)
+        check(runCatching {
+            (page2.entries.first().relativePath as MutableList<String>).clear()
+        }.isFailure)
+        check(!page3.toString().contains("item25.txt"))
+        check(!page3.entries.last().toString().contains("item25.txt"))
+        check(page1.entries.size == 12 && page3.entries.size == 2)
+
         check(first.entries.none { it.sharedDirectory })
         check(first.digest == plan(sources, trees).digest)
         // The emitted review value carries a copied ItemRef. Kotlin's

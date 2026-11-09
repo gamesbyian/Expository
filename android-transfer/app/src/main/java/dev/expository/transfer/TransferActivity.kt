@@ -271,6 +271,11 @@ private fun DeveloperPreview(
     var mergeSourceInventory by remember {
         mutableStateOf<Map<SmartMergeFolder, SmartMergeInventory>>(emptyMap())
     }
+    // Display-only pages keyed to exact in-memory source objects. Navigating a
+    // page never refreshes a grant, persists a path, or publishes authority.
+    var mergeInventoryPageOffsets by remember {
+        mutableStateOf<Map<SmartMergeFolder, Int>>(emptyMap())
+    }
     var mergeInventoryReading by remember { mutableStateOf<SmartMergeFolder?>(null) }
     var mergeInventoryJob by remember { mutableStateOf<Job?>(null) }
     val mergeInventorySerial = remember { AtomicLong(0L) }
@@ -326,6 +331,7 @@ private fun DeveloperPreview(
         mergeInventoryJob = null
         mergeInventoryReading = null
         mergeSourceInventory = emptyMap()
+        mergeInventoryPageOffsets = emptyMap()
     }
 
     fun tree(which: WorkspacePane): LocalTreeBrowseState = when (which) {
@@ -734,6 +740,7 @@ private fun DeveloperPreview(
         if (capturedRead?.valid(now) != true ||
             now < capturedRead.expiresAtMillis - 300_000L) {
             mergeSourceInventory = mergeSourceInventory - selected
+        mergeInventoryPageOffsets = mergeInventoryPageOffsets - selected
             mergeMessage = "Original Merge source access expired. Re-pick the folder."
             return
         }
@@ -743,6 +750,7 @@ private fun DeveloperPreview(
         val shareEpoch = currentShareEpoch()
         mergeInventoryReading = selected
         mergeSourceInventory = mergeSourceInventory - selected
+        mergeInventoryPageOffsets = mergeInventoryPageOffsets - selected
         mergeMessage = "Inspecting source descendants without writing files…"
         mergeInventoryJob = scope.launch {
             try {
@@ -1036,6 +1044,7 @@ private fun DeveloperPreview(
         val shareAtStart = currentShareEpoch()
         clearMergeIllustration()
         mergeSourceInventory = mergeSourceInventory - selected
+        mergeInventoryPageOffsets = mergeInventoryPageOffsets - selected
         mergeInspecting = selected
         mergeMessage = "Checking the original folder access without changing files…"
         mergeInspectionJob = scope.launch {
@@ -2461,6 +2470,99 @@ private fun DeveloperPreview(
                                             modifier = Modifier.testTag(
                                                 "smart-merge-source-inventory-" + index),
                                             style = MaterialTheme.typography.bodySmall)
+                                        if (current) {
+                                            val open = mergeInventoryPageOffsets.containsKey(selected)
+                                            FolderActionControl(
+                                                label = if (open)
+                                                    "Hide Merge source " + (index + 1) + " entries"
+                                                else "Browse Merge source " + (index + 1) +
+                                                    " entries (read-only)",
+                                                enabled = !mergeReading && mergeInspecting == null &&
+                                                    mergeInventoryReading == null &&
+                                                    !mergeDestinationReading,
+                                                modifier = Modifier.testTag(
+                                                    "smart-merge-browse-inventory-" + index),
+                                                onClick = {
+                                                    mergeInventoryPageOffsets = if (open)
+                                                        mergeInventoryPageOffsets - selected
+                                                    else mergeInventoryPageOffsets + (selected to 0)
+                                                }
+                                            )
+                                            mergeInventoryPageOffsets[selected]?.let { offset ->
+                                                val page = SmartMergeInventoryPager.page(
+                                                    selected, inventory, offset)
+                                                if (page == null) {
+                                                    Text("Inventory page unavailable. Hide and " +
+                                                        "reinspect the source if its contents changed.",
+                                                        style = MaterialTheme.typography.bodySmall)
+                                                } else {
+                                                    Column(modifier = Modifier.fillMaxWidth()
+                                                        .testTag("smart-merge-inventory-page-" + index)) {
+                                                        Text("Snapshot entries " +
+                                                            (page.offset + 1) + "–" +
+                                                            (page.offset + page.entries.size) +
+                                                            " of " + page.totalEntries +
+                                                            ", including the selected folder. " +
+                                                            "Read-only, not a Merge approval.",
+                                                            modifier = Modifier.testTag(
+                                                                "smart-merge-inventory-page-status-" +
+                                                                    index),
+                                                            style = MaterialTheme.typography.bodySmall)
+                                                        page.entries.forEachIndexed { row, item ->
+                                                            val description = item.position.toString() +
+                                                                ". " + (if (item.kind == ItemKind.DIRECTORY)
+                                                                    "Folder" else "File") + ": " +
+                                                                item.relativePath.joinToString("/")
+                                                            Text(description,
+                                                                modifier = Modifier.testTag(
+                                                                    "smart-merge-inventory-entry-" +
+                                                                        index + "-" + row)
+                                                                    .semantics {
+                                                                        contentDescription = description
+                                                                    },
+                                                                maxLines = 3,
+                                                                overflow = TextOverflow.Ellipsis,
+                                                                style = MaterialTheme.typography.bodySmall)
+                                                        }
+                                                        if (page.totalEntries >
+                                                            SmartMergeInventoryPager.PAGE_SIZE) {
+                                                            FlowRow(horizontalArrangement =
+                                                                Arrangement.spacedBy(8.dp),
+                                                                verticalArrangement =
+                                                                Arrangement.spacedBy(4.dp)) {
+                                                                FolderActionControl(
+                                                                    label = "Previous source entries",
+                                                                    enabled = page.offset > 0,
+                                                                    modifier = Modifier.testTag(
+                                                                        "smart-merge-inventory-previous-" +
+                                                                            index),
+                                                                    onClick = {
+                                                                        mergeInventoryPageOffsets =
+                                                                            mergeInventoryPageOffsets +
+                                                                                (selected to (page.offset -
+                                                                                    SmartMergeInventoryPager.PAGE_SIZE))
+                                                                    }
+                                                                )
+                                                                FolderActionControl(
+                                                                    label = "Next source entries",
+                                                                    enabled = page.nextOffset != null,
+                                                                    modifier = Modifier.testTag(
+                                                                        "smart-merge-inventory-next-" +
+                                                                            index),
+                                                                    onClick = {
+                                                                        page.nextOffset?.let { next ->
+                                                                            mergeInventoryPageOffsets =
+                                                                                mergeInventoryPageOffsets +
+                                                                                    (selected to next)
+                                                                        }
+                                                                    }
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                     FolderActionControl(
                                         label = "Check Merge source " + (index + 1) +
