@@ -108,6 +108,51 @@ object SmartMergePreviewPlannerSuite {
         check(frozenFirst.source.parent == listOf("Pictures", "A"))
         check(first.entries.size == 2 && first.digest == plan(sources, trees).digest)
         check(first.digest != plan(sources, trees, rootName = "Another").digest)
+
+        // A malicious/synthetic complete manifest can supply malformed
+        // opaque child identity or witness strings even when the captured M1
+        // root, visible path and claimed 64-hex manifest digest are sound.
+        // The default Java UTF-8 encoder would collapse these bytes into '?'
+        // in an otherwise reviewable M2 fingerprint.
+        val malformedChildId = "\uD800"
+        val badRead = CapabilityProof(Support.SUPPORTED,
+            malformedChildId, NOW + 10_000L)
+        val badWrite = CapabilityProof(Support.SUPPORTED,
+            malformedChildId, NOW + 10_000L)
+        val malformedChildren = listOf(
+            aFile.copy(source = aFile.source.copy(
+                key = aFile.source.key.copy(opaqueItemId = malformedChildId))),
+            aFile.copy(source = aFile.source.copy(
+                key = aFile.source.key.copy(version = malformedChildId))),
+            aFile.copy(source = aFile.source.copy(
+                location = aFile.source.location.copy(revision = malformedChildId))),
+            aFile.copy(source = aFile.source.copy(
+                location = aFile.source.location.copy(capabilities =
+                    aFile.source.location.capabilities +
+                        (Capability.READ to badRead)))),
+            aFile.copy(source = aFile.source.copy(
+                location = aFile.source.location.copy(capabilities =
+                    aFile.source.location.capabilities +
+                        (Capability.WRITE to badWrite))))
+        )
+        malformedChildren.forEachIndexed { index, malformed ->
+            val refused = plan(sources, listOf(
+                inventory(a, malformed), trees[1]))
+            check(!refused.reviewable && refused.entries.isEmpty()) {
+                "Malformed child source stamp accepted: field $index"
+            }
+            check("SOURCE_TREE_INCOMPLETE_OR_STALE" in refused.blockers)
+        }
+        val validSupplementaryChild = aFile.copy(source = aFile.source.copy(
+            key = aFile.source.key.copy(
+                opaqueItemId = "item-\uD83D\uDCC1")))
+        check(plan(sources, listOf(
+            inventory(a, validSupplementaryChild), trees[1])).reviewable)
+        check(plan(sources, listOf(
+            inventory(a, aFile.copy(source = aFile.source.copy(
+                key = aFile.source.key.copy(opaqueItemId = "?")))),
+            trees[1])).reviewable)
+
         // An authoritative source case-policy correction changes the reviewed
         // collision/ancestry assumptions even when the source IDs, versions,
         // displayed mappings and synthetic manifest digest remain identical.
