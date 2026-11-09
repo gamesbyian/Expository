@@ -248,12 +248,35 @@ object RecursiveFolderCopyEngine {
                     // BEFORE the mutating provider call. At that point the
                     // write attempt has been recorded, so failure is UNCERTAIN
                     // and requires reconciliation, never a clean replay.
+                    // A slow durable journal commit can also outlive source
+                    // membership or the destination's exact-parent witness.
+                    // Recheck BOTH read-only observations before any create,
+                    // then take the FINAL clock reading after those queries.
+                    // Neither callback may silently mint new write authority.
+                    val sourceAtCreate = runCatching {
+                        endpoint.sourceStillCurrent(entry)
+                    }.getOrDefault(false)
+                    val ticketAtCreate = runCatching {
+                        endpoint.currentDirectoryTicket(entry)
+                    }.getOrNull()
                     val preCreateNow = runCatching { clockMillis() }.getOrNull()
                     if (preCreateNow == null ||
                         ticket.expiresAtMillis <= preCreateNow) {
                         runCatching { journal.markUncertain(ticket.digest) }
                         return outcome(RecursiveCopyResult.UNCERTAIN,
                             "DIRECTORY_TICKET_EXPIRED_AFTER_DURABLE_ATTEMPT")
+                    }
+                    if (!sourceAtCreate || ticketAtCreate != ticket) {
+                        runCatching { journal.markUncertain(ticket.digest) }
+                        return outcome(RecursiveCopyResult.UNCERTAIN,
+                            "DIRECTORY_SOURCE_OR_PARENT_CHANGED_AFTER_DURABLE_ATTEMPT")
+                    }
+                    // A provider observation can itself block long enough for
+                    // a late Stop. Recheck the owning permit after ALL reads.
+                    if (!runCatching { continueRequested() }.getOrDefault(false)) {
+                        runCatching { journal.markUncertain(ticket.digest) }
+                        return outcome(RecursiveCopyResult.UNCERTAIN,
+                            "STOPPED_AFTER_DURABLE_ATTEMPT_NO_CREATE_REPLAY")
                     }
                     // From this point, the provider might have created a child,
                     // even if its response or journal acknowledgement fails.
