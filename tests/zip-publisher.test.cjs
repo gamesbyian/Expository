@@ -281,8 +281,8 @@ test('published-tree comparison accepts only reviewed new paths and parent tree 
   entry.path!=='art/2026/img.png'),/uploaded file/);
  reject('uploaded file modified',rows=>rows.map(entry=>
   entry.path==='docs/new.txt'?{...entry,sha:hex('c')}:entry),/uploaded file/);
- reject('invalid baseline object mode',rows=>rows.map(entry=>
-  entry.path==='docs/keep.txt'?{...entry,mode:'040000'}:entry),/pre-existing/);
+ reject('invalid published object mode',rows=>rows.map(entry=>
+  entry.path==='docs/keep.txt'?{...entry,mode:'040000'}:entry),/unverified object identities/);
  assert.throws(()=>api.verifyPublishedTreeDelta(
   {truncated:false,tree:[{...original[0],mode:'bad'}]},next,added),
   /unverified object identities/);
