@@ -586,7 +586,7 @@ test('cancelled content search cannot publish hits after asynchronous text decod
 });
 
 test('current content search still returns bounded text matches',async()=>{
- const fetcher=async()=>new Response('first line\\nneedle in second line',{status:200});
+ const fetcher=async()=>new Response('first line\nneedle in second line',{status:200});
  const {app,get}=boot(fetcher);
  Object.assign(app.state,{repo:'example/public',branch:'main',indexReady:true});
  app.state.indexEntries=[{name:'notes.txt',path:'notes.txt',type:'file',size:32}];
