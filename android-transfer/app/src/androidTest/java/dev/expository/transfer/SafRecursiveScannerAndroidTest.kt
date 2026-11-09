@@ -478,6 +478,72 @@ class SafRecursiveScannerAndroidTest {
         }.isFailure)
     }
 
+    @Test fun pickedMergeSourceRefusesBeforeExceedingRemainingReviewBudget() {
+        val e = Environment()
+        val appContext = InstrumentationRegistry.getInstrumentation().targetContext
+        val recordsBefore = appContext.noBackupFilesDir.list().orEmpty().toSet()
+        val read = Intent.FLAG_GRANT_READ_URI_PERMISSION
+        val selected = requireNotNull(SmartMergeSafFolderCapture.capture(
+            e.resolver, e.sourceTree, read, WorkspacePane.A, 1L, e.observedAtMillis))
+        val second = requireNotNull(SmartMergeSafFolderCapture.capture(
+            e.resolver, e.targetTree, read, WorkspacePane.B, 2L, e.observedAtMillis))
+
+        // The first picked source contains its root, two other directories
+        // and one file (four entries). Three must NOT yield a partial review.
+        var tightChecks = 0
+        assertNull("Exhausted aggregate quota must refuse the whole source",
+            e.scanner.inspectMergeRootInventory(selected, 3L,
+                maxEntries = 3, continueRequested = {
+                    tightChecks++
+                    true
+                }))
+        var fullChecks = 0
+        val exact = requireNotNull(e.scanner.inspectMergeRootInventory(
+            selected, 4L, maxEntries = 4, continueRequested = {
+                fullChecks++
+                true
+            }))
+        assertEquals(4, exact.manifest.entries.size)
+        assertTrue("Tight quota should stop before the full second-pass walk",
+            tightChecks in 1 until fullChecks)
+        val looser = requireNotNull(e.scanner.inspectMergeRootInventory(
+            selected, 5L, maxEntries = 5))
+        assertEquals("Budget size must not rewrite the observed source digest",
+            exact.manifest.digest, looser.manifest.digest)
+
+        // Invalid/zero budgets are rejected before any progress callback;
+        // the caller must not accidentally read a new source when the
+        // already-accepted basket fills the M2 10,000-entry limit.
+        for (invalid in listOf(-1, 0, RecursiveFolderCopyPlanner.MAX_ITEMS + 1,
+                Int.MAX_VALUE)) {
+            var callbacks = 0
+            assertNull(e.scanner.inspectMergeRootInventory(selected, 6L,
+                maxEntries = invalid, continueRequested = {
+                    callbacks++
+                    true
+                }))
+            assertEquals("Invalid quota must not start source traversal",
+                0, callbacks)
+        }
+
+        // The second provider has exactly two entries. A partially full
+        // basket can inspect it with remaining=2, but not remaining=1.
+        val twoRemaining = requireNotNull(
+            SmartMergeSourceReviewBudget.remaining(9_998))
+        val oneRemaining = requireNotNull(
+            SmartMergeSourceReviewBudget.remaining(9_999))
+        assertNull(e.scanner.inspectMergeRootInventory(second, 7L,
+            maxEntries = oneRemaining))
+        val accepted = requireNotNull(e.scanner.inspectMergeRootInventory(
+            second, 8L, maxEntries = twoRemaining))
+        assertEquals(2, accepted.manifest.entries.size)
+        assertEquals(10_000,
+            SmartMergeSourceReviewBudget.append(9_998,
+                accepted.manifest.entries.size))
+        assertEquals("Read-only quota failure cannot create recovery records",
+            recordsBefore, appContext.noBackupFilesDir.list().orEmpty().toSet())
+    }
+
     @Test fun twoIndependentSafPickedRootsHaveCompleteSeparateReadOnlyInventories() {
         val e = Environment()
         val read = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
