@@ -231,7 +231,12 @@ async function unzipMember(manifest,entry){
   const reader=piece.stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader();
   const chunks=[];let total=0;
   try{for(;;){const {done,value}=await reader.read();if(done)break;total+=value.byteLength;if(total>entry.size||total>ZIP_ENTRY_MAX)throw Error('ZIP decompression exceeded declared size');chunks.push(value)}}
-  finally{reader.releaseLock()}
+  catch(e){
+   // A rejected deflate stream must stop producing output immediately.
+   // Releasing the lock alone can leave a ZIP bomb inflating in background.
+   try{await reader.cancel()}catch{}
+   throw e
+  }finally{reader.releaseLock()}
   result=new Blob(chunks);
  }
  if(result.size!==entry.size||result.size>ZIP_ENTRY_MAX)throw Error('ZIP member length mismatch.');
