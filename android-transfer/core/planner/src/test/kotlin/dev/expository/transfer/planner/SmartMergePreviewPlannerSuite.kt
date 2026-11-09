@@ -108,6 +108,21 @@ object SmartMergePreviewPlannerSuite {
         check(frozenFirst.source.parent == listOf("Pictures", "A"))
         check(first.entries.size == 2 && first.digest == plan(sources, trees).digest)
         check(first.digest != plan(sources, trees, rootName = "Another").digest)
+        // An authoritative source case-policy correction changes the reviewed
+        // collision/ancestry assumptions even when the source IDs, versions,
+        // displayed mappings and synthetic manifest digest remain identical.
+        // The prior review fingerprint must not silently survive this change.
+        val sensitiveA = requireNotNull(SmartMergeFolder.capture(
+            WorkspacePane.SINGLE, a.source.copy(location =
+                a.source.location.copy(casePolicy = CasePolicy.CASE_SENSITIVE)),
+            7L, NOW))
+        val policyChanged = plan(basket(sensitiveA, b), listOf(
+            inventory(sensitiveA, entry(sensitiveA.source, listOf("report.txt"))),
+            trees[1]))
+        check(policyChanged.reviewable)
+        check(policyChanged.entries.map { it.targetPath } ==
+            first.entries.map { it.targetPath })
+        check(policyChanged.digest != first.digest)
         check(first.digest != plan(basket(b, a),
             listOf(trees[1], trees[0])).digest)
         check(!first.toString().contains("report"))
