@@ -181,17 +181,23 @@ internal class SafRecursiveSourceScanner(
      * This can do many expensive provider round trips. Run only on an IO
      * dispatcher; check continueRequested between bounded steps. Never use
      * the returned manifest as a mutation token or persist the tree grant.
+     *
+     * [maxEntries] is the caller's REMAINING aggregate review budget, including
+     * this picked root. A source that cannot fit refuses before exploring
+     * further descendants; no incomplete manifest can be published.
      */
     fun inspectMergeRootInventory(
         collected: SmartMergeFolder,
         browseGeneration: Long,
+        maxEntries: Int = RecursiveFolderCopyPlanner.MAX_ITEMS,
         continueRequested: () -> Boolean = { true }
     ): SmartMergeInventory? = runCatching {
         val root = collected.source
         val loc = root.location
         val grant = loc.key.grantId
         val now = clockMillis()
-        require(browseGeneration > collected.browseGeneration &&
+        require(maxEntries in 1..RecursiveFolderCopyPlanner.MAX_ITEMS &&
+            browseGeneration > collected.browseGeneration &&
             browseGeneration < Long.MAX_VALUE && now > 0L &&
             root.kind == ItemKind.DIRECTORY &&
             root.parent.isEmpty() && loc.folder.isEmpty() &&
@@ -237,7 +243,7 @@ internal class SafRecursiveSourceScanner(
         var directories = 0
         while (pending.isNotEmpty()) {
             require(continueRequested()) { "MERGE_INVENTORY_CANCELED" }
-            require(entries.size < RecursiveFolderCopyPlanner.MAX_ITEMS) {
+            require(entries.size < maxEntries) {
                 "MERGE_INVENTORY_ITEM_BOUND"
             }
             val (item, path) = pending.removeFirst()
@@ -288,8 +294,7 @@ internal class SafRecursiveSourceScanner(
                 "MERGE_SOURCE_DIRECTORY_INCOMPLETE"
             }
             val children = requireNotNull(observed.itemRefs())
-            require(entries.size + pending.size + children.size <=
-                RecursiveFolderCopyPlanner.MAX_ITEMS) {
+            require(entries.size + pending.size + children.size <= maxEntries) {
                 "MERGE_SOURCE_ITEM_BOUND"
             }
             snapshots += Triple(item, path.toList(), observed)
