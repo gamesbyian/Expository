@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch,BlobImpl=globalThis.Blob) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,navigate,recordRecentFolder,paintRecentFolders,clearRecentFolders,openSearchHit,documentThumbnail,loadThumb,openContainingFolder};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,sourceSections,boundedSourceViewer,navigate,recordRecentFolder,paintRecentFolders,clearRecentFolders,openSearchHit,documentThumbnail,loadThumb,openContainingFolder};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch','Blob',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl,BlobImpl
  );
@@ -752,6 +752,81 @@ test('current content search still returns bounded text matches',async()=>{
  assert.equal(hits.length,1);
  assert.equal(hits[0].children[0].textContent,'notes.txt:2');
  assert.equal(app.state.scanning,false);
+});
+
+test('large source sections align to line endings, retain global line numbering, and reuse in-memory bytes',async()=>{
+ const text=Array.from({length:8000},(_,i)=>'line'+i+' '+('x'.repeat(80))).join('\n');
+ assert.ok(text.length>500000);
+ const {app,get}=boot();
+ const sections=app.sourceSections(text);
+ assert.equal(sections.length,2);
+ assert.equal(sections[0].start,0);
+ assert.ok(sections[0].end<=500000,'section must stay within 500k chars');
+ assert.equal(text[sections[0].end-1],'\n','prefer complete lines when available');
+ assert.equal(sections[1].start,sections[0].end,'source sections must cover every character');
+ assert.equal(sections[1].partialStart,false);
+ assert.equal(sections[0].partialEnd,false);
+ assert.ok(sections[1].firstLine>1);
+ const file={name:'large.ts',path:'src/large.ts',type:'file',size:text.length};
+ app.state.repo='example/public';app.state.branch='main';
+ app.state.preview=file;app.state.currentBlob=new Blob([text]);app.state.previewText=text;
+ await app.renderCurrentFile();
+ let shell=get('previewBody').children[0];
+ assert.equal(shell.className,'source-segments');
+ assert.equal(shell.children[0].children[0].disabled,true);
+ assert.equal(shell.children[0].children[1].disabled,false);
+ assert.match(shell.children[0].children[2].textContent,/Section 1 of 2/);
+ assert.ok(app.state.sourceRanges?.sections===sections ||
+           app.state.sourceRanges?.sections.length===sections.length);
+ await shell.children[0].children[1].onclick();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(app.state.sourceSegment,1);
+ shell=get('previewBody').children[0];
+ assert.match(shell.children[0].children[2].textContent,/Section 2 of 2/);
+ assert.equal(shell.children[0].children[1].disabled,true);
+ const viewer=shell.children[1],pager=viewer.children.find(node=>node.className==='code-pages');
+ assert.equal(pager.children[1].textContent.startsWith(sections[1].firstLine+'–'),true);
+ assert.equal(viewer.jumpToLine(sections[1].firstLine),true);
+ assert.equal(viewer.children.at(-1).children[0].className,'code-line code-find-current');
+ assert.equal(shell.jumpToLine(1),false,'unloaded sections do not invent DOM rows');
+ await shell.children[0].children[0].onclick();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(app.state.sourceSegment,0,'can return to first section');
+ app.resetSession();
+ assert.equal(app.state.sourceRanges,null,'disconnect discards private text reference');
+ assert.equal(app.state.sourceSegment,0);
+});
+
+test('long individual line gets explicit continuation and never splits a surrogate pair',()=>{
+ const {app}=boot();
+ const text='a'.repeat(499999)+'😀'+'z'.repeat(22);
+ const sections=app.sourceSections(text);
+ assert.equal(sections.length,2);
+ assert.equal(sections[0].end,499999,'do not split the UTF-16 surrogate pair');
+ assert.equal(text.slice(sections[1].start,sections[1].start+2),'😀');
+ assert.equal(sections[0].partialEnd,true);
+ assert.equal(sections[1].partialStart,true);
+ assert.equal(sections[1].firstLine,1,'continued physical line keeps its original number');
+ const view=app.boundedSourceViewer(text,'single-line.js');
+ assert.match(view.children[0].children[2].textContent,/ends mid-line/);
+ app.state.sourceSegment=1;
+ const continued=app.boundedSourceViewer(text,'single-line.js');
+ assert.match(continued.children[0].children[2].textContent,/starts mid-line/);
+});
+
+test('windowed source viewer uses absolute line offsets for controls, symbols and jump',()=>{
+ const {app}=boot();
+ const view=app.sourceViewer('function alpha() {}\nfunction beta() {}','code.js',false,702);
+ const bar=view.children[0],pager=view.children.find(x=>x.className==='code-pages');
+ assert.equal(bar.children[4].min,'702');
+ assert.equal(bar.children[4].max,'703');
+ assert.equal(pager.children[1].textContent,'702–703 / 703 lines');
+ assert.equal(view.children.at(-1).children[0].children[0].textContent,'702');
+ assert.equal(view.jumpToLine(703),true);
+ assert.equal(view.jumpToLine(701),false);
+ const symbols=view.children.find(x=>x.className==='outline-panel');
+ assert.match(symbols.children[1].children[0].textContent,/L702/);
+ assert.match(symbols.children[1].children[1].textContent,/L703/);
 });
 
 test('source viewer jumps to global lines beyond its current 500-line window',()=>{
