@@ -74,6 +74,10 @@ test('file last-change dates are opt-in, source-backed and unknown dates sort la
  assert.equal(requests.length,3,'only explicitly requested visible file dates are fetched');
  assert.equal(app.state.fileDates.size,3);
  assert.deepEqual(app.gallerySort(app.state.items).map(x=>x.name),['b.js','a.js','c.js']);
+ const tiles=get('items').children.filter(x=>x.className==='tile');
+ assert.deepEqual(tiles.map(x=>x.children[1].textContent),['b.js','a.js','c.js']);
+ assert.match(tiles[0].children[2].textContent,/changed 2026-11-07/);
+ assert.match(tiles[2].children[2].textContent,/change date unknown/);
  assert.match(get('status').textContent,/2 dated, 1 without a usable date/);
  await app.loadFileDates();
  assert.equal(requests.length,3,'already reviewed paths are cached only in the tab');
