@@ -16,6 +16,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
@@ -125,6 +126,18 @@ class RecursiveRealPickerCopyUiTest {
             substring = true).assertExists()
         compose.onNodeWithTag("smart-merge-inventory-entry-0-0").assertExists()
         compose.onNodeWithTag("smart-merge-inventory-entry-0-3").assertExists()
+        // No provider round trip is required for local source-path search.
+        // An absent term must hide all private source rows without clearing
+        // the complete original RAM-only inventory or granting Merge.
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-inventory-filter-0"))
+        compose.onNodeWithTag("smart-merge-inventory-filter-0")
+            .performTextInput("definitely-missing-from-fixture-123")
+        compose.onNodeWithText("No matching entries among 4 captured source entries.",
+            substring = true).assertExists()
+        assertTrue("Filtering must hide captured filename rows",
+            compose.onAllNodesWithTag("smart-merge-inventory-entry-0-0")
+                .fetchSemanticsNodes().isEmpty())
         // The small fixture has no second page: navigation must be bounded.
         assertTrue("No bogus next-page control for four captured entries",
             compose.onAllNodesWithTag("smart-merge-inventory-next-0")
