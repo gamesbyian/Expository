@@ -816,6 +816,7 @@ private fun DeveloperPreview(
         val shareEpoch = currentShareEpoch()
         val completed = LinkedHashMap<SmartMergeFolder, SmartMergeInventory>(
             selected.size)
+        var aggregateEntries = 0
         mergeInventoryReading = selected.first()
         mergeMessage = "Inspecting 1 of " + selected.size +
             " source folders, read-only…"
@@ -857,6 +858,18 @@ private fun DeveloperPreview(
                             "No partial Merge inventory was accepted."
                         return@launch
                     }
+                    // Keep the SAME aggregate bound used by the immutable
+                    // M2 preview. A huge basket must not retain source trees
+                    // that cannot become a complete 10k-entry review.
+                    val bounded = SmartMergeSourceReviewBudget.append(
+                        aggregateEntries, inventory.manifest.entries.size)
+                    if (bounded == null) {
+                        mergeMessage = "The selected sources exceed the " +
+                            SmartMergeSourceReviewBudget.MAX_ITEMS +
+                            "-entry Merge review limit. No partial inventory was accepted."
+                        return@launch
+                    }
+                    aggregateEntries = bounded
                     completed[item] = inventory
                 }
                 // The first grant may have expired while the last source was
@@ -874,7 +887,8 @@ private fun DeveloperPreview(
                 }
                 mergeSourceInventory = completed.toMap()
                 mergeMessage = "All " + selected.size + " source inventories inspected. " +
-                    "Read-only evidence; this does not authorize Merge."
+                    aggregateEntries + " total entries. Read-only evidence; " +
+                    "this does not authorize Merge."
             } finally {
                 if (mergeInventorySerial.get() == serial) {
                     mergeInventoryJob = null

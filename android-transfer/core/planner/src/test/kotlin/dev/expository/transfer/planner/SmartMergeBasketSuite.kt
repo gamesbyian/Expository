@@ -73,6 +73,22 @@ object SmartMergeBasketSuite {
         check(SmartMergeFolder.capture(WorkspacePane.A,
             picked(supplementary), 1L, NOW) != null)
 
+        // The N-source scanner must not retain manifests that the common
+        // 10,000-entry M2 preview cannot display or review. This is an
+        // aggregate budget, not a per-tree limit or an execution permit.
+        check(SmartMergeSourceReviewBudget.MAX_ITEMS ==
+            SmartMergePreviewPlanner.MAX_PREVIEW_ENTRIES)
+        check(SmartMergeSourceReviewBudget.append(0, 1) == 1)
+        check(SmartMergeSourceReviewBudget.append(1, 4) == 5)
+        check(SmartMergeSourceReviewBudget.append(9_999, 1) == 10_000)
+        check(SmartMergeSourceReviewBudget.append(9_999, 2) == null)
+        check(SmartMergeSourceReviewBudget.append(10_000, 1) == null)
+        check(SmartMergeSourceReviewBudget.append(0, 10_001) == null)
+        check(SmartMergeSourceReviewBudget.append(0, 0) == null)
+        check(SmartMergeSourceReviewBudget.append(-1, 1) == null)
+        check(SmartMergeSourceReviewBudget.append(Int.MAX_VALUE, 1) == null)
+        check(SmartMergeSourceReviewBudget.append(1, Int.MAX_VALUE) == null)
+
         // M2 suggestion text is only an editable name, not content identity.
         check(SmartMergeNameSuggestions.suggestFromSourceNames(
             listOf("Family Photos 2023", "Family Photos 2024")) ==
