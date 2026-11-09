@@ -86,6 +86,61 @@ object SmartMergePreviewPlannerSuite {
         check(first.entries.map { it.targetPath.single() } ==
             listOf("report.txt", "report (2).txt"))
         check(first.collisionRenames == 1)
+        // Destination opaque identities and capability witnesses also enter
+        // the M2 fingerprint, but unlike selected sources they were not
+        // checked for unpaired UTF-16. Distinct malformed values can encode
+        // identically as '?' and must never produce a reviewable preview.
+        val safeDestination = loc("dest")
+        for (bad in listOf(
+                charArrayOf(0xD800.toChar()).concatToString(),
+                charArrayOf(0xDC00.toChar()).concatToString(),
+                charArrayOf(0xD800.toChar(), 'x', 0xDC00.toChar()).concatToString())) {
+            val invalid = listOf(
+                safeDestination.copy(key = safeDestination.key.copy(
+                    authorityId = "authority-" + bad)),
+                safeDestination.copy(key = safeDestination.key.copy(
+                    rootId = "root-" + bad)),
+                safeDestination.copy(key = safeDestination.key.copy(
+                    containerId = "container-" + bad)),
+                safeDestination.copy(key = safeDestination.key.copy(
+                    grantId = "grant-" + bad)),
+                safeDestination.copy(revision = "revision-" + bad),
+                safeDestination.copy(verifiedNamespace = "namespace-" + bad),
+                safeDestination.copy(verifiedStorageDomain = "storage-" + bad),
+                safeDestination.copy(capabilities =
+                    safeDestination.capabilities + (Capability.READ to
+                        proof().copy(observationId = "read-" + bad))),
+                safeDestination.copy(capabilities =
+                    safeDestination.capabilities + (Capability.CREATE_CHILD to
+                        proof().copy(observationId = "create-" + bad))),
+                // Optional witnesses also participate in the fingerprint.
+                safeDestination.copy(capabilities =
+                    safeDestination.capabilities + (Capability.RENAME to
+                        proof().copy(observationId = "optional-" + bad)))
+            )
+            for (candidate in invalid) {
+                val blocked = plan(sources, trees, destination = candidate)
+                check(!blocked.reviewable && blocked.entries.isEmpty())
+                check("DESTINATION_IDENTITY_UNVERIFIED" in blocked.blockers)
+                check(blocked.collisionRenames == 0 &&
+                    blocked.sharedDirectories == 0)
+                val unknown = candidate.copy(casePolicy = CasePolicy.UNKNOWN)
+                check(!SmartMergeCasefoldIllustrator.inspect(
+                    sources, trees, unknown, index(unknown), "Merged files",
+                    SmartMergeStructure.KEEP_SOURCE_DIRECTORIES, NOW).illustrated)
+            }
+        }
+        val supplementary = charArrayOf(0xD83D.toChar(),
+            0xDCC1.toChar()).concatToString()
+        val fullUnicode = safeDestination.copy(
+            key = safeDestination.key.copy(grantId = "grant-" + supplementary),
+            verifiedNamespace = "namespace-" + supplementary,
+            capabilities = safeDestination.capabilities + (Capability.RENAME to
+                proof().copy(observationId = "optional-" + supplementary)))
+        val goodUnicode = plan(sources, trees, destination = fullUnicode)
+        check(goodUnicode.reviewable && goodUnicode.entries.size == 2)
+        check(goodUnicode.digest != first.digest)
+
         // Browse the exact already-complete M2 snapshot without another
         // provider query, grant renewal, private path logging or merge plan.
         // Pages are bounded independently of the aggregate 10,000-entry cap.

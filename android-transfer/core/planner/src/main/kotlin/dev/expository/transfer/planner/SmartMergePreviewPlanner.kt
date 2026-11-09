@@ -248,6 +248,26 @@ object SmartMergePreviewPlanner {
     }
 
     /**
+     * Destination authority, root, grant and capability stamps participate
+     * in the M2 preview fingerprint. Their Java UTF-8 encoding must never
+     * silently collapse different malformed UTF-16 values into the same '?'
+     * bytes. Source stamps and visible path components are checked elsewhere.
+     * This remains review validation, not a provider no-replace guarantee.
+     */
+    private fun wellFormedDestinationStamp(destination: LocationRef): Boolean {
+        val key = destination.key
+        val identity = listOf(key.authorityId, key.rootId, key.containerId,
+            key.grantId.orEmpty(), destination.revision,
+            destination.verifiedNamespace.orEmpty(),
+            destination.verifiedStorageDomain.orEmpty())
+        return identity.all(SmartMergeNameRules::wellFormedUtf16) &&
+            destination.folder.all(SmartMergeNameRules::wellFormedUtf16) &&
+            destination.capabilities.values.all {
+                SmartMergeNameRules.wellFormedUtf16(it.observationId)
+            }
+    }
+
+    /**
      * [inventories] are aligned to the ordered M1 basket. Each manifest is
      * a FULL, previously reviewed source-tree observation, never a page, a
      * depth-limited partial traversal or a guessed provider-folder listing.
@@ -298,7 +318,8 @@ object SmartMergePreviewPlanner {
             destination.key.rootId.isBlank() ||
             destination.key.containerId.isBlank() ||
             destination.revision.isBlank() ||
-            destination.folder.any { !validName(it) })
+            destination.folder.any { !validName(it) } ||
+            !wellFormedDestinationStamp(destination))
             errors += "DESTINATION_IDENTITY_UNVERIFIED"
         if (destination.capabilities[Capability.READ]?.valid(nowMillis) != true)
             errors += "DESTINATION_PARENT_READ_EXPIRED"
