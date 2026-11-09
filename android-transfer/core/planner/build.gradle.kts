@@ -90,8 +90,17 @@ tasks.register<JavaExec>("smartMergeNamesScenarios") {
     mainClass.set("dev.expository.transfer.planner.SmartMergeNameSuggestionsSuite")
 }
 
+tasks.register<JavaExec>("smartMergeInventoryIntegrityScenarios") {
+    group = "verification"
+    description = "Refuse duplicate or detached source entries in complete M2 inventory pages"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.planner.SmartMergeInventoryIntegritySuite")
+}
+
 // These main()-based suites are not automatically discovered by Gradle's test task.
 // Keep the standard check lifecycle honest for local developers and CI.
 tasks.named("check") {
-    dependsOn("scenarios", "locationScenarios", "recursiveFolderScenarios", "directoryScenarios", "moveScenarios", "workspaceScenarios", "sessionAccessScenarios", "smartMergeBasketScenarios", "smartMergePreviewScenarios", "smartMergeIdentityScenarios", "smartMergeNamesScenarios")
+    dependsOn("scenarios", "locationScenarios", "recursiveFolderScenarios", "directoryScenarios", "moveScenarios", "workspaceScenarios", "sessionAccessScenarios", "smartMergeBasketScenarios", "smartMergePreviewScenarios", "smartMergeIdentityScenarios", "smartMergeNamesScenarios",
+        "smartMergeInventoryIntegrityScenarios")
 }
