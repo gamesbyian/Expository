@@ -968,7 +968,13 @@ function paint(more=false){
   }
   lastFolder=folder;
   const tile=elem('button','tile'),thumb=elem('div','thumb'),glyph=elem('span','glyph',icon(item));thumb.append(glyph);
-  tile.append(thumb,elem('span','filename',item.name),elem('span','meta',scope==='folder'?(item.type==='dir'?'Folder':formatSize(item.size)):(item.path+(item.size?' · '+formatSize(item.size):''))));
+  const recordedDate=state.fileDates.get(item.path)?.time;
+  const dateDetail=item.type==='file'&&$('sortFiles').value==='modified'?
+   Number.isFinite(recordedDate)?' · changed '+new Date(recordedDate).toISOString().slice(0,10):
+   ' · change date unknown':'';
+  tile.append(thumb,elem('span','filename',item.name),elem('span','meta',
+   (scope==='folder'?(item.type==='dir'?'Folder':formatSize(item.size)):
+    (item.path+(item.size?' · '+formatSize(item.size):'')))+dateDetail));
   tile.title=item.path;tile.dataset.path=item.path;tile.setAttribute('aria-pressed',String(state.selected.has(item.path)));if(state.selected.has(item.path))tile.classList.add('selected');
   tile.onclick=()=>item.type==='dir'?navigate(item.path):state.selectionMode&&imageRx.test(item.name)?selectImage(item):openPreview(item);
   if(scope!=='folder'&&item.type==='file'){
@@ -985,7 +991,12 @@ function paint(more=false){
   button.onclick=()=>{state.limit+=80;paint(true)};host.append(button)
  }
  if(!matching.length)host.append(elem('div','empty',scope==='repo'?'No matching files.':'Nothing matches this view.'));updateSelectionControls();
- status(matching.length+' items matched'+(scope==='folder'?' in folder':' across indexed paths')+(state.indexTruncated?' · index incomplete':'')+(state.indexError?' · index unavailable, limited to folder':'')+(matching.length>state.limit?' · showing first '+state.limit:''));
+ const dateCoverage=$('sortFiles').value==='modified'?
+  ' · '+state.visibleItems.filter(x=>x.type==='file'&&
+   Number.isFinite(state.fileDates.get(x.path)?.time)).length+'/'+
+   state.visibleItems.filter(x=>x.type==='file').length+
+   ' visible file dates known (remaining dates unknown)':'';
+ status(matching.length+' items matched'+(scope==='folder'?' in folder':' across indexed paths')+(state.indexTruncated?' · index incomplete':'')+(state.indexError?' · index unavailable, limited to folder':'')+(matching.length>state.limit?' · showing first '+state.limit:'')+dateCoverage);
 }
 const thumbQueue=[];let running=0;
 function documentThumbnail(item,thumb,source=''){
