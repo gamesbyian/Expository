@@ -63,11 +63,9 @@ test('writer rejects path traversal, unsafe Windows targets and ambiguous duplic
 });
 test('publisher rejects malformed UTF-16 paths before Git serialization and collision review',()=>{
  const {api}=setup();
- for(const bad of ['\\uD800','\\uDC00','file\\uD800name.txt','file\\uDC00name.txt',
-  'file\\uD800x\\uDC00name.txt']){
-  // Force evaluated escapes into the actual malformed UTF-16 characters.
-  const value=bad.replace(/\\\\u([0-9a-f]{4})/gi,(_m,hex)=>
-   String.fromCharCode(Number.parseInt(hex,16)));
+ const high=String.fromCharCode(0xD800),low=String.fromCharCode(0xDC00);
+ for(const value of [high,low,'file'+high+'name.txt','file'+low+'name.txt',
+   'file'+high+'x'+low+'name.txt']){
   assert.equal(api.wellFormedUtf16(value),false);
   assert.equal(api.cleanPath(value),false);
   assert.equal(api.cleanPath('safe/'+value),false);
@@ -77,8 +75,7 @@ test('publisher rejects malformed UTF-16 paths before Git serialization and coll
   assert.throws(()=>api.findCollisions([file('okay.txt')],
    {truncated:false,tree:[{path:value,type:'blob'}]}),/malformed/);
  }
- const pair='\\uD83D\\uDCC1'.replace(/\\\\u([0-9a-f]{4})/gi,(_m,hex)=>
-  String.fromCharCode(Number.parseInt(hex,16)));
+ const pair=String.fromCharCode(0xD83D,0xDCC1);
  assert.equal(api.wellFormedUtf16(pair),true);
  assert.equal(api.cleanPath('nested/'+pair+'.png'),true);
  assert.equal(api.branchPath('feature/'+pair),true);
