@@ -82,8 +82,16 @@ tasks.register<JavaExec>("smartMergeIdentityScenarios") {
     mainClass.set("dev.expository.transfer.planner.SmartMergeSourceIdentitySuite")
 }
 
+tasks.register<JavaExec>("smartMergeNamesScenarios") {
+    group = "verification"
+    description = "Pure source-label-only Smart Merge folder name suggestions and missing-range refusal"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.planner.SmartMergeNameSuggestionsSuite")
+}
+
 // These main()-based suites are not automatically discovered by Gradle's test task.
 // Keep the standard check lifecycle honest for local developers and CI.
 tasks.named("check") {
-    dependsOn("scenarios", "locationScenarios", "recursiveFolderScenarios", "directoryScenarios", "moveScenarios", "workspaceScenarios", "sessionAccessScenarios", "smartMergeBasketScenarios", "smartMergePreviewScenarios", "smartMergeIdentityScenarios")
+    dependsOn("scenarios", "locationScenarios", "recursiveFolderScenarios", "directoryScenarios", "moveScenarios", "workspaceScenarios", "sessionAccessScenarios", "smartMergeBasketScenarios", "smartMergePreviewScenarios", "smartMergeIdentityScenarios", "smartMergeNamesScenarios")
 }
