@@ -843,6 +843,11 @@ private fun DeveloperPreview(
                             "-entry Merge review limit. No partial inventory was accepted."
                         return@launch
                     }
+                    // M2 allows 10k across sources, but one recursive
+                    // scanner has an independently qualified 2,048-item cap.
+                    // Preserve BOTH bounds while avoiding unneeded reads.
+                    val sourceLimit = minOf(remaining,
+                        RecursiveFolderCopyPlanner.MAX_ITEMS)
                     mergeInventoryReading = item
                     mergeMessage = "Inspecting " + (index + 1) + " of " +
                         selected.size + " source folders, read-only…"
@@ -850,7 +855,7 @@ private fun DeveloperPreview(
                     val inventory = withContext(Dispatchers.IO) {
                         SafRecursiveSourceScanner(context.contentResolver)
                             .inspectMergeRootInventory(item, generation,
-                                maxEntries = remaining,
+                                maxEntries = sourceLimit,
                                 continueRequested = {
                                     isActive && mergeInventorySerial.get() == serial &&
                                         currentShareEpoch() == shareEpoch &&
@@ -865,9 +870,9 @@ private fun DeveloperPreview(
                         inventory?.manifest?.reviewable != true ||
                         inventory.collected !== item) {
                         mergeMessage = "Source " + (index + 1) +
-                            " could not be fully inspected within the remaining " +
-                            remaining + "-entry budget, or was changed, canceled " +
-                            "or expired. No partial Merge inventory was accepted."
+                            " could not be fully inspected within the " +
+                            sourceLimit + "-entry source scan bound, or was changed, " +
+                            "canceled or expired. No partial Merge inventory was accepted."
                         return@launch
                     }
                     // Keep the SAME aggregate bound used by the immutable
