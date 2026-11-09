@@ -510,15 +510,35 @@ async function recoverTargetedFolder(){
   let ref=branch,tree=[],startDepth=0;
   if(parts.length>8){
    const parent=parts.slice(0,-1).join('/');
-   const key=repo+'@'+branch+'/'+parent;
-   let siblings=state.cache.get(key);
+   const parentKey=repo+'@'+branch+'/'+parent;
+   let siblings=state.cache.get(parentKey);
    if(!siblings)siblings=await json('/repos/'+repo+'/contents/'+pathPart(parent)+'?ref='+enc(branch));
    if(!live())return 0;
    if(!Array.isArray(siblings))throw Error('Parent directory listing unavailable.');
    const candidates=siblings.filter(x=>x.type==='dir'&&x.path===folder&&/^[a-f0-9]{40}$/i.test(x.sha||''));
-   if(candidates.length!==1)throw Error('Exact folder tree SHA unavailable from its parent listing.');
-   ref=candidates[0].sha;
-   startDepth=parts.length;
+   if(candidates.length===1){
+    ref=candidates[0].sha;
+    startDepth=parts.length;
+   }else{
+    // A capped parent Contents response can omit the chosen child. Reuse
+    // the NEAREST already cached ancestor's exact child tree SHA instead.
+    // At most eight nonrecursive tree reads follow; never walk an arbitrary
+    // number of ancestors or guess from a visible folder name alone.
+    let found=false;
+    for(let depth=parts.length-2;depth>=Math.max(0,parts.length-8);depth--){
+     const ancestor=parts.slice(0,depth).join('/');
+     const cached=state.cache.get(repo+'@'+branch+'/'+ancestor);
+     if(!Array.isArray(cached))continue;
+     const childPath=parts.slice(0,depth+1).join('/');
+     const anchors=cached.filter(x=>x.type==='dir'&&x.path===childPath&&/^[a-f0-9]{40}$/i.test(x.sha||''));
+     if(anchors.length!==1)continue;
+     ref=anchors[0].sha;
+     startDepth=depth+1;
+     found=true;
+     break;
+    }
+    if(!found)throw Error('Exact folder tree SHA unavailable from bounded cached ancestors.');
+   }
   }
   for(let depth=startDepth;depth<=parts.length;depth++){
    const result=await json('/repos/'+repo+'/git/trees/'+enc(ref));
