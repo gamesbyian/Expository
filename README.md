@@ -29,7 +29,7 @@ The approved [Expository v1 full logo](assets/branding/magnifier-disk-stack-cent
 - Star public repositories for quick switching, without storing private repository names
 - Preview SVGs, photos, plain/safe Markdown, source files, PDFs, and supported media; galleries show safe static text thumbnails for small HTML/Markdown/data documents, with no execution of repository HTML or scripts
 - Pin two images for side-by-side comparison, touch-friendly reveal, or a bounded local pixel-difference heatmap
-- Select up to 12 images across repository folders, inspect a contact sheet, and save a PNG locally without uploading private art
+- Select up to 12 images across repository folders, inspect a contact sheet, and save a PNG locally without uploading private art. The same loaded images can be viewed as a **browser-local slideshow** with Previous/Next, Play/Pause, keyboard arrows, 3/5/10-second intervals and return to sheet. Playback starts only on Play, makes no new GitHub requests, and stops on modal close or private-session cleanup; actual phone/assistive-technology acceptance remains outstanding.
 - Zoom images from 1× to 4× with two-finger pinch and drag-to-pan gestures, or use keyboard-accessible zoom controls; native page scrolling stays available at fitted 1×. Rotate raster and SVG previews clockwise in 90° steps, with geometry fitted to the stage; rotation never modifies the downloaded original. Where the browser supports the Fullscreen API, the image viewer has a fullscreen/exit control, with Escape exiting fullscreen without abandoning the preview; unsupported/refused fullscreen is clearly surfaced.
 - Inspect the recent Git history of an individual file
 - Expand JSON as a safe tree or switch to raw source
