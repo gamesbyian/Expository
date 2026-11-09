@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch,BlobImpl=globalThis.Blob) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,documentThumbnail,loadThumb,openContainingFolder};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,documentThumbnail,loadThumb,openContainingFolder};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch','Blob',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl,BlobImpl
  );
@@ -577,6 +577,41 @@ test('reopening the same file discards stale text from the previous Blob',async(
  await pending;
  assert.equal(app.state.previewText,null,'old response cannot become new file text');
  assert.equal(get('previewBody').children.length,0);
+});
+
+test('cancelled content search cannot publish hits after asynchronous text decoding',async()=>{
+ const fetcher=async()=>new Response('needle in old private data',{status:200});
+ const {app,get}=boot(fetcher);
+ Object.assign(app.state,{repo:'example/private',branch:'main',indexReady:true});
+ app.state.indexEntries=[{name:'old.txt',path:'secret/old.txt',type:'file',size:26}];
+ get('filter').value='needle';
+ const original=Blob.prototype.text;
+ let finishDecode;
+ Blob.prototype.text=function(){return new Promise(resolve=>{finishDecode=resolve})};
+ try{
+  const pending=app.scanContents();
+  for(let i=0;i<12&&!finishDecode;i++)await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(typeof finishDecode,'function','download completed and text decoding is suspended');
+  app.cancelContentScan();
+  assert.equal(get('searchResults').children.length,0,'cancellation clears existing hits');
+  finishDecode('needle from previous repository');
+  await pending;
+  assert.equal(get('searchResults').children.length,0,'late decode cannot resurrect private search results');
+  assert.equal(app.state.scanning,false);
+ }finally{Blob.prototype.text=original}
+});
+
+test('current content search still returns bounded text matches',async()=>{
+ const fetcher=async()=>new Response('first line\nneedle in second line',{status:200});
+ const {app,get}=boot(fetcher);
+ Object.assign(app.state,{repo:'example/public',branch:'main',indexReady:true});
+ app.state.indexEntries=[{name:'notes.txt',path:'notes.txt',type:'file',size:32}];
+ get('filter').value='needle';
+ await app.scanContents();
+ const hits=get('searchResults').children.filter(x=>x.className==='search-hit');
+ assert.equal(hits.length,1);
+ assert.equal(hits[0].children[0].textContent,'notes.txt:2');
+ assert.equal(app.state.scanning,false);
 });
 
 test('code inspector searches displayed lines without treating source as markup',()=>{
