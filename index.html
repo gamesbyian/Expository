@@ -1627,18 +1627,22 @@ function boundedSourceViewer(text,name){
  fullLine.type='number';fullLine.min='1';fullLine.max=String(sections.at(-1).lastLine);
  fullLine.placeholder='Line';fullLine.setAttribute('aria-label','Original source line across all loaded sections');
  fullGo.type='button';fullGo.setAttribute('aria-label','Go to original source line across sections');
+ // A suspended click or surviving old DOM reference must never operate
+ // on the next account's private source, even if the text happens to match.
+ const ownerItem=state.preview,ownerBlob=state.currentBlob,ownerRepo=state.repo,ownerBranch=state.branch;
+ const live=()=>Boolean(ownerItem&&ownerBlob&&state.preview===ownerItem&&
+  state.currentBlob===ownerBlob&&state.previewText===text&&
+  state.repo===ownerRepo&&state.branch===ownerBranch);
  wrap.jumpToGlobalLine=async number=>{
-  if(!Number.isSafeInteger(number)||number<1||number>sections.at(-1).lastLine)return false;
+  if(!live()||!Number.isSafeInteger(number)||number<1||number>sections.at(-1).lastLine)return false;
   // Find the earliest matching section so the beginning of an unusually
   // long split line wins, rather than an arbitrary continuation chunk.
   const destination=sections.findIndex(x=>number>=x.firstLine&&number<=x.lastLine);
   if(destination<0)return false;
   if(destination===index)return viewer.jumpToLine(number);
-  const item=state.preview,blob=state.currentBlob;
-  if(!item||!blob||state.previewText!==text)return false;
   state.sourceSegment=destination;
   await renderCurrentFile();
-  if(state.preview!==item||state.currentBlob!==blob||state.previewText!==text)return false;
+  if(!live())return false;
   const current=$('previewBody').firstElementChild||$('previewBody').children[0];
   return current?.jumpToLine?.(number)===true
  };
