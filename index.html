@@ -178,13 +178,14 @@ function zipManifest(blob){
    if(uncompressed>ZIP_ENTRY_MAX||compressed>ZIP_MAX_BYTES||flags&1||flags&64||![0,8].includes(method))continue;
    if((madeBy>>>8)===3&&((unixMode&0xf000)!==0&&(unixMode&0xf000)!==0x8000))continue;
    if(method===0&&compressed!==uncompressed)continue;
-   if(seen.has(name.toLowerCase()))continue;
+   const nameKey=name.normalize('NFC').toLowerCase();
+   if(seen.has(nameKey))continue;
    total+=uncompressed;if(total>ZIP_TOTAL_MAX)fail('uncompressed total exceeds 128 MB');
    if(local+30>bytes.length||v.getUint32(local,true)!==0x04034b50)continue;
    const localLen=v.getUint16(local+26,true),localExtra=v.getUint16(local+28,true),start=local+30+localLen+localExtra;
    if(start+compressed>bytes.length||start>offset||v.getUint16(local+8,true)!==method||v.getUint16(local+6,true)!==flags)continue;
    if(zipDecodeName(bytes.subarray(local+30,local+30+localLen),flags)?.replace(/\\/g,'/')!==name)continue;
-   seen.add(name.toLowerCase());entries.push({name,path:name,size:uncompressed,compressed,method,flags,crc,start,type:'file'});
+   seen.add(nameKey);entries.push({name,path:name,size:uncompressed,compressed,method,flags,crc,start,type:'file'});
   }
   if(pos!==offset+size)fail('central directory size mismatch');
   return {blob,entries,skipped:count-entries.length};
@@ -466,7 +467,7 @@ async function api(path,accept,readBody){
   if(!r.ok){
    let secondary=false;
    if(r.status===403&&!r.headers?.get('retry-after')&&r.headers?.get('x-ratelimit-remaining')!=='0'){
-    try{const data=await r.json();secondary=/secondary rate limit|abuse detection|rate limit exceeded/i.test(String(data?.message||''))}catch{}
+    try{const data=await boundedGithubJson(r,64*1024);secondary=/secondary rate limit|abuse detection|rate limit exceeded/i.test(String(data?.message||''))}catch{}
    }
    // A response from a disconnected account must not rate-limit its successor.
    ensureLive();
@@ -479,18 +480,31 @@ async function api(path,accept,readBody){
   return r;
  }finally{state.activeRequests.delete(controller)}
 }
-async function json(path){return api(path,undefined,r=>r.json())}
+// GitHub recursive trees are the largest metadata response. Other endpoints
+// (including a 1,000-entry Contents listing) use a smaller 4 MiB ceiling.
+const JSON_TREE_MAX=24*1024*1024,JSON_API_MAX=4*1024*1024;
+async function boundedGithubJson(response,maxBytes){
+ const blob=await boundedResponseBlob(response,maxBytes,'GitHub JSON');
+ let decoded;
+ try{decoded=new TextDecoder('utf-8',{fatal:true}).decode(await blob.arrayBuffer())}
+ catch{throw Error('GitHub returned invalid UTF-8 JSON.')}
+ try{return JSON.parse(decoded)}catch{throw Error('GitHub returned malformed JSON.')}
+}
+async function json(path){
+ const limit=path.includes('/git/trees/')&&/[?&]recursive=1(?:&|$)/.test(path)?JSON_TREE_MAX:JSON_API_MAX;
+ return api(path,undefined,response=>boundedGithubJson(response,limit))
+}
 function pathPart(s){return s.split('/').map(enc).join('/')}
 function blobUrl(blob,kind='preview'){const u=URL.createObjectURL(blob);(kind==='thumb'?state.thumbUrls:state.previewUrls).add(u);return u}
 function clearUrls(kind){const set=kind==='thumb'?state.thumbUrls:state.previewUrls;for(const u of set)URL.revokeObjectURL(u);set.clear()}
 function clearObjects(){clearUrls('thumb');clearUrls('preview')}
 function withMediaType(blob,name){const ext=name.split('.').at(-1).toLowerCase();const mime={svg:'image/svg+xml',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',avif:'image/avif',bmp:'image/bmp',pdf:'application/pdf',mp4:'video/mp4',webm:'video/webm',mp3:'audio/mpeg',m4a:'audio/mp4',wav:'audio/wav',ogg:'audio/ogg'}[ext];return mime?new Blob([blob],{type:mime}):blob}
 function entryUrl(item){const p=pathPart(item.path);return '/repos/'+state.repo+'/contents/'+p+'?ref='+enc(state.branch)}
-async function boundedResponseBlob(response,maxBytes){
- if(!Number.isSafeInteger(maxBytes)||maxBytes<1||maxBytes>ZIP_MAX_BYTES)throw Error('Invalid preview byte limit.');
+async function boundedResponseBlob(response,maxBytes,kind='File'){
+ if(!Number.isSafeInteger(maxBytes)||maxBytes<1||maxBytes>ZIP_MAX_BYTES)throw Error('Invalid browser read byte limit.');
  const advertised=response.headers?.get?.('content-length');
  if(advertised&&/^\d+$/.test(advertised)&&Number(advertised)>maxBytes)
-  throw Error('File exceeds the '+maxBytes+'-byte browser read limit.');
+  throw Error(kind+' exceeds the '+maxBytes+'-byte browser read limit.');
  // A header or indexed Git blob size is not a trustworthy download bound.
  // Require streaming support so an absent/false Content-Length never makes
  // the browser buffer an arbitrarily large private file before validation.
@@ -505,7 +519,7 @@ async function boundedResponseBlob(response,maxBytes){
    total+=value.byteLength;
    if(total>maxBytes){
     reader.cancel().catch(()=>{});
-    throw Error('File exceeds the '+maxBytes+'-byte browser read limit.');
+    throw Error(kind+' exceeds the '+maxBytes+'-byte browser read limit.');
    }
    chunks.push(value);
   }
