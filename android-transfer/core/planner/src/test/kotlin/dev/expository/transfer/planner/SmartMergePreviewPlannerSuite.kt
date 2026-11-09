@@ -474,6 +474,25 @@ object SmartMergePreviewPlannerSuite {
         check(illustrated.toString() == "SmartMergeCasefoldIllustration(redacted)")
         check(illustrated.changes.single().toString() ==
             "SmartMergeIllustratedChange(redacted)")
+        check(illustrated.layoutOffset == 0 &&
+            illustrated.layoutEntries.size == 2 &&
+            illustrated.nextLayoutOffset == null)
+        check(illustrated.layoutEntries.map { it.targetPath } ==
+            listOf(listOf("report.txt"), listOf("report (2).txt")))
+        check(illustrated.layoutEntries.map { it.sourceNumber } == listOf(1, 2))
+        check(!illustrated.layoutEntries.first().renamedForCollision)
+        check(illustrated.layoutEntries.last().renamedForCollision)
+        check(illustrated.layoutEntries.none { it.sharedDirectory })
+        check(illustrated.layoutEntries.last().toString() ==
+            "SmartMergeIllustratedLayoutEntry(redacted)")
+        check(runCatching {
+            (illustrated.layoutEntries as
+                MutableList<SmartMergeIllustratedLayoutEntry>).clear()
+        }.isFailure)
+        check(runCatching {
+            (illustrated.layoutEntries.last().targetPath as
+                MutableList<String>).clear()
+        }.isFailure)
         check(illustrate(sourceTrees = albums).hypotheticalRenames == 1)
         val coalescedIllustration = illustrate(sourceTrees = albums,
             mode = SmartMergeStructure.COALESCE_MATCHING_DIRECTORIES)
@@ -607,16 +626,45 @@ object SmartMergePreviewPlannerSuite {
         // A large hypothetical collision review must expose every change
         // through bounded, deterministic pages, without an executable digest
         // or a persisted cursor. The first twelve are never the whole story.
-        fun page(offset: Int, parent: PagedLocationIndex? = index(unknown)) =
+        fun page(offset: Int, parent: PagedLocationIndex? = index(unknown),
+            layoutOffset: Int = 0) =
             SmartMergeCasefoldIllustrator.inspect(
                 twentyBasket, twentyInventory, unknown, parent,
                 "Merged files", SmartMergeStructure.KEEP_SOURCE_DIRECTORIES,
-                NOW, changeOffset = offset)
+                NOW, changeOffset = offset, layoutOffset = layoutOffset)
         val firstPage = page(0)
         check(firstPage.illustrated && !firstPage.executable)
         check(firstPage.totalChanges == 19 && firstPage.changeOffset == 0)
         check(firstPage.changes.size == SmartMergeCasefoldIllustrator.MAX_DISPLAY_CHANGES)
         check(firstPage.nextChangeOffset == 12)
+        check(firstPage.mappedChildren == 20)
+        check(firstPage.layoutEntries.size ==
+            SmartMergeCasefoldIllustrator.MAX_DISPLAY_LAYOUT)
+        check(firstPage.layoutOffset == 0 && firstPage.nextLayoutOffset == 12)
+        check(firstPage.layoutEntries.first().sourceNumber == 1)
+        check(firstPage.layoutEntries.first().targetPath == listOf("same.txt"))
+        check(firstPage.layoutEntries.last().sourceNumber == 12)
+        check(firstPage.layoutEntries.last().targetPath ==
+            listOf("same (12).txt"))
+        val laterLayout = page(0, layoutOffset = 12)
+        check(laterLayout.illustrated && laterLayout.layoutOffset == 12)
+        check(laterLayout.layoutEntries.size == 8 &&
+            laterLayout.nextLayoutOffset == null)
+        check(laterLayout.layoutEntries.first().sourceNumber == 13)
+        check(laterLayout.layoutEntries.last().sourceNumber == 20)
+        check(laterLayout.layoutEntries.last().targetPath ==
+            listOf("same (20).txt"))
+        check((firstPage.layoutEntries + laterLayout.layoutEntries)
+            .map { it.sourceNumber } == (1..20).toList())
+        check(page(12, layoutOffset = 12).illustrated)
+        for (badLayout in listOf(-12, 1, 11, 24, 10_000)) {
+            val blocked = page(0, layoutOffset = badLayout)
+            check(!blocked.illustrated && blocked.layoutEntries.isEmpty() &&
+                blocked.nextLayoutOffset == null)
+            check(blocked.blockers.any {
+                it.startsWith("ILLUSTRATION_LAYOUT_")
+            })
+        }
         check(firstPage.changes.first().sourceNumber == 2)
         check(firstPage.changes.last().sourceNumber == 13)
         val secondPage = page(12)
@@ -636,7 +684,8 @@ object SmartMergePreviewPlannerSuite {
             check(badPage.blockers.any { it.startsWith("ILLUSTRATION_PAGE_") })
         }
         val invalidParentPage = page(12, null)
-        check(!invalidParentPage.illustrated && invalidParentPage.changes.isEmpty())
+        check(!invalidParentPage.illustrated && invalidParentPage.changes.isEmpty() &&
+            invalidParentPage.layoutEntries.isEmpty())
         check("DESTINATION_PARENT_INCOMPLETE" in invalidParentPage.blockers)
         val oneDifference = illustrate()
         check(oneDifference.illustrated && oneDifference.totalChanges == 1 &&
@@ -648,6 +697,8 @@ object SmartMergePreviewPlannerSuite {
             SmartMergeStructure.KEEP_SOURCE_DIRECTORIES, NOW)
         check(noCollision.illustrated && noCollision.totalChanges == 0 &&
             noCollision.nextChangeOffset == null && noCollision.changes.isEmpty())
+        check(noCollision.layoutEntries.size == 2 &&
+            noCollision.layoutEntries.none { it.renamedForCollision })
 
         // The first-free suffix policy must account for original numbered names.
         val c = source("C", "saf-C")
