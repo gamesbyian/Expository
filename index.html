@@ -393,6 +393,9 @@ function pumpZipThumbs(){
 }
 function zipViewer(manifest,parent,folder='',visible=120){
  cancelZipThumbs();
+ // The preceding ZIP folder's image thumbnails are no longer visible.
+ // Revoke their Blob URLs on every redraw, not just when the modal closes.
+ clearUrls('preview');
  const thumbEpoch=zipThumbEpoch;
  if(typeof IntersectionObserver==='function'){
   zipThumbObserver=new IntersectionObserver(events=>{
