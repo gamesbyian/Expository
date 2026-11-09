@@ -190,12 +190,65 @@ async function inspectDestination(token,repo,base,prefix,source,signal){
  if(collisions.length)throw Error('Existing files or directory conflicts: '+collisions.slice(0,8).join(', ')+(collisions.length>8?' …':''));
  return {repo,base,head,treeSha,entries};
 }
+/**
+ * GitHub's default 40-hex Git blob ID is SHA-1 over
+ * "blob <byte length>\0" followed by the exact file bytes.
+ * WebCrypto is used for Git object identity correspondence, not as a
+ * collision-resistant security signature. The selected Blob is immutable,
+ * and processing is bounded by the existing 16 MiB member cap.
+ */
+async function gitBlobIdentity(blob){
+ if(!(blob instanceof Blob)||blob.size>MAX_SINGLE)
+  throw Error('Selected file cannot be verified within the publisher limit.');
+ if(typeof crypto==='undefined'||!crypto.subtle?.digest)
+  throw Error('This browser cannot verify Git blob identities; publication stopped.');
+ const bytes=new Uint8Array(await blob.arrayBuffer());
+ const header=new TextEncoder().encode('blob '+bytes.byteLength+'\0');
+ const payload=new Uint8Array(header.length+bytes.length);
+ payload.set(header);
+ payload.set(bytes,header.length);
+ const digest=new Uint8Array(await crypto.subtle.digest('SHA-1',payload));
+ return Array.from(digest,b=>b.toString(16).padStart(2,'0')).join('')
+}
 function encodeBlob(blob){
  return new Promise((resolve,reject)=>{
   const reader=new FileReader();
   reader.onload=()=>{const value=reader.result;if(typeof value!=='string'||!value.includes(','))reject(Error('File encoding failed'));else resolve(value.slice(value.indexOf(',')+1))};
   reader.onerror=()=>reject(Error('File cannot be read'));reader.readAsDataURL(blob)
  });
+}
+/**
+ * GitHub's successful POST /git/refs response is only an acknowledgement.
+ * Independently GET the new branch, commit and complete tree, then compare
+ * every uploaded path to its exact Git blob object ID. No retry or mutation:
+ * an ambiguous result after ref creation must remain review-required.
+ *
+ * This checks returned Git object IDs against upload expectations, without
+ * downloading branch bytes again or proving the base tree is unchanged.
+ */
+async function verifyPublishedBranch(plan,token,branch,commitSha,treeSha,uploaded,signal){
+ const root='/repos/'+plan.repo;
+ const ref=await github(token,'GET',root+'/git/ref/heads/'+encodeGitPath(branch),undefined,signal);
+ if(ref?.ref!=='refs/heads/'+branch||ref?.object?.sha!==commitSha)
+  throw Error('New branch identity was not independently confirmed.');
+ const commit=await github(token,'GET',root+'/git/commits/'+commitSha,undefined,signal);
+ if(commit?.sha!==commitSha||commit?.tree?.sha!==treeSha||
+    !Array.isArray(commit.parents)||commit.parents.length!==1||
+    commit.parents[0]?.sha!==plan.head)
+  throw Error('New branch commit identity, tree or parent differs from review.');
+ const tree=await github(token,'GET',root+'/git/trees/'+treeSha+'?recursive=1',undefined,signal);
+ if(tree?.sha!==treeSha)throw Error('Published tree identity differs from review.');
+ // The existing collision validator also rejects truncated, malformed,
+ // duplicate-case or ambiguous Unicode identities in the observed tree.
+ findCollisions([],tree);
+ const published=new Map(tree.tree.map(entry=>[entry.path,entry]));
+ for(const expected of uploaded){
+  const actual=published.get(expected.path);
+  if(!actual||actual.type!=='blob'||actual.mode!=='100644'||
+    actual.sha!==expected.sha)
+   throw Error('An uploaded file identity was missing or differed on readback.');
+ }
+ return uploaded.length
 }
 async function writeNewBranch(plan,token,branch,onProgress,signal){
  if(!branchPath(branch)||branch===plan.base)throw Error('Unsafe proposed output branch.');
@@ -206,14 +259,22 @@ async function writeNewBranch(plan,token,branch,onProgress,signal){
  const entries=[];
  for(let i=0;i<plan.entries.length;i++){
   if(signal?.aborted)throw Error('Publishing cancelled before branch creation.');
-  const file=plan.entries[i];onProgress('Uploading '+(i+1)+'/'+plan.entries.length+' · '+file.path);
+  const file=plan.entries[i];onProgress('Verifying and uploading '+(i+1)+'/'+plan.entries.length+' · '+file.path);
+  // Compute the Git object ID from the chosen bytes first. The server
+  // acknowledgement and the later readback must both agree with this ID.
+  const expectedSha=await gitBlobIdentity(file.blob);
+  if(signal?.aborted)throw Error('Publishing cancelled before branch creation.');
   const content=await encodeBlob(file.blob);
+  if(signal?.aborted)throw Error('Publishing cancelled before branch creation.');
   const result=await github(token,'POST',prefix+'/git/blobs',{content,encoding:'base64'},signal);
-  if(!/^[a-f0-9]{40}$/i.test(result?.sha||''))throw Error('Blob creation failed integrity response.');
-  entries.push({path:file.path,mode:'100644',type:'blob',sha:result.sha})
+  if(!/^[a-f0-9]{40}$/i.test(result?.sha||'')||
+    result.sha.toLowerCase()!==expectedSha)
+   throw Error('GitHub blob identity differs from the selected file bytes. No branch was created.');
+  entries.push({path:file.path,mode:'100644',type:'blob',sha:expectedSha})
  }
  onProgress('Preparing an atomic tree and commit…');
  const newTree=await github(token,'POST',prefix+'/git/trees',{base_tree:plan.treeSha,tree:entries},signal);
+ if(!/^[a-f0-9]{40}$/i.test(newTree?.sha||''))throw Error('Tree creation returned no valid SHA.');
  const commit=await github(token,'POST',prefix+'/git/commits',{message:'Extract ZIP files with Expository',tree:newTree.sha,parents:[plan.head]},signal);
  if(!/^[a-f0-9]{40}$/i.test(commit?.sha||''))throw Error('Commit creation returned no valid SHA.');
  if(signal?.aborted)throw Error('Publishing stopped before branch creation.');
@@ -222,7 +283,19 @@ async function writeNewBranch(plan,token,branch,onProgress,signal){
  // The only ref mutation is a brand-new branch; no update to main or existing branches.
  const ref=await github(token,'POST',prefix+'/git/refs',{ref:'refs/heads/'+branch,sha:commit.sha},signal);
  if(ref?.object?.sha!==commit.sha)throw Error('GitHub branch creation did not confirm the commit SHA.');
- return {commitSha:commit.sha,branch};
+ onProgress('GitHub acknowledged the new branch. Checking branch, commit and uploaded files…');
+ let verifiedEntries;
+ try{
+  verifiedEntries=await verifyPublishedBranch(
+   plan,token,branch,commit.sha,newTree.sha,entries,signal);
+ }catch{
+  // The branch may ALREADY exist. Never replay object or ref writes on an
+  // unavailable, stale or contrary readback. Let the operator inspect it.
+  const uncertain=Error('GitHub acknowledged a new branch, but its file identities could not be independently confirmed. Inspect the branch before any further publication.');
+  uncertain.publishedButUnverified=true;
+  throw uncertain;
+ }
+ return {commitSha:commit.sha,branch,verifiedEntries};
 }
 function renderIncoming(){
  const files=$('files');files.replaceChildren();$('incoming').textContent=incoming?incoming.entries.length+' verified files handed off in browser memory from '+incoming.sourceName:'Waiting for Expository…';
@@ -261,8 +334,15 @@ async function startPublish(){
   const result=await writeNewBranch(choice.plan,choice.token,newBranch,status,writerAbort.signal);
   const a=document.createElement('a');a.href='https://github.com/'+choice.repo+'/tree/'+encodeGitPath(result.branch);a.target='_blank';a.rel='noopener noreferrer';a.textContent='Open the new GitHub branch';
   $('destinations').replaceChildren(a);
-  status('Created '+newBranch+' at commit '+result.commitSha.slice(0,12)+'. Base branch unchanged. You can open a pull request on GitHub.');
- }catch(e){status('Publishing did not complete: '+e.message+'. Check GitHub for the new branch before retrying. The base branch was not updated.')}
+  status('Confirmed '+result.verifiedEntries+' uploaded file identities on the new branch '+newBranch+' at commit '+result.commitSha.slice(0,12)+'. Base branch unchanged. You can open a pull request on GitHub.');
+ }catch(e){
+  if(e.publishedButUnverified){
+   const link=document.createElement('a');link.href='https://github.com/'+choice.repo+'/tree/'+encodeGitPath(newBranch);
+   link.target='_blank';link.rel='noopener noreferrer';link.textContent='Inspect the possibly created branch';
+   $('destinations').replaceChildren(link);
+   status('Publication needs manual review: '+e.message);
+  }else status('Publishing did not complete: '+e.message+'. Check GitHub for the new branch before retrying. The base branch was not updated.');
+ }
  finally{busy=false;writerAbort=null;$('cancel').disabled=true;$('review').disabled=false;$('token').value='';review=null}
 }
 function receiveBundle(packet){

@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch,BlobImpl=globalThis.Blob) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,documentThumbnail,loadThumb,openContainingFolder};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,sourceSections,boundedSourceViewer,navigate,recordRecentFolder,paintRecentFolders,clearRecentFolders,openSearchHit,documentThumbnail,loadThumb,openContainingFolder};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch','Blob',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl,BlobImpl
  );
@@ -43,6 +43,102 @@ test('browser source parses and controls have matching elements',()=>{
  for(const id of ['tree','scope','filter','copyFolder','copyFile','disconnect','preview','prevPreview','nextPreview'])
    assert.ok(html.includes('id="'+id+'"'), id+' exists');
 });
+test('recent folders stay ordered, bounded, accessible, and in tab memory only',()=>{
+ const {app,get}=boot();
+ app.state.repo='example/private';app.state.branch='main';app.state.repoIsPrivate=true;
+ app.recordRecentFolder('secret/2026/contracts');app.recordRecentFolder('src');
+ app.recordRecentFolder('secret/2026/contracts');
+ assert.deepEqual(app.state.recentFolders,['secret/2026/contracts','src']);
+ const nav=get('recentFolders');
+ assert.equal(nav.children.length,2);
+ assert.equal(nav.children[0].textContent,'↶ contracts');
+ assert.equal(nav.children[0].title,'secret/2026/contracts');
+ assert.match(nav.children[0].getAttribute('aria-label'),/Open recent folder/);
+ assert.equal(get('clearRecents').hidden,false);
+ app.recordRecentFolder('secret/../up');
+ assert.equal(app.state.recentFolders.length,2,'reject unsafe paths');
+ for(let i=0;i<16;i++)app.recordRecentFolder('folder/'+i);
+ assert.equal(app.state.recentFolders.length,8,'bound recent folder paths');
+ assert.equal(app.state.recentFolders[0],'folder/15');
+ assert.equal(app.state.recentFolders.at(-1),'folder/8');
+ app.clearRecentFolders();
+ assert.deepEqual(app.state.recentFolders,[]);
+ assert.equal(get('clearRecents').hidden,true);
+ assert.equal(nav.children.length,1,'empty state without private paths');
+ app.recordRecentFolder('secret/very-private');
+ app.resetSession();
+ assert.deepEqual(app.state.recentFolders,[]);
+ assert.equal(get('recentFolders').children.length,1);
+ assert.ok(!get('recentFolders').children[0].textContent.includes('very-private'),
+  'disconnect must scrub private recent navigation');
+ assert.equal(get('clearRecents').hidden,true);
+});
+
+test('only successful, current-generation folder reads enter recent history',async()=>{
+ const requests=[];
+ const fetcher=async url=>{
+  requests.push(url);
+  if(url.includes('/contents/bad?'))return new Response('not found',{status:404});
+  return new Response(JSON.stringify([]),{status:200});
+ };
+ const {app,get}=boot(fetcher);
+ app.state.repo='example/public';app.state.branch='main';app.state.repoIsPrivate=false;
+ assert.equal(await app.navigate('docs'),true);
+ assert.deepEqual(app.state.recentFolders,['docs']);
+ assert.equal(await app.navigate('bad'),false);
+ assert.deepEqual(app.state.recentFolders,['docs'],'missing folders must not enter recents');
+ assert.equal(await app.navigate('src'),true);
+ assert.deepEqual(app.state.recentFolders,['src','docs']);
+ assert.equal(get('recentFolders').children[0].textContent,'↶ src');
+ assert.equal(requests.length,3);
+});
+
+test('delayed superseded navigation cannot reinsert a stale private path',async()=>{
+ let release;
+ const fetcher=url=>{
+  if(url.includes('/contents/old?'))return new Promise(resolve=>{
+   release=()=>resolve(new Response(JSON.stringify([]),{status:200}))
+  });
+  return Promise.resolve(new Response(JSON.stringify([]),{status:200}));
+ };
+ const {app}=boot(fetcher);
+ app.state.repo='example/private';app.state.branch='main';
+ const stale=app.navigate('old');
+ await new Promise(resolve=>setImmediate(resolve));
+ const current=app.navigate('current');
+ assert.equal(await current,true);
+ release();assert.equal(await stale,false);
+ assert.deepEqual(app.state.recentFolders,['current']);
+});
+test('mobile recent-folder disclosure reuses the same tab-only history and clears it',()=>{
+ const {app,get}=boot();
+ Object.assign(app.state,{repo:'private/repo',branch:'main',repoIsPrivate:true});
+ app.recordRecentFolder('');
+ assert.equal(get('recentJump').hidden,true,'current root cannot be its own shortcut');
+ app.recordRecentFolder('private/project');
+ app.recordRecentFolder('private/project/notes');
+ app.state.path='private/project/notes';
+ app.paintRecentFolders();
+ const jumps=get('recentJumpLinks').children;
+ assert.equal(get('recentJump').hidden,false);
+ assert.equal(get('recentJumpSummary').textContent,'Recent folders (2)');
+ assert.deepEqual(jumps.map(x=>x.textContent),['private/project','Repository root']);
+ assert.equal(jumps[0].getAttribute('aria-label'),'Open recent folder: private/project');
+ assert.equal(jumps[0].title,'private/project');
+ assert.equal(jumps[0].type,'button');
+ assert.deepEqual(app.state.recentFolders,
+  ['private/project/notes','private/project',''],'inline navigation creates no separate history');
+ app.clearRecentFolders();
+ assert.equal(get('recentJump').hidden,true);
+ assert.equal(get('recentJumpLinks').children.length,0,
+  'manual Clear must remove private folder names from the mobile DOM');
+ app.recordRecentFolder('private/secret');
+ app.resetSession();
+ assert.equal(get('recentJumpLinks').children.length,0,
+  'disconnect removes private jump labels as well as sidebar history');
+ assert.equal(get('recentJump').hidden,true);
+});
+
 test('folder index produces ancestry; collapsible tree limits DOM rows',()=>{
  const {app,get}=boot();
  app.treeAdd('design/storyboards/P0');app.treeAdd('design/proposals');
@@ -687,6 +783,126 @@ test('current content search still returns bounded text matches',async()=>{
  assert.equal(app.state.scanning,false);
 });
 
+test('large source sections align to line endings, retain global line numbering, and reuse in-memory bytes',async()=>{
+ const text=Array.from({length:8000},(_,i)=>'line'+i+' '+('x'.repeat(80))).join('\n');
+ assert.ok(text.length>500000);
+ const {app,get}=boot();
+ const sections=app.sourceSections(text);
+ assert.equal(sections.length,2);
+ assert.equal(sections[0].start,0);
+ assert.ok(sections[0].end<=500000,'section must stay within 500k chars');
+ assert.equal(text[sections[0].end-1],'\n','prefer complete lines when available');
+ assert.equal(sections[1].start,sections[0].end,'source sections must cover every character');
+ assert.equal(sections[1].partialStart,false);
+ assert.equal(sections[0].partialEnd,false);
+ assert.ok(sections[1].firstLine>1);
+ const file={name:'large.ts',path:'src/large.ts',type:'file',size:text.length};
+ app.state.repo='example/public';app.state.branch='main';
+ app.state.preview=file;app.state.currentBlob=new Blob([text]);app.state.previewText=text;
+ await app.renderCurrentFile();
+ let shell=get('previewBody').children[0];
+ assert.equal(shell.className,'source-segments');
+ assert.equal(shell.children[0].children[0].disabled,true);
+ assert.equal(shell.children[0].children[1].disabled,false);
+ assert.match(shell.children[0].children[2].textContent,/Section 1 of 2/);
+ assert.ok(app.state.sourceRanges?.sections===sections ||
+           app.state.sourceRanges?.sections.length===sections.length);
+ await shell.children[0].children[1].onclick();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(app.state.sourceSegment,1);
+ shell=get('previewBody').children[0];
+ assert.match(shell.children[0].children[2].textContent,/Section 2 of 2/);
+ assert.equal(shell.children[0].children[1].disabled,true);
+ const viewer=shell.children[1],pager=viewer.children.find(node=>node.className==='code-pages');
+ assert.equal(pager.children[1].textContent.startsWith(sections[1].firstLine+'–'),true);
+ assert.equal(viewer.jumpToLine(sections[1].firstLine),true);
+ assert.equal(viewer.children.at(-1).children[0].className,'code-line code-find-current');
+ assert.equal(shell.jumpToLine(1),false,'unloaded sections do not invent DOM rows');
+ await shell.children[0].children[0].onclick();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(app.state.sourceSegment,0,'can return to first section');
+ app.resetSession();
+ assert.equal(app.state.sourceRanges,null,'disconnect discards private text reference');
+ assert.equal(app.state.sourceSegment,0);
+});
+
+test('long individual line gets explicit continuation and never splits a surrogate pair',()=>{
+ const {app}=boot();
+ const text='a'.repeat(499999)+'😀'+'z'.repeat(22);
+ const sections=app.sourceSections(text);
+ assert.equal(sections.length,2);
+ assert.equal(sections[0].end,499999,'do not split the UTF-16 surrogate pair');
+ assert.equal(text.slice(sections[1].start,sections[1].start+2),'😀');
+ assert.equal(sections[0].partialEnd,true);
+ assert.equal(sections[1].partialStart,true);
+ assert.equal(sections[1].firstLine,1,'continued physical line keeps its original number');
+ const view=app.boundedSourceViewer(text,'single-line.js');
+ assert.match(view.children[0].children[2].textContent,/ends mid-line/);
+ app.state.sourceSegment=1;
+ const continued=app.boundedSourceViewer(text,'single-line.js');
+ assert.match(continued.children[0].children[2].textContent,/starts mid-line/);
+});
+
+test('windowed source viewer uses absolute line offsets for controls, symbols and jump',()=>{
+ const {app}=boot();
+ const view=app.sourceViewer('function alpha() {}\nfunction beta() {}','code.js',false,702);
+ const bar=view.children[0],pager=view.children.find(x=>x.className==='code-pages');
+ assert.equal(bar.children[4].min,'702');
+ assert.equal(bar.children[4].max,'703');
+ assert.equal(pager.children[1].textContent,'702–703 / 703 lines');
+ assert.equal(view.children.at(-1).children[0].children[0].textContent,'702');
+ assert.equal(view.jumpToLine(703),true);
+ assert.equal(view.jumpToLine(701),false);
+ const symbols=view.children.find(x=>x.className==='outline-panel');
+ assert.match(symbols.children[1].children[0].textContent,/L702/);
+ assert.match(symbols.children[1].children[1].textContent,/L703/);
+});
+
+test('source viewer jumps to global lines beyond its current 500-line window',()=>{
+ const {app}=boot();
+ const view=app.sourceViewer(Array.from({length:1307},(_,i)=>'source '+(i+1)).join('\n'),'long.ts');
+ const pager=view.children.find(node=>node.className==='code-pages');
+ const pre=view.children.at(-1);
+ assert.equal(pager.children[1].textContent,'1–500 / 1307 lines');
+ assert.equal(view.jumpToLine(1207),true);
+ assert.equal(pager.children[1].textContent,'1001–1307 / 1307 lines');
+ assert.equal(pre.children[206].className,'code-line code-find-current');
+ assert.equal(view.children[0].children[4].value,'1207');
+ assert.equal(view.children[0].children[6].textContent,'Line 1207 of 1307');
+ assert.equal(view.jumpToLine(1308),false);
+ assert.equal(pager.children[1].textContent,'1001–1307 / 1307 lines','out-of-range jump cannot change window');
+});
+
+test('content search opens a deep Markdown match in raw windowed source and allows rendered toggle',async()=>{
+ const markdown=Array.from({length:705},(_,i)=>i===650?'needle in line 651':'content '+i).join('\n');
+ const fetcher=async()=>new Response(markdown,{status:200});
+ const {app,get}=boot(fetcher);
+ Object.assign(app.state,{repo:'example/public',branch:'main',repoRequest:1,indexReady:true});
+ const file={name:'notes.md',path:'docs/notes.md',size:markdown.length,type:'file'};
+ app.state.indexEntries=[file];app.state.visibleItems=[file];
+ get('filter').value='needle';
+ await app.scanContents();
+ const hit=get('searchResults').children.find(node=>node.className==='search-hit');
+ assert.ok(hit,'bounded scan produced the deep source-line result');
+ assert.match(hit.children[0].textContent,/notes.md:651/);
+ assert.equal(await hit.onclick(),true,'search hit must jump to its actual loaded line');
+ const viewer=get('previewBody').children[0],pager=viewer.children.find(node=>node.className==='code-pages');
+ assert.equal(pager.children[1].textContent,'501–705 / 705 lines');
+ assert.equal(viewer.children.at(-1).children[150].className,'code-line code-find-current');
+ assert.equal(get('structuredToggle').hidden,false);
+ assert.equal(get('structuredToggle').textContent,'Rendered Markdown');
+ await get('structuredToggle').onclick();
+ assert.equal(get('structuredToggle').textContent,'Raw source');
+ assert.notEqual(get('previewBody').children[0].className,'code-view','Markdown is rendered again');
+});
+
+test('content-search jump refuses a file from a disconnected repository',async()=>{
+ const {app,get}=boot(async()=>new Response('needle',{status:200}));
+ Object.assign(app.state,{repo:'new/repository',branch:'main',repoRequest:2});
+ const file={name:'stale.js',path:'secret/stale.js',size:6,type:'file'};
+ assert.equal(await app.openSearchHit(file,0,'old/repository','main'),false);
+ assert.equal(get('previewBody').children.length,0,'no stale source preview mounted');
+});
 test('code inspector searches displayed lines without treating source as markup',()=>{
  const {app}=boot();
  const view=app.sourceViewer('const target = 1;\nconst other = 2;\n// target again','example.js');

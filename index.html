@@ -32,7 +32,7 @@ main{max-width:1600px;margin:auto;padding:16px;display:grid;grid-template-column
 body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1b2130;--dim:#566173;--accent:#176596;--shadow:0 18px 48px #161b2733;color-scheme:light}body.light header{background:#fffffff0}body.light .field,body.light .thumb{background:#f7f8fa}body.light .preview-body pre{background:#edf0f5}
 .refine{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 14px;border-bottom:1px solid var(--stroke)}.refine .field{width:auto;min-width:105px;max-width:180px;flex:1;padding:8px;min-height:44px}.refine label{display:flex;align-items:center;gap:7px}.refine input[type=range]{width:100px;accent-color:var(--accent);min-height:38px}.refine .pill{padding:8px 11px}
 .items.grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--tile-min,145px)),1fr))}.items.grid .thumb{height:clamp(92px,calc(var(--tile-min,145px) * .75),240px)}
-.code-view{display:block;max-width:100%;overflow:auto;padding:8px 0!important;white-space:pre!important;overflow-wrap:normal!important;line-height:1.6;font-size:12px!important}.code-line{display:block;min-height:1.5em;padding-right:10px}.code-line:hover{background:#ffffff0a}.line-num{display:inline-block;user-select:none;color:#737c94;text-align:right;width:3.4rem;padding:0 12px 0 7px;border-right:1px solid var(--stroke);margin-right:13px;position:sticky;left:0;background:var(--panel2)}.tok-comment{color:#829093}.tok-string{color:#a7d987}.tok-num{color:#dbaa76}.tok-keyword{color:#bda0ee}.tok-type{color:#7ac8e7}.code-toolbar{display:flex;gap:8px;flex-wrap:wrap}.code-pages{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:8px 0}.code-pages button{min-height:44px}.code-pages span{flex:1;text-align:center;min-width:110px}.code-toolbar{align-items:center;margin-bottom:8px}.code-toolbar .code-find{min-height:44px;width:min(100%,190px);flex:1 1 140px;background:var(--panel2);color:var(--text);border:1px solid var(--stroke);border-radius:8px;padding:9px}.code-toolbar .code-line-number{min-height:44px;width:75px;background:var(--panel2);color:var(--text);border:1px solid var(--stroke);border-radius:8px;padding:9px}.code-toolbar button{min-height:44px;padding:8px 11px}.code-line.code-find-hit{background:#3c506b55}.code-line.code-find-current{background:#3c7a9a75;outline:1px solid var(--accent);outline-offset:-1px}.code-search-info{flex:1 1 100%;font-size:11px}.outline-panel{margin:8px 0;border:1px solid var(--stroke);border-radius:10px;padding:7px 9px;background:var(--panel2)}.outline-panel summary{cursor:pointer;min-height:38px;padding:8px;color:var(--accent);font-size:12px;font-weight:700}.outline-list{display:flex;flex-wrap:wrap;gap:7px;max-height:210px;overflow:auto;padding:6px 0}.outline-list .pill{min-height:44px;font-size:12px;max-width:100%;overflow-wrap:anywhere;text-align:left}.search-hit{display:block;text-align:left;border:1px solid var(--stroke);border-radius:10px;background:var(--panel2);padding:10px;color:var(--text);width:100%;overflow-wrap:anywhere}.search-hit small{display:block;color:var(--dim)}#searchResults{padding:0 14px 14px;display:grid;gap:7px}#favorites button{width:100%;text-align:left;overflow-wrap:anywhere}
+.code-view{display:block;max-width:100%;overflow:auto;padding:8px 0!important;white-space:pre!important;overflow-wrap:normal!important;line-height:1.6;font-size:12px!important}.code-line{display:block;min-height:1.5em;padding-right:10px}.code-line:hover{background:#ffffff0a}.line-num{display:inline-block;user-select:none;color:#737c94;text-align:right;width:3.4rem;padding:0 12px 0 7px;border-right:1px solid var(--stroke);margin-right:13px;position:sticky;left:0;background:var(--panel2)}.tok-comment{color:#829093}.tok-string{color:#a7d987}.tok-num{color:#dbaa76}.tok-keyword{color:#bda0ee}.tok-type{color:#7ac8e7}.code-toolbar{display:flex;gap:8px;flex-wrap:wrap}.code-pages{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:8px 0}.code-pages button{min-height:44px}.code-pages span{flex:1;text-align:center;min-width:110px}.code-toolbar{align-items:center;margin-bottom:8px}.code-toolbar .code-find{min-height:44px;width:min(100%,190px);flex:1 1 140px;background:var(--panel2);color:var(--text);border:1px solid var(--stroke);border-radius:8px;padding:9px}.code-toolbar .code-line-number{min-height:44px;width:75px;background:var(--panel2);color:var(--text);border:1px solid var(--stroke);border-radius:8px;padding:9px}.code-toolbar button{min-height:44px;padding:8px 11px}.code-line.code-find-hit{background:#3c506b55}.code-line.code-find-current{background:#3c7a9a75;outline:1px solid var(--accent);outline-offset:-1px}.code-search-info{flex:1 1 100%;font-size:11px}.source-segments{display:flex;flex-direction:column;gap:10px;min-width:0}.source-segment-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.source-segment-controls button{min-height:44px}.source-segment-controls .hint{flex:1 1 100%;overflow-wrap:anywhere}.outline-panel{margin:8px 0;border:1px solid var(--stroke);border-radius:10px;padding:7px 9px;background:var(--panel2)}.outline-panel summary{cursor:pointer;min-height:38px;padding:8px;color:var(--accent);font-size:12px;font-weight:700}.outline-list{display:flex;flex-wrap:wrap;gap:7px;max-height:210px;overflow:auto;padding:6px 0}.outline-list .pill{min-height:44px;font-size:12px;max-width:100%;overflow-wrap:anywhere;text-align:left}.search-hit{display:block;text-align:left;border:1px solid var(--stroke);border-radius:10px;background:var(--panel2);padding:10px;color:var(--text);width:100%;overflow-wrap:anywhere}.search-hit small{display:block;color:var(--dim)}#searchResults{padding:0 14px 14px;display:grid;gap:7px}#favorites button{width:100%;text-align:left;overflow-wrap:anywhere}#recentFolders button{width:100%;min-height:44px;text-align:left;overflow-wrap:anywhere;word-break:break-word}#clearRecents{min-height:44px}
 @media(max-width:760px){.refine{padding:9px}.refine .field{flex:1 1 105px}.refine label{flex:1 1 auto}.refine input[type=range]{flex:1;min-width:80px}.preview-head{gap:5px}.preview-head .pill{font-size:11px}.preview-body{padding:10px}}
 .inspect-tools{display:flex;gap:7px;flex-wrap:wrap;padding:7px 12px;border-bottom:1px solid var(--stroke)}.inspect-tools[hidden]{display:none}.inspect-tools .pill{font-size:12px;padding:6px 10px;min-height:40px}
 .image-viewer{display:flex;flex-direction:column;gap:8px;min-width:0}.image-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.image-actions .pill{padding:7px 12px}.image-stage{touch-action:pan-x pan-y;overflow:auto;max-height:62dvh;min-height:140px;background:repeating-conic-gradient(#242936 0% 25%,#1b202a 0% 50%) 50%/18px 18px;border:1px solid var(--stroke);border-radius:10px;overscroll-behavior:contain}.image-stage img{display:block;max-width:none!important;max-height:none!important;object-fit:contain;align-self:auto!important;height:auto}
@@ -80,6 +80,15 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 @media(max-width:420px){.items.list .gallery-card{flex-direction:column}.items.list .gallery-card .folder-jump{max-width:none}}
 
 .zip-browser{width:100%;min-width:0}.zip-controls{display:flex;gap:8px;flex-wrap:wrap}.zip-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:9px}.zip-list button{text-align:left;min-height:48px;overflow-wrap:anywhere}.zip-member{background:var(--panel2);border:1px solid var(--stroke);border-radius:10px;padding:10px;color:var(--text);display:flex;flex-direction:column;gap:5px}.zip-entry{display:flex;gap:8px;align-items:center;min-width:0;border:1px solid var(--stroke);border-radius:11px;padding:5px}.zip-entry input{width:23px;height:23px;flex:none;accent-color:var(--accent)}.zip-entry .zip-member{flex:1;border:0;min-width:0}.zip-mini{height:88px;display:grid;place-items:center}.zip-mini img{max-width:100%;max-height:88px;object-fit:contain}
+.recent-jump{display:none;padding:0 13px 8px;border-bottom:1px solid var(--stroke);font-size:12px}
+.recent-jump[hidden]{display:none!important}
+.recent-jump summary{min-height:44px;padding:12px 0;color:var(--accent);cursor:pointer;font-weight:750}
+.recent-jump-links{display:flex;flex-wrap:wrap;gap:7px;padding:5px 0}
+.recent-jump-links button{min-height:44px;max-width:100%;padding:8px 11px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-align:left;font-size:12px}
+.recent-jump-actions{display:flex;justify-content:flex-end;padding:4px 0}
+.recent-jump-actions button{min-height:44px;padding:8px 11px;font-size:12px}
+@media(max-width:760px){.recent-jump{display:block}}
+#workspace[data-mode="review"] .recent-jump{display:none}
 </style>
 </head>
 <body>
@@ -96,13 +105,14 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 <label for="branch">Branch</label><input class="field" id="branch" value="" placeholder="Default branch" autocapitalize="off" spellcheck="false">
 <button id="loadBranches" class="pill" disabled aria-controls="branchPicker">Browse branches</button><select id="branchPicker" class="field" hidden aria-label="Choose a repository branch"><option value="">Choose a branch…</option></select>
 <button class="pill active" id="openRepo">Open repository →</button><button id="bookmark" class="pill" disabled aria-label="Bookmark this public repository">☆ Star public repo</button>
-<hr><h2>Starred public repositories</h2><div id="favorites" class="stack"></div><hr><h2>Folders</h2><div id="tree" role="navigation" aria-label="Folder navigation"></div><hr>
+<hr><h2>Starred public repositories</h2><div id="favorites" class="stack"></div><hr><h2>Recent folders</h2><div id="recentFolders" class="stack" role="navigation" aria-label="Recent folder navigation"></div><button id="clearRecents" class="pill" type="button" hidden>Clear recent folders</button><hr><h2>Folders</h2><div id="tree" role="navigation" aria-label="Folder navigation"></div><hr>
 <div class="hint">Read-only by design. No editing, no analytics, no token persistence. Preview private assets locally in this tab.</div>
 </aside>
 <section class="workspace" id="workspace" data-mode="files" aria-label="Repository files">
 <div class="toolbar"><button id="back" class="icon-btn" title="Parent folder" aria-label="Parent folder">↑</button><input id="filter" class="field" placeholder="Find by name…" aria-label="Filter files by name"><select id="scope" class="field" aria-label="Search and gallery scope"><option value="folder">This folder</option><option value="repo">Search entire repo</option><option value="descendants">This folder + subfolders</option><option value="allFiles">All files in repo</option><option value="images">Images in subfolders</option><option value="allImages">All repo images</option></select><button id="listBtn" class="pill" title="List view">☷</button><button id="gridBtn" class="pill active" title="Gallery view">▦</button><button id="zipToggle" class="pill" aria-pressed="false" aria-label="Include ZIP contents in gallery">ZIPs +</button><button id="copyFolder" class="pill" title="Copy folder link" aria-label="Copy folder link">↗</button><button id="refineToggle" class="pill" aria-expanded="true" aria-controls="refineControls">Filters</button><button id="storyToggle" class="pill" aria-pressed="false" title="Explore commits, releases and tags">Story</button><button id="sizeToggle" class="pill" aria-pressed="false" aria-controls="sizeView" title="Explore indexed files and folders by size">Sizes</button><button id="selectMode" class="pill" aria-pressed="false" title="Select up to 12 images for a contact sheet">Select images</button><button id="contactSheet" class="pill" hidden disabled>Contact sheet (0)</button><button id="clearSelection" class="pill" hidden>Clear</button></div>
 <div class="refine" id="refineControls"><label for="sortFiles">Sort</label><select id="sortFiles" class="field" aria-label="Sort files"><option value="name">Name</option><option value="size">Largest</option><option value="extension">Extension</option><option value="path">Path</option><option value="modified">Last changed (known dates)</option></select><button id="loadDates" class="pill" type="button" hidden aria-label="Look up last change dates for up to twelve visible GitHub files">Look up dates (12)</button><label for="sortDirection">Order</label><select id="sortDirection" class="field" aria-label="Sort order"><option value="asc">Ascending</option><option value="desc">Descending</option></select><label for="groupFolders">Group</label><select id="groupFolders" class="field" aria-label="Gallery grouping"><option value="none">Continuous grid</option><option value="folder">By folder</option></select><label for="includeZip" title="Inspect up to 12 archives locally, showing at most 1,000 files from each."><input id="includeZip" type="checkbox"> Include ZIP contents</label><label for="fileKind">Kind</label><select id="fileKind" class="field" aria-label="Filter by file category"><option value="all">Everything</option><option value="image">Images</option><option value="html">HTML</option><option value="previewable">Previewable files</option><option value="code">Code</option><option value="doc">Documents</option><option value="data">Data</option><option value="other">Other</option></select><label for="extFilter">Extensions</label><input id="extFilter" class="field" placeholder="png, svg, html…" aria-label="Filter by file extensions, separated by commas"><label for="density">Gallery size <input id="density" type="range" min="110" max="270" value="145" step="10" aria-label="Gallery thumbnail size"></label><button id="contentSearch" class="pill" title="Scan bounded text files for a phrase">Search contents</button></div>
 <div class="path" id="breadcrumbs">No repository selected</div>
+<details id="recentJump" class="recent-jump" hidden><summary id="recentJumpSummary">Recent folders</summary><nav id="recentJumpLinks" class="recent-jump-links" aria-label="Jump to a recently visited folder"></nav><div class="recent-jump-actions"><button id="clearJump" class="pill" type="button">Clear recent folders</button></div></details>
 <section id="storyView" class="story-view" hidden aria-label="Repository Story Mode"></section><section id="sizeView" class="size-view" hidden aria-label="Repository file-size map"></section><div id="items" class="items grid"><div class="empty"><strong>Browse in full colour.</strong>Open any public repository, or connect a read-only token for your private ones.</div></div><div class="status" id="status" aria-live="polite"></div><div id="searchResults" aria-live="polite"></div>
 </section></main>
 <section id="preview" class="preview" role="dialog" aria-modal="true" aria-label="File preview"><div class="preview-head"><button id="prevPreview" class="icon-btn" aria-label="Previous file" title="Previous file">‹</button><button id="nextPreview" class="icon-btn" aria-label="Next file" title="Next file">›</button><strong id="previewTitle"></strong><button id="compareAction" class="pill" hidden aria-label="Pin image for visual comparison">Pin A</button><button id="copyRaw" class="pill" hidden aria-label="Copy file text">Copy text</button><button id="downloadRaw" class="pill" hidden aria-label="Download original file">Download</button><button id="shareRaw" class="pill" hidden aria-label="Share this file with device apps">Share</button><button id="previewFolder" class="pill" title="Open containing folder" aria-label="Open containing folder">Folder ↳</button><button id="copyFile" class="pill" title="Copy file deep link" aria-label="Copy file deep link">Copy ↗</button><a id="fileLink" class="pill" target="_blank" rel="noopener noreferrer" aria-label="View file on GitHub">Git ↗</a><button id="closePreview" class="icon-btn" aria-label="Close preview">✕</button></div><div id="inspectTools" class="inspect-tools" hidden><button id="fileHistory" class="pill">History</button><button id="structuredToggle" class="pill" hidden>JSON tree</button></div><div class="preview-body" id="previewBody"></div></section>
@@ -111,19 +121,48 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 
 const ZIP_MAX_BYTES=24*1024*1024,ZIP_ENTRY_MAX=16*1024*1024,ZIP_TOTAL_MAX=128*1024*1024,ZIP_MAX_FILES=2000;
 let zipContext=null,zipStartFolder='';const zipManifests=new Map(),zipSelections=new Map();let zipGalleryEntries=[],zipScanSeq=0,zipPrepSeq=0;
+// ZIP's general-purpose flag 11 explicitly declares UTF-8. When absent,
+// classic ZIP filenames are encoded with IBM Code Page 437, not lossy UTF-8.
+// This fixed table covers bytes 0x80–0xFF; ASCII bytes map unchanged.
+const ZIP_CP437=[
+ 'ÇüéâäàåçêëèïîìÄÅ','ÉæÆôöòûùÿÖÜ¢£¥₧ƒ',
+ 'áíóúñÑªº¿⌐¬½¼¡«»','░▒▓│┤╡╢╖╕╣║╗╝╜╛┐',
+ '└┴┬├─┼╞╟╚╔╩╦╠═╬╧','╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀',
+ 'αßΓπΣσµτΦΘΩδ∞φε∩','≡±≥≤⌠⌡÷≈°∙·√ⁿ²■\u00a0'
+].join('');
+function zipDecodeName(bytes,flags){
+ if(flags&0x0800){
+  try{return new TextDecoder('utf-8',{fatal:true}).decode(bytes)}
+  catch{return null} // Invalid declared UTF-8 must not turn into U+FFFD.
+ }
+ let decoded='';
+ for(const byte of bytes)decoded+=byte<0x80?String.fromCharCode(byte):ZIP_CP437[byte-0x80];
+ return decoded
+}
 function zipManifest(blob){
  const fail=msg=>{throw Error('ZIP: '+msg)};
  if(blob.size>ZIP_MAX_BYTES)fail('archive exceeds the 24 MB browser-inspection limit');
  return blob.arrayBuffer().then(buffer=>{
   const bytes=new Uint8Array(buffer),v=new DataView(buffer);let eocd=-1;
-  for(let i=bytes.length-22;i>=Math.max(0,bytes.length-65557);i--)if(v.getUint32(i,true)===0x06054b50){eocd=i;break}
-  if(eocd<0)fail('end directory not found');
-  if(eocd+22+v.getUint16(eocd+20,true)>bytes.length)fail('truncated end directory');
-  const count=v.getUint16(eocd+10,true),size=v.getUint32(eocd+12,true),offset=v.getUint32(eocd+16,true);
+  // PK\\x05\\x06 can appear inside the legal ZIP comment. A signature alone is
+  // not an EOCD: require the declared comment and central directory to end
+  // at their respective boundaries before trusting its entry counts.
+  let foundSignature=false;
+  for(let i=bytes.length-22;i>=Math.max(0,bytes.length-65557);i--){
+   if(v.getUint32(i,true)!==0x06054b50)continue;
+   foundSignature=true;
+   const comment=v.getUint16(i+20,true),size=v.getUint32(i+12,true),offset=v.getUint32(i+16,true);
+   if(i+22+comment===bytes.length&&offset+size===i){eocd=i;break}
+  }
+  if(eocd<0)fail(foundSignature?'invalid central directory layout or ZIP comment':'end directory not found');
+  const disks=v.getUint16(eocd+4,true),centralDisk=v.getUint16(eocd+6,true),
+   onDisk=v.getUint16(eocd+8,true),count=v.getUint16(eocd+10,true),
+   size=v.getUint32(eocd+12,true),offset=v.getUint32(eocd+16,true);
+  if(disks||centralDisk||onDisk!==count)fail('multi-disk ZIP is unsupported');
   if(count===65535||size===0xffffffff||offset===0xffffffff)fail('ZIP64 requires another reader');
   if(count>ZIP_MAX_FILES)fail('too many files');
   if(offset+size>eocd)fail('invalid central directory');
-  const decoder=new TextDecoder('utf-8',{fatal:false}),entries=[],seen=new Set();let pos=offset,total=0;
+  const entries=[],seen=new Set();let pos=offset,total=0;
   for(let i=0;i<count;i++){
    if(pos+46>bytes.length||v.getUint32(pos,true)!==0x02014b50)fail('bad central directory entry');
    const flags=v.getUint16(pos+8,true),method=v.getUint16(pos+10,true),crc=v.getUint32(pos+16,true),
@@ -131,7 +170,8 @@ function zipManifest(blob){
     nameLen=v.getUint16(pos+28,true),extraLen=v.getUint16(pos+30,true),commentLen=v.getUint16(pos+32,true),
     local=v.getUint32(pos+42,true),madeBy=v.getUint16(pos+4,true),unixMode=v.getUint32(pos+38,true)>>>16;
    if(pos+46+nameLen+extraLen+commentLen>bytes.length)fail('truncated entry');
-   const name=decoder.decode(bytes.subarray(pos+46,pos+46+nameLen)).replace(/\\/g,'/');
+   const rawName=zipDecodeName(bytes.subarray(pos+46,pos+46+nameLen),flags);
+   const name=rawName?.replace(/\\/g,'/');
    pos+=46+nameLen+extraLen+commentLen;
    if(!name||name.length>4096||name.startsWith('/')||/[\x00-\x1f\x7f]/.test(name)||name.split('/').some(x=>x==='..'||x==='.'||!x||x.length>255)||/^[a-zA-Z]:/.test(name))continue;
    if(name.endsWith('/'))continue;
@@ -143,7 +183,7 @@ function zipManifest(blob){
    if(local+30>bytes.length||v.getUint32(local,true)!==0x04034b50)continue;
    const localLen=v.getUint16(local+26,true),localExtra=v.getUint16(local+28,true),start=local+30+localLen+localExtra;
    if(start+compressed>bytes.length||start>offset||v.getUint16(local+8,true)!==method||v.getUint16(local+6,true)!==flags)continue;
-   if(decoder.decode(bytes.subarray(local+30,local+30+localLen)).replace(/\\/g,'/')!==name)continue;
+   if(zipDecodeName(bytes.subarray(local+30,local+30+localLen),flags)?.replace(/\\/g,'/')!==name)continue;
    seen.add(name.toLowerCase());entries.push({name,path:name,size:uncompressed,compressed,method,flags,crc,start,type:'file'});
   }
   if(pos!==offset+size)fail('central directory size mismatch');
@@ -235,7 +275,16 @@ function zipShareSelected(files){
  Promise.resolve(navigator.share({files})).then(()=>status('Files handed to the device share target.')).catch(e=>{if(e.name!=='AbortError')status('Device sharing failed: '+e.message)});
 }
 function zipSafeForDevice(name){
- return name.split('/').every(x=>x&&!/[<>:"|?*\x00-\x1f\x7f]/.test(x)&&!/[. ]$/.test(x)&&! /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(x));
+ // ZIP members are never allowed to write into existing version-control
+ // internals: selecting a repository root for extraction must not create
+ // a .git hook or a .hg/.svn metadata file as an unexpected side effect.
+ if(typeof name!=='string'||!name)return false;
+ const encoder=new TextEncoder();
+ if(encoder.encode(name).length>4096)return false;
+ return name.split('/').every(x=>x&&encoder.encode(x).length<=255&&
+  !/[\\<>:"|?*\x00-\x1f\x7f]/.test(x)&&!/[. ]$/.test(x)&&
+  !/^(\.git|\.hg|\.svn)$/i.test(x)&&
+  !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(x));
 }
 async function zipExtractFolder(manifest,entries,button,progress){
  if(typeof window.showDirectoryPicker!=='function'){status('Directory export is unavailable. Try Share selected, or open an individual file to download.');return}
@@ -373,7 +422,7 @@ function zipViewer(manifest,parent,folder='',visible=120){
  root.append(listing);zipPrepareShare(manifest,parent,share,progress);return root
 }
 
-const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0,selectionMode:false,selected:new Map(),sheetSeq:0,sheetOpen:false,activeRequests:new Set(),rateLimitedUntil:0,folderRecoveryKey:'',sizeOpen:false,imageFullscreenCleanup:null,fileDates:new Map(),dateSeq:0,dateBusy:false};
+const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0,selectionMode:false,selected:new Map(),sheetSeq:0,sheetOpen:false,activeRequests:new Set(),rateLimitedUntil:0,folderRecoveryKey:'',sizeOpen:false,imageFullscreenCleanup:null,fileDates:new Map(),dateSeq:0,dateBusy:false,recentFolders:[],sourceSegment:0,sourceRanges:null};
 const codeRx=/\.(?:js|jsx|mjs|ts|tsx|py|rs|go|java|kt|c|cpp|h|hpp|sh|css|scss|html|sql|gradle)$/i,docsRx=/\.(?:md|markdown|txt|pdf|rst)$/i,dataRx=/\.(?:json|csv|tsv|yaml|yml|xml|toml|ini|properties)$/i;
 const docThumbRx=/\.(?:html?|md|markdown|txt|json|csv|tsv|ya?ml|xml|pdf|css)$/i,previewableRx=/\.(?:png|jpe?g|webp|gif|svg|avif|bmp|html?|md|markdown|txt|json|csv|tsv|ya?ml|xml|pdf|css)$/i;
 const imageRx=/\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i,textRx=/\.(md|markdown|txt|json|ya?ml|xml|csv|tsv|js|jsx|ts|tsx|css|scss|html|py|kt|java|rs|go|sh|toml|ini|svg|sql|log|gradle|properties)$/i;
@@ -552,6 +601,49 @@ async function loadFileDates(){
 function loadBookmarks(){try{const data=JSON.parse(localStorage.getItem('expository-public-bookmarks')||'[]');if(Array.isArray(data))for(const name of data.slice(0,24))if(typeof name==='string'&&/^[\w.-]+\/[\w.-]+$/.test(name))state.bookmarks.add(name)}catch{}}
 function paintBookmarks(){const host=$('favorites');host.replaceChildren();for(const name of [...state.bookmarks].sort()){const b=elem('button','pill','★ '+name);b.onclick=()=>{$('repo').value=name;$('branch').value='';openRepo()};host.append(b)}if(!state.bookmarks.size)host.append(elem('span','hint','None yet. Only public repo names are saved.'));const b=$('bookmark');b.disabled=!state.repo||state.repoIsPrivate;b.textContent=state.bookmarks.has(state.repo)?'★ Unstar public repo':'☆ Star public repo'}
 function toggleBookmark(){if(state.repoIsPrivate||!state.repo)return;if(state.bookmarks.has(state.repo))state.bookmarks.delete(state.repo);else{if(state.bookmarks.size>=24){status('Maximum 24 public bookmarks. Unstar one first.');return}state.bookmarks.add(state.repo)}try{localStorage.setItem('expository-public-bookmarks',JSON.stringify([...state.bookmarks]))}catch{}paintBookmarks()}
+// Folder visit history is transient and scoped to the CURRENT repository and
+// branch only. Never persist even public folder paths or carry private paths
+// into a new account, branch or repository.
+function paintRecentFolders(){
+ // Reuse the exact same tab-memory list for sidebar and phone workspace.
+ // Never create a second history authority or put a private path in URLs.
+ const jump=$('recentJump'),links=$('recentJumpLinks');
+ const other=state.recentFolders.filter(path=>path!==state.path);
+ const restoreFocus=links.contains(document.activeElement);
+ links.replaceChildren();
+ for(const path of other){
+  const button=elem('button','pill',path||'Repository root');
+  button.type='button';button.title=path||'Repository root';
+  button.setAttribute('aria-label','Open recent folder: '+(path||'repository root'));
+  button.onclick=()=>navigate(path);links.append(button)
+ }
+ $('recentJumpSummary').textContent='Recent folders ('+other.length+')';
+ jump.hidden=!other.length;
+ if(!other.length)jump.open=false;
+ else if(restoreFocus)$('recentJumpSummary').focus();
+ const host=$('recentFolders');host.replaceChildren();
+ $('clearRecents').hidden=!state.recentFolders.length;
+ if(!state.recentFolders.length){
+  host.append(elem('span','hint','Folder visits stay in this tab only.'));
+  return
+ }
+ for(const path of state.recentFolders){
+  const name=path?path.split('/').at(-1):'Repository root';
+  const button=elem('button','pill recent-folder','↶ '+name);
+  button.type='button';button.title=path||'Repository root';
+  button.setAttribute('aria-label','Open recent folder: '+(path||'repository root'));
+  button.onclick=()=>navigate(path);
+  host.append(button)
+ }
+}
+function recordRecentFolder(path){
+ if(!state.repo||!state.branch||!safeRepoPath(path))return;
+ state.recentFolders=[path,...state.recentFolders.filter(p=>p!==path)].slice(0,8);
+ paintRecentFolders()
+}
+function clearRecentFolders(){
+ state.recentFolders=[];paintRecentFolders()
+}
 function crumb(){const b=$('breadcrumbs');b.replaceChildren();const parts=state.path.split('/').filter(Boolean);const root=elem('button','',state.repo+' @ '+state.branch);root.onclick=()=>navigate('');b.append(root);parts.forEach((p,i)=>{b.append(document.createTextNode(' / '));let x=elem('button','',p);x.onclick=()=>navigate(parts.slice(0,i+1).join('/'));b.append(x)})}
 function treeAdd(path){const parts=path.split('/');for(let i=1;i<=parts.length;i++)state.tree.add(parts.slice(0,i).join('/'))}
 function expandAncestors(path){const parts=path.split('/').filter(Boolean);for(let i=1;i<=parts.length;i++)state.expanded.add(parts.slice(0,i).join('/'))}
@@ -711,6 +803,7 @@ async function navigate(path){
   if(!data){data=await json('/repos/'+state.repo+'/contents/'+pathPart(path)+'?ref='+enc(state.branch));
    if(!Array.isArray(data))throw Error('This is a file, not a directory.');state.cache.set(key,data)}
   if(seq!==state.seq)return false;
+  recordRecentFolder(path);
   state.items=[...data].sort((a,b)=>(a.type==='dir'?0:1)-(b.type==='dir'?0:1)||a.name.localeCompare(b.name));
   state.items.filter(x=>x.type==='dir').forEach(x=>treeAdd(x.path));
   const capped=data.length>=1000,recovered=recoverLargeFolderFromIndex();
@@ -1036,7 +1129,7 @@ function closeImageFullscreen(){
   Promise.resolve(document.exitFullscreen()).catch(()=>{});
  }
 }
-function clearPreview(){++zipPrepSeq;zipSelections.clear();cancelZipThumbs();closeImageFullscreen();++state.sheetSeq;state.sheetOpen=false;++state.compareSeq;const wasOpen=state.preview!==null;state.preview=null;state.historyOpen=false;state.structuredOpen=false;$('inspectTools').hidden=true;state.currentBlob=null;state.previewText=null;$('copyRaw').hidden=true;$('downloadRaw').hidden=true;$('shareRaw').hidden=true;state.compareMode=false;updateCompareAction();$('preview').classList.remove('open');$('scrim').classList.remove('on');$('previewBody').replaceChildren();clearUrls('preview');if(wasOpen&&state.repo&&state.branch)updateHash();if(wasOpen&&state.returnFocus?.isConnected)state.returnFocus.focus();state.returnFocus=null;$('pageHeader').inert=false;$('pageMain').inert=false}
+function clearPreview(){++zipPrepSeq;zipSelections.clear();cancelZipThumbs();closeImageFullscreen();++state.sheetSeq;state.sheetOpen=false;++state.compareSeq;const wasOpen=state.preview!==null;state.preview=null;state.historyOpen=false;state.structuredOpen=false;$('inspectTools').hidden=true;state.currentBlob=null;state.previewText=null;state.sourceRanges=null;state.sourceSegment=0;$('copyRaw').hidden=true;$('downloadRaw').hidden=true;$('shareRaw').hidden=true;state.compareMode=false;updateCompareAction();$('preview').classList.remove('open');$('scrim').classList.remove('on');$('previewBody').replaceChildren();clearUrls('preview');if(wasOpen&&state.repo&&state.branch)updateHash();if(wasOpen&&state.returnFocus?.isConnected)state.returnFocus.focus();state.returnFocus=null;$('pageHeader').inert=false;$('pageMain').inert=false}
 function compareReady(){return Boolean(state.pinned&&state.preview&&state.currentBlob&&imageRx.test(state.preview.name)&&state.pinned.item.path!==state.preview.path&&state.pinned.repo===state.repo&&state.pinned.branch===state.branch)}
 function updateCompareAction(){
  const b=$('compareAction'),isImage=Boolean(state.preview&&state.currentBlob&&imageRx.test(state.preview.name));
@@ -1140,7 +1233,7 @@ async function scanContents(){
    for(let line=0;line<lines.length&&perFile<2&&matches<80;line++){
     if(!lines[line].toLowerCase().includes(needle))continue;perFile++;matches++;
     const result=elem('button','search-hit'),title=elem('strong','',file.path+':'+(line+1)),sample=elem('small','',lines[line].trim().slice(0,190));
-    result.append(title,sample);result.onclick=async()=>{await openPreview(file);if(state.preview!==file||repo!==state.repo||branch!==state.branch)return;const el=$('previewBody').querySelectorAll('.code-line')[line];el?.scrollIntoView({block:'center'});if(el)el.style.outline='1px solid var(--accent)'};
+    result.append(title,sample);result.onclick=()=>openSearchHit(file,line,repo,branch);
     host.append(result)
    }
   }catch{errors++}finally{complete++;if(seq===state.searchSeq&&(complete%10===0||complete===candidates.length))status('Content scan '+complete+'/'+candidates.length+' files · '+matches+' matching lines'+(errors?' · '+errors+' inaccessible':''))}
@@ -1149,6 +1242,25 @@ async function scanContents(){
  state.scanning=false;$('contentSearch').textContent='Search contents';
  if(!matches)host.append(elem('p','hint','No text matches in scanned files.'));
  host.append(elem('p','hint','Finished: '+complete+' files; up to 2 matches per file and 80 matches total. '+(limited?'Only the first 120 eligible files were scanned.':'All eligible indexed files were scanned.')+(errors?' '+errors+' files could not be fetched.':'')));
+}
+// A search hit refers to a GLOBAL source line, not an index into the
+// currently mounted 500-line DOM window. Reuse the source viewer's own
+// bounded line-navigation method and never search stale preview DOM.
+async function openSearchHit(file,line,repo,branch){
+ // Results from an old account may remain clickable briefly while the UI
+ // changes. Refuse before fetching so an old path is never sent to a new repo.
+ if(repo!==state.repo||branch!==state.branch||!safeRepoPath(file?.path))return false;
+ await openPreview(file);
+ if(state.preview!==file||repo!==state.repo||branch!==state.branch)return false;
+ if(/\.(md|markdown|svg)$/i.test(file.name)&&!state.structuredOpen){
+  // The default Markdown/SVG renderer has no source-line mapping. Switch to
+  // the existing inert raw source view for the requested line.
+  state.structuredOpen=true;
+  await renderCurrentFile();
+ }
+ if(state.preview!==file||repo!==state.repo||branch!==state.branch)return false;
+ const viewer=$('previewBody').firstElementChild||$('previewBody').children[0];
+ return viewer?.jumpToLine?.(line+1)===true
 }
 function showContent(node){$('previewBody').replaceChildren(node)}
 async function saveContactSheet(images){
@@ -1315,7 +1427,10 @@ async function renderCurrentFile(){
  const item=state.preview,blob=state.currentBlob;if(!item||!blob)return;
  closeImageFullscreen();cancelZipThumbs();clearUrls('preview');const lower=item.name.toLowerCase();let node;
  if(/\.zip$/i.test(lower)&&!item.zipMember){const manifest=zipManifests.get(item.path)||await zipManifest(blob);if(state.preview!==item||state.currentBlob!==blob)return;zipContext=manifest;const start=zipStartFolder;zipStartFolder='';node=zipViewer(zipContext,item,start)}
- else if(imageRx.test(lower))node=imageViewer(blob,item);
+ else if(imageRx.test(lower)&&(!/\.svg$/i.test(lower)||!state.structuredOpen)){
+  node=imageViewer(blob,item);
+  if(/\.svg$/i.test(lower)){$('structuredToggle').hidden=false;$('structuredToggle').textContent='SVG source'}
+ }
  else if(/\.pdf$/i.test(lower)){node=elem('iframe');node.title=item.name;node.src=blobUrl(new Blob([blob],{type:'application/pdf'}))}
  else if(/\.(mp4|webm|ogg)$/i.test(lower)){node=elem('video');node.controls=true;node.src=blobUrl(blob)}
  else if(/\.(mp3|wav|m4a|flac)$/i.test(lower)){node=elem('audio');node.controls=true;node.src=blobUrl(blob)}
@@ -1325,16 +1440,24 @@ async function renderCurrentFile(){
   if(/\.json$/i.test(lower)){let value;try{value=JSON.parse(text)}catch{}
    $('structuredToggle').hidden=value===undefined;
    $('structuredToggle').textContent=state.structuredOpen?'Raw source':'JSON tree';
-   node=state.structuredOpen&&value!==undefined?jsonViewer(value):sourceViewer(text.slice(0,500000),item.name,text.length>500000)
+   node=state.structuredOpen&&value!==undefined?jsonViewer(value):boundedSourceViewer(text,item.name)
   }else if(/\.(csv|tsv)$/i.test(lower)){$('structuredToggle').hidden=false;$('structuredToggle').textContent=state.structuredOpen?'Raw source':'Table';
-   node=state.structuredOpen?tableViewer(text.slice(0,500000),/\.tsv$/i.test(lower)?'\t':','):sourceViewer(text.slice(0,500000),item.name,text.length>500000);
-  }else node=/\.(md|markdown)$/i.test(lower)?simpleMarkdown(text.slice(0,500000),item):sourceViewer(text.slice(0,500000),item.name,text.length>500000);
+   node=state.structuredOpen?tableViewer(text.slice(0,500000),/\.tsv$/i.test(lower)?'\t':','):boundedSourceViewer(text,item.name);
+  }else if(/\.(md|markdown)$/i.test(lower)){
+   $('structuredToggle').hidden=false;
+   $('structuredToggle').textContent=state.structuredOpen?'Rendered Markdown':'Raw source';
+   node=state.structuredOpen?boundedSourceViewer(text,item.name):
+    simpleMarkdown(text.slice(0,500000),item)
+  }else{
+   if(/\.svg$/i.test(lower)){$('structuredToggle').hidden=false;$('structuredToggle').textContent='Image'}
+   node=boundedSourceViewer(text,item.name)
+  }
  }else node=elem('div','message','No inline preview for this format. Use the GitHub link.');
  // A close, file switch or reopened same file invalidates any suspended parse.
  if(state.preview!==item||state.currentBlob!==blob)return;
  showContent(node);if(item.zipMember&&zipContext){const back=elem('button','pill','← Back to ZIP');back.onclick=()=>{zipStartFolder=fileFolder(item.zipMember.name);openPreview(item.zipParent)};$('previewBody').prepend(back)}updateCompareAction()
 }
-async function toggleStructured(){if(!state.preview||!state.previewText)return;state.structuredOpen=!state.structuredOpen;await renderCurrentFile()}
+async function toggleStructured(){if(!state.preview||!state.currentBlob)return;if(!state.previewText&&!/\.svg$/i.test(state.preview.name))return;state.structuredOpen=!state.structuredOpen;await renderCurrentFile()}
 async function toggleHistory(){
  if(!state.preview)return;
  if(state.historyOpen){state.historyOpen=false;$('fileHistory').textContent='History';$('structuredToggle').hidden=!/\.(json|csv|tsv)$/i.test(state.preview.name);await renderCurrentFile();return}
@@ -1378,8 +1501,56 @@ function extractSourceSymbols(lines,filename){
  }
  return found
 }
-function sourceViewer(text,name,previewTruncated=false){
- // The file data has already been limited by renderCurrentFile to 500k characters.
+// Display sections of already downloaded text; no new network requests and
+// never more than 500,000 characters or 500 visible source rows per window.
+// Prefer line boundaries; a >500k single line continues in the next section.
+function sourceSections(text){
+ const MAX=500000,sections=[];let start=0,firstLine=1;
+ if(!text.length)return [{start:0,end:0,firstLine:1,partialStart:false,partialEnd:false}];
+ while(start<text.length){
+  let end=Math.min(text.length,start+MAX);
+  if(end<text.length){
+   const newline=text.lastIndexOf('\n',end-1);
+   if(newline>=start+Math.floor(MAX/2))end=newline+1;
+   else if(end>start+1&&/[\uD800-\uDBFF]/.test(text[end-1])&&
+    /[\uDC00-\uDFFF]/.test(text[end]))end--;
+  }
+  const partialStart=start>0&&text[start-1]!=='\n';
+  const partialEnd=end<text.length&&text[end-1]!=='\n';
+  sections.push({start,end,firstLine,partialStart,partialEnd});
+  for(let p=text.indexOf('\n',start);p>=0&&p<end;p=text.indexOf('\n',p+1))firstLine++;
+  start=end;
+ }
+ return sections
+}
+function boundedSourceViewer(text,name){
+ const sections=state.sourceRanges?.source===text?state.sourceRanges.sections:sourceSections(text);
+ if(state.sourceRanges?.source!==text)state.sourceRanges={source:text,sections};
+ const index=Math.max(0,Math.min(state.sourceSegment,sections.length-1));
+ state.sourceSegment=index;
+ const section=sections[index];
+ const end=section.end<text.length&&text[section.end-1]==='\n'?section.end-1:section.end;
+ const viewer=sourceViewer(text.slice(section.start,end),name,false,section.firstLine);
+ if(sections.length===1)return viewer;
+ const wrap=elem('div','source-segments'),controls=elem('div','source-segment-controls');
+ const previous=elem('button','pill','← Earlier section'),next=elem('button','pill','Later section →');
+ previous.type=next.type='button';
+ previous.disabled=index===0;next.disabled=index===sections.length-1;
+ previous.setAttribute('aria-label','Show previous source section');
+ next.setAttribute('aria-label','Show next source section');
+ previous.onclick=()=>{if(index>0&&state.previewText===text){state.sourceSegment=index-1;return renderCurrentFile()}};
+ next.onclick=()=>{if(index<sections.length-1&&state.previewText===text){state.sourceSegment=index+1;return renderCurrentFile()}};
+ const description='Section '+(index+1)+' of '+sections.length+
+  ' · characters '+(section.start+1)+'–'+section.end+' of '+text.length+
+  ' · original line numbers'+(section.partialStart?' · starts mid-line':'')+
+  (section.partialEnd?' · ends mid-line':'')+
+  ' · search and Go to line apply to this section';
+ controls.append(previous,next,elem('span','hint',description));wrap.append(controls,viewer);
+ wrap.jumpToLine=number=>viewer.jumpToLine(number);
+ return wrap
+}
+function sourceViewer(text,name,previewTruncated=false,lineBase=1){
+ // Source data is capped by boundedSourceViewer to one 500k-character section.
  // A 500-line DOM window avoids building thousands of syntax-highlighted elements on a phone.
  const allLines=text.split('\n'),PAGE=500,MAX_MATCHES=500;
  const container=elem('div'),bar=elem('div','code-toolbar');
@@ -1387,7 +1558,7 @@ function sourceViewer(text,name,previewTruncated=false){
  const search=elem('input','code-find');search.type='search';search.placeholder='Find in preview';search.setAttribute('aria-label','Find in loaded file preview');
  const prev=elem('button','pill','↑ Match'),next=elem('button','pill','↓ Match'),go=elem('input','code-line-number'),goButton=elem('button','pill','Go to line');
  prev.type=next.type=goButton.type='button';prev.setAttribute('aria-label','Previous matching line');next.setAttribute('aria-label','Next matching line');
- go.type='number';go.min='1';go.max=String(allLines.length);go.placeholder='Line';go.setAttribute('aria-label','Go to line number in loaded file preview');
+ go.type='number';go.min=String(lineBase);go.max=String(lineBase+allLines.length-1);go.placeholder='Line';go.setAttribute('aria-label','Go to line number in loaded file preview');
  const info=elem('span','hint code-search-info','Search all lines loaded in this preview.');
  bar.append(notice,search,prev,next,go,goButton,info);container.append(bar);
  const symbols=extractSourceSymbols(allLines,name);
@@ -1395,8 +1566,8 @@ function sourceViewer(text,name,previewTruncated=false){
   const panel=elem('details','outline-panel'),summary=elem('summary','','Symbols ('+symbols.length+') · heuristic, first 2,600 lines');
   const list=elem('div','outline-list');panel.append(summary);
   for(const symbol of symbols){
-   const button=elem('button','pill',symbol.kind+' '+symbol.name+' · L'+symbol.line);
-   button.type='button';button.setAttribute('aria-label','Jump to '+symbol.kind+' '+symbol.name+', line '+symbol.line);
+   const button=elem('button','pill',symbol.kind+' '+symbol.name+' · L'+(lineBase+symbol.line-1));
+   button.type='button';button.setAttribute('aria-label','Jump to '+symbol.kind+' '+symbol.name+', line '+(lineBase+symbol.line-1));
    button.onclick=()=>{jump(symbol.line-1);panel.open=false};list.append(button)
   }
   panel.append(list);container.append(panel)
@@ -1419,7 +1590,7 @@ function sourceViewer(text,name,previewTruncated=false){
   rows=[];pre.replaceChildren();
   const end=Math.min(start+PAGE,allLines.length);
   for(let i=start;i<end;i++){
-   const row=elem('div','code-line'),ln=elem('span','line-num',String(i+1));row.append(ln);
+   const row=elem('div','code-line'),ln=elem('span','line-num',String(lineBase+i));row.append(ln);
    let offset=0;
    for(const hit of allLines[i].matchAll(rx)){
     if(hit.index>offset)row.append(document.createTextNode(allLines[i].slice(offset,hit.index)));
@@ -1428,8 +1599,8 @@ function sourceViewer(text,name,previewTruncated=false){
    }
    row.append(document.createTextNode(allLines[i].slice(offset)));pre.append(row);rows.push(row)
   }
-  notice.textContent=name+' · lines '+(start+1)+'–'+end+' of '+allLines.length+(previewTruncated?' loaded (500k-character cap)':'');
-  pageLabel.textContent=(start+1)+'–'+end+' / '+allLines.length+' lines';
+  notice.textContent=name+' · lines '+(lineBase+start)+'–'+(lineBase+end-1)+' of '+(lineBase+allLines.length-1)+(previewTruncated?' loaded (500k-character cap)':'');
+  pageLabel.textContent=(lineBase+start)+'–'+(lineBase+end-1)+' / '+(lineBase+allLines.length-1)+' lines';
   back.disabled=start===0;forward.disabled=end===allLines.length;redraw()
  }
  function showWindow(index){start=Math.floor(index/PAGE)*PAGE;renderWindow()}
@@ -1458,7 +1629,15 @@ function sourceViewer(text,name,previewTruncated=false){
  search.oninput=find;
  search.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();nextMatch(e.shiftKey?-1:1)}};
  next.onclick=()=>nextMatch(1);prev.onclick=()=>nextMatch(-1);
- goButton.onclick=()=>{const number=Number(go.value);if(Number.isInteger(number)&&number>=1&&number<=allLines.length){position=-1;jump(number-1);info.textContent='Line '+number+' of '+allLines.length+(previewTruncated?' loaded':'')}else info.textContent='Enter a line from 1 to '+allLines.length};
+ // Shared by Go to line AND repository-wide content-search results. Only
+ // the loaded, bounded preview can be addressed; never synthesize missing rows.
+ container.jumpToLine=number=>{
+  if(!Number.isInteger(number)||number<lineBase||number>=lineBase+allLines.length)return false;
+  position=-1;go.value=String(number);jump(number-lineBase);
+  info.textContent='Line '+number+' of '+(lineBase+allLines.length-1)+(previewTruncated?' loaded':'');
+  return true
+ };
+ goButton.onclick=()=>{if(!container.jumpToLine(Number(go.value)))info.textContent='Enter a line from '+lineBase+' to '+(lineBase+allLines.length-1)};
  go.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();goButton.click()}};
  back.onclick=()=>{selectedLine=-1;showWindow(Math.max(0,start-PAGE))};
  forward.onclick=()=>{selectedLine=-1;showWindow(Math.min(allLines.length-1,start+PAGE))};
@@ -1527,7 +1706,7 @@ async function openPreview(item){
  state.sheetOpen=false;++state.sheetSeq;
  for(const id of ['prevPreview','nextPreview','fileLink','copyFile'])$(id).hidden=false;
  if(!state.preview)state.returnFocus=document.activeElement;
- clearUrls('preview');state.preview=item;state.currentBlob=null;state.previewText=null;state.historyOpen=false;state.structuredOpen=false;
+ clearUrls('preview');state.preview=item;state.currentBlob=null;state.previewText=null;state.sourceRanges=null;state.sourceSegment=0;state.historyOpen=false;state.structuredOpen=false;
  $('fileHistory').textContent='History';$('inspectTools').hidden=false;$('structuredToggle').hidden=true;
  $('copyRaw').hidden=true;$('downloadRaw').hidden=true;state.compareMode=false;
  previewButtons();updateCompareAction();updateHash(item.path);
@@ -1566,7 +1745,7 @@ async function openRepo(targetPath=''){
  $('branchPicker').hidden=true;$('branchPicker').replaceChildren(new Option('Choose a branch…',''));$('loadBranches').disabled=true;
  abortRequests();
  cancelContentScan();stopStory();hideSizeMap();state.storyData=null;const request=++state.repoRequest;state.repo=repo;state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;
- state.folderRecoveryKey='';++state.dateSeq;state.dateBusy=false;state.fileDates.clear();++zipScanSeq;++zipPrepSeq;zipGalleryEntries=[];zipManifests.clear();zipSelections.clear();zipContext=null;zipStartFolder='';clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
+ state.folderRecoveryKey='';++state.dateSeq;state.dateBusy=false;state.fileDates.clear();state.recentFolders=[];paintRecentFolders();state.sourceRanges=null;state.sourceSegment=0;++zipScanSeq;++zipPrepSeq;zipGalleryEntries=[];zipManifests.clear();zipSelections.clear();zipContext=null;zipStartFolder='';clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
  clearObjects();clearPreview();++state.seq;status('Connecting to '+repo+'…');
  try{
   const info=await json('/repos/'+repo);if(request!==state.repoRequest)return;
@@ -1576,7 +1755,7 @@ async function openRepo(targetPath=''){
  }catch(e){if(request===state.repoRequest)status('Cannot open repository: '+e.message);return false}
 }
 function resetSession(){
- abortRequests();state.rateLimitedUntil=0;state.folderRecoveryKey='';++state.dateSeq;state.dateBusy=false;state.fileDates.clear();++zipScanSeq;++zipPrepSeq;zipGalleryEntries=[];zipManifests.clear();zipSelections.clear();zipContext=null;zipStartFolder='';cancelContentScan();stopStory();hideSizeMap();state.storyData=null;++state.repoRequest;++state.seq;state.token='';state.repo='';state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;state.cache.clear();state.items=[];state.visibleItems=[];
+ abortRequests();state.rateLimitedUntil=0;state.folderRecoveryKey='';++state.dateSeq;state.dateBusy=false;state.fileDates.clear();state.recentFolders=[];paintRecentFolders();state.sourceRanges=null;state.sourceSegment=0;++zipScanSeq;++zipPrepSeq;zipGalleryEntries=[];zipManifests.clear();zipSelections.clear();zipContext=null;zipStartFolder='';cancelContentScan();stopStory();hideSizeMap();state.storyData=null;++state.repoRequest;++state.seq;state.token='';state.repo='';state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;state.cache.clear();state.items=[];state.visibleItems=[];
  state.tree.clear();state.expanded.clear();state.indexEntries=[];state.indexReady=false;state.indexError=false;state.indexTruncated=false;state.repoIsPrivate=true;
  clearSelection();state.renderEpoch++;if(state.thumbObserver){state.thumbObserver.disconnect();state.thumbObserver=null}thumbQueue.length=0;
  clearPreview();clearObjects();paintBookmarks();$('token').value='';$('branch').value='';$('loadBranches').disabled=true;$('loadBranches').textContent='Browse branches';$('branchPicker').hidden=true;$('branchPicker').replaceChildren(new Option('Choose a branch…',''));
@@ -1611,7 +1790,7 @@ function syncRefineToViewport(){
 }
 $('refineToggle').onclick=()=>{const controls=$('refineControls');controls.hidden=!controls.hidden;$('refineToggle').setAttribute('aria-expanded',String(!controls.hidden));$('refineToggle').textContent=controls.hidden?'Filters':'Hide filters'};
 if(typeof window!=='undefined'&&window.matchMedia){const mql=window.matchMedia('(max-width:760px)');syncRefineToViewport();mql.addEventListener('change',()=>{syncRefineToViewport();$('refineToggle').textContent='Filters'})}
-$('filter').oninput=()=>{state.limit=80;paint()};$('sortFiles').onchange=()=>{if($('sortFiles').value==='modified')$('sortDirection').value='desc';state.limit=80;paint()};$('loadDates').onclick=loadFileDates;$('sortDirection').onchange=()=>{state.limit=80;paint()};$('groupFolders').onchange=()=>{state.limit=80;paint()};$('fileKind').onchange=()=>{state.limit=80;paint()};$('includeZip').onchange=scanZipGallery;$('zipToggle').onclick=()=>{$('includeZip').checked=!$('includeZip').checked;scanZipGallery()};$('extFilter').oninput=()=>{state.limit=80;paint()};$('density').oninput=()=>{$('items').style.setProperty('--tile-min',$('density').value+'px')};$('scope').onchange=()=>{if(['images','allImages'].includes($('scope').value)&&!['all','image'].includes($('fileKind').value))$('fileKind').value='image';state.limit=80;paint()};$('prevPreview').onclick=()=>adjacentPreview(-1);$('nextPreview').onclick=()=>adjacentPreview(1);$('back').onclick=()=>navigate(state.path.split('/').slice(0,-1).join('/'));$('gridBtn').onclick=()=>{state.mode='grid';$('gridBtn').classList.add('active');$('listBtn').classList.remove('active');paint()};$('listBtn').onclick=()=>{state.mode='list';$('listBtn').classList.add('active');$('gridBtn').classList.remove('active');paint()};
+$('clearRecents').onclick=clearRecentFolders;$('clearJump').onclick=clearRecentFolders;$('filter').oninput=()=>{state.limit=80;paint()};$('sortFiles').onchange=()=>{if($('sortFiles').value==='modified')$('sortDirection').value='desc';state.limit=80;paint()};$('loadDates').onclick=loadFileDates;$('sortDirection').onchange=()=>{state.limit=80;paint()};$('groupFolders').onchange=()=>{state.limit=80;paint()};$('fileKind').onchange=()=>{state.limit=80;paint()};$('includeZip').onchange=scanZipGallery;$('zipToggle').onclick=()=>{$('includeZip').checked=!$('includeZip').checked;scanZipGallery()};$('extFilter').oninput=()=>{state.limit=80;paint()};$('density').oninput=()=>{$('items').style.setProperty('--tile-min',$('density').value+'px')};$('scope').onchange=()=>{if(['images','allImages'].includes($('scope').value)&&!['all','image'].includes($('fileKind').value))$('fileKind').value='image';state.limit=80;paint()};$('prevPreview').onclick=()=>adjacentPreview(-1);$('nextPreview').onclick=()=>adjacentPreview(1);$('back').onclick=()=>navigate(state.path.split('/').slice(0,-1).join('/'));$('gridBtn').onclick=()=>{state.mode='grid';$('gridBtn').classList.add('active');$('listBtn').classList.remove('active');paint()};$('listBtn').onclick=()=>{state.mode='list';$('listBtn').classList.add('active');$('gridBtn').classList.remove('active');paint()};
 $('theme').onclick=()=>{document.body.classList.toggle('light');$('theme').textContent=document.body.classList.contains('light')?'☾':'☀︎';try{localStorage.setItem('expository-theme',document.body.classList.contains('light')?'light':'dark')}catch{}};
 try{if(localStorage.getItem('expository-theme')==='light')$('theme').click()}catch{}
 $('navToggle').onclick=()=>{$('sidebar').classList.add('open');$('scrim').classList.add('on')};$('closePreview').onclick=clearPreview;$('scrim').onclick=()=>{clearPreview();closeNav()};
@@ -1621,7 +1800,7 @@ document.addEventListener('keydown',e=>{
   if(!['INPUT','TEXTAREA','SELECT'].includes(e.target?.tagName)){if(e.key==='ArrowRight')adjacentPreview(1);if(e.key==='ArrowLeft')adjacentPreview(-1)}
  }
 });
-loadBookmarks();paintBookmarks();
+loadBookmarks();paintBookmarks();paintRecentFolders();
 const match=location.hash.slice(1).match(/^([^/]+\/[^/]+)\/([^/]+)\/(.*)$/);
 if(match){try{
  $('repo').value=decodeURIComponent(match[1]);$('branch').value=decodeURIComponent(match[2]);
