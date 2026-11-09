@@ -134,28 +134,31 @@ test('folder grouping stays stable across show-more pagination boundaries',()=>{
 
 
 test('stale document thumbnail text cannot repopulate a repainted tile',async()=>{
- let finishDecode;
- const oldBlob={size:45,type:'text/html',text:()=>new Promise(resolve=>{finishDecode=resolve})};
- const fetcher=async()=>({ok:true,blob:async()=>oldBlob});
+ const fetcher=async()=>new Response('<title>Old private name</title><h1>Old text</h1>',{status:200});
  const {app,get}=boot(fetcher);
  app.state.repo='example/private';app.state.branch='main';
  const thumb=get('delayedThumb');
- app.loadThumb({name:'old.html',path:'docs/old.html',size:45,type:'file'},thumb,null,app.state.renderEpoch);
- await new Promise(resolve=>setImmediate(resolve));
- assert.equal(typeof finishDecode,'function','text decoding is pending on prior render');
- app.state.renderEpoch++;
- finishDecode('<title>Old private name</title><h1>Old text</h1>');
- await new Promise(resolve=>setImmediate(resolve));
- assert.equal(thumb.children.length,0,'prior render may not repaint thumbnail after decode');
+ const nativeText=Blob.prototype.text;
+ let finishDecode;
+ Blob.prototype.text=function(){return new Promise(resolve=>{finishDecode=resolve})};
+ try{
+  app.loadThumb({name:'old.html',path:'docs/old.html',size:45,type:'file'},thumb,null,app.state.renderEpoch);
+  for(let i=0;i<12&&!finishDecode;i++)await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(typeof finishDecode,'function','streamed response arrived and text decode is pending');
+  app.state.renderEpoch++;
+  finishDecode('<title>Old private name</title><h1>Old text</h1>');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(thumb.children.length,0,'prior render may not repaint thumbnail after decode');
+ }finally{Blob.prototype.text=nativeText}
 });
 
 test('current document thumbnail still renders when its epoch remains unchanged',async()=>{
- const fetcher=async()=>({ok:true,blob:async()=>new Blob(['<title>Current title</title><h1>Current contents</h1>'],{type:'text/html'})});
+ const fetcher=async()=>new Response('<title>Current title</title><h1>Current contents</h1>',{status:200});
  const {app,get}=boot(fetcher);
  app.state.repo='example/public';app.state.branch='main';
  const thumb=get('currentThumb');
  app.loadThumb({name:'now.html',path:'docs/now.html',size:55,type:'file'},thumb,null,app.state.renderEpoch);
- await new Promise(resolve=>setImmediate(resolve));
+ for(let i=0;i<12&&!thumb.children.length;i++)await new Promise(resolve=>setImmediate(resolve));
  assert.equal(thumb.children.length,1);
  assert.equal(thumb.children[0].children[1].textContent,'Current title');
 });
