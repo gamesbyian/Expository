@@ -19,7 +19,7 @@ function setup(respond,cryptoImpl=require('node:crypto').webcrypto){
   return new Response(JSON.stringify(answer??mock(url,options,calls)),
    {status:200,headers:{'content-type':'application/json'}});
  }});
- vm.runInContext(source.slice(start,end)+'\nglobalThis.published={wellFormedUtf16,cleanPath,repoPath,branchPath,resolveEntries,findCollisions,githubCompareUrl,inspectDestination,writeNewBranch,verifyPublishedBranch,gitBlobIdentity,boundedGithubJson};',context);
+ vm.runInContext(source.slice(start,end)+'\nglobalThis.published={wellFormedUtf16,cleanPath,repoPath,branchPath,resolveEntries,findCollisions,githubCompareUrl,inspectDestination,writeNewBranch,verifyPublishedBranch,verifyPublishedTreeDelta,gitBlobIdentity,boundedGithubJson};',context);
  return {api:context.published,calls};
 }
 function mock(url,options,calls){
@@ -33,12 +33,24 @@ function mock(url,options,calls){
   sha:SHA.commit,tree:{sha:SHA.newTree},parents:[{sha:SHA.head}]
  };
  if(url.includes('/git/trees/'+SHA.tree+'?recursive=1'))
-  return {sha:SHA.tree,truncated:false,tree:[{path:'already.txt',type:'blob'}]};
+  return {sha:SHA.tree,truncated:false,tree:[
+   {path:'already.txt',type:'blob',mode:'100644',sha:'f'.repeat(40)}
+  ]};
  if(url.includes('/git/trees/'+SHA.newTree+'?recursive=1')){
   const treeWrite=calls.find(x=>x.options.method==='POST'&&x.url.endsWith('/git/trees'));
+  const additions=treeWrite?.body.tree||[];
+  const parents=new Set();
+  for(const file of additions){
+   let slash=file.path.indexOf('/');
+   while(slash!==-1){
+    parents.add(file.path.slice(0,slash));
+    slash=file.path.indexOf('/',slash+1)
+   }
+  }
   return {sha:SHA.newTree,truncated:false,tree:[
    {path:'already.txt',type:'blob',mode:'100644',sha:'f'.repeat(40)},
-   ...(treeWrite?.body.tree||[])
+   ...[...parents].map(path=>({path,type:'tree',mode:'040000',sha:'9'.repeat(40)})),
+   ...additions
   ]};
  }
  if(url.endsWith('/git/blobs')){
@@ -220,6 +232,82 @@ test('explicit commit builds blobs, tree and commit before creating only a new b
  assert.equal(writes[4].body.ref,'refs/heads/expository/zip-demo');
  assert.ok(writes.every(x=>!x.url.includes('/git/refs/heads/main')),'no update to base branch');
 });
+test('published-tree comparison accepts only reviewed new paths and parent tree updates',()=>{
+ const {api}=setup();
+ const hex=n=>n.repeat(40);
+ const original=[
+  {path:'unchanged.txt',type:'blob',mode:'100755',sha:hex('1')},
+  {path:'docs',type:'tree',mode:'040000',sha:hex('2')},
+  {path:'docs/keep.txt',type:'blob',mode:'100644',sha:hex('3')},
+  {path:'secrets',type:'tree',mode:'040000',sha:hex('4')},
+  {path:'secrets/key.link',type:'blob',mode:'120000',sha:hex('5')},
+  {path:'vendor',type:'commit',mode:'160000',sha:hex('6')}
+ ];
+ const added=[
+  {path:'docs/new.txt',type:'blob',mode:'100644',sha:hex('7')},
+  {path:'art/2026/img.png',type:'blob',mode:'100644',sha:hex('8')}
+ ];
+ const folders=[
+  {path:'art',type:'tree',mode:'040000',sha:hex('9')},
+  {path:'art/2026',type:'tree',mode:'040000',sha:hex('a')}
+ ];
+ const revised=original.map(entry=>entry.path==='docs'
+  ?{...entry,sha:hex('b')}:entry);
+ const start={truncated:false,tree:original};
+ const next={truncated:false,tree:[...revised,...folders,...added]};
+ assert.equal(api.verifyPublishedTreeDelta(start,next,added),2,
+  'existing ancestor SHA may change to incorporate an authorized descendant');
+ const reject=(name,modify,pattern)=>{
+  assert.throws(()=>api.verifyPublishedTreeDelta(start,
+   {truncated:false,tree:modify([...next.tree])},added),pattern,name)
+ };
+ reject('existing executable blob content changed',rows=>rows.map(entry=>
+  entry.path==='unchanged.txt'?{...entry,sha:hex('0')}:entry),/pre-existing/);
+ reject('original symlink replaced',rows=>rows.map(entry=>
+  entry.path==='secrets/key.link'?{...entry,sha:hex('0')}:entry),/pre-existing/);
+ reject('submodule reference changed',rows=>rows.map(entry=>
+  entry.path==='vendor'?{...entry,sha:hex('0')}:entry),/pre-existing/);
+ reject('unrelated existing directory changed',rows=>rows.map(entry=>
+  entry.path==='secrets'?{...entry,sha:hex('0')}:entry),/pre-existing/);
+ reject('original file disappeared',rows=>rows.filter(entry=>
+  entry.path!=='docs/keep.txt'),/pre-existing/);
+ reject('unreviewed extra file',rows=>[...rows,
+  {path:'secret-copy.txt',type:'blob',mode:'100644',sha:hex('c')}],/unreviewed/);
+ reject('unreviewed extra directory',rows=>[...rows,
+  {path:'surprise',type:'tree',mode:'040000',sha:hex('c')}],/unreviewed/);
+ reject('missing required added folder',rows=>rows.filter(entry=>
+  entry.path!=='art/2026'),/required uploaded parent/);
+ reject('uploaded file omitted',rows=>rows.filter(entry=>
+  entry.path!=='art/2026/img.png'),/uploaded file/);
+ reject('uploaded file modified',rows=>rows.map(entry=>
+  entry.path==='docs/new.txt'?{...entry,sha:hex('c')}:entry),/uploaded file/);
+ reject('invalid published object mode',rows=>rows.map(entry=>
+  entry.path==='docs/keep.txt'?{...entry,mode:'040000'}:entry),/unverified object identities/);
+ assert.throws(()=>api.verifyPublishedTreeDelta(
+  {truncated:false,tree:[{...original[0],mode:'bad'}]},next,added),
+  /unverified object identities/);
+ assert.throws(()=>api.verifyPublishedTreeDelta(
+  start,{truncated:true,tree:next.tree},added),/incomplete/);
+});
+
+test('an unexpected changed original sibling after branch creation stays uncertain',async()=>{
+ const {api,calls}=setup((url,options,requests)=>{
+  if(options.method==='GET'&&url.includes('/git/trees/'+SHA.newTree+'?recursive=1')){
+   const contents=mock(url,options,requests);
+   contents.tree[0]={...contents.tree[0],sha:'0'.repeat(40)};
+   return contents
+  }
+ });
+ const plan=await api.inspectDestination('private-token','owner/repo',
+  'main','assets',[file('new.txt')]);
+ await assert.rejects(api.writeNewBranch(plan,'private-token',
+  'expository/zip-demo',()=>{}),
+  error=>error.publishedButUnverified===true);
+ assert.deepEqual(calls.filter(call=>call.options.method==='POST').map(call=>
+  call.url.split('/').at(-1)),['blobs','trees','commits','refs'],
+  'a conflicting published tree must never trigger new mutations');
+});
+
 test('a mismatched branch, parent, tree or file readback remains unverified, without replay',async()=>{
  const scenarios=[
   ['wrong branch identity',url=>url.includes('/git/ref/heads/expository/'),
