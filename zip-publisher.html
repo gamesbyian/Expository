@@ -59,6 +59,7 @@ const MAX_FILES=100,MAX_BYTES=32*1024*1024,MAX_SINGLE=16*1024*1024;
 const MAX_TREE_JSON_BYTES=24*1024*1024,MAX_SMALL_JSON_BYTES=512*1024;
 const $=id=>document.getElementById(id);
 let incoming=null,review=null,busy=false,writerAbort=null,channel=null;
+let reviewEpoch=0,reviewAbort=null;
 function status(message){$('status').textContent=message}
 function utf8Bytes(value){return new TextEncoder().encode(value).length}
 // TextEncoder replaces unpaired UTF-16 surrogates with U+FFFD. Two distinct
@@ -313,22 +314,32 @@ function renderIncoming(){
  for(const entry of incoming.entries){const line=document.createElement('div');line.className='path';line.textContent=entry.path+' · '+sizeText(entry.blob.size);files.append(line)}
  $('repo').value=incoming.repo;$('base').value=incoming.base;$('review').disabled=false
 }
-function invalidate(){review=null;$('publish').disabled=true;$('destinations').replaceChildren()}
+function invalidate(){
+ // User edits revoke any pending read-only destination inspection immediately.
+ // A late GitHub response must not recreate a review for abandoned inputs.
+ ++reviewEpoch;
+ if(reviewAbort){reviewAbort.abort();reviewAbort=null;
+  status('Destination or token changed. Previous review cancelled. Review again.')}
+ review=null;$('publish').disabled=true;$('destinations').replaceChildren()
+}
 async function startReview(){
  if(busy||!incoming)return;
  const repo=$('repo').value.trim(),base=$('base').value.trim(),prefix=$('prefix').value.trim().replace(/\/$/,''),token=$('token').value.trim();
  if(!token){status('A write-capable fine-grained token is required for review.');return}
  if(!repoPath(repo)||!branchPath(base)){status('Invalid repository or base branch.');return}
  busy=true;invalidate();$('review').disabled=true;status('Reading base commit, repository tree and destination collisions…');
+ const epoch=reviewEpoch,controller=new AbortController();
+ reviewAbort=controller;
  try{
-  const plan=await inspectDestination(token,repo,base,prefix,incoming.entries);
+  const plan=await inspectDestination(token,repo,base,prefix,incoming.entries,controller.signal);
+  if(epoch!==reviewEpoch||controller.signal.aborted)return;
   review={plan,token,repo,base,prefix,source:incoming.entries};
   const destination=$('destinations');destination.replaceChildren();
   const title=document.createElement('p');title.textContent='No collisions. '+plan.entries.length+' files will be committed into a NEW branch from '+base+' @ '+plan.head.slice(0,12)+'.';destination.append(title);
   for(const entry of plan.entries){const line=document.createElement('div');line.className='path';line.textContent=entry.path;destination.append(line)}
   $('publish').disabled=false;status('Review complete. Confirm to create a new branch. No existing branch will be modified.');
- }catch(e){status('Review blocked: '+e.message)}
- finally{busy=false;$('review').disabled=false}
+ }catch(e){if(epoch===reviewEpoch)status('Review blocked: '+e.message)}
+ finally{if(reviewAbort===controller)reviewAbort=null;busy=false;$('review').disabled=false}
 }
 async function startPublish(){
  if(busy||!review)return;
