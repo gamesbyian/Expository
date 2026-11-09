@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.text.Normalizer
 import java.util.ArrayDeque
+import java.util.Collections
 import java.util.Locale
 
 /**
@@ -29,7 +30,9 @@ data class RecursiveFolderCopyRequest(
 data class RecursiveCopyEntry(
     val source: ItemRef,
     val relativePath: List<String>
-)
+) {
+    override fun toString(): String = "RecursiveCopyEntry(redacted)"
+}
 
 data class RecursiveFolderManifest(
     val digest: String,
@@ -40,6 +43,11 @@ data class RecursiveFolderManifest(
 ) {
     /** Review-only. Each subsequent destination mutation still requires its own fresh preflight. */
     val reviewable: Boolean get() = blockers.isEmpty()
+    // The public debug representation must not dump provider IDs, locations
+    // or private filenames carried inside the source entries.
+    override fun toString(): String =
+        "RecursiveFolderManifest(entries=${entries.size},files=$files," +
+            "directories=$directories,blockers=${blockers.size})"
 }
 
 /**
@@ -147,10 +155,16 @@ object RecursiveFolderCopyPlanner {
                 item.parent != item.location.folder ||
                 item.key.authorityId != source.key.authorityId)
                 errors += "RECURSIVE_SOURCE_SCOPE_CHANGED"
+            // Review fingerprints must not outlive mutable aliases of the
+            // planner's caller-owned path/capability collections. Freeze the
+            // nested snapshots as well as the returned outer entry list.
             entries += RecursiveCopyEntry(item.copy(
-                parent = item.parent.toList(),
-                location = item.location.copy(folder = item.location.folder.toList(),
-                    capabilities = item.location.capabilities.toMap())), relative.toList())
+                parent = Collections.unmodifiableList(item.parent.toList()),
+                location = item.location.copy(
+                    folder = Collections.unmodifiableList(item.location.folder.toList()),
+                    capabilities = Collections.unmodifiableMap(
+                        item.location.capabilities.toMap()))),
+                Collections.unmodifiableList(relative.toList()))
             digestParts += listOf(relative.size.toString()) + relative +
                 listOf(item.key.authorityId, item.key.opaqueItemId, item.key.version,
                     item.kind.name, item.location.key.containerId,
@@ -197,8 +211,10 @@ object RecursiveFolderCopyPlanner {
             errors += "UNRELATED_OR_MISSING_DIRECTORY_WITNESS"
         val blockers = errors.distinct()
         return RecursiveFolderManifest(hash(digestParts),
-            if (blockers.isEmpty()) entries.toList() else emptyList(),
+            if (blockers.isEmpty()) Collections.unmodifiableList(entries.toList())
+                else emptyList(),
             if (blockers.isEmpty()) files else 0,
-            if (blockers.isEmpty()) dirs else 0, blockers)
+            if (blockers.isEmpty()) dirs else 0,
+            Collections.unmodifiableList(blockers.toList()))
     }
 }

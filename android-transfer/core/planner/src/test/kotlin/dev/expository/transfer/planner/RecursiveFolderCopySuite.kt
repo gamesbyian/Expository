@@ -77,6 +77,42 @@ object RecursiveFolderCopySuite {
             check(result.digest.length == 64)
             check(RecursiveFolderCopyPlanner.plan(f.request, NOW).digest == result.digest)
         }
+        case("returned manifest is immutable and safe to log after review") {
+            val result = RecursiveFolderCopyPlanner.plan(f.request, NOW)
+            val originalDigest = result.digest
+            check(result.reviewable && result.entries.size == 3)
+            val nested = result.entries.single { it.source.name == "Episode01.mkv" }
+            check(nested.relativePath == listOf("Shows", "Episode01.mkv"))
+            check(runCatching {
+                (result.entries as MutableList<RecursiveCopyEntry>).clear()
+            }.isFailure)
+            check(runCatching {
+                (nested.relativePath as MutableList<String>).add("changed")
+            }.isFailure)
+            check(runCatching {
+                (nested.source.parent as MutableList<String>).clear()
+            }.isFailure)
+            check(runCatching {
+                (nested.source.location.folder as MutableList<String>).clear()
+            }.isFailure)
+            check(runCatching {
+                (nested.source.location.capabilities
+                    as MutableMap<Capability, CapabilityProof>).clear()
+            }.isFailure)
+            val refused = RecursiveFolderCopyPlanner.plan(
+                f.request.copy(destinationListing = DestinationListing(
+                    "incomplete", false, emptyList())), NOW)
+            check(!refused.reviewable && refused.blockers.isNotEmpty())
+            check(runCatching {
+                (refused.blockers as MutableList<String>).add("FORGED_SUCCESS")
+            }.isFailure)
+            check(result.digest == originalDigest &&
+                result.entries.size == 3 && nested.relativePath.size == 2)
+            check(!result.toString().contains("Episode01.mkv"))
+            check(!result.toString().contains("Media"))
+            check(!nested.toString().contains("Episode01.mkv"))
+            check(!nested.toString().contains("source"))
+        }
         case("changed nested file version alters entire review digest") {
             val newIndex = index(f.rootIndex.location,
                 f.rootIndex.children.map {
