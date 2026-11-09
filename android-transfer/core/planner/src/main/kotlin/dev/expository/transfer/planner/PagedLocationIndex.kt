@@ -81,8 +81,9 @@ class PagedLocationIndex private constructor(
         children: List<ObservedLocationChild> = this.children,
         seenTokens: Set<String> = this.seenTokens,
         errorCode: String? = this.errorCode
-    ) = PagedLocationIndex(location, state, snapshotId, nextToken, children,
-        seenTokens, errorCode)
+    ) = PagedLocationIndex(location, state, snapshotId, nextToken,
+        Collections.unmodifiableList(children.toList()),
+        Collections.unmodifiableSet(seenTokens.toSet()), errorCode)
 
     private fun invalid(reason: String) = rebuilt(
         state = LocationIndexState.INVALID, children = emptyList(),
@@ -163,6 +164,8 @@ class PagedLocationIndex private constructor(
     /** Opaque direct-child references; operation-specific READ proof still needed. */
     fun itemRefs(): List<ItemRef>? =
         if (state == LocationIndexState.COMPLETE)
-            children.map { ItemRef(it.key, location, location.folder, it.name, it.kind) }
+            Collections.unmodifiableList(children.map {
+                ItemRef(it.key, location, location.folder, it.name, it.kind)
+            })
         else null
 }
