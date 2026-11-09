@@ -102,6 +102,38 @@ async function mutate(blob,edit){
  edit(data,central);
  return new Blob([data]);
 }
+test('invalid local entries cannot consume the aggregate budget of valid ZIP members',async()=>{
+ const members=Array.from({length:9},(_,i)=>({name:'spoof-'+i+'.txt',body:'broken'}));
+ members.push({name:'good.txt',body:'preserved'});
+ const data=Buffer.from(await archiveMany(members).arrayBuffer());
+ const eocd=data.length-22,central=data.readUInt32LE(eocd+16);
+ let cursor=central;
+ for(let i=0;i<9;i++){
+  // Central-directory record advertises a valid individual 16 MiB deflate
+  // entry, but the local header is STORED and fails the mandatory check.
+  data.writeUInt16LE(8,cursor+10);
+  data.writeUInt32LE(16*1024*1024,cursor+24);
+  cursor+=46+data.readUInt16LE(cursor+28)+data.readUInt16LE(cursor+30)+data.readUInt16LE(cursor+32);
+ }
+ const manifest=await zipManifest(new Blob([data]));
+ assert.equal(manifest.entries.length,1);
+ assert.equal(manifest.entries[0].name,'good.txt');
+ assert.equal(manifest.skipped,9);
+ assert.equal(await (await unzipMember(manifest,manifest.entries[0])).text(),'preserved');
+});
+test('ZIP member bytes cannot overlap the central-directory records',async()=>{
+ const source=await archive('file.txt','x').arrayBuffer();
+ const data=Buffer.from(source);
+ const central=data.readUInt32LE(data.length-22+16);
+ // The stored file is one byte long. Advertise two bytes, crossing into
+ // the central-directory header's first P byte. The entry must be rejected
+ // at manifest time, before any user extraction or checksum attempt.
+ data.writeUInt32LE(2,central+20);
+ data.writeUInt32LE(2,central+24);
+ const manifest=await zipManifest(new Blob([data]));
+ assert.equal(manifest.entries.length,0);
+ assert.equal(manifest.skipped,1);
+});
 test('ZIP reader excludes symlinks rather than treating their payload as a regular file',async()=>{
  const blob=await mutate(archive('link','target'),(data,c)=>{
   data.writeUInt16LE(3<<8,c+4);
