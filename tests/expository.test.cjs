@@ -1300,6 +1300,49 @@ test('direct-tree recovery does not certify a moving branch with replaced file S
  }
 });
 
+test('deep indexed SHA cannot resurrect a folder absent from complete parent listing',async()=>{
+ const repo='example/private',branch='main',folder=Array.from({length:14},(_,i)=>'layer'+i).join('/');
+ const parent=folder.split('/').slice(0,-1).join('/'),sha='a'.repeat(40);
+ const cases=[
+  {name:'absent from complete parent',listing:[],reason:/absent from complete parent/},
+  {name:'unrelated entries below cap',listing:Array.from({length:999},(_,i)=>({
+   type:'file',path:parent+'/unrelated'+i+'.txt',sha:'b'.repeat(40)})),
+   reason:/absent from complete parent/},
+  {name:'duplicate exact child',listing:[
+   ...Array.from({length:998},(_,i)=>({type:'file',path:parent+'/a'+i+'.txt',sha:'b'.repeat(40)})),
+   {type:'dir',path:folder,sha},{type:'dir',path:folder,sha:'c'.repeat(40)}],
+   reason:/ambiguous or invalid child/},
+  {name:'mislabelled child file',listing:[
+   ...Array.from({length:999},(_,i)=>({type:'file',path:parent+'/a'+i+'.txt',sha:'b'.repeat(40)})),
+   {type:'file',path:folder,sha}],
+   reason:/ambiguous or invalid child/},
+  {name:'invalid child SHA',listing:[
+   ...Array.from({length:999},(_,i)=>({type:'file',path:parent+'/a'+i+'.txt',sha:'b'.repeat(40)})),
+   {type:'dir',path:folder,sha:'malformed'}],
+   reason:/ambiguous or invalid child/}
+ ];
+ for(const row of cases){
+  const requests=[],fetcher=async url=>{
+   requests.push(url);
+   if(!url.includes('/contents/'))throw Error('No tree should be read on contradictory parent evidence');
+   return new Response(JSON.stringify(row.listing),{status:200})
+  };
+  const {app,get}=boot(fetcher);
+  Object.assign(app.state,{repo,branch,path:folder,repoRequest:1,seq:1,
+   indexTruncated:true,indexReady:true,mode:'list'});
+  app.state.indexTreeShas.set(folder,sha);
+  app.state.items=Array.from({length:1000},(_,i)=>({
+   name:'file'+i+'.txt',path:folder+'/file'+i+'.txt',type:'file',sha:'d'.repeat(40)
+  }));
+  assert.equal(await app.recoverTargetedFolder(),0,row.name);
+  assert.deepEqual(requests,['https://api.github.com/repos/'+repo+
+   '/contents/'+parent+'?ref=main'],row.name+' must not read older SHA');
+  assert.match(get('status').textContent,row.reason);
+  assert.match(get('status').textContent,/Listing may be incomplete/);
+  assert.equal(app.state.items.length,1000,'original snapshot is preserved');
+ }
+});
+
 test('truncated recursive tree exact SHA anchors recover a capped folder beyond eight levels',async()=>{
  const repo='example/large',branch='main',parts=Array.from({length:15},(_,i)=>'level'+i);
  const folder=parts.join('/'),parent=parts.slice(0,-1).join('/');
