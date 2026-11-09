@@ -312,7 +312,8 @@ object SmartMergePreviewPlanner {
                 origin.location.key.grantId.orEmpty(),
                 origin.location.verifiedNamespace.orEmpty(),
                 origin.location.verifiedStorageDomain.orEmpty(),
-                origin.location.revision, origin.parent.joinToString("\u0000"))
+                origin.location.revision, origin.location.casePolicy.name,
+                origin.parent.joinToString("\u0000"))
             parts += origin.location.capabilities.toSortedMap(compareBy { it.name })
                 .flatMap { (cap, proof) -> listOf(cap.name, proof.support.name,
                     proof.observationId, proof.expiresAtMillis.toString()) }
