@@ -207,6 +207,72 @@ test('oversized GitHub preflight tree refuses publishing before any POST',async(
  assert.ok(calls.length>=3&&calls.every(x=>x.options.method==='GET'));
 });
 
+test('destination review refuses a mismatched or missing Git tree SHA',async()=>{
+ for(const badSha of [undefined,'f'.repeat(40),'not-a-git-sha']){
+  const {api,calls}=setup((url,options)=>{
+   if(options.method==='GET'&&url.includes('/git/trees/'+SHA.tree+'?recursive=1'))
+    return {sha:badSha,truncated:false,tree:[]}
+  });
+  await assert.rejects(api.inspectDestination('private-sensitive-token',
+   'owner/repo','main','assets',[file('new.txt')]),
+   error=>/review tree identity differs/.test(error.message)&&
+    !error.message.includes('private-sensitive-token'));
+  assert.deepEqual(calls.map(call=>call.options.method),['GET','GET','GET'],
+   'a mismatched review tree must refuse without any Git mutation');
+ }
+});
+
+test('write preflight refuses a changed Git tree SHA without staging objects',async()=>{
+ let treeReads=0;
+ const {api,calls}=setup((url,options)=>{
+  if(options.method==='GET'&&url.includes('/git/trees/'+SHA.tree+'?recursive=1')){
+   treeReads++;
+   if(treeReads===2)return {sha:'f'.repeat(40),truncated:false,tree:[]}
+  }
+ });
+ const plan=await api.inspectDestination('synthetic-token',
+  'owner/repo','main','',[file('new.txt')]);
+ await assert.rejects(
+  api.writeNewBranch(plan,'synthetic-token','expository/zip-mismatch',()=>{}),
+  /Base repository tree identity changed after review/);
+ assert.equal(treeReads,2);
+ assert.ok(calls.every(call=>call.options.method==='GET'),
+  'a mismatched second read must not create even an unreachable blob');
+});
+
+test('stop during Git tree preparation never initiates a commit or branch',async()=>{
+ const controller=new AbortController();
+ const {api,calls}=setup((url,options)=>{
+  if(options.method==='POST'&&url.endsWith('/git/trees')){
+   controller.abort();
+   return {sha:SHA.newTree}
+  }
+ });
+ const plan=await api.inspectDestination('synthetic-token',
+  'owner/repo','main','nested',[file('new.txt')]);
+ await assert.rejects(
+  api.writeNewBranch(plan,'synthetic-token','expository/zip-stop',()=>{},controller.signal),
+  error=>error.publishedButUnverified!==true&&
+   /stopped before branch creation/.test(error.message));
+ assert.deepEqual(calls.filter(call=>call.options.method==='POST')
+  .map(call=>call.url.split('/').at(-1)),['blobs','trees'],
+  'the server may have an unreachable tree but no commit or branch was requested');
+});
+
+test('stop after blob upload and before staging a Git tree makes no further writes',async()=>{
+ const controller=new AbortController();
+ const {api,calls}=setup();
+ const plan=await api.inspectDestination('synthetic-token',
+  'owner/repo','main','nested',[file('new.txt')]);
+ await assert.rejects(api.writeNewBranch(plan,'synthetic-token',
+  'expository/zip-stop',message=>{
+   if(message==='Preparing an atomic tree and commit…')controller.abort()
+  },controller.signal),/stopped before branch creation/);
+ assert.deepEqual(calls.filter(call=>call.options.method==='POST')
+  .map(call=>call.url.split('/').at(-1)),['blobs'],
+  'stop after hashing/upload must prevent all subsequent Git objects');
+});
+
 test('destination inspection performs only reads before explicit confirmation',async()=>{
  const {api,calls}=setup();
  const plan=await api.inspectDestination('sensitive-token','owner/repo','main','folder',[file('new.txt')]);

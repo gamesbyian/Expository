@@ -195,6 +195,9 @@ async function inspectDestination(token,repo,base,prefix,source,signal){
  const commit=await github(token,'GET',root+'/git/commits/'+head,undefined,signal),treeSha=commit?.tree?.sha;
  if(!/^[a-f0-9]{40}$/i.test(treeSha||''))throw Error('Commit tree is unavailable.');
  const tree=await github(token,'GET',root+'/git/trees/'+treeSha+'?recursive=1',undefined,signal);
+ // The displayed no-collision decision must be about this exact Git tree,
+ // not an unrelated complete tree returned from an intermediary/cache.
+ if(tree?.sha!==treeSha)throw Error('Destination review tree identity differs from base commit.');
  const collisions=findCollisions(entries,tree);
  if(collisions.length)throw Error('Existing files or directory conflicts: '+collisions.slice(0,8).join(', ')+(collisions.length>8?' …':''));
  return {repo,base,head,treeSha,entries};
@@ -333,8 +336,12 @@ async function writeNewBranch(plan,token,branch,onProgress,signal){
   entries.push({path:file.path,mode:'100644',type:'blob',sha:expectedSha})
  }
  onProgress('Preparing an atomic tree and commit…');
+ if(signal?.aborted)throw Error('Publishing stopped before branch creation.');
  const newTree=await github(token,'POST',prefix+'/git/trees',{base_tree:plan.treeSha,tree:entries},signal);
  if(!/^[a-f0-9]{40}$/i.test(newTree?.sha||''))throw Error('Tree creation returned no valid SHA.');
+ // A cancellation while GitHub was preparing an unreachable tree must not
+ // initiate a separate commit write even if the first reply still arrives.
+ if(signal?.aborted)throw Error('Publishing stopped before branch creation.');
  const commit=await github(token,'POST',prefix+'/git/commits',{message:'Extract ZIP files with Expository',tree:newTree.sha,parents:[plan.head]},signal);
  if(!/^[a-f0-9]{40}$/i.test(commit?.sha||''))throw Error('Commit creation returned no valid SHA.');
  if(signal?.aborted)throw Error('Publishing stopped before branch creation.');
