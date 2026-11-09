@@ -318,6 +318,32 @@ class RecursiveRealPickerCopyUiTest {
             substring = true).assertExists()
         compose.onNodeWithText("Source 2: Collision-01.txt → Collision-01 (2).txt",
             substring = true).assertExists()
+        // The same pure casefolded planner now exposes every HYPOTHETICAL
+        // future child path in bounded 12-row pages, not only renames.
+        // This is an OS-picked READ-only view with no permission escalation.
+        press("smart-merge-layout-toggle")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithTag("smart-merge-layout-page-status")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Hypothetical layout 1–12 of 38.",
+            substring = true).assertExists()
+        compose.onNodeWithTag("smart-merge-layout-row-0").assertExists()
+        press("smart-merge-layout-next")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithText("Hypothetical layout 13–24 of 38.",
+                substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("smart-merge-layout-row-11").assertExists()
+        press("smart-merge-layout-previous")
+        compose.waitUntil(30_000L) {
+            compose.onAllNodesWithText("Hypothetical layout 1–12 of 38.",
+                substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        press("smart-merge-layout-toggle")
+        assertTrue("Hiding the example must withdraw its private path rows",
+            compose.onAllNodesWithTag("smart-merge-layout-row-0")
+                .fetchSemanticsNodes().isEmpty())
         compose.onNodeWithTag("smart-merge-illustration-next")
             .assertIsEnabled().performScrollTo().performClick()
         compose.waitUntil(30_000L) {
