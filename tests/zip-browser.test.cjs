@@ -44,7 +44,7 @@ test('ZIP manifest does not expose NFC-equivalent paths as separate extractable 
  const legacy=Buffer.from([0x64,0x69,0x72,0x2f,0x82,0x2e,0x74,0x78,0x74]);
  const manifest=await zipManifest(archiveMany([
   {name:legacy,flags:0,body:'legacy payload'},
-  {name:'DIR/e\\u0301.TXT',flags:0x0800,body:'collision payload'},
+  {name:'DIR/e'+String.fromCharCode(0x0301)+'.TXT',flags:0x0800,body:'collision payload'},
   {name:'other/independent.txt',flags:0x0800,body:'independent payload'}
  ]));
  assert.deepEqual(manifest.entries.map(x=>x.name),['dir/é.txt','other/independent.txt']);
