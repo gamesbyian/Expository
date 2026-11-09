@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch,BlobImpl=globalThis.Blob) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,boundedGithubJson,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,indexTree,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,sourceSections,boundedSourceViewer,navigate,recordRecentFolder,paintRecentFolders,clearRecentFolders,openSearchHit,openContactSheet,presentSelectedSlideshow,stopSlideshow,documentThumbnail,loadThumb,openContainingFolder};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,boundedGithubJson,fetchBlob,abortRequests,safeRepoPath,zipViewer,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,indexTree,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,sourceSections,boundedSourceViewer,navigate,recordRecentFolder,paintRecentFolders,clearRecentFolders,openSearchHit,openContactSheet,presentSelectedSlideshow,stopSlideshow,documentThumbnail,loadThumb,openContainingFolder};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch','Blob',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl,BlobImpl
  );
@@ -851,6 +851,28 @@ test('GitHub metadata refuses unbounded parsing on unsupported response streams'
  const {app}=boot(fetcher);
  await assert.rejects(app.json('/repos/old/private'),/cannot enforce a streaming/);
  assert.equal(app.state.activeRequests.size,0);
+});
+
+test('ZIP virtual-folder redraw revokes previous thumbnail URLs without disturbing gallery URLs',()=>{
+ const {app}=boot();
+ const parent={name:'archive.zip',path:'assets/archive.zip',type:'file'};
+ const manifest={entries:[],skipped:0};
+ const prior=URL.revokeObjectURL,revoked=[];
+ try{
+  URL.revokeObjectURL=url=>revoked.push(url);
+  app.state.previewUrls.add('blob:zip-thumb-a');
+  app.state.previewUrls.add('blob:zip-thumb-b');
+  app.state.thumbUrls.add('blob:ordinary-gallery');
+  const first=app.zipViewer(manifest,parent);
+  assert.equal(first.className,'zip-browser');
+  assert.deepEqual(revoked,['blob:zip-thumb-a','blob:zip-thumb-b']);
+  assert.equal(app.state.previewUrls.size,0);
+  assert.equal(app.state.thumbUrls.size,1,'unrelated gallery thumbnails remain active');
+  app.state.previewUrls.add('blob:zip-thumb-next-folder');
+  app.zipViewer(manifest,parent,'subfolder');
+  assert.deepEqual(revoked,['blob:zip-thumb-a','blob:zip-thumb-b','blob:zip-thumb-next-folder']);
+  assert.equal(app.state.previewUrls.size,0);
+ }finally{URL.revokeObjectURL=prior}
 });
 
 test('a closed ZIP preview cannot republish a pending parsed archive',async()=>{
