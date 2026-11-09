@@ -54,6 +54,9 @@ button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid #ffe1
 // Credential entry is intentionally restricted to a top-level, user-opened page.
 if(window.self!==window.top){document.body.replaceChildren(document.createTextNode('Open Expository ZIP publisher directly in a new tab.'));return}
 const MAX_FILES=100,MAX_BYTES=32*1024*1024,MAX_SINGLE=16*1024*1024;
+// The recursive Git tree can dwarf the selected ZIP. Bound actual HTTP bytes
+// before JSON decoding; Content-Length and GitHub's tree count are advisory.
+const MAX_TREE_JSON_BYTES=24*1024*1024,MAX_SMALL_JSON_BYTES=512*1024;
 const $=id=>document.getElementById(id);
 let incoming=null,review=null,busy=false,writerAbort=null,channel=null;
 function status(message){$('status').textContent=message}
@@ -133,12 +136,46 @@ function findCollisions(entries,tree){
  return [...new Set(blockers)];
 }
 function encodeGitPath(path){return path.split('/').map(encodeURIComponent).join('/')}
+// Never call Response.json() on an unbounded private repository tree.
+// Reject invalid UTF-8 rather than silently replacing an opaque path byte,
+// and cancel the reader on refusal instead of buffering the remainder.
+async function boundedGithubJson(response,limit){
+ if(!Number.isSafeInteger(limit)||limit<1||limit>MAX_TREE_JSON_BYTES)
+  throw Error('Invalid GitHub response byte limit.');
+ const advertised=response.headers?.get?.('content-length');
+ if(advertised&&/^\\d+$/.test(advertised)&&Number(advertised)>limit){
+  response.body?.cancel?.().catch(()=>{});
+  throw Error('GitHub response exceeds the '+limit+'-byte publisher limit.');
+ }
+ if(!response.body||typeof response.body.getReader!=='function')
+  throw Error('This browser cannot enforce the GitHub response-size limit.');
+ const reader=response.body.getReader(),decoder=new TextDecoder('utf-8',{fatal:true});
+ const parts=[];let total=0,complete=false;
+ try{
+  while(true){
+   const {done,value}=await reader.read();
+   if(done){complete=true;break}
+   if(!(value instanceof Uint8Array))throw Error('Invalid GitHub response chunk.');
+   total+=value.byteLength;
+   if(total>limit)throw Error('GitHub response exceeds the '+limit+'-byte publisher limit.');
+   parts.push(decoder.decode(value,{stream:true}));
+  }
+  parts.push(decoder.decode());
+ }catch(error){
+  if(!complete)await reader.cancel().catch(()=>{});
+  throw error
+ }finally{reader.releaseLock()}
+ try{return JSON.parse(parts.join(''))}
+ catch{throw Error('GitHub returned malformed JSON.')}
+}
 async function github(token,method,path,body,signal){
  const headers={'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','Authorization':'Bearer '+token};
  if(body!==undefined)headers['Content-Type']='application/json';
  const response=await fetch('https://api.github.com'+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),cache:'no-store',signal,redirect:'error'});
  if(!response.ok)throw Error('GitHub '+method+' returned HTTP '+response.status+'. Check token scope, branch, path and API rate limit.');
- return response.json();
+ const limit=method==='GET'&&/\\/git\\/trees\\/[a-f0-9]{40}\\?recursive=1$/i.test(path)?
+  MAX_TREE_JSON_BYTES:MAX_SMALL_JSON_BYTES;
+ return boundedGithubJson(response,limit);
 }
 async function inspectDestination(token,repo,base,prefix,source,signal){
  if(!repoPath(repo)||!branchPath(base))throw Error('Invalid owner/repository or branch name.');
