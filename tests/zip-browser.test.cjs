@@ -8,12 +8,12 @@ const source=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 const start=source.indexOf('const ZIP_MAX_BYTES='),end=source.indexOf('const $=id=>',start);
 assert.ok(start>=0&&end>start,'ZIP reader is embedded in the browser application');
 const context=vm.createContext({Blob,Uint8Array,DataView,TextDecoder,Response,DecompressionStream,withMediaType:b=>b});
-vm.runInContext(source.slice(start,end)+'\nglobalThis.exposed={zipManifest,unzipMember,zipCRC,zipSafeForDevice,zipShareSelected};',context);
-const {zipManifest,unzipMember,zipCRC,zipSafeForDevice,zipShareSelected}=context.exposed;
-function archive(name='pictures/hello.txt',body='Hello from ZIP',crcOverride){
- const data=Buffer.from(body),filename=Buffer.from(name),crc=crcOverride??zipCRC(data);
- const local=Buffer.alloc(30);local.writeUInt32LE(0x04034b50,0);local.writeUInt32LE(crc,14);local.writeUInt32LE(data.length,18);local.writeUInt32LE(data.length,22);local.writeUInt16LE(filename.length,26);
- const center=Buffer.alloc(46);center.writeUInt32LE(0x02014b50,0);center.writeUInt32LE(crc,16);center.writeUInt32LE(data.length,20);center.writeUInt32LE(data.length,24);center.writeUInt16LE(filename.length,28);center.writeUInt32LE(0,42);
+vm.runInContext(source.slice(start,end)+'\nglobalThis.exposed={zipManifest,zipDecodeName,unzipMember,zipCRC,zipSafeForDevice,zipShareSelected};',context);
+const {zipManifest,zipDecodeName,unzipMember,zipCRC,zipSafeForDevice,zipShareSelected}=context.exposed;
+function archive(name='pictures/hello.txt',body='Hello from ZIP',crcOverride,flags=0){
+ const data=Buffer.from(body),filename=Buffer.isBuffer(name)?name:Buffer.from(name),crc=crcOverride??zipCRC(data);
+ const local=Buffer.alloc(30);local.writeUInt32LE(0x04034b50,0);local.writeUInt16LE(flags,6);local.writeUInt32LE(crc,14);local.writeUInt32LE(data.length,18);local.writeUInt32LE(data.length,22);local.writeUInt16LE(filename.length,26);
+ const center=Buffer.alloc(46);center.writeUInt32LE(0x02014b50,0);center.writeUInt16LE(flags,8);center.writeUInt32LE(crc,16);center.writeUInt32LE(data.length,20);center.writeUInt32LE(data.length,24);center.writeUInt16LE(filename.length,28);center.writeUInt32LE(0,42);
  const end=Buffer.alloc(22);end.writeUInt32LE(0x06054b50,0);end.writeUInt16LE(1,8);end.writeUInt16LE(1,10);end.writeUInt32LE(center.length+filename.length,12);end.writeUInt32LE(local.length+filename.length+data.length,16);
  return new Blob([local,filename,data,center,filename,end]);
 }
@@ -22,6 +22,31 @@ test('ZIP manifest includes navigable member paths and extracts verified bytes',
  assert.equal(manifest.entries.length,1);
  assert.equal(manifest.entries[0].name,'pictures/hello.txt');
  assert.equal(await (await unzipMember(manifest,manifest.entries[0])).text(),'Hello from ZIP');
+});
+test('legacy ZIP CP437 names preserve accented letters and extracted bytes',async()=>{
+ // Legacy tools set no UTF-8 flag; 0x82 is CP437 é, invalid standalone UTF-8.
+ const cp437=Buffer.from([0x63,0x61,0x66,0x82,0x2e,0x74,0x78,0x74]);
+ const manifest=await zipManifest(archive(cp437,'correct payload'));
+ assert.equal(manifest.entries.length,1);
+ assert.equal(manifest.entries[0].name,'café.txt');
+ assert.equal(manifest.skipped,0);
+ assert.equal(await (await unzipMember(manifest,manifest.entries[0])).text(),'correct payload');
+ const last=zipDecodeName(new Uint8Array([0xff]),0);
+ assert.equal(last.length,1);
+ assert.equal(last.charCodeAt(0),0xa0,'CP437 0xFF occupies one code point');
+});
+test('explicit UTF-8 ZIP flag preserves Unicode filenames',async()=>{
+ const name='ユニレーサーズ/écho.txt';
+ const manifest=await zipManifest(archive(name,'content',undefined,0x0800));
+ assert.equal(manifest.entries.length,1);
+ assert.equal(manifest.entries[0].name,name);
+ assert.equal(manifest.skipped,0);
+});
+test('declared UTF-8 ZIP with malformed bytes is skipped rather than renamed',async()=>{
+ const malformed=Buffer.from([0x6e,0x61,0x6d,0x65,0xc3,0x28,0x2e,0x74,0x78,0x74]);
+ const manifest=await zipManifest(archive(malformed,'secret',undefined,0x0800));
+ assert.equal(manifest.entries.length,0,'invalid UTF-8 must not produce replacement-character filenames');
+ assert.equal(manifest.skipped,1);
 });
 test('ZIP reader discards path traversal names',async()=>{
  const manifest=await zipManifest(archive('../escape.txt'));
