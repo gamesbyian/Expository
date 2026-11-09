@@ -11,7 +11,7 @@ const source = html.match(/<script>([\s\S]+?)<\/script>/)?.[1];
 function fakeNode(tag='DIV') {
   return {
     tagName:tag.toUpperCase(),dataset:{},children:[],value:'',textContent:'',style:{setProperty(name,value){this[name]=value}},classList:{add(){},remove(){},contains(){return false}},
-    append(...nodes){this.children.push(...nodes)},replaceChildren(...nodes){this.children=nodes},
+    append(...nodes){this.children.push(...nodes)},replaceChildren(...nodes){this.children=nodes},replaceChild(replacement,old){const i=this.children.indexOf(old);if(i<0)throw Error('Child absent');this.children[i]=replacement;return old},
     remove(){},querySelector(){return null},querySelectorAll(){return []},contains(){return false},getClientRects(){return [1]},setAttribute(name,value){this[name]=value},getAttribute(name){return this[name]||null},
     addEventListener(){},focus(){},click(){},get isConnected(){return true}
   };
@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch,BlobImpl=globalThis.Blob) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,sourceSections,boundedSourceViewer,navigate,recordRecentFolder,paintRecentFolders,clearRecentFolders,openSearchHit,documentThumbnail,loadThumb,openContainingFolder};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,sourceSections,boundedSourceViewer,navigate,recordRecentFolder,paintRecentFolders,clearRecentFolders,openSearchHit,openContactSheet,presentSelectedSlideshow,stopSlideshow,documentThumbnail,loadThumb,openContainingFolder};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch','Blob',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl,BlobImpl
  );
@@ -555,6 +555,68 @@ test('image contact sheet selections are bounded, reversible and cleared',()=>{
  assert.equal(get('contactSheet').disabled,true);
 });
 
+test('contact-sheet slideshow uses already loaded images with no new fetch and clean teardown',async()=>{
+ let calls=0;
+ const fetcher=async()=>{calls++;return new Response(new Uint8Array([1,2,3]),{status:200})};
+ const {app,get}=boot(fetcher);
+ app.state.repo='example/private';app.state.branch='main';app.state.repoIsPrivate=true;
+ const items=[{name:'one.png',path:'private/one.png',type:'file',size:3},
+  {name:'two.png',path:'private/two.png',type:'file',size:3}];
+ app.state.selected=new Map(items.map(x=>[x.path,x]));
+ await app.openContactSheet();
+ assert.equal(calls,2,'the sheet loads each source once');
+ const sheet=get('previewBody').children[0],actions=sheet.children[0];
+ const slide=actions.children[1];
+ assert.equal(slide.textContent,'Slideshow');
+ assert.equal(slide.disabled,false);
+ assert.equal(slide.onclick(),true);
+ assert.equal(calls,2,'slideshow must reuse downloaded images without new calls');
+ const view=get('previewBody').children[0];
+ assert.equal(view.className,'slide-view');
+ const buttons=view.children[0].children,stage=view.children[1],caption=view.children[2];
+ assert.equal(buttons[5].textContent,'1 of 2');
+ assert.equal(stage.children[0].alt,'private/one.png');
+ buttons[3].onclick();
+ assert.equal(stage.children[0].alt,'private/two.png');
+ assert.equal(buttons[5].textContent,'2 of 2');
+ assert.equal(caption.textContent,'private/two.png');
+ buttons[1].onclick();
+ assert.equal(stage.children[0].alt,'private/one.png');
+ buttons[2].onclick();
+ assert.ok(app.state.slideshowTimer!==null,'Play starts the timer by explicit user action');
+ assert.equal(buttons[2].textContent,'Pause');
+ buttons[4].value='3000';buttons[4].onchange();
+ assert.ok(app.state.slideshowTimer!==null,'interval change remains actively scheduled');
+ buttons[2].onclick();
+ assert.equal(app.state.slideshowTimer,null);
+ assert.equal(buttons[2].textContent,'Play');
+ buttons[0].onclick();
+ assert.equal(app.state.slideshowActive,false);
+ assert.equal(get('previewBody').children[0],sheet,'Back restores original contact sheet');
+ assert.equal(get('previewTitle').textContent,'Contact sheet · 2 images');
+ assert.equal(calls,2);
+ app.clearPreview();
+ assert.equal(app.state.slideshowTimer,null);
+ assert.equal(app.state.slideStep,null);
+ assert.equal(get('previewBody').children.length,0);
+});
+
+test('stale slideshows cannot start, and session teardown stops active playback',()=>{
+ const {app,get}=boot();
+ const loaded=[{item:{name:'secret.png',path:'secret/secret.png'},image:{src:'blob:synthetic'}}];
+ const body=fakeNode('div');
+ app.state.sheetOpen=true;app.state.sheetSeq=4;app.state.preview={name:'Contact sheet'};
+ assert.equal(app.presentSelectedSlideshow(loaded,body,3),false,'stale sheet generation rejected');
+ assert.equal(get('previewBody').children.length,0);
+ assert.equal(app.presentSelectedSlideshow(loaded,body,4),true);
+ const controls=get('previewBody').children[0].children[0].children;
+ controls[2].onclick();
+ assert.ok(app.state.slideshowTimer!==null);
+ app.resetSession();
+ assert.equal(app.state.slideshowActive,false);
+ assert.equal(app.state.slideshowTimer,null);
+ assert.equal(app.state.slideStep,null,'private selected paths cannot remain in timer callbacks');
+});
 test('private repository browsing never leaves identifiers in Expository URL fragments',()=>{
  const {app,urls}=boot();
  app.state.repo='gamesbyian/secret-project';app.state.branch='main';app.state.path='assets/private';app.state.repoIsPrivate=true;
