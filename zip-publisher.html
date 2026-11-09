@@ -232,10 +232,68 @@ function encodeBlob(blob){
  * every uploaded path to its exact Git blob object ID. No retry or mutation:
  * an ambiguous result after ref creation must remain review-required.
  *
- * This checks returned Git object IDs against upload expectations, without
- * downloading branch bytes again or proving the base tree is unchanged.
+ * This also independently compares the complete base and published tree
+ * objects to detect unreviewed additions or changes. It does not re-download
+ * private payload bytes, and Git SHA-1 is not a collision-resistant signature.
  */
-async function verifyPublishedBranch(plan,token,branch,commitSha,treeSha,uploaded,signal){
+/**
+ * Compare a complete reviewed base tree with the independently fetched result.
+ * Only selected files and their required parent folders may be added.
+ * Existing files, symlinks and submodules retain exact mode/object identity.
+ * An existing ancestor directory's SHA is permitted to change because its
+ * child tree grew; unrelated directories must retain their original SHA.
+ */
+function verifyPublishedTreeDelta(before,after,uploaded){
+ findCollisions([],before);
+ findCollisions([],after);
+ const allowedMode={blob:new Set(['100644','100755','120000']),
+  tree:new Set(['040000']),commit:new Set(['160000'])};
+ function checkedMap(tree){
+  const rows=new Map();
+  for(const entry of tree.tree){
+   if(!allowedMode[entry.type]?.has(entry.mode)||
+      !/^[0-9a-f]{40}$/i.test(entry.sha||''))
+    throw Error('GitHub tree contains unverified object identities or file modes.');
+   rows.set(entry.path,entry)
+  }
+  return rows
+ }
+ const existing=checkedMap(before),published=checkedMap(after);
+ const expected=new Map(),requiredFolders=new Set();
+ for(const file of uploaded){
+  if(!cleanPath(file.path)||file.type!=='blob'||file.mode!=='100644'||
+     !/^[0-9a-f]{40}$/i.test(file.sha||'')||expected.has(file.path))
+   throw Error('Upload has invalid or duplicate Git file identities.');
+  expected.set(file.path,file);
+  let slash=file.path.indexOf('/');
+  while(slash!==-1){
+   requiredFolders.add(file.path.slice(0,slash));
+   slash=file.path.indexOf('/',slash+1)
+  }
+ }
+ for(const [path,old] of existing){
+  const current=published.get(path);
+  if(!current||current.type!==old.type||current.mode!==old.mode||
+     (old.type!=='tree'||!requiredFolders.has(path))&&current.sha!==old.sha)
+   throw Error('A pre-existing repository object was missing or changed.');
+ }
+ for(const [path,current] of published){
+  if(existing.has(path))continue;
+  if(expected.has(path)){
+   if(current.type!=='blob'||current.mode!=='100644'||
+      current.sha!==expected.get(path).sha)
+    throw Error('An uploaded file was missing or differed from its verified bytes.');
+  }else if(!(requiredFolders.has(path)&&current.type==='tree'&&
+      current.mode==='040000'))
+   throw Error('Published branch contains unreviewed additional objects.');
+ }
+ for(const path of expected.keys())
+  if(!published.has(path))throw Error('A reviewed uploaded file was missing.');
+ for(const path of requiredFolders)
+  if(!published.has(path))throw Error('A required uploaded parent folder was missing.');
+ return expected.size
+}
+async function verifyPublishedBranch(plan,token,branch,commitSha,treeSha,uploaded,baseTree,signal){
  const root='/repos/'+plan.repo;
  const ref=await github(token,'GET',root+'/git/ref/heads/'+encodeGitPath(branch),undefined,signal);
  if(ref?.ref!=='refs/heads/'+branch||ref?.object?.sha!==commitSha)
@@ -247,23 +305,16 @@ async function verifyPublishedBranch(plan,token,branch,commitSha,treeSha,uploade
   throw Error('New branch commit identity, tree or parent differs from review.');
  const tree=await github(token,'GET',root+'/git/trees/'+treeSha+'?recursive=1',undefined,signal);
  if(tree?.sha!==treeSha)throw Error('Published tree identity differs from review.');
- // The existing collision validator also rejects truncated, malformed,
- // duplicate-case or ambiguous Unicode identities in the observed tree.
- findCollisions([],tree);
- const published=new Map(tree.tree.map(entry=>[entry.path,entry]));
- for(const expected of uploaded){
-  const actual=published.get(expected.path);
-  if(!actual||actual.type!=='blob'||actual.mode!=='100644'||
-    actual.sha!==expected.sha)
-   throw Error('An uploaded file identity was missing or differed on readback.');
- }
- return uploaded.length
+ // Prevent any silent modification to the reviewed base. The only allowed
+ // delta is the explicitly uploaded file list plus necessary directories.
+ return verifyPublishedTreeDelta(baseTree,tree,uploaded);
 }
 async function writeNewBranch(plan,token,branch,onProgress,signal){
  if(!branchPath(branch)||branch===plan.base)throw Error('Unsafe proposed output branch.');
  const prefix='/repos/'+plan.repo,latest=await github(token,'GET',prefix+'/git/ref/heads/'+encodeGitPath(plan.base),undefined,signal);
  if(latest?.object?.sha!==plan.head)throw Error('Base branch changed after review. Review destinations again.');
  const tree=await github(token,'GET',prefix+'/git/trees/'+plan.treeSha+'?recursive=1',undefined,signal);
+ if(tree?.sha!==plan.treeSha)throw Error('Base repository tree identity changed after review.');
  if(findCollisions(plan.entries,tree).length)throw Error('Destinations are no longer collision-free.');
  const entries=[];
  for(let i=0;i<plan.entries.length;i++){
@@ -308,7 +359,7 @@ async function writeNewBranch(plan,token,branch,onProgress,signal){
  let verifiedEntries;
  try{
   verifiedEntries=await verifyPublishedBranch(
-   plan,token,branch,commit.sha,newTree.sha,entries,signal);
+   plan,token,branch,commit.sha,newTree.sha,entries,tree,signal);
  }catch{
   // The branch may ALREADY exist. Never replay object or ref writes on an
   // unavailable, stale or contrary readback. Let the operator inspect it.
