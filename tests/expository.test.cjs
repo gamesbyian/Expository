@@ -413,13 +413,13 @@ test('repo switch cancels an authenticated JSON body after response headers',asy
 });
 
 test('repo switch aborts the current binary preview stream, not just fetch headers',async()=>{
- let finishRead,signal;
+ let finishRead,signal,readCount=0;
  const apiFetch=async(_u,opts)=>{
   signal=opts.signal;
   return {ok:true,headers:{get:()=>null},body:{getReader:()=>({
-   read:()=>new Promise(resolve=>{finishRead=()=>resolve({
-    done:false,value:new Uint8Array([1,2,3])
-   })}),
+   read:()=>readCount++?Promise.resolve({done:true}):new Promise(resolve=>{
+    finishRead=()=>resolve({done:false,value:new Uint8Array([1,2,3])})
+   }),
    releaseLock(){}
   })}};
  };
