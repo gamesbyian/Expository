@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,documentThumbnail,openContainingFolder};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,documentThumbnail,openContainingFolder};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl
  );
@@ -390,6 +390,64 @@ test('repo switches abort outstanding authenticated API requests',async()=>{
  app.abortRequests();
  await assert.rejects(pending,/Aborted/);
  assert.equal(aborted,true);
+ assert.equal(app.state.activeRequests.size,0);
+});
+
+
+test('repo switch cancels an authenticated JSON body after response headers',async()=>{
+ let finishBody,signal;
+ const apiFetch=async(_url,opts)=>{
+  signal=opts.signal;
+  return {ok:true,json:()=>new Promise(resolve=>{finishBody=resolve})};
+ };
+ const {app}=boot(apiFetch);app.state.token='ghp_private_test_only';
+ const pending=app.json('/repos/old/private');
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(typeof finishBody,'function','response headers arrived and parsing began');
+ assert.equal(app.state.activeRequests.size,1,'body read still holds its abort controller');
+ app.abortRequests();
+ assert.equal(signal.aborted,true);
+ finishBody({private:true});
+ await assert.rejects(pending,/cancelled/,'late body must not be accepted after disconnect');
+ assert.equal(app.state.activeRequests.size,0);
+});
+
+test('repo switch aborts the current binary preview body, not just fetch headers',async()=>{
+ let finishBody,signal;
+ const apiFetch=async(_url,opts)=>{
+  signal=opts.signal;
+  return {ok:true,blob:()=>new Promise(resolve=>{finishBody=resolve})};
+ };
+ const {app}=boot(apiFetch);app.state.repo='example/old';app.state.branch='main';
+ const pending=app.fetchBlob({name:'secret.txt',path:'private/secret.txt'});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(app.state.activeRequests.size,1);
+ app.abortRequests();
+ assert.equal(signal.aborted,true);
+ finishBody(new Blob(['previous account contents']));
+ await assert.rejects(pending,/cancelled/);
+ assert.equal(app.state.activeRequests.size,0);
+});
+
+test('a late denied old-session response cannot impose its rate limit on the new session',async()=>{
+ let finishErrorBody,signal;
+ const apiFetch=async(_url,opts)=>{
+  signal=opts.signal;
+  return {
+   ok:false,status:403,
+   headers:{get:key=>key==='x-ratelimit-remaining'?'35':null},
+   json:()=>new Promise(resolve=>{finishErrorBody=resolve})
+  };
+ };
+ const {app}=boot(apiFetch);
+ const pending=app.json('/repos/old/private');
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(typeof finishErrorBody,'function');
+ app.abortRequests();
+ assert.equal(signal.aborted,true);
+ finishErrorBody({message:'secondary rate limit exceeded for prior token'});
+ await assert.rejects(pending,/cancelled/);
+ assert.equal(app.state.rateLimitedUntil,0,'stale token must not throttle successor');
  assert.equal(app.state.activeRequests.size,0);
 });
 

@@ -405,31 +405,39 @@ function githubFailure(response,now=Date.now(),secondary=false){
  if(code===404)return {limited:false,until:0,message:'Repository or path not found (404), or the current token has no access.'};
  return {limited:false,until:0,message:'GitHub request failed (HTTP '+code+'). Please retry later.'};
 }
-async function api(path,accept){
+async function api(path,accept,readBody){
  if(Date.now()<state.rateLimitedUntil)throw Error('GitHub API is temporarily rate-limited. Try again after '+new Date(state.rateLimitedUntil).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'.');
  const headers={'Accept':accept||'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
  if(state.token)headers.Authorization='Bearer '+state.token;
  const controller=new AbortController();state.activeRequests.add(controller);
+ const ensureLive=()=>{if(controller.signal.aborted)throw Error('GitHub request cancelled.');};
  try{
   const r=await fetch(url(path),{headers,cache:'no-store',signal:controller.signal,redirect:'error'});
+  ensureLive();
   if(!r.ok){
    let secondary=false;
    if(r.status===403&&!r.headers?.get('retry-after')&&r.headers?.get('x-ratelimit-remaining')!=='0'){
     try{const data=await r.json();secondary=/secondary rate limit|abuse detection|rate limit exceeded/i.test(String(data?.message||''))}catch{}
    }
+   // A response from a disconnected account must not rate-limit its successor.
+   ensureLive();
    const failure=githubFailure(r,Date.now(),secondary);if(failure.limited)state.rateLimitedUntil=Math.max(state.rateLimitedUntil,failure.until);throw Error(failure.message)
   }
+  // Consume response bodies while their AbortController is still registered.
+  // A repository/credential switch aborts both network transfer AND JSON/blob
+  // decoding, and rejects uncooperative/mocked late body completions.
+  if(readBody){const value=await readBody(r);ensureLive();return value}
   return r;
  }finally{state.activeRequests.delete(controller)}
 }
-async function json(path){return(await api(path)).json()}
+async function json(path){return api(path,undefined,r=>r.json())}
 function pathPart(s){return s.split('/').map(enc).join('/')}
 function blobUrl(blob,kind='preview'){const u=URL.createObjectURL(blob);(kind==='thumb'?state.thumbUrls:state.previewUrls).add(u);return u}
 function clearUrls(kind){const set=kind==='thumb'?state.thumbUrls:state.previewUrls;for(const u of set)URL.revokeObjectURL(u);set.clear()}
 function clearObjects(){clearUrls('thumb');clearUrls('preview')}
 function withMediaType(blob,name){const ext=name.split('.').at(-1).toLowerCase();const mime={svg:'image/svg+xml',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',avif:'image/avif',bmp:'image/bmp',pdf:'application/pdf',mp4:'video/mp4',webm:'video/webm',mp3:'audio/mpeg',m4a:'audio/mp4',wav:'audio/wav',ogg:'audio/ogg'}[ext];return mime?new Blob([blob],{type:mime}):blob}
 function entryUrl(item){const p=pathPart(item.path);return '/repos/'+state.repo+'/contents/'+p+'?ref='+enc(state.branch)}
-async function fetchBlob(item){if(item.zipMember){const manifest=zipManifests.get(item.zipParent.path)||zipContext;if(!manifest)throw Error('ZIP archive no longer loaded.');return unzipMember(manifest,item.zipMember)}const r=await api(entryUrl(item),'application/vnd.github.raw+json');return withMediaType(await r.blob(),item.name)}
+async function fetchBlob(item){if(item.zipMember){const manifest=zipManifests.get(item.zipParent.path)||zipContext;if(!manifest)throw Error('ZIP archive no longer loaded.');return unzipMember(manifest,item.zipMember)}const blob=await api(entryUrl(item),'application/vnd.github.raw+json',r=>r.blob());return withMediaType(blob,item.name)}
 function icon(item){return item.type==='dir'?'📁':imageRx.test(item.name)?'◈':/\.pdf$/i.test(item.name)?'▤':textRx.test(item.name)?'≡':'◇'}
 function formatSize(n){return n==null?'':n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB'}
 function elem(tag,cls,text){let el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=text;return el}
