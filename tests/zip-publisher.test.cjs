@@ -249,6 +249,61 @@ test('a mismatched branch, parent, tree or file readback remains unverified, wit
  }
 });
 
+test('uncertain GitHub branch-creation replies always require manual inspection',async()=>{
+ const branch='expository/zip-demo';
+ const scenarios=[
+  ['HTTP 409',()=>({__httpStatus:409})],
+  ['HTTP 422',()=>({__httpStatus:422})],
+  ['HTTP 503',()=>({__httpStatus:503})],
+  ['transport disconnect',()=>{throw new TypeError('synthetic connection lost') }],
+  ['empty acknowledgement',()=>({})],
+  ['wrong ref name',()=>({ref:'refs/heads/expository/other',object:{sha:SHA.commit}})],
+  ['wrong commit SHA',()=>({ref:'refs/heads/'+branch,object:{sha:'f'.repeat(40)}})]
+ ];
+ for(const [scenario,answer] of scenarios){
+  const {api,calls}=setup((url,options)=>
+   options.method==='POST'&&url.endsWith('/git/refs')?answer():undefined);
+  const plan=await api.inspectDestination('private-sensitive-token',
+   'owner/repo','main','assets',[file('photo.png')]);
+  await assert.rejects(
+   api.writeNewBranch(plan,'private-sensitive-token',branch,()=>{}),
+   error=>error.publishedButUnverified===true&&
+    /branch may already exist/i.test(error.message)&&
+    !error.message.includes('private-sensitive-token'),
+   scenario+' must never claim that branch creation failed or was undone');
+  const posts=calls.filter(call=>call.options.method==='POST');
+  assert.deepEqual(posts.map(call=>call.url.split('/').at(-1)),
+   ['blobs','trees','commits','refs'],scenario+' must not retry/ref-write again');
+  assert.equal(calls.filter(call=>call.url.includes('/git/ref/heads/'+branch)).length,0,
+   scenario+' must not silently reconcile or replay an uncertain ref');
+ }
+});
+
+test('cancellation immediately before ref mutation remains a known no-ref outcome',async()=>{
+ const controller=new AbortController();
+ const {api,calls}=setup((url,options,requests)=>{
+  if(options.method==='GET'&&url.endsWith('/git/ref/heads/main')&&
+   requests.filter(call=>call.url.endsWith('/git/ref/heads/main')).length===3)
+   controller.abort();
+ });
+ const plan=await api.inspectDestination('private-token','owner/repo',
+  'main','',[file('fine.txt')]);
+ await assert.rejects(
+  api.writeNewBranch(plan,'private-token','expository/zip-cancel',()=>{},controller.signal),
+  error=>error.publishedButUnverified!==true&&/stopped before branch creation/.test(error.message));
+ assert.ok(calls.some(call=>call.url.endsWith('/git/commits')&&call.options.method==='POST'),
+  'blob/tree/commit objects can be created without a branch ref');
+ assert.equal(calls.some(call=>call.url.endsWith('/git/refs')&&call.options.method==='POST'),false,
+  'no ref mutation request was sent when cancellation preceded it');
+});
+
+test('stop control explains a branch may remain after cancellation',()=>{
+ assert.match(html,/id="cancel" disabled>Stop \(branch may remain\)<\/button>/);
+ assert.match(source,/A GitHub branch may already exist; inspect it before another publication/);
+ assert.match(source,/if\(e\.publishedButUnverified\)/);
+ assert.match(source,/Inspect the possibly created branch/);
+});
+
 test('an unavailable post-creation GitHub read remains uncertain, never auto-retried',async()=>{
  const {api,calls}=setup((url,options)=>{
   if(options.method==='GET'&&url.includes('/git/ref/heads/expository/'))
