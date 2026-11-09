@@ -93,8 +93,8 @@ test('manual date sampling requests at most twelve files at three-way concurrenc
  const {app,get}=boot(apiFetch);
  Object.assign(app.state,{repo:'public/test',branch:'main',repoRequest:1,path:''});
  app.state.items=Array.from({length:30},(_,i)=>({
-  name:'file'+String(i).padStart(2,'0')+'.txt',
-  path:'file'+String(i).padStart(2,'0')+'.txt',type:'file',size:10
+  name:'file'+String(i).padStart(2,'0')+'.kt',
+  path:'file'+String(i).padStart(2,'0')+'.kt',type:'file',size:10
  }));
  get('sortFiles').value='modified';get('sortDirection').value='desc';
  app.paint();await app.loadFileDates();
@@ -113,7 +113,7 @@ test('date responses from disconnected private repository never populate a succe
  });
  const {app,get}=boot(apiFetch);
  Object.assign(app.state,{repo:'private/first',branch:'main',repoRequest:1,path:''});
- app.state.items=[{name:'secret.txt',path:'secret.txt',type:'file',size:10}];
+ app.state.items=[{name:'secret.kt',path:'secret.kt',type:'file',size:10}];
  get('sortFiles').value='modified';app.paint();
  const pending=app.loadFileDates();
  await new Promise(resolve=>setImmediate(resolve));
