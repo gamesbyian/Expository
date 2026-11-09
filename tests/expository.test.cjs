@@ -944,7 +944,7 @@ test('whole-source Go to line controls support Enter and reject invalid input',a
  bad.children[3].value='999999';
  assert.equal(await bad.children[4].onclick(),false);
  assert.match(bad.children[5].textContent,/Enter an original line from 1/);
- assert.equal(app.state.sourceSegment>0);
+ assert.ok(app.state.sourceSegment>0,'invalid request keeps the active section');
  const event={key:'Enter',preventDefault(){this.prevented=true}};
  bad.children[3].value='2';
  assert.equal(await bad.children[3].onkeydown(event),true);
