@@ -33,6 +33,21 @@ class SmartMergeFolder private constructor(
                 !SmartMergeNameRules.validComponent(observed.name) ||
                 l.capabilities[Capability.READ]?.valid(nowMillis) != true)
                 return null
+            // The M1 snapshot is later serialized into an M2 review digest.
+            // Java UTF-8 conversion substitutes '?' for an unpaired UTF-16
+            // surrogate, so two different opaque IDs/revisions/witnesses may
+            // otherwise hash to the same bytes. Reject malformed identity
+            // fields, not just malformed visible folder names.
+            val identity = listOf(observed.key.authorityId,
+                observed.key.opaqueItemId, observed.key.version,
+                k.authorityId, k.rootId, k.containerId, k.grantId.orEmpty(),
+                l.revision, l.verifiedNamespace.orEmpty(),
+                l.verifiedStorageDomain.orEmpty())
+            if (identity.any { !SmartMergeNameRules.wellFormedUtf16(it) } ||
+                observed.parent.any { !SmartMergeNameRules.wellFormedUtf16(it) } ||
+                l.capabilities.values.any {
+                    !SmartMergeNameRules.wellFormedUtf16(it.observationId)
+                }) return null
             // A SAF picker grant cannot be inferred from a provider name.
             if (k.kind == LocationKind.LOCAL_SAF && k.grantId.isNullOrBlank())
                 return null
