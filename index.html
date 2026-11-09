@@ -32,7 +32,7 @@ main{max-width:1600px;margin:auto;padding:16px;display:grid;grid-template-column
 body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1b2130;--dim:#566173;--accent:#176596;--shadow:0 18px 48px #161b2733;color-scheme:light}body.light header{background:#fffffff0}body.light .field,body.light .thumb{background:#f7f8fa}body.light .preview-body pre{background:#edf0f5}
 .refine{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 14px;border-bottom:1px solid var(--stroke)}.refine .field{width:auto;min-width:105px;max-width:180px;flex:1;padding:8px;min-height:44px}.refine label{display:flex;align-items:center;gap:7px}.refine input[type=range]{width:100px;accent-color:var(--accent);min-height:38px}.refine .pill{padding:8px 11px}
 .items.grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--tile-min,145px)),1fr))}.items.grid .thumb{height:clamp(92px,calc(var(--tile-min,145px) * .75),240px)}
-.code-view{display:block;max-width:100%;overflow:auto;padding:8px 0!important;white-space:pre!important;overflow-wrap:normal!important;line-height:1.6;font-size:12px!important}.code-line{display:block;min-height:1.5em;padding-right:10px}.code-line:hover{background:#ffffff0a}.line-num{display:inline-block;user-select:none;color:#737c94;text-align:right;width:3.4rem;padding:0 12px 0 7px;border-right:1px solid var(--stroke);margin-right:13px;position:sticky;left:0;background:var(--panel2)}.tok-comment{color:#829093}.tok-string{color:#a7d987}.tok-num{color:#dbaa76}.tok-keyword{color:#bda0ee}.tok-type{color:#7ac8e7}.code-toolbar{display:flex;gap:8px;flex-wrap:wrap}.code-pages{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:8px 0}.code-pages button{min-height:44px}.code-pages span{flex:1;text-align:center;min-width:110px}.code-toolbar{align-items:center;margin-bottom:8px}.code-toolbar .code-find{min-height:44px;width:min(100%,190px);flex:1 1 140px;background:var(--panel2);color:var(--text);border:1px solid var(--stroke);border-radius:8px;padding:9px}.code-toolbar .code-line-number{min-height:44px;width:75px;background:var(--panel2);color:var(--text);border:1px solid var(--stroke);border-radius:8px;padding:9px}.code-toolbar button{min-height:44px;padding:8px 11px}.code-line.code-find-hit{background:#3c506b55}.code-line.code-find-current{background:#3c7a9a75;outline:1px solid var(--accent);outline-offset:-1px}.code-search-info{flex:1 1 100%;font-size:11px}.source-segments{display:flex;flex-direction:column;gap:10px;min-width:0}.source-segment-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.source-segment-controls button{min-height:44px}.source-segment-controls .hint{flex:1 1 100%;overflow-wrap:anywhere}.outline-panel{margin:8px 0;border:1px solid var(--stroke);border-radius:10px;padding:7px 9px;background:var(--panel2)}.outline-panel summary{cursor:pointer;min-height:38px;padding:8px;color:var(--accent);font-size:12px;font-weight:700}.outline-list{display:flex;flex-wrap:wrap;gap:7px;max-height:210px;overflow:auto;padding:6px 0}.outline-list .pill{min-height:44px;font-size:12px;max-width:100%;overflow-wrap:anywhere;text-align:left}.search-hit{display:block;text-align:left;border:1px solid var(--stroke);border-radius:10px;background:var(--panel2);padding:10px;color:var(--text);width:100%;overflow-wrap:anywhere}.search-hit small{display:block;color:var(--dim)}#searchResults{padding:0 14px 14px;display:grid;gap:7px}#favorites button{width:100%;text-align:left;overflow-wrap:anywhere}#recentFolders button{width:100%;min-height:44px;text-align:left;overflow-wrap:anywhere;word-break:break-word}#clearRecents{min-height:44px}
+.code-view{display:block;max-width:100%;overflow:auto;padding:8px 0!important;white-space:pre!important;overflow-wrap:normal!important;line-height:1.6;font-size:12px!important}.code-line{display:block;min-height:1.5em;padding-right:10px}.code-line:hover{background:#ffffff0a}.line-num{display:inline-block;user-select:none;color:#737c94;text-align:right;width:3.4rem;padding:0 12px 0 7px;border-right:1px solid var(--stroke);margin-right:13px;position:sticky;left:0;background:var(--panel2)}.tok-comment{color:#829093}.tok-string{color:#a7d987}.tok-num{color:#dbaa76}.tok-keyword{color:#bda0ee}.tok-type{color:#7ac8e7}.code-toolbar{display:flex;gap:8px;flex-wrap:wrap}.code-pages{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:8px 0}.code-pages button{min-height:44px}.code-pages span{flex:1;text-align:center;min-width:110px}.code-toolbar{align-items:center;margin-bottom:8px}.code-toolbar .code-find{min-height:44px;width:min(100%,190px);flex:1 1 140px;background:var(--panel2);color:var(--text);border:1px solid var(--stroke);border-radius:8px;padding:9px}.code-toolbar .code-line-number{min-height:44px;width:75px;background:var(--panel2);color:var(--text);border:1px solid var(--stroke);border-radius:8px;padding:9px}.code-toolbar button{min-height:44px;padding:8px 11px}.code-line.code-find-hit{background:#3c506b55}.code-line.code-find-current{background:#3c7a9a75;outline:1px solid var(--accent);outline-offset:-1px}.code-search-info{flex:1 1 100%;font-size:11px}.source-segments{display:flex;flex-direction:column;gap:10px;min-width:0}.source-segment-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.source-segment-controls button{min-height:44px}.source-segment-controls .hint{flex:1 1 100%;overflow-wrap:anywhere}.source-global-line{width:115px;min-width:95px;max-width:32vw;min-height:44px}.outline-panel{margin:8px 0;border:1px solid var(--stroke);border-radius:10px;padding:7px 9px;background:var(--panel2)}.outline-panel summary{cursor:pointer;min-height:38px;padding:8px;color:var(--accent);font-size:12px;font-weight:700}.outline-list{display:flex;flex-wrap:wrap;gap:7px;max-height:210px;overflow:auto;padding:6px 0}.outline-list .pill{min-height:44px;font-size:12px;max-width:100%;overflow-wrap:anywhere;text-align:left}.search-hit{display:block;text-align:left;border:1px solid var(--stroke);border-radius:10px;background:var(--panel2);padding:10px;color:var(--text);width:100%;overflow-wrap:anywhere}.search-hit small{display:block;color:var(--dim)}#searchResults{padding:0 14px 14px;display:grid;gap:7px}#favorites button{width:100%;text-align:left;overflow-wrap:anywhere}#recentFolders button{width:100%;min-height:44px;text-align:left;overflow-wrap:anywhere;word-break:break-word}#clearRecents{min-height:44px}
 @media(max-width:760px){.refine{padding:9px}.refine .field{flex:1 1 105px}.refine label{flex:1 1 auto}.refine input[type=range]{flex:1;min-width:80px}.preview-head{gap:5px}.preview-head .pill{font-size:11px}.preview-body{padding:10px}}
 .inspect-tools{display:flex;gap:7px;flex-wrap:wrap;padding:7px 12px;border-bottom:1px solid var(--stroke)}.inspect-tools[hidden]{display:none}.inspect-tools .pill{font-size:12px;padding:6px 10px;min-height:40px}
 .image-viewer{display:flex;flex-direction:column;gap:8px;min-width:0}.image-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.image-actions .pill{padding:7px 12px}.image-stage{touch-action:pan-x pan-y;overflow:auto;max-height:62dvh;min-height:140px;background:repeating-conic-gradient(#242936 0% 25%,#1b202a 0% 50%) 50%/18px 18px;border:1px solid var(--stroke);border-radius:10px;overscroll-behavior:contain}.image-stage img{display:block;max-width:none!important;max-height:none!important;object-fit:contain;align-self:auto!important;height:auto}
@@ -1579,7 +1579,7 @@ function extractSourceSymbols(lines,filename){
 // Prefer line boundaries; a >500k single line continues in the next section.
 function sourceSections(text){
  const MAX=500000,sections=[];let start=0,firstLine=1;
- if(!text.length)return [{start:0,end:0,firstLine:1,partialStart:false,partialEnd:false}];
+ if(!text.length)return [{start:0,end:0,firstLine:1,lastLine:1,partialStart:false,partialEnd:false}];
  while(start<text.length){
   let end=Math.min(text.length,start+MAX);
   if(end<text.length){
@@ -1590,9 +1590,13 @@ function sourceSections(text){
   }
   const partialStart=start>0&&text[start-1]!=='\n';
   const partialEnd=end<text.length&&text[end-1]!=='\n';
-  sections.push({start,end,firstLine,partialStart,partialEnd});
-  for(let p=text.indexOf('\n',start);p>=0&&p<end;p=text.indexOf('\n',p+1))firstLine++;
-  start=end;
+  let followingLine=firstLine;
+  for(let p=text.indexOf('\n',start);p>=0&&p<end;p=text.indexOf('\n',p+1))followingLine++;
+  // A trailing newline belongs to the next section's first line. A
+  // mid-line split keeps the same original number in both sections.
+  const lastLine=followingLine-(end<text.length&&!partialEnd?1:0);
+  sections.push({start,end,firstLine,lastLine,partialStart,partialEnd});
+  firstLine=followingLine;start=end;
  }
  return sections
 }
@@ -1617,9 +1621,37 @@ function boundedSourceViewer(text,name){
   ' · characters '+(section.start+1)+'–'+section.end+' of '+text.length+
   ' · original line numbers'+(section.partialStart?' · starts mid-line':'')+
   (section.partialEnd?' · ends mid-line':'')+
-  ' · search and Go to line apply to this section';
- controls.append(previous,next,elem('span','hint',description));wrap.append(controls,viewer);
- wrap.jumpToLine=number=>viewer.jumpToLine(number);
+  ' · Find searches this section; jump below reaches any loaded source line';
+ const fullLine=elem('input','field source-global-line'),fullGo=elem('button','pill','Go to line');
+ const fullMessage=elem('span','hint','Navigate by original line number, across sections.');
+ fullLine.type='number';fullLine.min='1';fullLine.max=String(sections.at(-1).lastLine);
+ fullLine.placeholder='Line';fullLine.setAttribute('aria-label','Original source line across all loaded sections');
+ fullGo.type='button';fullGo.setAttribute('aria-label','Go to original source line across sections');
+ wrap.jumpToGlobalLine=async number=>{
+  if(!Number.isSafeInteger(number)||number<1||number>sections.at(-1).lastLine)return false;
+  // Find the earliest matching section so the beginning of an unusually
+  // long split line wins, rather than an arbitrary continuation chunk.
+  const destination=sections.findIndex(x=>number>=x.firstLine&&number<=x.lastLine);
+  if(destination<0)return false;
+  if(destination===index)return viewer.jumpToLine(number);
+  const item=state.preview,blob=state.currentBlob;
+  if(!item||!blob||state.previewText!==text)return false;
+  state.sourceSegment=destination;
+  await renderCurrentFile();
+  if(state.preview!==item||state.currentBlob!==blob||state.previewText!==text)return false;
+  const current=$('previewBody').firstElementChild||$('previewBody').children[0];
+  return current?.jumpToLine?.(number)===true
+ };
+ const doJump=async()=>{
+  const number=Number(fullLine.value),ok=await wrap.jumpToGlobalLine(number);
+  if(!ok)fullMessage.textContent='Enter an original line from 1 to '+sections.at(-1).lastLine+
+   '. If the file changed, reopen its source.';
+  return ok
+ };
+ fullGo.onclick=doJump;
+ fullLine.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();return doJump()}};
+ controls.append(previous,next,elem('span','hint',description),fullLine,fullGo,fullMessage);
+ wrap.append(controls,viewer);wrap.jumpToLine=number=>viewer.jumpToLine(number);
  return wrap
 }
 function sourceViewer(text,name,previewTruncated=false,lineBase=1){
