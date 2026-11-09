@@ -136,6 +136,14 @@ function findCollisions(entries,tree){
  return [...new Set(blockers)];
 }
 function encodeGitPath(path){return path.split('/').map(encodeURIComponent).join('/')}
+function githubCompareUrl(repo,base,branch){
+ if(!repoPath(repo)||!branchPath(base)||!branchPath(branch)||base===branch)
+  throw Error('Invalid GitHub branch comparison.');
+ // This opens GitHub's review/PR creation UI. The app never creates PRs
+ // or updates the already-published branch.
+ return 'https://github.com/'+repo+'/compare/'+
+  encodeGitPath(base)+'...'+encodeGitPath(branch)+'?expand=1'
+}
 // Never call Response.json() on an unbounded private repository tree.
 // Reject invalid UTF-8 rather than silently replacing an opaque path byte,
 // and cancel the reader on refusal instead of buffering the remainder.
@@ -332,9 +340,12 @@ async function startPublish(){
  status('Starting upload for new branch '+newBranch+'…');
  try{
   const result=await writeNewBranch(choice.plan,choice.token,newBranch,status,writerAbort.signal);
-  const a=document.createElement('a');a.href='https://github.com/'+choice.repo+'/tree/'+encodeGitPath(result.branch);a.target='_blank';a.rel='noopener noreferrer';a.textContent='Open the new GitHub branch';
-  $('destinations').replaceChildren(a);
-  status('Confirmed '+result.verifiedEntries+' uploaded file identities on the new branch '+newBranch+' at commit '+result.commitSha.slice(0,12)+'. Base branch unchanged. You can open a pull request on GitHub.');
+  const links=document.createElement('div');links.className='actions';
+  const a=document.createElement('a');a.href='https://github.com/'+choice.repo+'/tree/'+encodeGitPath(result.branch);a.target='_blank';a.rel='noopener noreferrer';a.textContent='Open verified GitHub branch';
+  const compare=document.createElement('a');compare.href=githubCompareUrl(choice.repo,choice.base,result.branch);
+  compare.target='_blank';compare.rel='noopener noreferrer';compare.textContent='Review and create PR on GitHub';
+  links.append(a,compare);$('destinations').replaceChildren(links);
+  status('Confirmed '+result.verifiedEntries+' uploaded file identities on the new branch '+newBranch+' at commit '+result.commitSha.slice(0,12)+'. Base branch unchanged. Review a pull request on GitHub when ready.');
  }catch(e){
   if(e.publishedButUnverified){
    const link=document.createElement('a');link.href='https://github.com/'+choice.repo+'/tree/'+encodeGitPath(newBranch);

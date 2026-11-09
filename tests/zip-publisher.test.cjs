@@ -19,7 +19,7 @@ function setup(respond,cryptoImpl=require('node:crypto').webcrypto){
   return new Response(JSON.stringify(answer??mock(url,options,calls)),
    {status:200,headers:{'content-type':'application/json'}});
  }});
- vm.runInContext(source.slice(start,end)+'\nglobalThis.published={wellFormedUtf16,cleanPath,repoPath,branchPath,resolveEntries,findCollisions,inspectDestination,writeNewBranch,verifyPublishedBranch,gitBlobIdentity,boundedGithubJson};',context);
+ vm.runInContext(source.slice(start,end)+'\nglobalThis.published={wellFormedUtf16,cleanPath,repoPath,branchPath,resolveEntries,findCollisions,githubCompareUrl,inspectDestination,writeNewBranch,verifyPublishedBranch,gitBlobIdentity,boundedGithubJson};',context);
  return {api:context.published,calls};
 }
 function mock(url,options,calls){
@@ -105,6 +105,30 @@ test('publisher rejects malformed UTF-16 paths before Git serialization and coll
  assert.equal(selected.length,1);
  assert.deepEqual([...api.findCollisions(selected,{truncated:false,
   tree:[{path:'already.txt',type:'blob'}]})],[]);
+});
+
+test('verified new-branch result offers a safe, separate GitHub PR comparison URL',()=>{
+ const {api}=setup();
+ assert.equal(api.githubCompareUrl('gamesbyian/Expository','main',
+  'expository/zip-20261109-abc'),
+  'https://github.com/gamesbyian/Expository/compare/main...expository/zip-20261109-abc?expand=1');
+ assert.equal(api.githubCompareUrl('owner/repo','release/v2',
+  'feature/photos'),
+  'https://github.com/owner/repo/compare/release/v2...feature/photos?expand=1');
+ assert.equal(api.githubCompareUrl('owner/repo','main','feature/#token'),
+  'https://github.com/owner/repo/compare/main...feature/%23token?expand=1',
+  'valid special characters in a Git ref are URL-encoded, not rejected');
+ for(const [repo,base,branch] of [
+  ['wrong/../repo','main','feature/new'],
+  ['owner/repo','main','main'],
+  ['owner/repo','main','topic?write=true'],
+  ['owner/repo','../../main','expository/new'],
+  ['owner/repo','main','feature/@{token}']
+ ])assert.throws(()=>api.githubCompareUrl(repo,base,branch),/Invalid GitHub branch comparison/);
+ assert.ok(source.indexOf('compare.href=githubCompareUrl') >
+  source.indexOf('const result=await writeNewBranch'),
+  'PR review link is rendered only after confirmed publication');
+ assert.match(source,/compare.target='_blank';compare.rel='noopener noreferrer'/);
 });
 
 test('tree collision check catches files, directories and case folding',()=>{
