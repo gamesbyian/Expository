@@ -444,6 +444,12 @@ class RecursiveRealPickerCopyUiTest {
         }
         compose.onNodeWithText("6 descendant item(s), 1 keep-both rename(s)",
             substring = true).assertExists()
+        compose.onNodeWithTag("smart-merge-illustration-impact").assertExists()
+        compose.onNodeWithText(
+            "2 file copy operation(s), 5 new directory creation(s)",
+            substring = true).assertExists()
+        compose.onNodeWithText("free-space requirements are UNKNOWN",
+            substring = true).assertExists()
         compose.onNodeWithText("Hypothetical differences 1–1 of 1.").assertExists()
         assertTrue("Single collision must not show unnecessary page navigation",
             compose.onAllNodesWithTag("smart-merge-illustration-next")
@@ -471,6 +477,11 @@ class RecursiveRealPickerCopyUiTest {
         }
         compose.onNodeWithText("6 descendant item(s), 1 keep-both rename(s), " +
             "2 reused directory name(s)", substring = true).assertExists()
+        compose.onNodeWithText(
+            "2 file copy operation(s), 3 new directory creation(s)",
+            substring = true).assertExists()
+        compose.onNodeWithText("free-space requirements are UNKNOWN",
+            substring = true).assertExists()
         compose.onNodeWithText("Hypothetical differences 1–3 of 3.").assertExists()
         assertTrue("Coalescing below the page cap should not show paging",
             compose.onAllNodesWithTag("smart-merge-illustration-previous")
