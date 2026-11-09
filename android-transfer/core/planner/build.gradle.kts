@@ -74,8 +74,16 @@ tasks.register<JavaExec>("smartMergePreviewScenarios") {
     mainClass.set("dev.expository.transfer.planner.SmartMergePreviewPlannerSuite")
 }
 
+tasks.register<JavaExec>("smartMergeIdentityScenarios") {
+    group = "verification"
+    description = "Reject malformed Unicode in inert Smart Merge source identity and grant witnesses"
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.expository.transfer.planner.SmartMergeSourceIdentitySuite")
+}
+
 // These main()-based suites are not automatically discovered by Gradle's test task.
 // Keep the standard check lifecycle honest for local developers and CI.
 tasks.named("check") {
-    dependsOn("scenarios", "locationScenarios", "recursiveFolderScenarios", "directoryScenarios", "moveScenarios", "workspaceScenarios", "sessionAccessScenarios", "smartMergeBasketScenarios", "smartMergePreviewScenarios")
+    dependsOn("scenarios", "locationScenarios", "recursiveFolderScenarios", "directoryScenarios", "moveScenarios", "workspaceScenarios", "sessionAccessScenarios", "smartMergeBasketScenarios", "smartMergePreviewScenarios", "smartMergeIdentityScenarios")
 }
