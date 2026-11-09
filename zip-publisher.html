@@ -40,7 +40,7 @@ button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid #ffe1
 <label for="prefix">Destination folder (leave empty for root)</label><input id="prefix" autocomplete="off" spellcheck="false" placeholder="imported/assets">
 <label for="token">Fine-grained GitHub token with Contents: Read and Write</label><input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste token in this tab only">
 <p class="hint">Never paste a token into the normal Expository viewer to enable publishing. This writer does not remember credentials. The output always goes to a newly created branch, never directly to your base branch.</p>
-<div class="actions"><button id="review" disabled>Review destination and collisions</button><button id="publish" class="primary" disabled>Confirm: create new branch</button><button id="cancel" disabled>Stop before branch creation</button></div>
+<div class="actions"><button id="review" disabled>Review destination and collisions</button><button id="publish" class="primary" disabled>Confirm: create new branch</button><button id="cancel" disabled>Stop (branch may remain)</button></div>
 <div id="status" class="status" role="status" aria-live="polite"></div>
 <div id="destinations"></div>
 </section>
@@ -290,8 +290,20 @@ async function writeNewBranch(plan,token,branch,onProgress,signal){
  const current=await github(token,'GET',prefix+'/git/ref/heads/'+encodeGitPath(plan.base),undefined,signal);
  if(current?.object?.sha!==plan.head)throw Error('Base branch changed during upload. No new branch was created. Review again.');
  // The only ref mutation is a brand-new branch; no update to main or existing branches.
- const ref=await github(token,'POST',prefix+'/git/refs',{ref:'refs/heads/'+branch,sha:commit.sha},signal);
- if(ref?.object?.sha!==commit.sha)throw Error('GitHub branch creation did not confirm the commit SHA.');
+ if(signal?.aborted)throw Error('Publishing stopped before branch creation.');
+ onProgress('Creating the new branch. A stop or lost reply may leave it in GitHub…');
+ try{
+  // Once this request begins, any lost/denied/malformed acknowledgement
+  // is uncertain. GitHub may already have created the ref. Never replay it.
+  const ref=await github(token,'POST',prefix+'/git/refs',
+   {ref:'refs/heads/'+branch,sha:commit.sha},signal);
+  if(ref?.ref!=='refs/heads/'+branch||ref?.object?.sha!==commit.sha)
+   throw Error('New branch acknowledgement did not match the requested ref.');
+ }catch{
+  const uncertain=Error('GitHub branch creation was attempted but its outcome was not confirmed. The branch may already exist. Inspect it before any further publication.');
+  uncertain.publishedButUnverified=true;
+  throw uncertain;
+ }
  onProgress('GitHub acknowledged the new branch. Checking branch, commit and uploaded files…');
  let verifiedEntries;
  try{
@@ -377,7 +389,7 @@ function receiveBundle(packet){
  }catch(e){status('Handoff rejected: '+e.message)}
 }
 $('review').onclick=startReview;$('publish').onclick=startPublish;
-$('cancel').onclick=()=>{if(writerAbort){writerAbort.abort();status('Stopping before branch creation…')}};
+$('cancel').onclick=()=>{if(writerAbort){writerAbort.abort();status('Stopping. A GitHub branch may already exist; inspect it before another publication.')}};
 for(const id of ['repo','base','prefix','token'])$(id).oninput=invalidate;
 const nonce=location.hash.slice(1);
 if(/^[a-f0-9]{32}$/.test(nonce)&&typeof BroadcastChannel==='function'){
