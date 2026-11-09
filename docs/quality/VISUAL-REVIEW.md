@@ -22,6 +22,7 @@
 | X14 | Long source preview | 393×852; 500-line DOM windows across successive ≤500k-character text sections, 1,200+-line navigation, global line numbers, search-hit jumps, Unicode/long-line continuation, previous/next section keyboard focus and retained 20 MB download bound |
 | X15 | Native image fullscreen | 393×852 image viewer; fullscreen entry/exit, retained close and zoom controls, Escape preserving file preview, non-support fallback and focus restoration |
 | X16 | Image rotation | 393×852 raster/SVG at 90° and 270°, fit/crop and orientation, zoom at rotated angle, return to 0°, fullscreen interoperability, original-file byte preservation |
+| X17 | Selected-image slideshow | 393×852 and 360×780; loaded contact sheet → Slideshow → Previous/Next, accessible 44px Play/Pause, 3/5/10-second intervals, Back to sheet, no extra network reads, keyboard arrows, reduced-motion comfort and private-session teardown |
 
 ## Evidence receipt
 
