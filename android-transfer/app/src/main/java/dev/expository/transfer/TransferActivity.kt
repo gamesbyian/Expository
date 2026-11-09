@@ -740,6 +740,7 @@ private fun DeveloperPreview(
         if (capturedRead?.valid(now) != true ||
             now < capturedRead.expiresAtMillis - 300_000L) {
             mergeSourceInventory = mergeSourceInventory - selected
+        mergeInventoryPageOffsets = mergeInventoryPageOffsets - selected
             mergeMessage = "Original Merge source access expired. Re-pick the folder."
             return
         }
@@ -749,6 +750,7 @@ private fun DeveloperPreview(
         val shareEpoch = currentShareEpoch()
         mergeInventoryReading = selected
         mergeSourceInventory = mergeSourceInventory - selected
+        mergeInventoryPageOffsets = mergeInventoryPageOffsets - selected
         mergeMessage = "Inspecting source descendants without writing files…"
         mergeInventoryJob = scope.launch {
             try {
@@ -1025,6 +1027,7 @@ private fun DeveloperPreview(
         val shareAtStart = currentShareEpoch()
         clearMergeIllustration()
         mergeSourceInventory = mergeSourceInventory - selected
+        mergeInventoryPageOffsets = mergeInventoryPageOffsets - selected
         mergeInspecting = selected
         mergeMessage = "Checking the original folder access without changing files…"
         mergeInspectionJob = scope.launch {
