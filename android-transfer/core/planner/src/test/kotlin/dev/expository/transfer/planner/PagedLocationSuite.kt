@@ -75,6 +75,53 @@ object PagedLocationSuite {
             index.destinationListing()?.siblings?.size == 405)
         check(index.append(third).state == LocationIndexState.INVALID)
 
+        // A COMPLETE directory index must retain an immutable observation,
+        // even if its creator later edits the supplied parent collections.
+        val mutableFolder = mutableListOf("Media", "Photos")
+        val mutableProofs = local.capabilities.toMutableMap()
+        val mutableLocation = local.copy(folder = mutableFolder,
+            capabilities = mutableProofs)
+        val frozen = PagedLocationIndex.begin(mutableLocation)
+        mutableFolder += "changed-after-capture"
+        mutableProofs.clear()
+        check(frozen.location.folder == listOf("Media", "Photos") &&
+            frozen.location.capabilities.size == 2)
+        check(runCatching {
+            (frozen.location.folder as MutableList<String>).clear()
+        }.isFailure)
+        check(runCatching {
+            (frozen.location.capabilities
+                as MutableMap<Capability, CapabilityProof>).clear()
+        }.isFailure)
+        val frozenComplete = frozen.append(LocationPage(frozen.location,
+            "frozen-snapshot", null, null,
+            listOf(child(frozen.location, 1)), true))
+        check(frozenComplete.state == LocationIndexState.COMPLETE)
+        val siblings = requireNotNull(frozenComplete.destinationListing()).siblings
+        check(runCatching {
+            (siblings as MutableList<String>).add("invented-target.bin")
+        }.isFailure)
+        check(frozenComplete.destinationListing()?.siblings == listOf("File0001.bin"))
+
+        // Continuation tokens form part of a listing's authorization chain:
+        // a caller cannot forge a previously observed cursor by downcasting.
+        val firstCursor = PagedLocationIndex.begin(local).append(LocationPage(
+            local, "cursor-snapshot", null, "cursor-one",
+            listOf(child(local, 1)), true))
+        val secondCursor = firstCursor.append(LocationPage(local,
+            "cursor-snapshot", "cursor-one", "cursor-two",
+            listOf(child(local, 2)), true))
+        check(secondCursor.state == LocationIndexState.OPEN &&
+            secondCursor.seenTokens == setOf("cursor-one", "cursor-two"))
+        check(runCatching {
+            (secondCursor.seenTokens as MutableSet<String>).add("forged-cursor")
+        }.isFailure)
+        val lastCursor = secondCursor.append(LocationPage(local,
+            "cursor-snapshot", "cursor-two", null,
+            listOf(child(local, 3)), true))
+        check(lastCursor.state == LocationIndexState.COMPLETE &&
+            lastCursor.children.size == 3)
+
         val fullLimit = scan(local, (1..2_000).map { child(local, it) })
         check(fullLimit.state == LocationIndexState.COMPLETE &&
             fullLimit.children.size == PagedLocationIndex.MAX_ITEMS)
