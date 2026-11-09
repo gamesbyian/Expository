@@ -111,6 +111,24 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 
 const ZIP_MAX_BYTES=24*1024*1024,ZIP_ENTRY_MAX=16*1024*1024,ZIP_TOTAL_MAX=128*1024*1024,ZIP_MAX_FILES=2000;
 let zipContext=null,zipStartFolder='';const zipManifests=new Map(),zipSelections=new Map();let zipGalleryEntries=[],zipScanSeq=0,zipPrepSeq=0;
+// ZIP's general-purpose flag 11 explicitly declares UTF-8. When absent,
+// classic ZIP filenames are encoded with IBM Code Page 437, not lossy UTF-8.
+// This fixed table covers bytes 0x80–0xFF; ASCII bytes map unchanged.
+const ZIP_CP437=[
+ 'ÇüéâäàåçêëèïîìÄÅ','ÉæÆôöòûùÿÖÜ¢£¥₧ƒ',
+ 'áíóúñÑªº¿⌐¬½¼¡«»','░▒▓│┤╡╢╖╕╣║╗╝╜╛┐',
+ '└┴┬├─┼╞╟╚╔╩╦╠═╬╧','╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀',
+ 'αßΓπΣσµτΦΘΩδ∞φε∩','≡±≥≤⌠⌡÷≈°∙·√ⁿ²■\u00a0'
+].join('');
+function zipDecodeName(bytes,flags){
+ if(flags&0x0800){
+  try{return new TextDecoder('utf-8',{fatal:true}).decode(bytes)}
+  catch{return null} // Invalid declared UTF-8 must not turn into U+FFFD.
+ }
+ let decoded='';
+ for(const byte of bytes)decoded+=byte<0x80?String.fromCharCode(byte):ZIP_CP437[byte-0x80];
+ return decoded
+}
 function zipManifest(blob){
  const fail=msg=>{throw Error('ZIP: '+msg)};
  if(blob.size>ZIP_MAX_BYTES)fail('archive exceeds the 24 MB browser-inspection limit');
@@ -123,7 +141,7 @@ function zipManifest(blob){
   if(count===65535||size===0xffffffff||offset===0xffffffff)fail('ZIP64 requires another reader');
   if(count>ZIP_MAX_FILES)fail('too many files');
   if(offset+size>eocd)fail('invalid central directory');
-  const decoder=new TextDecoder('utf-8',{fatal:false}),entries=[],seen=new Set();let pos=offset,total=0;
+  const entries=[],seen=new Set();let pos=offset,total=0;
   for(let i=0;i<count;i++){
    if(pos+46>bytes.length||v.getUint32(pos,true)!==0x02014b50)fail('bad central directory entry');
    const flags=v.getUint16(pos+8,true),method=v.getUint16(pos+10,true),crc=v.getUint32(pos+16,true),
@@ -131,7 +149,8 @@ function zipManifest(blob){
     nameLen=v.getUint16(pos+28,true),extraLen=v.getUint16(pos+30,true),commentLen=v.getUint16(pos+32,true),
     local=v.getUint32(pos+42,true),madeBy=v.getUint16(pos+4,true),unixMode=v.getUint32(pos+38,true)>>>16;
    if(pos+46+nameLen+extraLen+commentLen>bytes.length)fail('truncated entry');
-   const name=decoder.decode(bytes.subarray(pos+46,pos+46+nameLen)).replace(/\\/g,'/');
+   const rawName=zipDecodeName(bytes.subarray(pos+46,pos+46+nameLen),flags);
+   const name=rawName?.replace(/\\/g,'/');
    pos+=46+nameLen+extraLen+commentLen;
    if(!name||name.length>4096||name.startsWith('/')||/[\x00-\x1f\x7f]/.test(name)||name.split('/').some(x=>x==='..'||x==='.'||!x||x.length>255)||/^[a-zA-Z]:/.test(name))continue;
    if(name.endsWith('/'))continue;
@@ -143,7 +162,7 @@ function zipManifest(blob){
    if(local+30>bytes.length||v.getUint32(local,true)!==0x04034b50)continue;
    const localLen=v.getUint16(local+26,true),localExtra=v.getUint16(local+28,true),start=local+30+localLen+localExtra;
    if(start+compressed>bytes.length||start>offset||v.getUint16(local+8,true)!==method||v.getUint16(local+6,true)!==flags)continue;
-   if(decoder.decode(bytes.subarray(local+30,local+30+localLen)).replace(/\\/g,'/')!==name)continue;
+   if(zipDecodeName(bytes.subarray(local+30,local+30+localLen),flags)?.replace(/\\/g,'/')!==name)continue;
    seen.add(name.toLowerCase());entries.push({name,path:name,size:uncompressed,compressed,method,flags,crc,start,type:'file'});
   }
   if(pos!==offset+size)fail('central directory size mismatch');
