@@ -2,6 +2,7 @@ package dev.expository.transfer.planner
 
 import java.nio.charset.StandardCharsets
 import java.text.Normalizer
+import java.util.Collections
 import java.util.Locale
 
 /**
@@ -61,8 +62,12 @@ class PagedLocationIndex private constructor(
 
         fun begin(location: LocationRef): PagedLocationIndex =
             PagedLocationIndex(
-                location.copy(folder = location.folder.toList(),
-                    capabilities = location.capabilities.toMap()),
+                // An OPEN index must not retain mutable caller-owned location
+                // evidence that could later be changed behind its snapshot.
+                location.copy(
+                    folder = Collections.unmodifiableList(location.folder.toList()),
+                    capabilities = Collections.unmodifiableMap(
+                        location.capabilities.toMap())),
                 LocationIndexState.OPEN, null, null, emptyList(), emptySet(), null
             )
     }
@@ -142,7 +147,7 @@ class PagedLocationIndex private constructor(
             snapshotId = snapshotId ?: page.snapshotId,
             nextToken = page.nextToken,
             seenTokens = if (page.nextToken == null) seenTokens
-                else seenTokens + page.nextToken,
+                else Collections.unmodifiableSet(seenTokens + page.nextToken),
             children = java.util.Collections.unmodifiableList(
                 children + page.children.toList())
         )
@@ -152,7 +157,7 @@ class PagedLocationIndex private constructor(
     fun destinationListing(): DestinationListing? =
         if (state == LocationIndexState.COMPLETE && snapshotId != null)
             DestinationListing(snapshotId, complete = true,
-                siblings = children.map { it.name })
+                siblings = Collections.unmodifiableList(children.map { it.name }))
         else null
 
     /** Opaque direct-child references; operation-specific READ proof still needed. */
