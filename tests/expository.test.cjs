@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch,BlobImpl=globalThis.Blob) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,sourceSections,boundedSourceViewer,navigate,recordRecentFolder,paintRecentFolders,clearRecentFolders,openSearchHit,documentThumbnail,loadThumb,openContainingFolder};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,boundedGithubJson,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,sourceSections,boundedSourceViewer,navigate,recordRecentFolder,paintRecentFolders,clearRecentFolders,openSearchHit,documentThumbnail,loadThumb,openContainingFolder};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch','Blob',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl,BlobImpl
  );
@@ -608,21 +608,25 @@ test('repo switches abort outstanding authenticated API requests',async()=>{
 });
 
 
-test('repo switch cancels an authenticated JSON body after response headers',async()=>{
- let finishBody,signal;
+test('repo switch cancels an authenticated JSON stream after response headers',async()=>{
+ let finishRead,signal,reads=0;
  const apiFetch=async(_url,opts)=>{
   signal=opts.signal;
-  return {ok:true,json:()=>new Promise(resolve=>{finishBody=resolve})};
+  return {ok:true,headers:{get:()=>null},body:{getReader:()=>({
+   read:()=>reads++?Promise.resolve({done:true}):new Promise(resolve=>{
+    finishRead=()=>resolve({done:false,value:new TextEncoder().encode('{"private":true}')})
+   }),releaseLock(){}
+  })}};
  };
  const {app}=boot(apiFetch);app.state.token='ghp_private_test_only';
  const pending=app.json('/repos/old/private');
  await new Promise(resolve=>setImmediate(resolve));
- assert.equal(typeof finishBody,'function','response headers arrived and parsing began');
- assert.equal(app.state.activeRequests.size,1,'body read still holds its abort controller');
+ assert.equal(typeof finishRead,'function','stream consumption must remain active after headers');
+ assert.equal(app.state.activeRequests.size,1,'JSON stream owns the abort controller');
  app.abortRequests();
  assert.equal(signal.aborted,true);
- finishBody({private:true});
- await assert.rejects(pending,/cancelled/,'late body must not be accepted after disconnect');
+ finishRead();
+ await assert.rejects(pending,/cancelled/,'late JSON must not survive disconnect');
  assert.equal(app.state.activeRequests.size,0);
 });
 
@@ -691,28 +695,69 @@ test('GitHub blob read refuses browsers without enforceable streaming',async()=>
  assert.equal(app.state.activeRequests.size,0);
 });
 
-test('a late denied old-session response cannot impose its rate limit on the new session',async()=>{
- let finishErrorBody,signal;
+test('a late denied old-session streamed error cannot throttle the next session',async()=>{
+ let finishError,signal,reads=0;
  const apiFetch=async(_url,opts)=>{
   signal=opts.signal;
-  return {
-   ok:false,status:403,
+  return {ok:false,status:403,
    headers:{get:key=>key==='x-ratelimit-remaining'?'35':null},
-   json:()=>new Promise(resolve=>{finishErrorBody=resolve})
+   body:{getReader:()=>({
+    read:()=>reads++?Promise.resolve({done:true}):new Promise(resolve=>{
+     finishError=()=>resolve({done:false,value:new TextEncoder().encode(
+      '{"message":"secondary rate limit exceeded for prior token"}')})
+    }),releaseLock(){}
+   })}
   };
  };
  const {app}=boot(apiFetch);
  const pending=app.json('/repos/old/private');
  await new Promise(resolve=>setImmediate(resolve));
- assert.equal(typeof finishErrorBody,'function');
+ assert.equal(typeof finishError,'function');
  app.abortRequests();
  assert.equal(signal.aborted,true);
- finishErrorBody({message:'secondary rate limit exceeded for prior token'});
+ finishError();
  await assert.rejects(pending,/cancelled/);
- assert.equal(app.state.rateLimitedUntil,0,'stale token must not throttle successor');
+ assert.equal(app.state.rateLimitedUntil,0,'stale error cannot throttle successor');
  assert.equal(app.state.activeRequests.size,0);
 });
 
+test('GitHub metadata reader rejects streamed JSON exceeding its actual byte cap',async()=>{
+ let cancelled=false;
+ const {app}=boot();
+ const response=new Response(new ReadableStream({
+  start(controller){controller.enqueue(new TextEncoder().encode('{"secret":true}'))},
+  cancel(){cancelled=true}
+ }),{status:200});
+ await assert.rejects(app.boundedGithubJson(response,9),/9-byte browser read limit/);
+ assert.equal(cancelled,true,'oversized response stream must be cancelled');
+});
+test('GitHub JSON rejects invalid UTF-8 instead of silently changing metadata',async()=>{
+ const {app}=boot();
+ await assert.rejects(
+  app.boundedGithubJson(new Response(new Uint8Array([0xc0,0x80]),{status:200}),100),
+  /invalid UTF-8 JSON/
+ );
+ await assert.rejects(
+  app.boundedGithubJson(new Response('{"incomplete":',{status:200}),100),
+  /malformed JSON/
+ );
+});
+test('recursive GitHub trees have a larger explicit cap than ordinary API responses',async()=>{
+ const fetcher=async()=>new Response('{"tree":[]}',{
+  status:200,headers:{'Content-Length':'6000000'}
+ });
+ const {app}=boot(fetcher);
+ await assert.rejects(app.json('/repos/public/test'),/GitHub JSON exceeds the 4194304-byte browser read limit/);
+ const tree=await app.json('/repos/public/test/git/trees/abc?recursive=1');
+ assert.deepEqual(tree.tree,[]);
+ assert.equal(app.state.activeRequests.size,0);
+});
+test('GitHub metadata refuses unbounded parsing on unsupported response streams',async()=>{
+ const fetcher=async()=>({ok:true,headers:{get:()=>null},body:null,json:async()=>({private:true})});
+ const {app}=boot(fetcher);
+ await assert.rejects(app.json('/repos/old/private'),/cannot enforce a streaming/);
+ assert.equal(app.state.activeRequests.size,0);
+});
 
 test('a closed ZIP preview cannot republish a pending parsed archive',async()=>{
  let finishArchive;
