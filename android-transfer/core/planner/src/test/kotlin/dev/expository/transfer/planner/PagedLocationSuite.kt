@@ -54,6 +54,49 @@ object PagedLocationSuite {
 
     @JvmStatic fun main(args: Array<String>) {
         val local = loc(LocationKind.LOCAL_SAF, "local-provider")
+        // Ordinary Kotlin data-class debug output must not serialize
+        // private authority, grant, account, path, child or cursor data.
+        // This is diagnostic redaction only: equals/copy and provider
+        // validation still see the exact original identities.
+        val secret = "PRIVATE_PROVIDER_IDENTITY_984"
+        val privateProof = CapabilityProof(Support.SUPPORTED,
+            "witness-" + secret, NOW + 10_000L)
+        val privateKey = LocationKey(LocationKind.LOCAL_SAF,
+            "authority-" + secret, "root-" + secret,
+            "container-" + secret, "grant-" + secret)
+        val privateLocation = LocationRef(privateKey,
+            listOf("folder-" + secret), "revision-" + secret,
+            mapOf(Capability.READ to privateProof),
+            "namespace-" + secret, "storage-" + secret)
+        val privateItemKey = ItemKey(privateKey.authorityId,
+            "opaque-" + secret, "version-" + secret)
+        val privateItem = ItemRef(privateItemKey, privateLocation,
+            privateLocation.folder, "file-" + secret + ".bin", ItemKind.FILE)
+        val privateSibling = ObservedLocationChild(privateItemKey,
+            privateItem.name, ItemKind.FILE)
+        val privatePage = LocationPage(privateLocation,
+            "snapshot-" + secret, "request-" + secret,
+            "next-" + secret, listOf(privateSibling), true)
+        val privateListing = DestinationListing("revision-" + secret,
+            true, listOf("sibling-" + secret))
+        val privateTransfer = TransferRequest(listOf(privateItem),
+            privateLocation, destinationListing = privateListing)
+        val debugValues = listOf<Any>(privateProof, privateKey,
+            privateLocation, privateItemKey, privateItem, privateSibling,
+            privatePage, privateListing, privateTransfer)
+        check(debugValues.none { it.toString().contains(secret) })
+        check(privatePage.toString().contains("children=1"))
+        check(privateTransfer.toString().contains("sources=1"))
+        check(privateKey.toString().contains("LOCAL_SAF"))
+        check(privateLocation.copy() == privateLocation)
+        check(privatePage.copy() == privatePage)
+        check(privateItem.copy() == privateItem)
+        check(privateTransfer.copy() == privateTransfer)
+        // Nested list diagnostics must also be safe when their elements are
+        // converted to text by an exception or ordinary collection wrapper.
+        check(!listOf(privateLocation, privateItem, privatePage,
+            privateTransfer).toString().contains(secret))
+
         val elements = (1..405).map { child(local, it) }
         var index = PagedLocationIndex.begin(local)
         val adapter = FakePages(LocationKind.LOCAL_SAF, elements)
