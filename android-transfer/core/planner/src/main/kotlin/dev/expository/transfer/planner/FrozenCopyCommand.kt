@@ -60,6 +60,16 @@ class CopyCommandScope private constructor(
                 listingRevision.isBlank() || generation < 0L ||
                 selectedIds.any { it.isBlank() } ||
                 selectedIds.size != selectedIds.toSet().size) return null
+            // A Java UTF-8 encoder silently substitutes '?' for a lone
+            // surrogate. Distinct OS/provider selection IDs can otherwise
+            // produce the SAME in-memory claim fingerprint. Refuse any
+            // malformed authority, grant, revision or selected object identity
+            // before freezing, rather than canonicalizing lossy bytes.
+            val identity = listOf(key.authorityId, key.rootId,
+                key.containerId, key.grantId.orEmpty(), listingRevision)
+            if (identity.any { !SmartMergeNameRules.wellFormedUtf16(it) } ||
+                selectedIds.any { !SmartMergeNameRules.wellFormedUtf16(it) })
+                return null
             val ids = selectedIds.sorted()
             val md = MessageDigest.getInstance("SHA-256")
             fun update(value: String) {
