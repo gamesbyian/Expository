@@ -178,13 +178,14 @@ function zipManifest(blob){
    if(uncompressed>ZIP_ENTRY_MAX||compressed>ZIP_MAX_BYTES||flags&1||flags&64||![0,8].includes(method))continue;
    if((madeBy>>>8)===3&&((unixMode&0xf000)!==0&&(unixMode&0xf000)!==0x8000))continue;
    if(method===0&&compressed!==uncompressed)continue;
-   if(seen.has(name.toLowerCase()))continue;
+   const nameKey=name.normalize('NFC').toLowerCase();
+   if(seen.has(nameKey))continue;
    total+=uncompressed;if(total>ZIP_TOTAL_MAX)fail('uncompressed total exceeds 128 MB');
    if(local+30>bytes.length||v.getUint32(local,true)!==0x04034b50)continue;
    const localLen=v.getUint16(local+26,true),localExtra=v.getUint16(local+28,true),start=local+30+localLen+localExtra;
    if(start+compressed>bytes.length||start>offset||v.getUint16(local+8,true)!==method||v.getUint16(local+6,true)!==flags)continue;
    if(zipDecodeName(bytes.subarray(local+30,local+30+localLen),flags)?.replace(/\\/g,'/')!==name)continue;
-   seen.add(name.toLowerCase());entries.push({name,path:name,size:uncompressed,compressed,method,flags,crc,start,type:'file'});
+   seen.add(nameKey);entries.push({name,path:name,size:uncompressed,compressed,method,flags,crc,start,type:'file'});
   }
   if(pos!==offset+size)fail('central directory size mismatch');
   return {blob,entries,skipped:count-entries.length};
