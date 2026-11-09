@@ -52,6 +52,38 @@ test('ZIP manifest does not expose NFC-equivalent paths as separate extractable 
  assert.equal(await (await unzipMember(manifest,manifest.entries[0])).text(),'legacy payload');
  assert.equal(await (await unzipMember(manifest,manifest.entries[1])).text(),'independent payload');
 });
+test('ZIP manifest rejects both file-parent and folder-parent collisions before extraction',async()=>{
+ const manifest=await zipManifest(archiveMany([
+  {name:'docs',body:'plain file'},
+  {name:'DOCS/report.txt',body:'conflicting child'},
+  {name:'images/logo.png',body:'picture'},
+  {name:'IMAGES',body:'conflicting parent'},
+  {name:'other/note.txt',body:'safe'}
+ ]));
+ assert.deepEqual([...manifest.entries].map(x=>x.name),['docs','images/logo.png','other/note.txt']);
+ assert.equal(manifest.skipped,2,'both impossible paths must be excluded');
+ assert.equal(await (await unzipMember(manifest,manifest.entries[0])).text(),'plain file');
+ assert.equal(await (await unzipMember(manifest,manifest.entries[1])).text(),'picture');
+ assert.equal(await (await unzipMember(manifest,manifest.entries[2])).text(),'safe');
+});
+test('valid shared directories survive a rejected file parent and malformed early entry',async()=>{
+ const valid=await zipManifest(archiveMany([
+  {name:'chapter/one.txt',body:'one'},
+  {name:'CHAPTER',body:'cannot also be file'},
+  {name:'chapter/two.txt',body:'two'}
+ ]));
+ assert.deepEqual([...valid.entries].map(x=>x.name),['chapter/one.txt','chapter/two.txt']);
+ assert.equal(valid.skipped,1);
+ const data=Buffer.from(await archiveMany([
+  {name:'docs',body:'bad local header'},
+  {name:'docs/report.txt',body:'later genuine file'}
+ ]).arrayBuffer());
+ data.writeUInt32LE(0,14); // Non-descriptor local CRC now disagrees with central CRC.
+ const recovered=await zipManifest(new Blob([data]));
+ assert.deepEqual([...recovered.entries].map(x=>x.name),['docs/report.txt']);
+ assert.equal(recovered.skipped,1,'invalid member must not reserve a destination');
+ assert.equal(await (await unzipMember(recovered,recovered.entries[0])).text(),'later genuine file');
+});
 test('ZIP manifest includes navigable member paths and extracts verified bytes',async()=>{
  const manifest=await zipManifest(archive());
  assert.equal(manifest.entries.length,1);
