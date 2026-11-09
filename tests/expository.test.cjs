@@ -435,7 +435,7 @@ test('a late denied old-session response cannot impose its rate limit on the new
   signal=opts.signal;
   return {
    ok:false,status:403,
-   headers:{get:key=>key==='x-ratelimit-remaining'?'0':key==='x-ratelimit-reset'?String(Math.floor(Date.now()/1000)+360):null},
+   headers:{get:key=>key==='x-ratelimit-remaining'?'35':null},
    json:()=>new Promise(resolve=>{finishErrorBody=resolve})
   };
  };
@@ -445,7 +445,7 @@ test('a late denied old-session response cannot impose its rate limit on the new
  assert.equal(typeof finishErrorBody,'function');
  app.abortRequests();
  assert.equal(signal.aborted,true);
- finishErrorBody({message:'old account error'});
+ finishErrorBody({message:'secondary rate limit exceeded for prior token'});
  await assert.rejects(pending,/cancelled/);
  assert.equal(app.state.rateLimitedUntil,0,'stale token must not throttle successor');
  assert.equal(app.state.activeRequests.size,0);
