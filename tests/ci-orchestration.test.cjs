@@ -89,7 +89,27 @@ test('all PRs reach a fail-closed native selector before the expensive lanes', (
   assert.match(native, /needs\.select\.outputs\.android == 'true'/);
   assert.match(native, /gh api --paginate/);
   assert.match(native, /previous_filename/);
-  assert.match(native, /github\.event_name == 'issue_comment' && 'main' \|\| github\.ref/, 'manual workflow remains reviewed-main');
+  assert.match(native, /ref: \$\{\{ github\.sha \}\}/, 'manual developer APK is pinned to the event commit');
+});
+
+test('opt-in developer APK pins its source and exports independent hash evidence', () => {
+  const native = read('transfer-native.yml');
+  const section = native.slice(native.indexOf('  android-debug:'),
+    native.indexOf('\n  ftps-lab:'));
+  assert.ok(section.startsWith('  android-debug:'));
+  assert.match(section, /github\.event_name == 'workflow_dispatch'/);
+  assert.match(section, /github\.event\.comment\.user\.login == 'gamesbyian'/);
+  assert.match(section, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(section, /persist-credentials: false/);
+  assert.doesNotMatch(section, /ref: main|\&\& 'main' \|\| github\.ref/,
+    'artifact source must not follow a moving main branch');
+  assert.match(section, /source_sha="\$\(git rev-parse HEAD\)"/);
+  assert.match(section, /source_sha" != "\$EVENT_SHA"/);
+  assert.match(section, /Developer APK source drifted from its dispatch commit/);
+  assert.match(section, /SOURCE-SHA\.txt/);
+  assert.match(section, /sha256sum expository-ftp-developer-debug\.apk > SHA256SUMS\.txt/);
+  assert.match(section, /path: \|[\s\S]*SOURCE-SHA\.txt/);
+  assert.match(section, /retention-days: 5/);
 });
 
 test('merge-queue web and native verification do not depend on PR-only metadata', () => {
