@@ -1,6 +1,8 @@
 package dev.expository.transfer.planner
 
 import java.util.Collections
+import java.text.Normalizer
+import java.util.Locale
 
 /**
  * A bounded, display-only page from ONE already captured M2 source inventory.
@@ -12,7 +14,10 @@ import java.util.Collections
  * or the selected basket/source snapshot changes.
  */
 class SmartMergeInventoryPage internal constructor(
+    /** Total rows matching the current in-memory search, not all captured rows. */
     val totalEntries: Int,
+    /** Original complete source snapshot size, before optional filtering. */
+    val capturedEntries: Int,
     val offset: Int,
     val entries: List<SmartMergeInventoryDisplayEntry>,
     val nextOffset: Int?
@@ -32,6 +37,7 @@ class SmartMergeInventoryDisplayEntry internal constructor(
 
 object SmartMergeInventoryPager {
     const val PAGE_SIZE = 12
+    const val MAX_QUERY_LENGTH = 80
 
     /**
      * Null means no complete, coherent display page is available. This
@@ -43,7 +49,8 @@ object SmartMergeInventoryPager {
     fun page(
         selected: SmartMergeFolder,
         inventory: SmartMergeInventory,
-        offset: Int
+        offset: Int,
+        query: String = ""
     ): SmartMergeInventoryPage? {
         if (inventory.collected !== selected || !inventory.manifest.reviewable)
             return null
@@ -54,7 +61,9 @@ object SmartMergeInventoryPager {
             manifest.files + manifest.directories != entries.size ||
             entries.first().source != selected.source ||
             entries.first().relativePath != listOf(selected.source.name) ||
-            offset < 0 || offset % PAGE_SIZE != 0 || offset >= entries.size)
+            query.length > MAX_QUERY_LENGTH ||
+            !SmartMergeNameRules.wellFormedUtf16(query) ||
+            offset < 0 || offset % PAGE_SIZE != 0)
             return null
 
         if (entries.any { entry ->
@@ -77,7 +86,21 @@ object SmartMergeInventoryPager {
                         selected.source.location.key.grantId
             }) return null
 
-        val pageRows = entries.drop(offset).take(PAGE_SIZE)
+        // Search only the relative path BELOW the selected root. Otherwise
+        // matching the source folder's basename would return every child.
+        // Include the root itself when its own name matches. All operations
+        // stay within the already bounded 2,048-entry memory snapshot.
+        val needle = Normalizer.normalize(query.trim(), Normalizer.Form.NFC)
+            .lowercase(Locale.ROOT)
+        val matched = if (needle.isEmpty()) entries else entries.filter { entry ->
+            val displayPath = if (entry === entries.first()) entry.source.name
+                else entry.relativePath.drop(1).joinToString("/")
+            Normalizer.normalize(displayPath, Normalizer.Form.NFC)
+                .lowercase(Locale.ROOT).contains(needle)
+        }
+        if (offset >= matched.size && !(offset == 0 && matched.isEmpty()))
+            return null
+        val pageRows = matched.drop(offset).take(PAGE_SIZE)
             .mapIndexed { withinPage, entry ->
                 SmartMergeInventoryDisplayEntry(
                     offset + withinPage + 1,
@@ -85,8 +108,8 @@ object SmartMergeInventoryPager {
                     entry.source.kind
                 )
             }
-        val next = (offset + pageRows.size).takeIf { it < entries.size }
-        return SmartMergeInventoryPage(entries.size, offset,
+        val next = (offset + pageRows.size).takeIf { it < matched.size }
+        return SmartMergeInventoryPage(matched.size, entries.size, offset,
             Collections.unmodifiableList(pageRows), next)
     }
 }
