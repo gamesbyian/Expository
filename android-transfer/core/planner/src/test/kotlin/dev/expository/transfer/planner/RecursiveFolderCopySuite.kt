@@ -126,6 +126,50 @@ object RecursiveFolderCopySuite {
             val next = RecursiveFolderCopyPlanner.plan(changed, NOW)
             check(next.reviewable && previous.digest != next.digest)
         }
+        case("child authority witnesses and case policy change the review digest") {
+            // The same complete, versioned directory listing may be read with
+            // a different per-child READ observation or optional permission.
+            // The prior V2 digest omitted these fields, allowing an old
+            // review fingerprint to survive a changed source witness.
+            val leaves = listOf(child("deep", "Nested.txt", ItemKind.FILE))
+            val originalLocation = f.emptyIndex.location
+            val baseIndex = index(originalLocation, leaves, "stable-snapshot")
+            fun reviewed(location: LocationRef): RecursiveFolderManifest {
+                val nextIndex = index(location, leaves, "stable-snapshot")
+                return RecursiveFolderCopyPlanner.plan(f.request.copy(
+                    descendants = listOf(
+                        f.request.descendants.first(),
+                        RecursiveFolderObservation(f.empty, nextIndex)
+                    )
+                ), NOW)
+            }
+            val original = reviewed(originalLocation)
+            check(original.reviewable && original.files == 2)
+            check(original.entries.size == 4)
+            val newerRead = originalLocation.copy(capabilities =
+                originalLocation.capabilities + (Capability.READ to
+                    CapabilityProof(Support.SUPPORTED,
+                        "new-read-observation", read.expiresAtMillis)))
+            val differentExpiry = originalLocation.copy(capabilities =
+                originalLocation.capabilities + (Capability.READ to
+                    read.copy(expiresAtMillis = read.expiresAtMillis + 100L)))
+            val extraCapability = originalLocation.copy(capabilities =
+                originalLocation.capabilities + (Capability.WRITE to write))
+            val changedCase = originalLocation.copy(casePolicy =
+                CasePolicy.CASE_SENSITIVE)
+            for (changed in listOf(
+                    newerRead, differentExpiry, extraCapability, changedCase)) {
+                val next = reviewed(changed)
+                check(next.reviewable && next.files == original.files)
+                check(next.entries.map { it.relativePath } ==
+                    original.entries.map { it.relativePath })
+                check(next.digest != original.digest)
+                // No new provider file, content or permission is manufactured
+                // by a changed pure review digest.
+            }
+            check(reviewed(originalLocation).digest == original.digest)
+            check(baseIndex.state == LocationIndexState.COMPLETE)
+        }
         case("provider iteration order does not change approved manifest") {
             val reordered = index(f.rootIndex.location, f.rootIndex.children.reversed())
             val changed = f.request.copy(descendants = listOf(
