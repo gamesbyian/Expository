@@ -148,6 +148,41 @@ test('ZIP reader refuses mismatched local and central file names',async()=>{
  const manifest=await zipManifest(blob);
  assert.equal(manifest.entries.length,0);
 });
+test('ZIP local and central filenames must match in original bytes, not only after slash normalization',async()=>{
+ const blob=await mutate(archive('folder/item.txt','original'),data=>{
+  data.write('folder\\item.txt',30,'utf8');
+ });
+ const manifest=await zipManifest(blob);
+ assert.equal(manifest.entries.length,0);
+ assert.equal(manifest.skipped,1,'changed raw local filename is untrusted even when display path matches');
+});
+test('ZIP local CRC and sizes agree with central records when no data descriptor is declared',async()=>{
+ for(const field of [14,18,22]){
+  const blob=await mutate(archive('stable.txt','verified bytes'),data=>{
+   data.writeUInt32LE((data.readUInt32LE(field)^1)>>>0,field);
+  });
+  const manifest=await zipManifest(blob);
+  assert.equal(manifest.entries.length,0,'local header disagreement at offset '+field+' must be refused');
+  assert.equal(manifest.skipped,1);
+ }
+});
+test('valid bit-three ZIP descriptor retains payload when local CRC and sizes are placeholders',async()=>{
+ const seed=Buffer.from(await archive('streamed.txt','descriptor-backed',undefined,0x0008).arrayBuffer());
+ const oldEocd=seed.length-22,oldCentral=seed.readUInt32LE(oldEocd+16);
+ const descriptor=Buffer.alloc(16);
+ descriptor.writeUInt32LE(0x08074b50,0);
+ descriptor.writeUInt32LE(seed.readUInt32LE(14),4);
+ descriptor.writeUInt32LE(seed.readUInt32LE(18),8);
+ descriptor.writeUInt32LE(seed.readUInt32LE(22),12);
+ const data=Buffer.concat([seed.subarray(0,oldCentral),descriptor,seed.subarray(oldCentral)]);
+ for(const field of [14,18,22])data.writeUInt32LE(0,field);
+ data.writeUInt32LE(oldCentral+descriptor.length,data.length-22+16);
+ const manifest=await zipManifest(new Blob([data]));
+ assert.equal(manifest.entries.length,1);
+ assert.equal(manifest.entries[0].name,'streamed.txt');
+ assert.equal(await (await unzipMember(manifest,manifest.entries[0])).text(),'descriptor-backed');
+});
+
 test('ZIP reader excludes encrypted entries at index time',async()=>{
  const blob=await mutate(archive('secret.txt','x'),data=>{data.writeUInt16LE(1,6)});
  const manifest=await zipManifest(blob);

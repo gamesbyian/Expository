@@ -170,7 +170,8 @@ function zipManifest(blob){
     nameLen=v.getUint16(pos+28,true),extraLen=v.getUint16(pos+30,true),commentLen=v.getUint16(pos+32,true),
     local=v.getUint32(pos+42,true),madeBy=v.getUint16(pos+4,true),unixMode=v.getUint32(pos+38,true)>>>16;
    if(pos+46+nameLen+extraLen+commentLen>bytes.length)fail('truncated entry');
-   const rawName=zipDecodeName(bytes.subarray(pos+46,pos+46+nameLen),flags);
+   const centralName=bytes.subarray(pos+46,pos+46+nameLen);
+   const rawName=zipDecodeName(centralName,flags);
    const name=rawName?.replace(/\\/g,'/');
    pos+=46+nameLen+extraLen+commentLen;
    if(!name||name.length>4096||name.startsWith('/')||/[\x00-\x1f\x7f]/.test(name)||name.split('/').some(x=>x==='..'||x==='.'||!x||x.length>255)||/^[a-zA-Z]:/.test(name))continue;
@@ -185,7 +186,19 @@ function zipManifest(blob){
    // Member compressed bytes must end before the central directory. A
    // purported payload spanning central records is not a complete file.
    if(start>offset||compressed>offset-start||v.getUint16(local+8,true)!==method||v.getUint16(local+6,true)!==flags)continue;
-   if(zipDecodeName(bytes.subarray(local+30,local+30+localLen),flags)?.replace(/\\/g,'/')!==name)continue;
+   // A decoded path may hide different raw local and central filename
+   // bytes (for example slash versus backslash). ZIP requires the exact
+   // original filename bytes in both headers, not merely equal displays.
+   if(localLen!==nameLen)continue;
+   let sameRawName=true;
+   for(let k=0;k<nameLen;k++)if(bytes[local+30+k]!==centralName[k]){sameRawName=false;break}
+   if(!sameRawName)continue;
+   // Without a data descriptor (bit 3), local CRC and both sizes are
+   // authoritative too. Bit-3 archives may legitimately record zero here.
+   if(!(flags&0x0008)&&
+    (v.getUint32(local+14,true)!==crc||
+     v.getUint32(local+18,true)!==compressed||
+     v.getUint32(local+22,true)!==uncompressed))continue;
    // Count only fully validated, retained entries. Malformed local headers
    // must not exhaust the aggregate budget for otherwise valid members.
    if(uncompressed>ZIP_TOTAL_MAX-total)fail('uncompressed total exceeds 128 MB');
