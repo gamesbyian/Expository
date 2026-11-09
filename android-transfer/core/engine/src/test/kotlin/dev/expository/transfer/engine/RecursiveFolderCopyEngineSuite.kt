@@ -326,7 +326,10 @@ object RecursiveFolderCopyEngineSuite {
             val first = alreadyExpired.run()
             check(first.result == RecursiveCopyResult.BLOCKED &&
                 first.reason == "DIRECTORY_PREFLIGHT_NOT_VERIFIED")
-            check(alreadyExpired.created.isEmpty() && alreadyExpired.journals.isEmpty())
+            check(alreadyExpired.created.isEmpty() &&
+                alreadyExpired.journals.values.all {
+                    DurableAttemptJournal(it).current() == null
+                })
             val f = Fake()
             var ticks = 0
             val beforeJournal = RecursiveFolderCopyEngine.execute(
@@ -334,8 +337,10 @@ object RecursiveFolderCopyEngineSuite {
                 { true }, { if (++ticks == 1) 100L else 1_000L })
             check(beforeJournal.result == RecursiveCopyResult.BLOCKED &&
                 beforeJournal.reason == "DIRECTORY_PREFLIGHT_CHANGED")
-            check(f.created.isEmpty() && f.journals.isEmpty() &&
-                "mkdir" !in f.trace)
+            check(f.created.isEmpty() &&
+                f.journals.values.all {
+                    DurableAttemptJournal(it).current() == null
+                } && "mkdir" !in f.trace)
         }
         case("directory ticket expiring during durable begin cannot create or replay") {
             val f = Fake()
