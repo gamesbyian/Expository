@@ -110,6 +110,35 @@ test('delayed superseded navigation cannot reinsert a stale private path',async(
  release();assert.equal(await stale,false);
  assert.deepEqual(app.state.recentFolders,['current']);
 });
+test('mobile recent-folder disclosure reuses the same tab-only history and clears it',()=>{
+ const {app,get}=boot();
+ Object.assign(app.state,{repo:'private/repo',branch:'main',repoIsPrivate:true});
+ app.recordRecentFolder('');
+ assert.equal(get('recentJump').hidden,true,'current root cannot be its own shortcut');
+ app.recordRecentFolder('private/project');
+ app.recordRecentFolder('private/project/notes');
+ app.state.path='private/project/notes';
+ app.paintRecentFolders();
+ const jumps=get('recentJumpLinks').children;
+ assert.equal(get('recentJump').hidden,false);
+ assert.equal(get('recentJumpSummary').textContent,'Recent folders (2)');
+ assert.deepEqual(jumps.map(x=>x.textContent),['private/project','Repository root']);
+ assert.equal(jumps[0].getAttribute('aria-label'),'Open recent folder: private/project');
+ assert.equal(jumps[0].title,'private/project');
+ assert.equal(jumps[0].type,'button');
+ assert.deepEqual(app.state.recentFolders,
+  ['private/project/notes','private/project',''],'inline navigation creates no separate history');
+ app.clearRecentFolders();
+ assert.equal(get('recentJump').hidden,true);
+ assert.equal(get('recentJumpLinks').children.length,0,
+  'manual Clear must remove private folder names from the mobile DOM');
+ app.recordRecentFolder('private/secret');
+ app.resetSession();
+ assert.equal(get('recentJumpLinks').children.length,0,
+  'disconnect removes private jump labels as well as sidebar history');
+ assert.equal(get('recentJump').hidden,true);
+});
+
 test('folder index produces ancestry; collapsible tree limits DOM rows',()=>{
  const {app,get}=boot();
  app.treeAdd('design/storyboards/P0');app.treeAdd('design/proposals');
