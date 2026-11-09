@@ -8,8 +8,8 @@ const source=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
 const start=source.indexOf('const ZIP_MAX_BYTES='),end=source.indexOf('const $=id=>',start);
 assert.ok(start>=0&&end>start,'ZIP reader is embedded in the browser application');
 const context=vm.createContext({Blob,Uint8Array,DataView,TextDecoder,TextEncoder,Response,DecompressionStream,withMediaType:b=>b});
-vm.runInContext(source.slice(start,end)+'\nglobalThis.exposed={zipManifest,zipDecodeName,unzipMember,zipCRC,zipSafeForDevice,zipShareSelected};',context);
-const {zipManifest,zipDecodeName,unzipMember,zipCRC,zipSafeForDevice,zipShareSelected}=context.exposed;
+vm.runInContext(source.slice(start,end)+'\nglobalThis.exposed={zipManifest,zipDecodeName,unzipMember,zipCRC,zipSafeForDevice,zipShareSelected,zipExtractFolder};',context);
+const {zipManifest,zipDecodeName,unzipMember,zipCRC,zipSafeForDevice,zipShareSelected,zipExtractFolder}=context.exposed;
 function archive(name='pictures/hello.txt',body='Hello from ZIP',crcOverride,flags=0){
  const data=Buffer.from(body),filename=Buffer.isBuffer(name)?name:Buffer.from(name),crc=crcOverride??zipCRC(data);
  const local=Buffer.alloc(30);local.writeUInt32LE(0x04034b50,0);local.writeUInt16LE(flags,6);local.writeUInt32LE(crc,14);local.writeUInt32LE(data.length,18);local.writeUInt32LE(data.length,22);local.writeUInt16LE(filename.length,26);
@@ -91,6 +91,51 @@ test('ZIP reader discards path traversal names',async()=>{
 test('ZIP reader detects bad CRC instead of exporting corrupted data',async()=>{
  const manifest=await zipManifest(archive('safe.txt','hi',0));
  await assert.rejects(unzipMember(manifest,manifest.entries[0]),/checksum/);
+});
+function extractionFixture(){
+ const operations=[],written=new Map(),progress={textContent:''},button={disabled:false,after(){}};
+ const folder=(prefix='')=>({
+  async getDirectoryHandle(name,opts){
+   operations.push({type:'directory',path:prefix+name,create:opts?.create===true});
+   return folder(prefix+name+'/')
+  },
+  async getFileHandle(name,opts){
+   operations.push({type:'file',path:prefix+name,create:opts?.create===true});
+   if(!opts?.create)throw Object.assign(new Error('not found'),{name:'NotFoundError'});
+   return {async createWritable(){
+    operations.push({type:'writable',path:prefix+name});
+    return {
+     async write(blob){written.set(prefix+name,await blob.text())},
+     async close(){operations.push({type:'close',path:prefix+name})},
+     async abort(){operations.push({type:'abort',path:prefix+name})}
+    }
+   }}
+  }
+ });
+ let message='';
+ context.window={showDirectoryPicker:async()=>folder()};
+ context.elem=()=>({disabled:false,remove(){}});
+ context.status=value=>{message=value};
+ return {operations,written,progress,button,get message(){return message}}
+}
+test('CRC failure never creates empty destination folders during ZIP extraction',async()=>{
+ const manifest=await zipManifest(archive('nested/album/broken.txt','corrupt contents',0));
+ const fixture=extractionFixture();
+ await zipExtractFolder(manifest,manifest.entries,fixture.button,fixture.progress);
+ assert.deepEqual(fixture.operations,[],'corrupt member must not invoke any directory/file handle');
+ assert.equal(fixture.written.size,0);
+ assert.match(fixture.message,/0\/1 files saved.*1 failed\/unsupported/);
+ assert.equal(fixture.button.disabled,false,'extraction UI recovers after a failed member');
+});
+test('verified nested ZIP member still creates the intended destination and writes exact bytes',async()=>{
+ const manifest=await zipManifest(archive('nested/album/photo.txt','verified contents'));
+ const fixture=extractionFixture();
+ await zipExtractFolder(manifest,manifest.entries,fixture.button,fixture.progress);
+ assert.equal(fixture.written.get('nested/album/photo.txt'),'verified contents');
+ assert.deepEqual(fixture.operations.map(x=>x.type),
+  ['directory','directory','file','file','writable','close']);
+ assert.match(fixture.message,/1\/1 files saved/);
+ assert.equal(fixture.button.disabled,false);
 });
 test('ZIP reader rejects files above configured archive cap',async()=>{
  assert.throws(()=>zipManifest(new Blob([new Uint8Array(24*1024*1024+1)])),/24 MB/);
