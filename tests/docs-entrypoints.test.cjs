@@ -49,3 +49,17 @@ test('current queues acknowledge distinct native and web authority and historica
   assert.match(dependencies, /Later #401 independently accepted Dual recursive real-picker E2/);
   assert.doesNotMatch(dependencies, /^(?!.*Historical).*draft #401.*(?:qualif|blocked)/im);
 });
+
+test('native live queue starts with action routing; dated milestones remain archived', () => {
+  const queue = read('android-transfer/WORK-QUEUE.md');
+  const archive = read('android-transfer/WORK-QUEUE-EVIDENCE-ARCHIVE-2026-11-09.md');
+  assert.match(queue, /^# Expository Transfer: executable native work queue\n\n\*\*Current routing /);
+  assert.match(queue, /\]\(WORK-QUEUE-EVIDENCE-ARCHIVE-2026-11-09\.md\)/);
+  assert.ok(queue.indexOf('## Immediate decision board') > 0);
+  assert.ok(queue.indexOf('## Immediate decision board') < 12000,
+    'dated reports must not bury the native decision board');
+  assert.match(archive, /source blob `[a-f0-9]{40}`/);
+  assert.match(archive, /2026-11-05/);
+  assert.match(archive, /2026-11-09/);
+  assert.match(archive, /Do not assign next work or infer current acceptance from this archive/);
+});
