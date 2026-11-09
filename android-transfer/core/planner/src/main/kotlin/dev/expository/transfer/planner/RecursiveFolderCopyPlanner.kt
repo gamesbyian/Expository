@@ -125,7 +125,7 @@ object RecursiveFolderCopyPlanner {
                 errors += "DUPLICATE_DIRECTORY_WITNESS"
         }
 
-        val digestParts = mutableListOf("RECURSIVE_COPY_V2", transfer.digest,
+        val digestParts = mutableListOf("RECURSIVE_COPY_V3", transfer.digest,
             parent.snapshotId.orEmpty(), parent.location.revision,
             root.key.opaqueItemId, root.key.version, root.name)
         val entries = mutableListOf<RecursiveCopyEntry>()
@@ -168,7 +168,19 @@ object RecursiveFolderCopyPlanner {
             digestParts += listOf(relative.size.toString()) + relative +
                 listOf(item.key.authorityId, item.key.opaqueItemId, item.key.version,
                     item.kind.name, item.location.key.containerId,
-                    item.location.revision, item.location.key.grantId.orEmpty())
+                    item.location.revision, item.location.key.grantId.orEmpty(),
+                    // A child READ witness can change without changing its
+                    // path, version or provider listing revision. Freeze every
+                    // per-item capability observation and case assumption into
+                    // this review fingerprint, including optional witnesses.
+                    item.location.casePolicy.name,
+                    item.location.capabilities.size.toString())
+            digestParts += item.location.capabilities
+                .toSortedMap(compareBy { it.name })
+                .flatMap { (cap, proof) -> listOf(
+                    cap.name, proof.support.name, proof.observationId,
+                    proof.expiresAtMillis.toString()
+                ) }
             if (item.kind == ItemKind.FILE) {
                 files++
                 continue
