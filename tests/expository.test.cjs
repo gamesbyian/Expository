@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch,BlobImpl=globalThis.Blob) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,documentThumbnail,loadThumb,openContainingFolder};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,documentThumbnail,loadThumb,openContainingFolder};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch','Blob',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl,BlobImpl
  );
@@ -56,6 +56,79 @@ test('folder index produces ancestry; collapsible tree limits DOM rows',()=>{
  app.paintTree();
  assert.equal(get('tree').children.length,4,'expanding ancestors exposes leaf');
 });
+test('file last-change dates are opt-in, source-backed and unknown dates sort last',async()=>{
+ const requests=[];
+ const apiFetch=async url=>{
+  requests.push(url);
+  const file=new URL(url).searchParams.get('path');
+  const date=file==='a.js'?'2026-10-03T12:00:00Z':file==='b.js'?'2026-11-07T12:00:00Z':null;
+  return new Response(JSON.stringify(date?[{commit:{committer:{date}}}]:[]),{status:200});
+ };
+ const {app,get}=boot(apiFetch);
+ Object.assign(app.state,{repo:'public/test',branch:'main',repoRequest:1,path:''});
+ app.state.items=['a.js','b.js','c.js'].map(name=>({name,path:name,type:'file',size:10}));
+ get('sortFiles').value='modified';get('sortDirection').value='desc';
+ app.paint();
+ assert.equal(requests.length,0,'rendering cannot silently fetch commit history');
+ await app.loadFileDates();
+ assert.equal(requests.length,3,'only explicitly requested visible file dates are fetched');
+ assert.equal(app.state.fileDates.size,3);
+ assert.deepEqual(app.gallerySort(app.state.items).map(x=>x.name),['b.js','a.js','c.js']);
+ const tiles=get('items').children.filter(x=>x.className==='tile');
+ assert.deepEqual(tiles.map(x=>x.children[1].textContent),['b.js','a.js','c.js']);
+ assert.match(tiles[0].children[2].textContent,/changed 2026-11-07/);
+ assert.match(tiles[2].children[2].textContent,/change date unknown/);
+ assert.match(get('status').textContent,/2 dated, 1 without a usable date/);
+ await app.loadFileDates();
+ assert.equal(requests.length,3,'already reviewed paths are cached only in the tab');
+ get('sortDirection').value='asc';
+ assert.deepEqual(app.gallerySort(app.state.items).map(x=>x.name),['a.js','b.js','c.js'],
+  'unknown remains last even in ascending order');
+});
+
+test('manual date sampling requests at most twelve files at three-way concurrency',async()=>{
+ let active=0,maxActive=0,requests=0;
+ const apiFetch=async()=>{
+  active++;maxActive=Math.max(maxActive,active);requests++;
+  await new Promise(resolve=>setImmediate(resolve));
+  active--;
+  return new Response(JSON.stringify([{commit:{committer:{date:'2026-11-01T00:00:00Z'}}}]),{status:200});
+ };
+ const {app,get}=boot(apiFetch);
+ Object.assign(app.state,{repo:'public/test',branch:'main',repoRequest:1,path:''});
+ app.state.items=Array.from({length:30},(_,i)=>({
+  name:'file'+String(i).padStart(2,'0')+'.kt',
+  path:'file'+String(i).padStart(2,'0')+'.kt',type:'file',size:10
+ }));
+ get('sortFiles').value='modified';get('sortDirection').value='desc';
+ app.paint();await app.loadFileDates();
+ assert.equal(requests,12);
+ assert.equal(app.state.fileDates.size,12);
+ assert.ok(maxActive<=3,'no more than three concurrent GitHub history requests');
+ assert.match(get('status').textContent,/of 12 sampled visible files/);
+});
+
+test('date responses from disconnected private repository never populate a successor',async()=>{
+ let release;
+ const apiFetch=()=>new Promise(resolve=>{
+  release=()=>resolve(new Response(JSON.stringify([{
+   commit:{committer:{date:'2026-11-08T00:00:00Z'}}
+  }]),{status:200}));
+ });
+ const {app,get}=boot(apiFetch);
+ Object.assign(app.state,{repo:'private/first',branch:'main',repoRequest:1,path:''});
+ app.state.items=[{name:'secret.kt',path:'secret.kt',type:'file',size:10}];
+ get('sortFiles').value='modified';app.paint();
+ const pending=app.loadFileDates();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(typeof release,'function');
+ app.resetSession();
+ release();await pending;
+ assert.equal(app.state.fileDates.size,0);
+ assert.equal(app.state.dateBusy,false);
+ assert.equal(app.state.activeRequests.size,0);
+});
+
 test('repo-wide names and recursive image views match expected paths',()=>{
  const {app,get}=boot();
  app.state.indexReady=true;

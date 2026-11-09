@@ -101,7 +101,7 @@ body.light{--bg:#f4f4f7;--panel:#fff;--panel2:#f2f4f8;--stroke:#d4d8e2;--text:#1
 </aside>
 <section class="workspace" id="workspace" data-mode="files" aria-label="Repository files">
 <div class="toolbar"><button id="back" class="icon-btn" title="Parent folder" aria-label="Parent folder">↑</button><input id="filter" class="field" placeholder="Find by name…" aria-label="Filter files by name"><select id="scope" class="field" aria-label="Search and gallery scope"><option value="folder">This folder</option><option value="repo">Search entire repo</option><option value="descendants">This folder + subfolders</option><option value="allFiles">All files in repo</option><option value="images">Images in subfolders</option><option value="allImages">All repo images</option></select><button id="listBtn" class="pill" title="List view">☷</button><button id="gridBtn" class="pill active" title="Gallery view">▦</button><button id="zipToggle" class="pill" aria-pressed="false" aria-label="Include ZIP contents in gallery">ZIPs +</button><button id="copyFolder" class="pill" title="Copy folder link" aria-label="Copy folder link">↗</button><button id="refineToggle" class="pill" aria-expanded="true" aria-controls="refineControls">Filters</button><button id="storyToggle" class="pill" aria-pressed="false" title="Explore commits, releases and tags">Story</button><button id="sizeToggle" class="pill" aria-pressed="false" aria-controls="sizeView" title="Explore indexed files and folders by size">Sizes</button><button id="selectMode" class="pill" aria-pressed="false" title="Select up to 12 images for a contact sheet">Select images</button><button id="contactSheet" class="pill" hidden disabled>Contact sheet (0)</button><button id="clearSelection" class="pill" hidden>Clear</button></div>
-<div class="refine" id="refineControls"><label for="sortFiles">Sort</label><select id="sortFiles" class="field" aria-label="Sort files"><option value="name">Name</option><option value="size">Largest</option><option value="extension">Extension</option><option value="path">Path</option></select><label for="sortDirection">Order</label><select id="sortDirection" class="field" aria-label="Sort order"><option value="asc">Ascending</option><option value="desc">Descending</option></select><label for="groupFolders">Group</label><select id="groupFolders" class="field" aria-label="Gallery grouping"><option value="none">Continuous grid</option><option value="folder">By folder</option></select><label for="includeZip" title="Inspect up to 12 archives locally, showing at most 1,000 files from each."><input id="includeZip" type="checkbox"> Include ZIP contents</label><label for="fileKind">Kind</label><select id="fileKind" class="field" aria-label="Filter by file category"><option value="all">Everything</option><option value="image">Images</option><option value="html">HTML</option><option value="previewable">Previewable files</option><option value="code">Code</option><option value="doc">Documents</option><option value="data">Data</option><option value="other">Other</option></select><label for="extFilter">Extensions</label><input id="extFilter" class="field" placeholder="png, svg, html…" aria-label="Filter by file extensions, separated by commas"><label for="density">Gallery size <input id="density" type="range" min="110" max="270" value="145" step="10" aria-label="Gallery thumbnail size"></label><button id="contentSearch" class="pill" title="Scan bounded text files for a phrase">Search contents</button></div>
+<div class="refine" id="refineControls"><label for="sortFiles">Sort</label><select id="sortFiles" class="field" aria-label="Sort files"><option value="name">Name</option><option value="size">Largest</option><option value="extension">Extension</option><option value="path">Path</option><option value="modified">Last changed (known dates)</option></select><button id="loadDates" class="pill" type="button" hidden aria-label="Look up last change dates for up to twelve visible GitHub files">Look up dates (12)</button><label for="sortDirection">Order</label><select id="sortDirection" class="field" aria-label="Sort order"><option value="asc">Ascending</option><option value="desc">Descending</option></select><label for="groupFolders">Group</label><select id="groupFolders" class="field" aria-label="Gallery grouping"><option value="none">Continuous grid</option><option value="folder">By folder</option></select><label for="includeZip" title="Inspect up to 12 archives locally, showing at most 1,000 files from each."><input id="includeZip" type="checkbox"> Include ZIP contents</label><label for="fileKind">Kind</label><select id="fileKind" class="field" aria-label="Filter by file category"><option value="all">Everything</option><option value="image">Images</option><option value="html">HTML</option><option value="previewable">Previewable files</option><option value="code">Code</option><option value="doc">Documents</option><option value="data">Data</option><option value="other">Other</option></select><label for="extFilter">Extensions</label><input id="extFilter" class="field" placeholder="png, svg, html…" aria-label="Filter by file extensions, separated by commas"><label for="density">Gallery size <input id="density" type="range" min="110" max="270" value="145" step="10" aria-label="Gallery thumbnail size"></label><button id="contentSearch" class="pill" title="Scan bounded text files for a phrase">Search contents</button></div>
 <div class="path" id="breadcrumbs">No repository selected</div>
 <section id="storyView" class="story-view" hidden aria-label="Repository Story Mode"></section><section id="sizeView" class="size-view" hidden aria-label="Repository file-size map"></section><div id="items" class="items grid"><div class="empty"><strong>Browse in full colour.</strong>Open any public repository, or connect a read-only token for your private ones.</div></div><div class="status" id="status" aria-live="polite"></div><div id="searchResults" aria-live="polite"></div>
 </section></main>
@@ -373,7 +373,7 @@ function zipViewer(manifest,parent,folder='',visible=120){
  root.append(listing);zipPrepareShare(manifest,parent,share,progress);return root
 }
 
-const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0,selectionMode:false,selected:new Map(),sheetSeq:0,sheetOpen:false,activeRequests:new Set(),rateLimitedUntil:0,folderRecoveryKey:'',sizeOpen:false,imageFullscreenCleanup:null};
+const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0,selectionMode:false,selected:new Map(),sheetSeq:0,sheetOpen:false,activeRequests:new Set(),rateLimitedUntil:0,folderRecoveryKey:'',sizeOpen:false,imageFullscreenCleanup:null,fileDates:new Map(),dateSeq:0,dateBusy:false};
 const codeRx=/\.(?:js|jsx|mjs|ts|tsx|py|rs|go|java|kt|c|cpp|h|hpp|sh|css|scss|html|sql|gradle)$/i,docsRx=/\.(?:md|markdown|txt|pdf|rst)$/i,dataRx=/\.(?:json|csv|tsv|yaml|yml|xml|toml|ini|properties)$/i;
 const docThumbRx=/\.(?:html?|md|markdown|txt|json|csv|tsv|ya?ml|xml|pdf|css)$/i,previewableRx=/\.(?:png|jpe?g|webp|gif|svg|avif|bmp|html?|md|markdown|txt|json|csv|tsv|ya?ml|xml|pdf|css)$/i;
 const imageRx=/\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i,textRx=/\.(md|markdown|txt|json|ya?ml|xml|csv|tsv|js|jsx|ts|tsx|css|scss|html|py|kt|java|rs|go|sh|toml|ini|svg|sql|log|gradle|properties)$/i;
@@ -477,6 +477,15 @@ function filterSort(list){
  const kind=$('fileKind').value||'all',sort=$('sortFiles').value||'name',extensions=new Set(($('extFilter').value||'').toLowerCase().split(/[\s,;]+/).map(x=>x.replace(/^\*?\./,'')).filter(x=>/^[a-z0-9_-]{1,20}$/.test(x)));
  return list.filter(x=>(kind==='all'||(kind==='html'?x.type==='file'&&/\.html?$/i.test(x.name):kind==='previewable'?x.type==='file'&&previewableRx.test(x.name):typeOf(x)===kind))&&(!extensions.size||x.type==='file'&&extensions.has(x.name.split('.').at(-1).toLowerCase()))).sort((a,b)=>{
   const d=(a.type==='dir'?0:1)-(b.type==='dir'?0:1);if(d)return d;
+  if(sort==='modified'){
+   // Unknown/unqueried files stay LAST in both directions. A Git tree has
+   // no file modification dates; only explicit commit-history reads count.
+   const da=state.fileDates.get(a.path)?.time,db=state.fileDates.get(b.path)?.time;
+   if(da!==undefined||db!==undefined){
+    if(da===undefined)return 1;if(db===undefined)return -1;
+    const diff=(da-db)*($('sortDirection').value==='desc'?-1:1);if(diff)return diff
+   }
+  }
   if(sort==='size'){const diff=(b.size||0)-(a.size||0);if(diff)return diff}
   else if(sort==='extension'){const ext=x=>x.name.includes('.')?x.name.split('.').at(-1).toLowerCase():'';const diff=ext(a).localeCompare(ext(b));if(diff)return diff}
   else if(sort==='path'){const diff=a.path.localeCompare(b.path,undefined,{numeric:true,sensitivity:'base'});if(diff)return diff}
@@ -484,9 +493,61 @@ function filterSort(list){
  })
 }
 function gallerySort(list){
- const ordered=filterSort(list);if($('sortDirection').value==='desc')ordered.reverse();
+ const ordered=filterSort(list);if($('sortDirection').value==='desc'&&$('sortFiles').value!=='modified')ordered.reverse();
  if($('groupFolders').value==='folder'&&$('scope').value!=='folder')ordered.sort((a,b)=>fileFolder(a.path).localeCompare(fileFolder(b.path),undefined,{numeric:true,sensitivity:'base'}));
  return ordered
+}
+function updateDateControl(){
+ const button=$('loadDates'),active=$('sortFiles').value==='modified';
+ button.hidden=!active;button.disabled=state.dateBusy||!state.repo||!state.branch;
+ button.textContent=state.dateBusy?'Looking up dates…':'Look up dates (12)';
+}
+async function loadFileDates(){
+ if(state.dateBusy||!state.repo||!state.branch||$('sortFiles').value!=='modified')return;
+ // Explicit request only. Never scan arbitrary private GitHub history or
+ // store paths/dates outside this browser tab's bounded in-memory cache.
+ const MAX_CACHED_DATES=240;
+ const slots=Math.max(0,Math.min(12,MAX_CACHED_DATES-state.fileDates.size));
+ const batch=state.visibleItems.filter(item=>item.type==='file'&&!item.zipMember&&
+   safeRepoPath(item.path)&&!state.fileDates.has(item.path)).slice(0,slots);
+ if(!batch.length){
+  status(slots?'No unqueried visible GitHub files. Change folder or reveal more files.':
+   'Session date lookup cap reached (240 files); disconnect to clear it.');
+  return
+ }
+ const repo=state.repo,branch=state.branch,request=state.repoRequest,serial=++state.dateSeq;
+ const live=()=>request===state.repoRequest&&repo===state.repo&&
+  branch===state.branch&&serial===state.dateSeq;
+ state.dateBusy=true;updateDateControl();let next=0,known=0,unknown=0,failed=0;
+ async function worker(){
+  while(next<batch.length&&live()&&Date.now()>=state.rateLimitedUntil){
+   const item=batch[next++];
+   try{
+    const commits=await json('/repos/'+repo+'/commits?sha='+enc(branch)+
+     '&path='+enc(item.path)+'&per_page=1');
+    if(!live())return;
+    if(!Array.isArray(commits))throw Error('Commit-history response unavailable.');
+    const changed=commits[0]?.commit?.committer?.date||
+     commits[0]?.commit?.author?.date;
+    const timestamp=changed?Date.parse(changed):NaN;
+    // A missing event or unparseable timestamp is explicitly unknown.
+    if(Number.isFinite(timestamp)){
+     state.fileDates.set(item.path,{time:timestamp});known++
+    }else{state.fileDates.set(item.path,{});unknown++}
+   }catch{if(!live())return;failed++}
+  }
+ }
+ try{
+  await Promise.all([worker(),worker(),worker()]);
+  if(live()){
+   paint();
+   const rateNote=Date.now()<state.rateLimitedUntil?
+    ' GitHub rate limit active; no automatic retries.':'';
+   status('Last-change lookup: '+known+' dated, '+unknown+
+    ' without a usable date, '+failed+' failed of '+batch.length+
+    ' sampled visible files. Unqueried/unknown entries sort last.'+rateNote)
+  }
+ }finally{if(live()){state.dateBusy=false;updateDateControl()}}
 }
 function loadBookmarks(){try{const data=JSON.parse(localStorage.getItem('expository-public-bookmarks')||'[]');if(Array.isArray(data))for(const name of data.slice(0,24))if(typeof name==='string'&&/^[\w.-]+\/[\w.-]+$/.test(name))state.bookmarks.add(name)}catch{}}
 function paintBookmarks(){const host=$('favorites');host.replaceChildren();for(const name of [...state.bookmarks].sort()){const b=elem('button','pill','★ '+name);b.onclick=()=>{$('repo').value=name;$('branch').value='';openRepo()};host.append(b)}if(!state.bookmarks.size)host.append(elem('span','hint','None yet. Only public repo names are saved.'));const b=$('bookmark');b.disabled=!state.repo||state.repoIsPrivate;b.textContent=state.bookmarks.has(state.repo)?'★ Unstar public repo':'☆ Star public repo'}
@@ -893,7 +954,7 @@ function paint(more=false){
  const matching=currentMatches(),scope=$('scope').value;
  if(matching===null){host.append(elem('div','empty','Building the repository index…'));return}
  if(scope==='repo'&&!$('filter').value.trim()){host.append(elem('div','empty','Type a filename or path to search the repository.'));return}
- const previous=more?state.visibleItems.length:0;state.visibleItems=matching.slice(0,state.limit);
+ const previous=more?state.visibleItems.length:0;state.visibleItems=matching.slice(0,state.limit);updateDateControl();
  if(!more&&typeof IntersectionObserver!=='undefined'&&state.mode==='grid'){
   state.thumbObserver=new IntersectionObserver(entries=>{for(const e of entries){if(e.isIntersecting){const target=e.target;state.thumbObserver.unobserve(target);const job=target._thumbJob;if(job)loadThumb(job.item,job.thumb,job.glyph,epoch)}}},{rootMargin:'260px'});
  }
@@ -907,7 +968,13 @@ function paint(more=false){
   }
   lastFolder=folder;
   const tile=elem('button','tile'),thumb=elem('div','thumb'),glyph=elem('span','glyph',icon(item));thumb.append(glyph);
-  tile.append(thumb,elem('span','filename',item.name),elem('span','meta',scope==='folder'?(item.type==='dir'?'Folder':formatSize(item.size)):(item.path+(item.size?' · '+formatSize(item.size):''))));
+  const recordedDate=state.fileDates.get(item.path)?.time;
+  const dateDetail=item.type==='file'&&$('sortFiles').value==='modified'?
+   Number.isFinite(recordedDate)?' · changed '+new Date(recordedDate).toISOString().slice(0,10):
+   ' · change date unknown':'';
+  tile.append(thumb,elem('span','filename',item.name),elem('span','meta',
+   (scope==='folder'?(item.type==='dir'?'Folder':formatSize(item.size)):
+    (item.path+(item.size?' · '+formatSize(item.size):'')))+dateDetail));
   tile.title=item.path;tile.dataset.path=item.path;tile.setAttribute('aria-pressed',String(state.selected.has(item.path)));if(state.selected.has(item.path))tile.classList.add('selected');
   tile.onclick=()=>item.type==='dir'?navigate(item.path):state.selectionMode&&imageRx.test(item.name)?selectImage(item):openPreview(item);
   if(scope!=='folder'&&item.type==='file'){
@@ -924,7 +991,12 @@ function paint(more=false){
   button.onclick=()=>{state.limit+=80;paint(true)};host.append(button)
  }
  if(!matching.length)host.append(elem('div','empty',scope==='repo'?'No matching files.':'Nothing matches this view.'));updateSelectionControls();
- status(matching.length+' items matched'+(scope==='folder'?' in folder':' across indexed paths')+(state.indexTruncated?' · index incomplete':'')+(state.indexError?' · index unavailable, limited to folder':'')+(matching.length>state.limit?' · showing first '+state.limit:''));
+ const dateCoverage=$('sortFiles').value==='modified'?
+  ' · '+state.visibleItems.filter(x=>x.type==='file'&&
+   Number.isFinite(state.fileDates.get(x.path)?.time)).length+'/'+
+   state.visibleItems.filter(x=>x.type==='file').length+
+   ' visible file dates known (remaining dates unknown)':'';
+ status(matching.length+' items matched'+(scope==='folder'?' in folder':' across indexed paths')+(state.indexTruncated?' · index incomplete':'')+(state.indexError?' · index unavailable, limited to folder':'')+(matching.length>state.limit?' · showing first '+state.limit:'')+dateCoverage);
 }
 const thumbQueue=[];let running=0;
 function documentThumbnail(item,thumb,source=''){
@@ -1494,7 +1566,7 @@ async function openRepo(targetPath=''){
  $('branchPicker').hidden=true;$('branchPicker').replaceChildren(new Option('Choose a branch…',''));$('loadBranches').disabled=true;
  abortRequests();
  cancelContentScan();stopStory();hideSizeMap();state.storyData=null;const request=++state.repoRequest;state.repo=repo;state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;
- state.folderRecoveryKey='';++zipScanSeq;++zipPrepSeq;zipGalleryEntries=[];zipManifests.clear();zipSelections.clear();zipContext=null;zipStartFolder='';clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
+ state.folderRecoveryKey='';++state.dateSeq;state.dateBusy=false;state.fileDates.clear();++zipScanSeq;++zipPrepSeq;zipGalleryEntries=[];zipManifests.clear();zipSelections.clear();zipContext=null;zipStartFolder='';clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
  clearObjects();clearPreview();++state.seq;status('Connecting to '+repo+'…');
  try{
   const info=await json('/repos/'+repo);if(request!==state.repoRequest)return;
@@ -1504,7 +1576,7 @@ async function openRepo(targetPath=''){
  }catch(e){if(request===state.repoRequest)status('Cannot open repository: '+e.message);return false}
 }
 function resetSession(){
- abortRequests();state.rateLimitedUntil=0;state.folderRecoveryKey='';++zipScanSeq;++zipPrepSeq;zipGalleryEntries=[];zipManifests.clear();zipSelections.clear();zipContext=null;zipStartFolder='';cancelContentScan();stopStory();hideSizeMap();state.storyData=null;++state.repoRequest;++state.seq;state.token='';state.repo='';state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;state.cache.clear();state.items=[];state.visibleItems=[];
+ abortRequests();state.rateLimitedUntil=0;state.folderRecoveryKey='';++state.dateSeq;state.dateBusy=false;state.fileDates.clear();++zipScanSeq;++zipPrepSeq;zipGalleryEntries=[];zipManifests.clear();zipSelections.clear();zipContext=null;zipStartFolder='';cancelContentScan();stopStory();hideSizeMap();state.storyData=null;++state.repoRequest;++state.seq;state.token='';state.repo='';state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;state.cache.clear();state.items=[];state.visibleItems=[];
  state.tree.clear();state.expanded.clear();state.indexEntries=[];state.indexReady=false;state.indexError=false;state.indexTruncated=false;state.repoIsPrivate=true;
  clearSelection();state.renderEpoch++;if(state.thumbObserver){state.thumbObserver.disconnect();state.thumbObserver=null}thumbQueue.length=0;
  clearPreview();clearObjects();paintBookmarks();$('token').value='';$('branch').value='';$('loadBranches').disabled=true;$('loadBranches').textContent='Browse branches';$('branchPicker').hidden=true;$('branchPicker').replaceChildren(new Option('Choose a branch…',''));
@@ -1539,7 +1611,7 @@ function syncRefineToViewport(){
 }
 $('refineToggle').onclick=()=>{const controls=$('refineControls');controls.hidden=!controls.hidden;$('refineToggle').setAttribute('aria-expanded',String(!controls.hidden));$('refineToggle').textContent=controls.hidden?'Filters':'Hide filters'};
 if(typeof window!=='undefined'&&window.matchMedia){const mql=window.matchMedia('(max-width:760px)');syncRefineToViewport();mql.addEventListener('change',()=>{syncRefineToViewport();$('refineToggle').textContent='Filters'})}
-$('filter').oninput=()=>{state.limit=80;paint()};$('sortFiles').onchange=()=>{state.limit=80;paint()};$('sortDirection').onchange=()=>{state.limit=80;paint()};$('groupFolders').onchange=()=>{state.limit=80;paint()};$('fileKind').onchange=()=>{state.limit=80;paint()};$('includeZip').onchange=scanZipGallery;$('zipToggle').onclick=()=>{$('includeZip').checked=!$('includeZip').checked;scanZipGallery()};$('extFilter').oninput=()=>{state.limit=80;paint()};$('density').oninput=()=>{$('items').style.setProperty('--tile-min',$('density').value+'px')};$('scope').onchange=()=>{if(['images','allImages'].includes($('scope').value)&&!['all','image'].includes($('fileKind').value))$('fileKind').value='image';state.limit=80;paint()};$('prevPreview').onclick=()=>adjacentPreview(-1);$('nextPreview').onclick=()=>adjacentPreview(1);$('back').onclick=()=>navigate(state.path.split('/').slice(0,-1).join('/'));$('gridBtn').onclick=()=>{state.mode='grid';$('gridBtn').classList.add('active');$('listBtn').classList.remove('active');paint()};$('listBtn').onclick=()=>{state.mode='list';$('listBtn').classList.add('active');$('gridBtn').classList.remove('active');paint()};
+$('filter').oninput=()=>{state.limit=80;paint()};$('sortFiles').onchange=()=>{if($('sortFiles').value==='modified')$('sortDirection').value='desc';state.limit=80;paint()};$('loadDates').onclick=loadFileDates;$('sortDirection').onchange=()=>{state.limit=80;paint()};$('groupFolders').onchange=()=>{state.limit=80;paint()};$('fileKind').onchange=()=>{state.limit=80;paint()};$('includeZip').onchange=scanZipGallery;$('zipToggle').onclick=()=>{$('includeZip').checked=!$('includeZip').checked;scanZipGallery()};$('extFilter').oninput=()=>{state.limit=80;paint()};$('density').oninput=()=>{$('items').style.setProperty('--tile-min',$('density').value+'px')};$('scope').onchange=()=>{if(['images','allImages'].includes($('scope').value)&&!['all','image'].includes($('fileKind').value))$('fileKind').value='image';state.limit=80;paint()};$('prevPreview').onclick=()=>adjacentPreview(-1);$('nextPreview').onclick=()=>adjacentPreview(1);$('back').onclick=()=>navigate(state.path.split('/').slice(0,-1).join('/'));$('gridBtn').onclick=()=>{state.mode='grid';$('gridBtn').classList.add('active');$('listBtn').classList.remove('active');paint()};$('listBtn').onclick=()=>{state.mode='list';$('listBtn').classList.add('active');$('gridBtn').classList.remove('active');paint()};
 $('theme').onclick=()=>{document.body.classList.toggle('light');$('theme').textContent=document.body.classList.contains('light')?'☾':'☀︎';try{localStorage.setItem('expository-theme',document.body.classList.contains('light')?'light':'dark')}catch{}};
 try{if(localStorage.getItem('expository-theme')==='light')$('theme').click()}catch{}
 $('navToggle').onclick=()=>{$('sidebar').classList.add('open');$('scrim').classList.add('on')};$('closePreview').onclick=clearPreview;$('scrim').onclick=()=>{clearPreview();closeNav()};
