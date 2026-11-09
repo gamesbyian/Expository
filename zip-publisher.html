@@ -193,6 +193,7 @@ async function inspectDestination(token,repo,base,prefix,source,signal){
  const head=branch?.object?.sha;
  if(!/^[a-f0-9]{40}$/i.test(head||''))throw Error('Base branch did not resolve to a commit.');
  const commit=await github(token,'GET',root+'/git/commits/'+head,undefined,signal),treeSha=commit?.tree?.sha;
+ if(commit?.sha!==head)throw Error('Destination review returned a different base commit identity.');
  if(!/^[a-f0-9]{40}$/i.test(treeSha||''))throw Error('Commit tree is unavailable.');
  const tree=await github(token,'GET',root+'/git/trees/'+treeSha+'?recursive=1',undefined,signal);
  // The displayed no-collision decision must be about this exact Git tree,
@@ -316,6 +317,12 @@ async function writeNewBranch(plan,token,branch,onProgress,signal){
  if(!branchPath(branch)||branch===plan.base)throw Error('Unsafe proposed output branch.');
  const prefix='/repos/'+plan.repo,latest=await github(token,'GET',prefix+'/git/ref/heads/'+encodeGitPath(plan.base),undefined,signal);
  if(latest?.object?.sha!==plan.head)throw Error('Base branch changed after review. Review destinations again.');
+ // Re-establish the link between the frozen parent commit and its exact
+ // tree immediately before constructing any objects. A plausible tree SHA
+ // from an unrelated/stale commit must not replace the reviewed repository.
+ const actualBase=await github(token,'GET',prefix+'/git/commits/'+plan.head,undefined,signal);
+ if(actualBase?.sha!==plan.head||actualBase?.tree?.sha!==plan.treeSha)
+  throw Error('Base commit or tree identity differs from the reviewed destination.');
  const tree=await github(token,'GET',prefix+'/git/trees/'+plan.treeSha+'?recursive=1',undefined,signal);
  if(tree?.sha!==plan.treeSha)throw Error('Base repository tree identity changed after review.');
  if(findCollisions(plan.entries,tree).length)throw Error('Destinations are no longer collision-free.');

@@ -207,6 +207,50 @@ test('oversized GitHub preflight tree refuses publishing before any POST',async(
  assert.ok(calls.length>=3&&calls.every(x=>x.options.method==='GET'));
 });
 
+test('destination review refuses a commit response belonging to another Git object',async()=>{
+ for(const claimedSha of [undefined,'f'.repeat(40),'not-a-git-commit']){
+  const {api,calls}=setup((url,options)=>{
+   if(options.method==='GET'&&url.includes('/git/commits/'+SHA.head))
+    return {sha:claimedSha,tree:{sha:SHA.tree}}
+  });
+  await assert.rejects(
+   api.inspectDestination('private-token','owner/repo','main','',
+    [file('selected.txt')]),
+   error=>/different base commit identity/.test(error.message)&&
+    !error.message.includes('private-token'));
+  assert.deepEqual(calls.map(x=>x.options.method),['GET','GET'],
+   'reject invalid parent identity before reading a tree or making any writes');
+ }
+});
+
+test('stale or unrelated base commit at write time cannot create Git objects',async()=>{
+ for(const variant of [
+  {sha:'f'.repeat(40),tree:{sha:SHA.tree}},
+  {sha:SHA.head,tree:{sha:'f'.repeat(40)}},
+  {sha:SHA.head,tree:{}},
+  {}
+ ]){
+  let commitsRead=0;
+  const {api,calls}=setup((url,options)=>{
+   if(options.method==='GET'&&url.includes('/git/commits/'+SHA.head)){
+    commitsRead++;
+    if(commitsRead===2)return variant
+   }
+  });
+  const plan=await api.inspectDestination('private-token','owner/repo',
+   'main','assets',[file('selected.txt')]);
+  await assert.rejects(
+   api.writeNewBranch(plan,'private-token','expository/zip-review',()=>{}),
+   error=>/Base commit or tree identity differs/.test(error.message)&&
+    error.publishedButUnverified!==true&&
+    !error.message.includes('private-token'),
+   'no branch-creation attempt follows a mismatched base commit');
+  assert.equal(commitsRead,2);
+  assert.ok(calls.every(x=>x.options.method==='GET'),
+   'all refusal paths are read-only and create no blobs, commits or refs');
+ }
+});
+
 test('destination review refuses a mismatched or missing Git tree SHA',async()=>{
  for(const badSha of [undefined,'f'.repeat(40),'not-a-git-sha']){
   const {api,calls}=setup((url,options)=>{
