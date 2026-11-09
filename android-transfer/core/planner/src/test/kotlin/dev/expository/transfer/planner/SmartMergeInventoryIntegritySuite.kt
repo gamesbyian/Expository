@@ -86,9 +86,10 @@ object SmartMergeInventoryIntegritySuite {
         check(SmartMergeInventoryPager.page(chosen,
             inventory(chosen, listOf(root, one), digest = "x".repeat(64)), 0)
             == null)
+        val blankId = one.copy(source = one.source.copy(
+            key = one.source.key.copy(opaqueItemId = "")))
         check(SmartMergeInventoryPager.page(chosen,
-            inventory(chosen, listOf(root, one.copy(source = one.source.copy(
-                key = one.source.key.copy(opaqueItemId = "")))), 0) == null)
+            inventory(chosen, listOf(root, blankId)), 0) == null)
 
         // Last-row poison must reject even the FIRST 12-row UI page.
         val long = (0 until 13).map { child(chosen.source,
