@@ -162,7 +162,7 @@ function zipManifest(blob){
   if(count===65535||size===0xffffffff||offset===0xffffffff)fail('ZIP64 requires another reader');
   if(count>ZIP_MAX_FILES)fail('too many files');
   if(offset+size>eocd)fail('invalid central directory');
-  const entries=[],seen=new Set();let pos=offset,total=0;
+  const entries=[],seen=new Set(),occupiedFolders=new Set();let pos=offset,total=0;
   for(let i=0;i<count;i++){
    if(pos+46>bytes.length||v.getUint32(pos,true)!==0x02014b50)fail('bad central directory entry');
    const flags=v.getUint16(pos+8,true),method=v.getUint16(pos+10,true),crc=v.getUint32(pos+16,true),
@@ -180,7 +180,14 @@ function zipManifest(blob){
    if((madeBy>>>8)===3&&((unixMode&0xf000)!==0&&(unixMode&0xf000)!==0x8000))continue;
    if(method===0&&compressed!==uncompressed)continue;
    const nameKey=name.normalize('NFC').toLowerCase();
-   if(seen.has(nameKey))continue;
+   // A retained file may never also be a directory for another member.
+   // Keep the first fully validated member and exclude later file/folder
+   // conflicts consistently with the NFC/case duplicate policy.
+   if(seen.has(nameKey)||occupiedFolders.has(nameKey))continue;
+   let fileAncestor=false;
+   for(let slash=nameKey.indexOf('/');slash!==-1;slash=nameKey.indexOf('/',slash+1))
+    if(seen.has(nameKey.slice(0,slash))){fileAncestor=true;break}
+   if(fileAncestor)continue;
    if(local+30>bytes.length||v.getUint32(local,true)!==0x04034b50)continue;
    const localLen=v.getUint16(local+26,true),localExtra=v.getUint16(local+28,true),start=local+30+localLen+localExtra;
    // Member compressed bytes must end before the central directory. A
@@ -203,7 +210,10 @@ function zipManifest(blob){
    // must not exhaust the aggregate budget for otherwise valid members.
    if(uncompressed>ZIP_TOTAL_MAX-total)fail('uncompressed total exceeds 128 MB');
    total+=uncompressed;
-   seen.add(nameKey);entries.push({name,path:name,size:uncompressed,compressed,method,flags,crc,start,type:'file'});
+   seen.add(nameKey);
+   for(let slash=nameKey.indexOf('/');slash!==-1;slash=nameKey.indexOf('/',slash+1))
+    occupiedFolders.add(nameKey.slice(0,slash));
+   entries.push({name,path:name,size:uncompressed,compressed,method,flags,crc,start,type:'file'});
   }
   if(pos!==offset+size)fail('central directory size mismatch');
   return {blob,entries,skipped:count-entries.length};
