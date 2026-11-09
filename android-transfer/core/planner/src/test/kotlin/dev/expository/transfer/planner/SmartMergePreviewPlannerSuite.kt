@@ -466,6 +466,10 @@ object SmartMergePreviewPlannerSuite {
         check(illustrated.mappedChildren == 2 &&
             illustrated.hypotheticalRenames == 1 &&
             illustrated.hypotheticalSharedDirectories == 0)
+        check(illustrated.hypotheticalFileCopies == 2 &&
+            illustrated.hypotheticalDirectoryCreates == 1)
+        // The manifest has no trustworthy file-byte lengths; an operation
+        // count must never be presented as required bytes or disk capacity.
         check(illustrated.blockers == listOf("DESTINATION_CASE_POLICY_UNVERIFIED"))
         check(illustrated.changes.size == 1)
         check(illustrated.changes.single().sourceNumber == 2)
@@ -499,9 +503,18 @@ object SmartMergePreviewPlannerSuite {
         check(coalescedIllustration.illustrated)
         check(coalescedIllustration.hypotheticalSharedDirectories == 1 &&
             coalescedIllustration.hypotheticalRenames == 1)
+        val separatelyNamedAlbums = illustrate(sourceTrees = albums)
+        check(separatelyNamedAlbums.hypotheticalFileCopies == 2 &&
+            separatelyNamedAlbums.hypotheticalDirectoryCreates == 3)
+        check(coalescedIllustration.hypotheticalFileCopies == 2 &&
+            coalescedIllustration.hypotheticalDirectoryCreates == 2)
+        check(coalescedIllustration.mappedChildren ==
+            separatelyNamedAlbums.mappedChildren)
         check(coalescedIllustration.changes.any { it.directoryReused })
         val rootConflict = illustrate(parent = index(unknown, "merged FILES"))
         check(!rootConflict.illustrated && rootConflict.mappedChildren == 0 &&
+            rootConflict.hypotheticalFileCopies == 0 &&
+            rootConflict.hypotheticalDirectoryCreates == 0 &&
             rootConflict.changes.isEmpty() &&
             "MERGE_FOLDER_ALREADY_EXISTS" in rootConflict.blockers)
         val missingIllustration = illustrate(sourceTrees = listOf(trees[0]))
@@ -638,6 +651,8 @@ object SmartMergePreviewPlannerSuite {
         check(firstPage.changes.size == SmartMergeCasefoldIllustrator.MAX_DISPLAY_CHANGES)
         check(firstPage.nextChangeOffset == 12)
         check(firstPage.mappedChildren == 20)
+        check(firstPage.hypotheticalFileCopies == 20 &&
+            firstPage.hypotheticalDirectoryCreates == 1)
         check(firstPage.layoutEntries.size ==
             SmartMergeCasefoldIllustrator.MAX_DISPLAY_LAYOUT)
         check(firstPage.layoutOffset == 0 && firstPage.nextLayoutOffset == 12)
@@ -648,6 +663,10 @@ object SmartMergePreviewPlannerSuite {
             listOf("same (12).txt"))
         val laterLayout = page(0, layoutOffset = 12)
         check(laterLayout.illustrated && laterLayout.layoutOffset == 12)
+        check(laterLayout.hypotheticalFileCopies ==
+            firstPage.hypotheticalFileCopies &&
+            laterLayout.hypotheticalDirectoryCreates ==
+                firstPage.hypotheticalDirectoryCreates)
         check(laterLayout.layoutEntries.size == 8 &&
             laterLayout.nextLayoutOffset == null)
         check(laterLayout.layoutEntries.first().sourceNumber == 13)
@@ -697,6 +716,8 @@ object SmartMergePreviewPlannerSuite {
             SmartMergeStructure.KEEP_SOURCE_DIRECTORIES, NOW)
         check(noCollision.illustrated && noCollision.totalChanges == 0 &&
             noCollision.nextChangeOffset == null && noCollision.changes.isEmpty())
+        check(noCollision.hypotheticalFileCopies == 2 &&
+            noCollision.hypotheticalDirectoryCreates == 1)
         check(noCollision.layoutEntries.size == 2 &&
             noCollision.layoutEntries.none { it.renamedForCollision })
 
