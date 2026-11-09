@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,documentThumbnail,openContainingFolder};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,documentThumbnail,loadThumb,openContainingFolder};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl
  );
@@ -130,6 +130,34 @@ test('folder grouping stays stable across show-more pagination boundaries',()=>{
  more.onclick();
  assert.equal(host.children.filter(x=>x.className==='gallery-divider').length,2,'continued folder is not given a duplicate divider');
  assert.equal(app.state.visibleItems.length,82);
+});
+
+
+test('stale document thumbnail text cannot repopulate a repainted tile',async()=>{
+ let finishDecode;
+ const oldBlob={size:45,type:'text/html',text:()=>new Promise(resolve=>{finishDecode=resolve})};
+ const fetcher=async()=>({ok:true,blob:async()=>oldBlob});
+ const {app,get}=boot(fetcher);
+ app.state.repo='example/private';app.state.branch='main';
+ const thumb=get('delayedThumb');
+ app.loadThumb({name:'old.html',path:'docs/old.html',size:45,type:'file'},thumb,null,app.state.renderEpoch);
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(typeof finishDecode,'function','text decoding is pending on prior render');
+ app.state.renderEpoch++;
+ finishDecode('<title>Old private name</title><h1>Old text</h1>');
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(thumb.children.length,0,'prior render may not repaint thumbnail after decode');
+});
+
+test('current document thumbnail still renders when its epoch remains unchanged',async()=>{
+ const fetcher=async()=>({ok:true,blob:async()=>new Blob(['<title>Current title</title><h1>Current contents</h1>'],{type:'text/html'})});
+ const {app,get}=boot(fetcher);
+ app.state.repo='example/public';app.state.branch='main';
+ const thumb=get('currentThumb');
+ app.loadThumb({name:'now.html',path:'docs/now.html',size:55,type:'file'},thumb,null,app.state.renderEpoch);
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(thumb.children.length,1);
+ assert.equal(thumb.children[0].children[1].textContent,'Current title');
 });
 
 test('HTML thumbnail summaries are inert DOM text without loading or running scripts',()=>{
