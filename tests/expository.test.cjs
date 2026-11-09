@@ -1232,6 +1232,42 @@ test('truncated recursive index recovers a capped child folder through two nonre
  assert.equal(paths.length,2,'one root and one folder tree, no recursive refetch');
  assert.equal(get('status').textContent.includes('Folder verified'),true);
 });
+test('direct-tree recovery does not certify a moving branch with replaced file SHAs',async()=>{
+ const repo='example/public',sha='c'.repeat(40),same='a'.repeat(40),changed='b'.repeat(40);
+ const original=Array.from({length:1000},(_,i)=>({
+  type:'file',name:'file'+i+'.txt',path:'gallery/file'+i+'.txt',sha:same,size:4
+ }));
+ const run=async(which)=>{
+  let calls=0;
+  const fetcher=async url=>{
+   calls++;
+   const tree=url.endsWith('/git/trees/main')?[
+    {type:'tree',path:'gallery',sha}
+   ]:[...original.map((item,i)=>({type:'blob',path:item.name,
+    sha:which==='changed'&&i===713?changed:
+     which==='malformed'&&i===713?'invalid-sha':same,size:item.size}))];
+   if(which==='duplicate')tree.push({type:'blob',path:'file713.txt',sha:changed,size:4});
+   return new Response(JSON.stringify({truncated:false,tree}),{status:200});
+  };
+  const {app,get}=boot(fetcher);
+  Object.assign(app.state,{repo,branch:'main',path:'gallery',repoRequest:2,
+   seq:4,indexTruncated:true,indexReady:true,mode:'list'});
+  app.state.items=[...original];
+  assert.equal(await app.recoverTargetedFolder(),0,'same path inventory gains no entries');
+  assert.equal(calls,2,'one root and one direct tree read');
+  assert.equal(app.state.items.length,1000,'never silently overwrite original snapshot');
+  return get('status').textContent
+ };
+ const verified=await run('same');
+ assert.match(verified,/Folder verified/);
+ for(const mode of ['changed','duplicate','malformed']){
+  const status=await run(mode);
+  assert.match(status,/Directory changed between listings/,'must disclose '+mode);
+  assert.match(status,/results still incomplete/);
+  assert.doesNotMatch(status,/Folder verified/);
+ }
+});
+
 test('truncated recursive tree exact SHA anchors recover a capped folder beyond eight levels',async()=>{
  const repo='example/large',branch='main',parts=Array.from({length:15},(_,i)=>'level'+i);
  const folder=parts.join('/'),parent=parts.slice(0,-1).join('/');

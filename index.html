@@ -775,13 +775,28 @@ async function recoverTargetedFolder(){
     // direct tree is missing any originally listed path, the branch likely
     // moved between reads; the combined view must not claim verification.
     const completeTree=!result.truncated&&tree.length<=5000;
-    const directPaths=completeTree?new Map(tree.filter(entry=>
-     ['tree','blob'].includes(entry.type)&&entry.path&&
-     !entry.path.includes('/')&&safeRepoPath(entry.path))
-     .map(entry=>[folder?folder+'/'+entry.path:entry.path,
-      entry.type==='tree'?'dir':'file'])):null;
-    const snapshotsDisagree=directPaths!==null&&
-     state.items.some(item=>directPaths.get(item.path)!==item.type);
+    const directPaths=completeTree?new Map():null;
+    let ambiguousDirectPath=false;
+    if(directPaths)for(const entry of tree){
+     if(!['tree','blob'].includes(entry.type)||!entry.path||
+      entry.path.includes('/')||!safeRepoPath(entry.path))continue;
+     const path=folder?folder+'/'+entry.path:entry.path;
+     if(directPaths.has(path)){ambiguousDirectPath=true;continue}
+     directPaths.set(path,{type:entry.type==='tree'?'dir':'file',sha:entry.sha})
+    }
+    const validSha=sha=>typeof sha==='string'&&/^[a-f0-9]{40}$/i.test(sha);
+    // A moving branch may replace a blob/tree without renaming it. Merely
+    // comparing paths and types can falsely label two snapshots identical.
+    // Compare exact object SHAs when both API observations provide them;
+    // malformed nonempty SHA evidence must also refuse verified coverage.
+    const snapshotsDisagree=directPaths!==null&&(ambiguousDirectPath||
+     state.items.some(item=>{
+      const observed=directPaths.get(item.path);
+      if(!observed||observed.type!==item.type)return true;
+      if(item.sha&&!validSha(item.sha)||observed.sha&&!validSha(observed.sha))return true;
+      return validSha(item.sha)&&validSha(observed.sha)&&
+       item.sha.toLowerCase()!==observed.sha.toLowerCase()
+     }));
     for(const entry of tree.slice(0,5000)){
      if(!['tree','blob'].includes(entry.type)||!entry.path||entry.path.includes('/')||!safeRepoPath(entry.path))continue;
      const path=folder?folder+'/'+entry.path:entry.path;
