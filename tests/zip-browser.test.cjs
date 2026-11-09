@@ -88,6 +88,38 @@ test('ZIP reader discards path traversal names',async()=>{
  assert.equal(manifest.entries.length,0);
  assert.equal(manifest.skipped,1);
 });
+test('deflate size-limit refusal cancels the decoder before releasing the reader',async()=>{
+ let cancelled=0,released=0;
+ const reader={
+  read:async()=>({done:false,value:new Uint8Array([1,2,3,4])}),
+  cancel:async()=>{cancelled++},
+  releaseLock:()=>{released++}
+ };
+ const manifest={blob:{slice:()=>({stream:()=>({
+  pipeThrough:()=>({getReader:()=>reader})
+ })})}};
+ const entry={flags:0,method:8,start:0,compressed:1,size:3,crc:0,name:'too-large.txt'};
+ await assert.rejects(unzipMember(manifest,entry),/decompression exceeded declared size/);
+ assert.equal(cancelled,1,'oversized inflater is actively stopped');
+ assert.equal(released,1,'reader lock is released after cancellation');
+});
+test('successful bounded deflate decoding does not cancel a completed stream',async()=>{
+ let cancelled=0,released=0,reads=0;
+ const output=new Uint8Array([65,66]);
+ const reader={
+  read:async()=>++reads===1?{done:false,value:output}:{done:true},
+  cancel:async()=>{cancelled++},
+  releaseLock:()=>{released++}
+ };
+ const manifest={blob:{slice:()=>({stream:()=>({
+  pipeThrough:()=>({getReader:()=>reader})
+ })})}};
+ const entry={flags:0,method:8,start:0,compressed:1,size:2,crc:zipCRC(output),name:'okay.txt'};
+ const result=await unzipMember(manifest,entry);
+ assert.equal(await result.text(),'AB');
+ assert.equal(cancelled,0,'valid inflater is not cancelled');
+ assert.equal(released,1);
+});
 test('ZIP reader detects bad CRC instead of exporting corrupted data',async()=>{
  const manifest=await zipManifest(archive('safe.txt','hi',0));
  await assert.rejects(unzipMember(manifest,manifest.entries[0]),/checksum/);
