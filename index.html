@@ -1551,6 +1551,10 @@ async function renderCurrentFile(){
    $('structuredToggle').textContent=state.structuredOpen?'Rendered Markdown':'Raw source';
    node=state.structuredOpen?boundedSourceViewer(text,item.name):
     simpleMarkdown(text.slice(0,500000),item)
+  }else if(/\.html?$/i.test(lower)){
+   $('structuredToggle').hidden=false;
+   $('structuredToggle').textContent=state.structuredOpen?'HTML source':'Rendered HTML';
+   node=state.structuredOpen?safeHtmlPreview(text,item):boundedSourceViewer(text,item.name)
   }else{
    if(/\.svg$/i.test(lower)){$('structuredToggle').hidden=false;$('structuredToggle').textContent='Image'}
    node=boundedSourceViewer(text,item.name)
