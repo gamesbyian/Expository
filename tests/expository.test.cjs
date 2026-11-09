@@ -10,7 +10,7 @@ const html = fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
 const source = html.match(/<script>([\s\S]+?)<\/script>/)?.[1];
 function fakeNode(tag='DIV') {
   return {
-    tagName:tag.toUpperCase(),dataset:{},children:[],value:'',textContent:'',style:{setProperty(name,value){this[name]=value}},classList:{add(){},remove(){},contains(){return false}},
+    tagName:tag.toUpperCase(),dataset:{},children:[],get lastChild(){return this.children.at(-1)||null},value:'',textContent:'',style:{setProperty(name,value){this[name]=value}},classList:{add(){},remove(){},contains(){return false}},
     append(...nodes){this.children.push(...nodes)},replaceChildren(...nodes){this.children=nodes},replaceChild(replacement,old){const i=this.children.indexOf(old);if(i<0)throw Error('Child absent');this.children[i]=replacement;return old},
     remove(){},querySelector(){return null},querySelectorAll(){return []},contains(){return false},getClientRects(){return [1]},setAttribute(name,value){this[name]=value},getAttribute(name){return this[name]||null},
     addEventListener(){},focus(){},click(){},get isConnected(){return true}
