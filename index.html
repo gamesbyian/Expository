@@ -915,7 +915,13 @@ async function pump(){
   const job=thumbQueue.shift();if(job.epoch!==state.renderEpoch||job.repo!==state.repo||job.branch!==state.branch||!job.thumb.isConnected)continue;
   running++;(async()=>{try{const blob=await fetchBlob(job.item);
    if(job.epoch!==state.renderEpoch||!job.thumb.isConnected||job.repo!==state.repo||job.branch!==state.branch)return;
-   if(docThumbRx.test(job.item.name)){documentThumbnail(job.item,job.thumb,await blob.text());return}
+   if(docThumbRx.test(job.item.name)){
+    const source=await blob.text();
+    // The text decode may outlive a repaint, navigation or account switch.
+    // Check the original thumbnail's exact render epoch again before display.
+    if(job.epoch!==state.renderEpoch||!job.thumb.isConnected||job.repo!==state.repo||job.branch!==state.branch)return;
+    documentThumbnail(job.item,job.thumb,source);return
+   }
    const img=elem('img');img.loading='lazy';img.alt='';img.src=blobUrl(blob,'thumb');job.thumb.replaceChildren(img);
   }catch{}finally{running--;pump()}})()
  }
