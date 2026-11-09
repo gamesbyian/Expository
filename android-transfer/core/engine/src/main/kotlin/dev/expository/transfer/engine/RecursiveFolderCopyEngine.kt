@@ -218,13 +218,13 @@ object RecursiveFolderCopyEngine {
                         !digestFormat.matches(ticket.digest) ||
                         ticket.relativePath != entry.relativePath ||
                         ticket.verifiedParentIdentity.isBlank() ||
-                        ticket.expiresAtMillis < now)
+                        ticket.expiresAtMillis <= now)
                         return stopped("DIRECTORY_PREFLIGHT_NOT_VERIFIED")
                     val fresh = try { endpoint.currentDirectoryTicket(entry) }
                         catch (_: Exception) { null }
                     val freshNow = runCatching { clockMillis() }.getOrNull()
                     if (fresh == null || fresh != ticket || freshNow == null ||
-                        fresh.expiresAtMillis < freshNow ||
+                        fresh.expiresAtMillis <= freshNow ||
                         !runCatching { endpoint.sourceStillCurrent(entry) }.getOrDefault(false) ||
                         !runCatching { continueRequested() }.getOrDefault(false))
                         return stopped("DIRECTORY_PREFLIGHT_CHANGED")
@@ -241,6 +241,19 @@ object RecursiveFolderCopyEngine {
                         runCatching { journal.markUncertain(ticket.digest) }
                         return outcome(RecursiveCopyResult.UNCERTAIN,
                             "STOPPED_AFTER_DURABLE_ATTEMPT_NO_CREATE_REPLAY")
+                    }
+                    // The attempt journal may block long enough for the
+                    // previously fresh provider ticket to expire. Re-observe
+                    // its deadline AFTER durable beginAttempt and immediately
+                    // BEFORE the mutating provider call. At that point the
+                    // write attempt has been recorded, so failure is UNCERTAIN
+                    // and requires reconciliation, never a clean replay.
+                    val preCreateNow = runCatching { clockMillis() }.getOrNull()
+                    if (preCreateNow == null ||
+                        ticket.expiresAtMillis <= preCreateNow) {
+                        runCatching { journal.markUncertain(ticket.digest) }
+                        return outcome(RecursiveCopyResult.UNCERTAIN,
+                            "DIRECTORY_TICKET_EXPIRED_AFTER_DURABLE_ATTEMPT")
                     }
                     // From this point, the provider might have created a child,
                     // even if its response or journal acknowledgement fails.
