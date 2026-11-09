@@ -17,7 +17,7 @@ function setup(respond){
   if(answer?.__httpStatus)return {ok:false,status:answer.__httpStatus};
   return {ok:true,json:async()=>answer??mock(url,options)};
  }});
- vm.runInContext(source.slice(start,end)+'\nglobalThis.published={cleanPath,repoPath,branchPath,resolveEntries,findCollisions,inspectDestination,writeNewBranch};',context);
+ vm.runInContext(source.slice(start,end)+'\nglobalThis.published={wellFormedUtf16,cleanPath,repoPath,branchPath,resolveEntries,findCollisions,inspectDestination,writeNewBranch};',context);
  return {api:context.published,calls};
 }
 function mock(url,options){
@@ -61,6 +61,30 @@ test('writer rejects path traversal, unsafe Windows targets and ambiguous duplic
  assert.equal(api.branchPath('bad..branch'),false);
  assert.equal(api.branchPath('topic@{head}'),false,'Git ref syntax must reject @{');
 });
+test('publisher rejects malformed UTF-16 paths before Git serialization and collision review',()=>{
+ const {api}=setup();
+ const high=String.fromCharCode(0xD800),low=String.fromCharCode(0xDC00);
+ for(const value of [high,low,'file'+high+'name.txt','file'+low+'name.txt',
+   'file'+high+'x'+low+'name.txt']){
+  assert.equal(api.wellFormedUtf16(value),false);
+  assert.equal(api.cleanPath(value),false);
+  assert.equal(api.cleanPath('safe/'+value),false);
+  assert.equal(api.branchPath('feature/'+value),false);
+  assert.throws(()=>api.resolveEntries([file(value)],''),/Unsafe member path/);
+  assert.throws(()=>api.resolveEntries([file('okay.txt')],value),/unsafe path/);
+  assert.throws(()=>api.findCollisions([file('okay.txt')],
+   {truncated:false,tree:[{path:value,type:'blob'}]}),/malformed/);
+ }
+ const pair=String.fromCharCode(0xD83D,0xDCC1);
+ assert.equal(api.wellFormedUtf16(pair),true);
+ assert.equal(api.cleanPath('nested/'+pair+'.png'),true);
+ assert.equal(api.branchPath('feature/'+pair),true);
+ const selected=api.resolveEntries([file(pair+'.png')],'nested');
+ assert.equal(selected.length,1);
+ assert.deepEqual([...api.findCollisions(selected,{truncated:false,
+  tree:[{path:'already.txt',type:'blob'}]})],[]);
+});
+
 test('tree collision check catches files, directories and case folding',()=>{
  const {api}=setup();
  const files=api.resolveEntries([file('NEW.txt'),file('A/file.txt')],'');
