@@ -92,6 +92,31 @@ test('portable folder-export path guard excludes reserved and hazardous names',(
  }
  assert.equal(zipSafeForDevice('nested/print-01.png'),true);
 });
+test('ZIP comment containing a second end-marker signature keeps the real archive',async()=>{
+ // ZIP comments may contain arbitrary bytes, including a complete-looking
+ // PK 05 06 sequence 22 bytes before EOF. The signature is not authority.
+ const data=Buffer.from(await archive('old/photos.txt','kept bytes').arrayBuffer());
+ const fakeEnd=Buffer.alloc(22);
+ fakeEnd.writeUInt32LE(0x06054b50,0);
+ data.writeUInt16LE(fakeEnd.length,data.length-2);
+ const manifest=await zipManifest(new Blob([data,fakeEnd]));
+ assert.equal(manifest.entries.length,1,'valid central entry must survive a fake marker in the comment');
+ assert.equal(manifest.entries[0].name,'old/photos.txt');
+ assert.equal(await (await unzipMember(manifest,manifest.entries[0])).text(),'kept bytes');
+});
+test('ZIP parser rejects multi-disk claims even with an otherwise valid directory',async()=>{
+ const blob=await mutate(archive('safe.txt'),data=>{
+  const eocd=data.length-22;
+  data.writeUInt16LE(1,eocd+4);
+ });
+ await assert.rejects(zipManifest(blob),/multi-disk/);
+});
+test('ZIP parser rejects an EOCD whose comment length disagrees with the bytes',async()=>{
+ const blob=await mutate(archive('safe.txt'),data=>{
+  data.writeUInt16LE(2,data.length-2);
+ });
+ await assert.rejects(zipManifest(blob),/ZIP comment|central directory/);
+});
 test('ZIP parser rejects a mismatched central directory size',async()=>{
  const blob=await mutate(archive(),data=>{
   const pos=data.length-22;data.writeUInt32LE(data.readUInt32LE(pos+12)+1,pos+12);
