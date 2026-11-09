@@ -1206,13 +1206,13 @@ function jsonViewer(value){
 async function renderCurrentFile(){
  const item=state.preview,blob=state.currentBlob;if(!item||!blob)return;
  closeImageFullscreen();cancelZipThumbs();clearUrls('preview');const lower=item.name.toLowerCase();let node;
- if(/\.zip$/i.test(lower)&&!item.zipMember){zipContext=zipManifests.get(item.path)||await zipManifest(blob);const start=zipStartFolder;zipStartFolder='';node=zipViewer(zipContext,item,start)}
+ if(/\.zip$/i.test(lower)&&!item.zipMember){const manifest=zipManifests.get(item.path)||await zipManifest(blob);if(state.preview!==item||state.currentBlob!==blob)return;zipContext=manifest;const start=zipStartFolder;zipStartFolder='';node=zipViewer(zipContext,item,start)}
  else if(imageRx.test(lower))node=imageViewer(blob,item);
  else if(/\.pdf$/i.test(lower)){node=elem('iframe');node.title=item.name;node.src=blobUrl(new Blob([blob],{type:'application/pdf'}))}
  else if(/\.(mp4|webm|ogg)$/i.test(lower)){node=elem('video');node.controls=true;node.src=blobUrl(blob)}
  else if(/\.(mp3|wav|m4a|flac)$/i.test(lower)){node=elem('audio');node.controls=true;node.src=blobUrl(blob)}
  else if(textRx.test(lower)||blob.type.startsWith('text/')){
-  const text=state.previewText??await blob.text();if(state.preview!==item)return;
+  const text=state.previewText??await blob.text();if(state.preview!==item||state.currentBlob!==blob)return;
   state.previewText=text;$('copyRaw').hidden=false;
   if(/\.json$/i.test(lower)){let value;try{value=JSON.parse(text)}catch{}
    $('structuredToggle').hidden=value===undefined;
@@ -1222,6 +1222,8 @@ async function renderCurrentFile(){
    node=state.structuredOpen?tableViewer(text.slice(0,500000),/\.tsv$/i.test(lower)?'\t':','):sourceViewer(text.slice(0,500000),item.name,text.length>500000);
   }else node=/\.(md|markdown)$/i.test(lower)?simpleMarkdown(text.slice(0,500000),item):sourceViewer(text.slice(0,500000),item.name,text.length>500000);
  }else node=elem('div','message','No inline preview for this format. Use the GitHub link.');
+ // A close, file switch or reopened same file invalidates any suspended parse.
+ if(state.preview!==item||state.currentBlob!==blob)return;
  showContent(node);if(item.zipMember&&zipContext){const back=elem('button','pill','← Back to ZIP');back.onclick=()=>{zipStartFolder=fileFolder(item.zipMember.name);openPreview(item.zipParent)};$('previewBody').prepend(back)}updateCompareAction()
 }
 async function toggleStructured(){if(!state.preview||!state.previewText)return;state.structuredOpen=!state.structuredOpen;await renderCurrentFile()}
