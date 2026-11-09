@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,documentThumbnail,openContainingFolder};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,documentThumbnail,openContainingFolder};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl
  );
@@ -449,6 +449,41 @@ test('a late denied old-session response cannot impose its rate limit on the new
  await assert.rejects(pending,/cancelled/);
  assert.equal(app.state.rateLimitedUntil,0,'stale token must not throttle successor');
  assert.equal(app.state.activeRequests.size,0);
+});
+
+
+test('a closed ZIP preview cannot republish a pending parsed archive',async()=>{
+ let finishArchive;
+ const item={name:'private.zip',path:'private/private.zip',type:'file',size:22};
+ const blob={size:22,arrayBuffer:()=>new Promise(resolve=>{finishArchive=resolve})};
+ const {app,get}=boot();
+ app.state.preview=item;app.state.currentBlob=blob;
+ const pending=app.renderCurrentFile();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(typeof finishArchive,'function','archive byte read is pending');
+ app.clearPreview();
+ const bytes=new Uint8Array(22);
+ new DataView(bytes.buffer).setUint32(0,0x06054b50,true);
+ finishArchive(bytes.buffer);
+ await pending;
+ assert.equal(app.state.preview,null);
+ assert.equal(get('previewBody').children.length,0,'old archive must not reappear in a closed dialog');
+});
+
+test('reopening the same file discards stale text from the previous Blob',async()=>{
+ let finishText;
+ const item={name:'readme.md',path:'docs/readme.md',type:'file',size:20};
+ const oldBlob={type:'text/plain',text:()=>new Promise(resolve=>{finishText=resolve})};
+ const {app,get}=boot();
+ app.state.preview=item;app.state.currentBlob=oldBlob;
+ const pending=app.renderCurrentFile();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(typeof finishText,'function','old content decode is pending');
+ app.state.currentBlob={type:'text/plain',text:async()=> 'new content'};
+ finishText('private contents from previous read');
+ await pending;
+ assert.equal(app.state.previewText,null,'old response cannot become new file text');
+ assert.equal(get('previewBody').children.length,0);
 });
 
 test('code inspector searches displayed lines without treating source as markup',()=>{
