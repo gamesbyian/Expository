@@ -321,6 +321,46 @@ object RecursiveFolderCopyEngineSuite {
                 })
             }
         }
+        case("directory ticket exactly expired at first or second preflight blocks") {
+            val alreadyExpired = Fake().apply { expiry = 100L }
+            val first = alreadyExpired.run()
+            check(first.result == RecursiveCopyResult.BLOCKED &&
+                first.reason == "DIRECTORY_PREFLIGHT_NOT_VERIFIED")
+            check(alreadyExpired.created.isEmpty() && alreadyExpired.journals.isEmpty())
+            val f = Fake()
+            var ticks = 0
+            val beforeJournal = RecursiveFolderCopyEngine.execute(
+                manifest(), f, { manifest() }, { key, index -> f.storage(key, index) },
+                { true }, { if (++ticks == 1) 100L else 1_000L })
+            check(beforeJournal.result == RecursiveCopyResult.BLOCKED &&
+                beforeJournal.reason == "DIRECTORY_PREFLIGHT_CHANGED")
+            check(f.created.isEmpty() && f.journals.isEmpty() &&
+                "mkdir" !in f.trace)
+        }
+        case("directory ticket expiring during durable begin cannot create or replay") {
+            val f = Fake()
+            var ticks = 0
+            val outcome = RecursiveFolderCopyEngine.execute(
+                manifest(), f, { manifest() }, { key, index -> f.storage(key, index) },
+                { true },
+                // Two valid pre-journal checks, then ticket expires during
+                // the durable confirmation/attempt boundary.
+                { if (++ticks <= 2) 100L else 1_000L })
+            check(ticks == 3)
+            check(outcome.result == RecursiveCopyResult.UNCERTAIN &&
+                outcome.reason == "DIRECTORY_TICKET_EXPIRED_AFTER_DURABLE_ATTEMPT")
+            check(outcome.verifiedFiles == 0 && outcome.verifiedDirectories == 0 &&
+                outcome.verifiedBytes == 0L)
+            check(f.created.isEmpty() && "mkdir" !in f.trace &&
+                f.copied == null && f.journals.size == 1)
+            val persisted = DurableAttemptJournal(f.journals.getValue(0))
+            check(persisted.current()?.state == JournalState.UNCERTAIN)
+            check(persisted.recoverAfterRestart()?.state == JournalState.UNCERTAIN)
+            // One frozen attempt has been journaled; the next invocation
+            // cannot turn an uncertain operation into an automatic retry.
+            check(f.run().result == RecursiveCopyResult.BLOCKED)
+            check(f.created.isEmpty() && "mkdir" !in f.trace)
+        }
         case("lost create reply stops uncertain with no automatic retry") {
             val f = Fake().apply { failCreate = "Empty" }
             val result = f.run()
