@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch,BlobImpl=globalThis.Blob) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,documentThumbnail,loadThumb,openContainingFolder};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,documentThumbnail,loadThumb,openContainingFolder,navigate,paintRecentFolders,rememberRecentFolder,clearRecentFolders};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch','Blob',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl,BlobImpl
  );
@@ -43,6 +43,46 @@ test('browser source parses and controls have matching elements',()=>{
  for(const id of ['tree','scope','filter','copyFolder','copyFile','disconnect','preview','prevPreview','nextPreview'])
    assert.ok(html.includes('id="'+id+'"'), id+' exists');
 });
+test('recent folder chips only remember successful current-repo paths in this tab',async()=>{
+ const requests=[];
+ const fetchImpl=async url=>{
+  requests.push(String(url));
+  return new Response(JSON.stringify({message:'Missing'}),{status:404});
+ };
+ const {app,get}=boot(fetchImpl);
+ Object.assign(app.state,{repo:'public/fixture',branch:'main',repoRequest:1});
+ for(const path of ['docs','design','design/proposals']){
+  app.state.cache.set('public/fixture@main/'+path,[]);
+  assert.equal(await app.navigate(path),true,'cached folder opens');
+ }
+ assert.deepEqual(app.state.recentFolders,['design/proposals','design','docs']);
+ assert.equal(get('recentFolders').hidden,false,'previous paths are available');
+ assert.equal(get('recentFolderCount').textContent,'(2)');
+ assert.deepEqual(get('recentFolderLinks').children.map(x=>x.textContent),['design','docs']);
+ assert.equal(get('recentFolderLinks').children[0]['aria-label'],'Open recent folder design');
+ assert.equal(get('recentFolderLinks').children[0].type,'button');
+ assert.equal(await app.navigate('missing'),false,'failed folder access is not remembered');
+ assert.equal(requests.length,1);
+ assert.deepEqual(app.state.recentFolders,['design/proposals','design','docs']);
+ assert.equal(await app.navigate('design'),true);
+ assert.deepEqual(app.state.recentFolders,['design','design/proposals','docs'],
+  'revisits are promoted without duplicate entries');
+ for(let i=0;i<12;i++)app.rememberRecentFolder('samples/folder'+i);
+ assert.equal(app.state.recentFolders.length,8,'bounded to eight paths');
+ assert.equal(app.state.recentFolders[0],'samples/folder11');
+ app.rememberRecentFolder('../private');
+ assert.equal(app.state.recentFolders.length,8,'unsafe path cannot enter history');
+ app.clearRecentFolders();
+ assert.deepEqual(app.state.recentFolders,[]);
+ assert.equal(get('recentFolders').hidden,true);
+ assert.equal(get('recentFolderLinks').children.length,0);
+ app.rememberRecentFolder('sensitive/folder');
+ app.resetSession();
+ assert.deepEqual(app.state.recentFolders,[],'disconnect purges path memory');
+ assert.equal(get('recentFolders').hidden,true);
+ assert.equal(get('recentFolderLinks').children.length,0,'disconnect purges path DOM');
+});
+
 test('folder index produces ancestry; collapsible tree limits DOM rows',()=>{
  const {app,get}=boot();
  app.treeAdd('design/storyboards/P0');app.treeAdd('design/proposals');
