@@ -890,6 +890,90 @@ test('current content search still returns bounded text matches',async()=>{
  assert.equal(app.state.scanning,false);
 });
 
+test('whole-source global line jump crosses 500k sections and highlights the original line',async()=>{
+ const source=Array.from({length:8200},(_,i)=>'const line'+(i+1)+' = "'+'x'.repeat(80)+'";').join('\n');
+ const {app,get}=boot();
+ const sections=app.sourceSections(source);
+ assert.ok(sections.length>=2);
+ assert.equal(sections[0].firstLine,1);
+ assert.equal(sections.at(-1).lastLine,8200);
+ assert.ok(sections[0].lastLine<8200);
+ for(let i=1;i<sections.length;i++){
+  assert.equal(sections[i-1].lastLine+1,sections[i].firstLine,'complete-line boundary has contiguous line numbers');
+ }
+ const file={name:'large.ts',path:'src/large.ts',type:'file',size:source.length};
+ Object.assign(app.state,{repo:'example/public',branch:'main',preview:file,currentBlob:new Blob([source]),previewText:source});
+ await app.renderCurrentFile();
+ let wrap=get('previewBody').children[0];
+ const controls=wrap.children[0];
+ assert.equal(controls.children[3].getAttribute('aria-label'),'Original source line across all loaded sections');
+ assert.equal(controls.children[3].max,'8200');
+ assert.equal(await wrap.jumpToGlobalLine(7600),true);
+ assert.ok(app.state.sourceSegment>0);
+ wrap=get('previewBody').children[0];
+ const viewer=wrap.children[1], pager=viewer.children.find(x=>x.className==='code-pages');
+ const pageNumbers=pager.children[1].textContent.match(/^(\d+)–(\d+) \/ /);
+ assert.ok(pageNumbers,'global pager reports mounted line range');
+ assert.ok(Number(pageNumbers[1])<=7600&&Number(pageNumbers[2])>=7600,'target line is inside mounted window');
+ const current=viewer.children.at(-1).children.find(x=>x.className==='code-line code-find-current');
+ assert.ok(current,'target line must be mounted and highlighted');
+ assert.equal(current.children[0].textContent,'7600');
+ assert.equal(await wrap.jumpToGlobalLine(1),true);
+ assert.equal(app.state.sourceSegment,0);
+ wrap=get('previewBody').children[0];
+ assert.equal(wrap.children[1].children.at(-1).children[0].className,'code-line code-find-current');
+ assert.equal(await wrap.jumpToGlobalLine(8201),false);
+ assert.equal(await wrap.jumpToGlobalLine(-1),false);
+ assert.equal(await wrap.jumpToGlobalLine(1.2),false);
+});
+
+test('whole-source Go to line controls support Enter and reject invalid input',async()=>{
+ const source=Array.from({length:6000},(_,i)=>'line '+i+' '+('x'.repeat(92))).join('\n');
+ const {app,get}=boot();
+ const file={name:'README.log',path:'README.log',type:'file',size:source.length};
+ Object.assign(app.state,{repo:'example/public',branch:'main',preview:file,currentBlob:new Blob([source]),previewText:source});
+ await app.renderCurrentFile();
+ const first=get('previewBody').children[0];
+ const controls=first.children[0];
+ controls.children[3].value='5900';
+ assert.equal(await controls.children[4].onclick(),true);
+ assert.ok(app.state.sourceSegment>0);
+ const second=get('previewBody').children[0];
+ assert.equal(await second.jumpToGlobalLine(0),false);
+ const bad=second.children[0];
+ bad.children[3].value='999999';
+ assert.equal(await bad.children[4].onclick(),false);
+ assert.match(bad.children[5].textContent,/Enter an original line from 1/);
+ assert.ok(app.state.sourceSegment>0,'invalid request keeps the active section');
+ const event={key:'Enter',preventDefault(){this.prevented=true}};
+ bad.children[3].value='2';
+ assert.equal(await bad.children[3].onkeydown(event),true);
+ assert.equal(event.prevented,true);
+ assert.equal(app.state.sourceSegment,0);
+});
+
+test('global line ranges keep a split physical line stable and refuse stale private preview',async()=>{
+ const source='a'.repeat(500010)+'\n'+'second line';
+ const {app,get}=boot();
+ const sections=app.sourceSections(source);
+ assert.equal(sections.length,2);
+ assert.equal(sections[0].firstLine,1);
+ assert.equal(sections[0].lastLine,1);
+ assert.equal(sections[1].firstLine,1,'continued physical line retains identity');
+ assert.equal(sections[1].lastLine,2);
+ const file={name:'long.js',path:'private/long.js',type:'file',size:source.length};
+ Object.assign(app.state,{repo:'example/private',branch:'main',preview:file,currentBlob:new Blob([source]),previewText:source});
+ await app.renderCurrentFile();
+ const first=get('previewBody').children[0];
+ assert.equal(await first.jumpToGlobalLine(1),true,'select first segment of split line');
+ assert.equal(await first.jumpToGlobalLine(2),true);
+ assert.equal(app.state.sourceSegment,1);
+ app.resetSession();
+ assert.equal(await first.jumpToGlobalLine(1),false,'stale private viewer cannot reactivate old source');
+ assert.equal(app.state.sourceRanges,null);
+ assert.equal(get('previewBody').children.length,0);
+});
+
 test('large source sections align to line endings, retain global line numbering, and reuse in-memory bytes',async()=>{
  const text=Array.from({length:8000},(_,i)=>'line'+i+' '+('x'.repeat(80))).join('\n');
  assert.ok(text.length>500000);
