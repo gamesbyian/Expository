@@ -48,6 +48,8 @@ object RecursiveFolderCopyEngineSuite {
         var copied: ByteArray? = null
         var permitted = true
         var cancelAfterFirstBegin = false
+        var revokeSourceAfterFirstBegin = false
+        var changeTicketAfterFirstBegin = false
         var firstStepCommits = 0
         var sourceChanged: String? = null
         var ticketChanged = false
@@ -62,8 +64,11 @@ object RecursiveFolderCopyEngineSuite {
 
         fun storage(digest: String, i: Int): AtomicAttemptStorage =
             journals.getOrPut(i) { Store {
-                if (i == 0 && ++firstStepCommits == 2 && cancelAfterFirstBegin)
-                    permitted = false
+                if (i == 0 && ++firstStepCommits == 2) {
+                    if (cancelAfterFirstBegin) permitted = false
+                    if (revokeSourceAfterFirstBegin) sourceChanged = "Shows"
+                    if (changeTicketAfterFirstBegin) ticketChanged = true
+                }
             } }
         private fun ticket(e: RecursiveCopyEntry) = RecursiveDirectoryTicket(
             if (e.relativePath.size == 1) "1".repeat(64) else "2".repeat(64),
@@ -363,6 +368,46 @@ object RecursiveFolderCopyEngineSuite {
             check(persisted.recoverAfterRestart()?.state == JournalState.UNCERTAIN)
             // One frozen attempt has been journaled; the next invocation
             // cannot turn an uncertain operation into an automatic retry.
+            check(f.run().result == RecursiveCopyResult.BLOCKED)
+            check(f.created.isEmpty() && "mkdir" !in f.trace)
+        }
+        case("source membership changing during durable journal cannot create") {
+            val f = Fake().apply { revokeSourceAfterFirstBegin = true }
+            val result = f.run()
+            check(result.result == RecursiveCopyResult.UNCERTAIN &&
+                result.reason ==
+                    "DIRECTORY_SOURCE_OR_PARENT_CHANGED_AFTER_DURABLE_ATTEMPT")
+            check(result.verifiedDirectories == 0 && result.verifiedFiles == 0 &&
+                result.verifiedBytes == 0L)
+            check(f.firstStepCommits == 2 && f.journals.size == 1)
+            check(f.created.isEmpty() && f.copied == null &&
+                "mkdir" !in f.trace && "open-dest" !in f.trace)
+            val journal = DurableAttemptJournal(f.journals.getValue(0))
+            check(journal.current()?.state == JournalState.UNCERTAIN)
+            check(journal.recoverAfterRestart()?.state == JournalState.UNCERTAIN)
+            // Restore the source observation. The durable attempt remains
+            // recorded and must not turn into a second create.
+            f.revokeSourceAfterFirstBegin = false
+            f.sourceChanged = null
+            check(f.run().result == RecursiveCopyResult.BLOCKED)
+            check(f.created.isEmpty() && "mkdir" !in f.trace)
+        }
+        case("directory parent ticket changing during journal cannot create") {
+            val f = Fake().apply { changeTicketAfterFirstBegin = true }
+            val result = f.run()
+            check(result.result == RecursiveCopyResult.UNCERTAIN &&
+                result.reason ==
+                    "DIRECTORY_SOURCE_OR_PARENT_CHANGED_AFTER_DURABLE_ATTEMPT")
+            check(result.verifiedDirectories == 0 && result.verifiedFiles == 0 &&
+                result.verifiedBytes == 0L)
+            check(f.firstStepCommits == 2 && f.journals.size == 1)
+            check(f.created.isEmpty() && f.copied == null &&
+                "mkdir" !in f.trace && "open-dest" !in f.trace)
+            val journal = DurableAttemptJournal(f.journals.getValue(0))
+            check(journal.current()?.state == JournalState.UNCERTAIN)
+            check(journal.recoverAfterRestart()?.state == JournalState.UNCERTAIN)
+            f.changeTicketAfterFirstBegin = false
+            f.ticketChanged = false
             check(f.run().result == RecursiveCopyResult.BLOCKED)
             check(f.created.isEmpty() && "mkdir" !in f.trace)
         }
