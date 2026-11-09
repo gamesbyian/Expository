@@ -14,6 +14,10 @@ class SmartMergeCasefoldIllustration internal constructor(
     val blockers: List<String>,
     val illustrated: Boolean,
     val mappedChildren: Int,
+    /** A hypothetical independent byte-copy of each mapped FILE; no sizes yet. */
+    val hypotheticalFileCopies: Int,
+    /** New root plus non-reused mapped directories in the illustrative plan. */
+    val hypotheticalDirectoryCreates: Int,
     val hypotheticalRenames: Int,
     val hypotheticalSharedDirectories: Int,
     /** Number of all changes, not just this bounded display page. */
@@ -89,7 +93,7 @@ object SmartMergeCasefoldIllustrator {
             rootName, structure, nowMillis)
         fun refused(reasons: List<String>) = SmartMergeCasefoldIllustration(
             Collections.unmodifiableList(reasons.distinct()), false, 0, 0, 0,
-            0, 0, null, emptyList(), 0, null, emptyList())
+            0, 0, 0, 0, null, emptyList(), 0, null, emptyList())
         if (destination.key.kind != LocationKind.LOCAL_SAF ||
             destination.casePolicy != CasePolicy.UNKNOWN) {
             return refused(actual.blockers + "ILLUSTRATION_REQUIRES_UNKNOWN_SAF_CASE_POLICY")
@@ -144,6 +148,17 @@ object SmartMergeCasefoldIllustrator {
         val total = forecast.entries.count {
             it.renamedForCollision || it.sharedDirectory
         }
+        // Count the entire qualified hypothetical mapping, never the
+        // currently displayed page. The source manifest contains no trusted
+        // byte sizes or available-space observation, so these are operation
+        // counts ONLY. Include the proposed new Merge root, but never count
+        // a logically coalesced directory as newly created.
+        val fileCopies = forecast.entries.count {
+            it.source.kind == ItemKind.FILE
+        }
+        val directoryCreates = 1 + forecast.entries.count {
+            it.source.kind == ItemKind.DIRECTORY && !it.sharedDirectory
+        }
         if (changeOffset > 0 && changeOffset >= total)
             return refused(actual.blockers + "ILLUSTRATION_PAGE_OUT_OF_RANGE")
         if (layoutOffset > 0 && layoutOffset >= forecast.entries.size)
@@ -174,8 +189,9 @@ object SmartMergeCasefoldIllustrator {
             .takeIf { it < forecast.entries.size }
         return SmartMergeCasefoldIllustration(
             Collections.unmodifiableList(actual.blockers.toList()), true,
-            forecast.entries.size, forecast.collisionRenames,
-            forecast.sharedDirectories, total, changeOffset, following,
+            forecast.entries.size, fileCopies, directoryCreates,
+            forecast.collisionRenames, forecast.sharedDirectories,
+            total, changeOffset, following,
             Collections.unmodifiableList(samples), layoutOffset, nextLayout,
             Collections.unmodifiableList(layoutRows))
     }
