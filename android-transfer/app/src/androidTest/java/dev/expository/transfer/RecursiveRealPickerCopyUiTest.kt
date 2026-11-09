@@ -113,6 +113,29 @@ class RecursiveRealPickerCopyUiTest {
         }
         compose.onNodeWithText("Inventory: 1 file(s), 3 folder(s)",
             substring = true).assertExists()
+        // Browse the exact already-read source inventory using only UI
+        // paging. This must not reopen Android DocumentsUI or mutate files.
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-browse-inventory-0"))
+        compose.onNodeWithTag("smart-merge-browse-inventory-0")
+            .assertIsEnabled().performClick()
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-inventory-page-status-0"))
+        compose.onNodeWithText("Snapshot entries 1–4 of 4",
+            substring = true).assertExists()
+        compose.onNodeWithTag("smart-merge-inventory-entry-0-0").assertExists()
+        compose.onNodeWithTag("smart-merge-inventory-entry-0-3").assertExists()
+        // The small fixture has no second page: navigation must be bounded.
+        assertTrue("No bogus next-page control for four captured entries",
+            compose.onAllNodesWithTag("smart-merge-inventory-next-0")
+                .fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithTag("transfer-workspace-scroll")
+            .performScrollToNode(hasTestTag("smart-merge-browse-inventory-0"))
+        compose.onNodeWithTag("smart-merge-browse-inventory-0").performClick()
+        assertTrue("Collapsing removes private source filenames from semantics",
+            compose.onAllNodesWithTag("smart-merge-inventory-entry-0-0")
+                .fetchSemanticsNodes().isEmpty())
+
         visiblePicker("smart-merge-add-source", "Expository Target Lab")
         compose.waitUntil(30_000L) {
             compose.onAllNodesWithText("Smart Merge · 2 source folder(s)")
