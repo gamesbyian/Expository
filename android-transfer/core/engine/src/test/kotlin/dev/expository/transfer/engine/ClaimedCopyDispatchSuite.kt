@@ -247,6 +247,51 @@ object ClaimedCopyDispatchSuite {
         check(claimed().run(1, { true }) {
             ClaimedCopyDispatch.Prepared(a) { emptyTree }
         }.outcome.complete)
+        // A public aggregate receipt may be malformed even if its enum
+        // says COMPLETE_VERIFIED. A real recursive executor necessarily
+        // verified at least its root directory, enforces 2,048 steps and
+        // 128 directory steps, and cannot have bytes without a file.
+        // Never turn impossible reporting data into a green UI dispatch.
+        val forgedComplete = listOf(
+            RecursiveCopyRunReceipt(a, RecursiveCopyResult.COMPLETE_VERIFIED,
+                0, 0, 0L, "NO_ROOT"),
+            RecursiveCopyRunReceipt(a, RecursiveCopyResult.COMPLETE_VERIFIED,
+                -1, 1, 0L, "NEGATIVE_FILES"),
+            RecursiveCopyRunReceipt(a, RecursiveCopyResult.COMPLETE_VERIFIED,
+                1, -1, 0L, "NEGATIVE_FOLDERS"),
+            RecursiveCopyRunReceipt(a, RecursiveCopyResult.COMPLETE_VERIFIED,
+                0, 1, 1L, "BYTES_WITHOUT_FILE"),
+            RecursiveCopyRunReceipt(a, RecursiveCopyResult.COMPLETE_VERIFIED,
+                1, 1, -1L, "NEGATIVE_BYTES"),
+            RecursiveCopyRunReceipt(a, RecursiveCopyResult.COMPLETE_VERIFIED,
+                1, 129, 0L, "OVERSIZE_DIRECTORY_COUNT"),
+            RecursiveCopyRunReceipt(a, RecursiveCopyResult.COMPLETE_VERIFIED,
+                2_048, 1, 0L, "OVERSIZE_TOTAL_STEPS"),
+            RecursiveCopyRunReceipt("not-a-digest",
+                RecursiveCopyResult.COMPLETE_VERIFIED, 1, 1, 1L,
+                "MALFORMED_MANIFEST")
+        )
+        forgedComplete.forEach { forged ->
+            val candidate = forged.toDispatchCopyReceipt()
+            check(candidate.proof == CopyProof.UNCERTAIN &&
+                candidate.reason == "RECURSIVE_RECEIPT_INCONSISTENT_REVIEW" &&
+                candidate.bytesWritten >= 0L)
+            val ledger = CopyOutcomeLedger.begin(1).accept(candidate)
+            check(!ledger.complete &&
+                ledger.state == CopyOutcomeState.REVIEW_REQUIRED &&
+                ledger.verifiedItems == 0 && ledger.verifiedBytes == 0L)
+        }
+        val invalidBlocked = RecursiveCopyRunReceipt(a,
+            RecursiveCopyResult.BLOCKED, -1, 0, 0L, "INVALID_COUNTS")
+            .toDispatchCopyReceipt()
+        check(invalidBlocked.proof == CopyProof.UNCERTAIN)
+        val honestEmptyFile = RecursiveCopyRunReceipt(a,
+            RecursiveCopyResult.COMPLETE_VERIFIED, 1, 1, 0L, "EMPTY_FILE")
+            .toDispatchCopyReceipt()
+        check(honestEmptyFile.proof == CopyProof.BYTES_VERIFIED)
+        check(claimed().run(1, { true }) {
+            ClaimedCopyDispatch.Prepared(a) { honestEmptyFile }
+        }.outcome.complete)
         val earlyBlock = RecursiveCopyRunReceipt(a,
             RecursiveCopyResult.BLOCKED, 0, 0, 0L, "no authority")
             .toDispatchCopyReceipt()
