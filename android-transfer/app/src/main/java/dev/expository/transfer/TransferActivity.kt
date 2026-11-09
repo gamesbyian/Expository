@@ -276,6 +276,10 @@ private fun DeveloperPreview(
     var mergeInventoryPageOffsets by remember {
         mutableStateOf<Map<SmartMergeFolder, Int>>(emptyMap())
     }
+    // Ephemeral query only, scoped to the exact picked source. Never saved.
+    var mergeInventoryQueries by remember {
+        mutableStateOf<Map<SmartMergeFolder, String>>(emptyMap())
+    }
     var mergeInventoryReading by remember { mutableStateOf<SmartMergeFolder?>(null) }
     var mergeInventoryJob by remember { mutableStateOf<Job?>(null) }
     val mergeInventorySerial = remember { AtomicLong(0L) }
@@ -332,6 +336,7 @@ private fun DeveloperPreview(
         mergeInventoryReading = null
         mergeSourceInventory = emptyMap()
         mergeInventoryPageOffsets = emptyMap()
+        mergeInventoryQueries = emptyMap()
     }
 
     fun tree(which: WorkspacePane): LocalTreeBrowseState = when (which) {
@@ -741,6 +746,7 @@ private fun DeveloperPreview(
             now < capturedRead.expiresAtMillis - 300_000L) {
             mergeSourceInventory = mergeSourceInventory - selected
         mergeInventoryPageOffsets = mergeInventoryPageOffsets - selected
+        mergeInventoryQueries = mergeInventoryQueries - selected
             mergeMessage = "Original Merge source access expired. Re-pick the folder."
             return
         }
@@ -751,6 +757,7 @@ private fun DeveloperPreview(
         mergeInventoryReading = selected
         mergeSourceInventory = mergeSourceInventory - selected
         mergeInventoryPageOffsets = mergeInventoryPageOffsets - selected
+        mergeInventoryQueries = mergeInventoryQueries - selected
         mergeMessage = "Inspecting source descendants without writing files…"
         mergeInventoryJob = scope.launch {
             try {
@@ -1045,6 +1052,7 @@ private fun DeveloperPreview(
         clearMergeIllustration()
         mergeSourceInventory = mergeSourceInventory - selected
         mergeInventoryPageOffsets = mergeInventoryPageOffsets - selected
+        mergeInventoryQueries = mergeInventoryQueries - selected
         mergeInspecting = selected
         mergeMessage = "Checking the original folder access without changing files…"
         mergeInspectionJob = scope.launch {
@@ -2486,11 +2494,32 @@ private fun DeveloperPreview(
                                                     mergeInventoryPageOffsets = if (open)
                                                         mergeInventoryPageOffsets - selected
                                                     else mergeInventoryPageOffsets + (selected to 0)
+                                                    if (open) {
+                                                        mergeInventoryQueries =
+                                                            mergeInventoryQueries - selected
+                                                    }
                                                 }
                                             )
                                             mergeInventoryPageOffsets[selected]?.let { offset ->
+                                                val query = mergeInventoryQueries[selected].orEmpty()
+                                                OutlinedTextField(
+                                                    value = query,
+                                                    onValueChange = { value ->
+                                                        mergeInventoryQueries =
+                                                            mergeInventoryQueries + (selected to
+                                                                value.take(
+                                                                    SmartMergeInventoryPager
+                                                                        .MAX_QUERY_LENGTH))
+                                                        mergeInventoryPageOffsets =
+                                                            mergeInventoryPageOffsets + (selected to 0)
+                                                    },
+                                                    label = { Text("Filter captured source paths") },
+                                                    singleLine = true,
+                                                    modifier = Modifier.fillMaxWidth().testTag(
+                                                        "smart-merge-inventory-filter-" + index)
+                                                )
                                                 val page = SmartMergeInventoryPager.page(
-                                                    selected, inventory, offset)
+                                                    selected, inventory, offset, query)
                                                 if (page == null) {
                                                     Text("Inventory page unavailable. Hide and " +
                                                         "reinspect the source if its contents changed.",
@@ -2498,12 +2527,26 @@ private fun DeveloperPreview(
                                                 } else {
                                                     Column(modifier = Modifier.fillMaxWidth()
                                                         .testTag("smart-merge-inventory-page-" + index)) {
-                                                        Text("Snapshot entries " +
-                                                            (page.offset + 1) + "–" +
-                                                            (page.offset + page.entries.size) +
-                                                            " of " + page.totalEntries +
-                                                            ", including the selected folder. " +
-                                                            "Read-only, not a Merge approval.",
+                                                        val pageSummary = when {
+                                                            page.totalEntries == 0 ->
+                                                                "No matching entries among " +
+                                                                    page.capturedEntries +
+                                                                    " captured source entries. Read-only."
+                                                            query.isNotBlank() ->
+                                                                "Matching entries " +
+                                                                    (page.offset + 1) + "–" +
+                                                                    (page.offset + page.entries.size) +
+                                                                    " of " + page.totalEntries +
+                                                                    " from " + page.capturedEntries +
+                                                                    " captured entries. Read-only."
+                                                            else -> "Snapshot entries " +
+                                                                (page.offset + 1) + "–" +
+                                                                (page.offset + page.entries.size) +
+                                                                " of " + page.totalEntries +
+                                                                ", including the selected folder. " +
+                                                                "Read-only, not a Merge approval."
+                                                        }
+                                                        Text(pageSummary,
                                                             modifier = Modifier.testTag(
                                                                 "smart-merge-inventory-page-status-" +
                                                                     index),
