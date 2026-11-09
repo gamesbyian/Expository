@@ -166,7 +166,7 @@ async function scanZipGallery(){
  for(const archive of archives){
   if(seq!==zipScanSeq||repo!==state.repo||branch!==state.branch||!$('includeZip').checked)return;
   try{
-   const manifest=await zipManifest(await fetchBlob(archive));
+   const manifest=await zipManifest(await fetchBlob(archive,ZIP_MAX_BYTES));
    if(seq!==zipScanSeq||repo!==state.repo||branch!==state.branch)return;
    zipManifests.set(archive.path,manifest);
    for(const member of manifest.entries.slice(0,1000))zipGalleryEntries.push({path:archive.path+'!/'+member.name,name:member.name.split('/').at(-1),size:member.size,type:'file',zipMember:member,zipParent:archive});
@@ -437,7 +437,37 @@ function clearUrls(kind){const set=kind==='thumb'?state.thumbUrls:state.previewU
 function clearObjects(){clearUrls('thumb');clearUrls('preview')}
 function withMediaType(blob,name){const ext=name.split('.').at(-1).toLowerCase();const mime={svg:'image/svg+xml',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp',avif:'image/avif',bmp:'image/bmp',pdf:'application/pdf',mp4:'video/mp4',webm:'video/webm',mp3:'audio/mpeg',m4a:'audio/mp4',wav:'audio/wav',ogg:'audio/ogg'}[ext];return mime?new Blob([blob],{type:mime}):blob}
 function entryUrl(item){const p=pathPart(item.path);return '/repos/'+state.repo+'/contents/'+p+'?ref='+enc(state.branch)}
-async function fetchBlob(item){if(item.zipMember){const manifest=zipManifests.get(item.zipParent.path)||zipContext;if(!manifest)throw Error('ZIP archive no longer loaded.');return unzipMember(manifest,item.zipMember)}const blob=await api(entryUrl(item),'application/vnd.github.raw+json',r=>r.blob());return withMediaType(blob,item.name)}
+async function boundedResponseBlob(response,maxBytes){
+ if(!Number.isSafeInteger(maxBytes)||maxBytes<1||maxBytes>ZIP_MAX_BYTES)throw Error('Invalid preview byte limit.');
+ const advertised=response.headers?.get?.('content-length');
+ if(advertised&&/^\d+$/.test(advertised)&&Number(advertised)>maxBytes)
+  throw Error('File exceeds the '+maxBytes+'-byte browser read limit.');
+ // A header or indexed Git blob size is not a trustworthy download bound.
+ // Require streaming support so an absent/false Content-Length never makes
+ // the browser buffer an arbitrarily large private file before validation.
+ if(!response.body||typeof response.body.getReader!=='function')
+  throw Error('This browser cannot enforce a streaming file-size limit.');
+ const reader=response.body.getReader(),chunks=[];let total=0;
+ try{
+  while(true){
+   const {done,value}=await reader.read();
+   if(done)break;
+   if(!(value instanceof Uint8Array))throw Error('Invalid GitHub response chunk.');
+   total+=value.byteLength;
+   if(total>maxBytes){
+    reader.cancel().catch(()=>{});
+    throw Error('File exceeds the '+maxBytes+'-byte browser read limit.');
+   }
+   chunks.push(value);
+  }
+ }finally{reader.releaseLock()}
+ return new Blob(chunks)
+}
+async function fetchBlob(item,maxBytes=/\.zip$/i.test(item.name)?ZIP_MAX_BYTES:20e6){
+ if(item.zipMember){const manifest=zipManifests.get(item.zipParent.path)||zipContext;if(!manifest)throw Error('ZIP archive no longer loaded.');return unzipMember(manifest,item.zipMember)}
+ const blob=await api(entryUrl(item),'application/vnd.github.raw+json',r=>boundedResponseBlob(r,maxBytes));
+ return withMediaType(blob,item.name)
+}
 function icon(item){return item.type==='dir'?'📁':imageRx.test(item.name)?'◈':/\.pdf$/i.test(item.name)?'▤':textRx.test(item.name)?'≡':'◇'}
 function formatSize(n){return n==null?'':n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB'}
 function elem(tag,cls,text){let el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=text;return el}
@@ -913,7 +943,7 @@ function loadThumb(item,thumb,glyph,epoch){
 async function pump(){
  while(running<3&&thumbQueue.length){
   const job=thumbQueue.shift();if(job.epoch!==state.renderEpoch||job.repo!==state.repo||job.branch!==state.branch||!job.thumb.isConnected)continue;
-  running++;(async()=>{try{const blob=await fetchBlob(job.item);
+  running++;(async()=>{try{const blob=await fetchBlob(job.item,docThumbRx.test(job.item.name)?160000:8e6);
    if(job.epoch!==state.renderEpoch||!job.thumb.isConnected||job.repo!==state.repo||job.branch!==state.branch)return;
    if(docThumbRx.test(job.item.name)){documentThumbnail(job.item,job.thumb,await blob.text());return}
    const img=elem('img');img.loading='lazy';img.alt='';img.src=blobUrl(blob,'thumb');job.thumb.replaceChildren(img);
@@ -1027,7 +1057,7 @@ async function scanContents(){
  let next=0,complete=0,matches=0,errors=0;
  async function worker(){while(next<candidates.length&&seq===state.searchSeq){
   const file=candidates[next++];try{
-   const blob=await fetchBlob(file);if(seq!==state.searchSeq||repo!==state.repo||branch!==state.branch)return;
+   const blob=await fetchBlob(file,128*1024);if(seq!==state.searchSeq||repo!==state.repo||branch!==state.branch)return;
    const lines=(await blob.text()).split(/\r?\n/);let perFile=0;
    for(let line=0;line<lines.length&&perFile<2&&matches<80;line++){
     if(!lines[line].toLowerCase().includes(needle))continue;perFile++;matches++;
@@ -1084,7 +1114,7 @@ async function openContactSheet(){
   card.append(placeholder,elem('figcaption','',item.path));grid.append(card);return {item,card,placeholder}});
  body.append(controls,grid);showContent(body);let cursor=0,ready=0;
  async function worker(){while(cursor<result.length&&state.sheetOpen&&seq===state.sheetSeq){
-  const slot=result[cursor++];try{if(slot.item.size>8e6)throw Error('large image');const blob=await fetchBlob(slot.item);
+  const slot=result[cursor++];try{if(slot.item.size>8e6)throw Error('large image');const blob=await fetchBlob(slot.item,8e6);
    if(!state.sheetOpen||seq!==state.sheetSeq)return;
    const image=elem('img');image.alt=slot.item.path;image.src=blobUrl(blob);
    slot.card.replaceChild(image,slot.placeholder);slot.image=image;
@@ -1426,7 +1456,7 @@ async function openPreview(item){
  showContent(elem('div','message','Loading preview…'));
  try{
   if(item.size>(/\.zip$/i.test(item.name)&&!item.zipMember?ZIP_MAX_BYTES:20e6)){showContent(elem('div','message','File exceeds the bounded browser-preview limit. Use GitHub to download the original.'));return}
-  const blob=await fetchBlob(item);if(state.preview!==item)return;
+  const blob=await fetchBlob(item,/\.zip$/i.test(item.name)?ZIP_MAX_BYTES:20e6);if(state.preview!==item)return;
   state.currentBlob=blob;$('downloadRaw').hidden=false;$('shareRaw').hidden=!(typeof navigator.share==='function'&&typeof File==='function');await renderCurrentFile();
  }catch(e){if(state.preview===item)showContent(elem('div','message','Preview unavailable: '+e.message))}
 }
