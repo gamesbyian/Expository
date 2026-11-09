@@ -637,6 +637,64 @@ test('deep recovery fetches an uncached parent once and rejects unknown child SH
  assert.deepEqual(paths,['https://api.github.com/repos/test/large/contents/'+parent+'?ref=main']);
  assert.match(get('status').textContent,/Listing may be incomplete/);
 });
+test('deep capped parent can recover exact child from a nearby cached ancestor',async()=>{
+ const repo='test/large',branch='main',parentSha='a'.repeat(40),folderSha='b'.repeat(40);
+ const folder=Array.from({length:11},(_,i)=>'level'+i).join('/');
+ const parent=folder.split('/').slice(0,-1).join('/');
+ const grandparent=parent.split('/').slice(0,-1).join('/');
+ const paths=[];
+ const fetcher=async url=>{
+  paths.push(url);
+  const payload=url.includes('/contents/')?Array.from({length:1000},(_,i)=>({
+   type:'file',path:parent+'/capped'+i+'.txt',sha:'c'.repeat(40)
+  })):url.endsWith('/git/trees/'+parentSha)?{
+   truncated:false,tree:[{type:'tree',path:'level10',sha:folderSha}]
+  }:{
+   truncated:false,tree:[
+    ...Array.from({length:1000},(_,i)=>({type:'blob',path:'file'+i+'.svg',size:10})),
+    {type:'blob',path:'extra.svg',size:10}
+   ]
+  };
+  return new Response(JSON.stringify(payload),{status:200});
+ };
+ const {app,get}=boot(fetcher);
+ Object.assign(app.state,{repo,branch,path:folder,repoRequest:1,seq:1,indexTruncated:true,indexReady:true,mode:'list'});
+ app.state.items=Array.from({length:1000},(_,i)=>({
+  type:'file',name:'file'+i+'.svg',path:folder+'/file'+i+'.svg',size:10
+ }));
+ app.state.cache.set(repo+'@'+branch+'/'+grandparent,[{type:'dir',path:parent,sha:parentSha}]);
+ assert.equal(await app.recoverTargetedFolder(),1);
+ assert.deepEqual(paths,[
+  'https://api.github.com/repos/test/large/contents/'+parent+'?ref=main',
+  'https://api.github.com/repos/test/large/git/trees/'+parentSha,
+  'https://api.github.com/repos/test/large/git/trees/'+folderSha
+ ]);
+ assert.equal(app.state.items.length,1001);
+ assert.match(get('status').textContent,/Folder verified/);
+});
+
+test('deep capped parent will not start an unbounded uncached ancestor walk',async()=>{
+ const repo='test/large',branch='main',folder=Array.from({length:15},(_,i)=>'level'+i).join('/');
+ const parent=folder.split('/').slice(0,-1).join('/');
+ const tooDistant=folder.split('/').slice(0,5).join('/');
+ const paths=[];
+ const fetcher=async url=>{
+  paths.push(url);
+  return new Response(JSON.stringify([]),{status:200});
+ };
+ const {app,get}=boot(fetcher);
+ Object.assign(app.state,{repo,branch,path:folder,repoRequest:1,seq:1,indexTruncated:true,indexReady:true});
+ app.state.items=Array.from({length:1000},(_,i)=>({
+  type:'file',name:'file'+i,path:folder+'/file'+i
+ }));
+ app.state.cache.set(repo+'@'+branch+'/'+tooDistant,[{
+  type:'dir',path:folder.split('/').slice(0,6).join('/'),sha:'d'.repeat(40)
+ }]);
+ assert.equal(await app.recoverTargetedFolder(),0);
+ assert.deepEqual(paths,['https://api.github.com/repos/test/large/contents/'+parent+'?ref=main']);
+ assert.match(get('status').textContent,/Listing may be incomplete/);
+});
+
 test('deep folder recovery drops delayed parent responses after navigation',async()=>{
  let release;
  const fetcher=()=>new Promise(resolve=>{release=()=>resolve(new Response(JSON.stringify([{type:'dir',path:'old',sha:'e'.repeat(40)}]),{status:200}))});
