@@ -412,20 +412,68 @@ test('repo switch cancels an authenticated JSON body after response headers',asy
  assert.equal(app.state.activeRequests.size,0);
 });
 
-test('repo switch aborts the current binary preview body, not just fetch headers',async()=>{
- let finishBody,signal;
- const apiFetch=async(_url,opts)=>{
+test('repo switch aborts the current binary preview stream, not just fetch headers',async()=>{
+ let finishRead,signal;
+ const apiFetch=async(_u,opts)=>{
   signal=opts.signal;
-  return {ok:true,blob:()=>new Promise(resolve=>{finishBody=resolve})};
+  return {ok:true,headers:{get:()=>null},body:{getReader:()=>({
+   read:()=>new Promise(resolve=>{finishRead=()=>resolve({
+    done:false,value:new Uint8Array([1,2,3])
+   })}),
+   releaseLock(){}
+  })}};
  };
  const {app}=boot(apiFetch);app.state.repo='example/old';app.state.branch='main';
  const pending=app.fetchBlob({name:'secret.txt',path:'private/secret.txt'});
  await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(typeof finishRead,'function');
  assert.equal(app.state.activeRequests.size,1);
  app.abortRequests();
  assert.equal(signal.aborted,true);
- finishBody(new Blob(['previous account contents']));
+ finishRead();
  await assert.rejects(pending,/cancelled/);
+ assert.equal(app.state.activeRequests.size,0);
+});
+
+test('GitHub blob read rejects actual streamed bytes beyond limit without Content-Length',async()=>{
+ let cancelled=false;
+ const apiFetch=async()=>new Response(new ReadableStream({
+  start(controller){
+   controller.enqueue(new Uint8Array([1,2,3]));
+   controller.enqueue(new Uint8Array([4,5]));
+  },
+  cancel(){cancelled=true}
+ }),{status:200});
+ const {app}=boot(apiFetch);app.state.repo='example/public';app.state.branch='main';
+ await assert.rejects(
+  app.fetchBlob({name:'large.bin',path:'large.bin'},4),
+  /4-byte browser read limit/
+ );
+ assert.equal(cancelled,true,'oversize response is cancelled early');
+ assert.equal(app.state.activeRequests.size,0);
+});
+
+test('GitHub blob read rejects oversized advertised length before streaming',async()=>{
+ const apiFetch=async()=>new Response('small',{status:200,headers:{'Content-Length':'999'}});
+ const {app}=boot(apiFetch);app.state.repo='example/public';app.state.branch='main';
+ await assert.rejects(app.fetchBlob({name:'large.bin',path:'large.bin'},4),/4-byte browser read limit/);
+ assert.equal(app.state.activeRequests.size,0);
+});
+
+test('GitHub blob read accepts exact byte limit and preserves media type',async()=>{
+ const apiFetch=async()=>new Response(new Uint8Array([60,115,118,103]),{status:200});
+ const {app}=boot(apiFetch);app.state.repo='example/public';app.state.branch='main';
+ const result=await app.fetchBlob({name:'icon.svg',path:'icon.svg'},4);
+ assert.equal(result.size,4);
+ assert.equal(result.type,'image/svg+xml');
+ assert.equal(await result.text(),'<svg');
+ assert.equal(app.state.activeRequests.size,0);
+});
+
+test('GitHub blob read refuses browsers without enforceable streaming',async()=>{
+ const apiFetch=async()=>({ok:true,headers:{get:()=>null},body:null,blob:async()=>new Blob(['private'])});
+ const {app}=boot(apiFetch);app.state.repo='example/private';app.state.branch='main';
+ await assert.rejects(app.fetchBlob({name:'file.txt',path:'file.txt'},1024),/cannot enforce a streaming/);
  assert.equal(app.state.activeRequests.size,0);
 });
 
