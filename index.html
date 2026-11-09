@@ -1298,6 +1298,7 @@ function stopSlideshow(){
 function presentSelectedSlideshow(loaded,sheetBody,seq){
  if(!state.sheetOpen||seq!==state.sheetSeq||!loaded.length)return false;
  stopSlideshow();state.slideshowActive=true;
+ const originalTitle=$('previewTitle').textContent;
  const view=elem('div','slide-view'),actions=elem('div','slide-actions');
  const back=elem('button','pill','← Contact sheet'),previous=elem('button','pill','Previous'),
   play=elem('button','pill','Play'),next=elem('button','pill','Next');
@@ -1332,7 +1333,7 @@ function presentSelectedSlideshow(loaded,sheetBody,seq){
   play.textContent='Pause';play.setAttribute('aria-pressed','true')
  }
  state.slideStep=direction=>{pause();show(position+direction)};
- back.onclick=()=>{if(!valid())return;stopSlideshow();showContent(sheetBody);$('previewTitle').textContent='Contact sheet · '+loaded.length+' images';};
+ back.onclick=()=>{if(!valid())return;stopSlideshow();showContent(sheetBody);$('previewTitle').textContent=originalTitle;};
  previous.onclick=()=>state.slideStep?.(-1);
  next.onclick=()=>state.slideStep?.(1);
  play.onclick=()=>{if(state.slideshowTimer!==null)pause();else start()};
