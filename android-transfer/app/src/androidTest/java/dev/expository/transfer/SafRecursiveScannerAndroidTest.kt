@@ -478,6 +478,45 @@ class SafRecursiveScannerAndroidTest {
         }.isFailure)
     }
 
+    @Test fun mergeProviderCursorWindowHonorsRemainingSourceCapacity() {
+        val e = Environment()
+        val window = e.scanner::mergeBrowseWindow
+        // SAF browsing supports 200-row increments. A nearly full basket
+        // must not unconditionally decode 2,000 provider rows. An empty
+        // directory is still checked through one complete first page.
+        assertEquals(200, window(0))
+        assertEquals(200, window(1))
+        assertEquals(200, window(199))
+        assertEquals(200, window(200))
+        assertEquals(400, window(201))
+        assertEquals(400, window(400))
+        assertEquals(600, window(401))
+        assertEquals(2_000, window(1_999))
+        assertEquals(2_000, window(2_000))
+        assertEquals(2_000, window(RecursiveFolderCopyPlanner.MAX_ITEMS))
+        assertTrue(runCatching { window(-1) }.isFailure)
+        assertTrue(runCatching {
+            window(RecursiveFolderCopyPlanner.MAX_ITEMS + 1)
+        }.isFailure)
+
+        val chosen = requireNotNull(SmartMergeSafFolderCapture.capture(
+            e.resolver, e.sourceTree,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION, WorkspacePane.A, 1L,
+            e.observedAtMillis))
+        // Root, nested folder, empty folder and file: complete exact four
+        // remains reviewable even though each directory is now read with
+        // the tightest allowable cursor window. No digest/identity drift.
+        val compact = requireNotNull(e.scanner.inspectMergeRootInventory(
+            chosen, 2L, maxEntries = 4))
+        val default = requireNotNull(e.scanner.inspectMergeRootInventory(
+            chosen, 3L))
+        assertEquals(default.manifest.digest, compact.manifest.digest)
+        assertEquals(default.manifest.entries, compact.manifest.entries)
+        assertEquals(4, compact.manifest.entries.size)
+        assertNull("A complete source cannot be silently truncated to 3",
+            e.scanner.inspectMergeRootInventory(chosen, 4L, maxEntries = 3))
+    }
+
     @Test fun pickedMergeSourceRefusesBeforeExceedingRemainingReviewBudget() {
         val e = Environment()
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
