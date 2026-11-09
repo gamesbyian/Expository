@@ -288,7 +288,10 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.event_name == 'issue_comment' && 'main' || github.ref }}
+          # Pin the developer APK to the exact dispatch/event commit,
+          # never a moving main ref observed later by the runner.
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
@@ -305,6 +308,18 @@ jobs:
       - name: Give the distributable APK an unambiguous filename
         working-directory: android-transfer
         run: mv app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/expository-ftp-developer-debug.apk
+      - name: Require and record exact checked-out source commit
+        shell: bash
+        env:
+          EVENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          source_sha="$(git rev-parse HEAD)"
+          if [[ "$source_sha" != "$EVENT_SHA" || ! "$source_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Developer APK source drifted from its dispatch commit"
+            exit 2
+          fi
+          printf '%s\n' "$source_sha" > android-transfer/app/build/outputs/apk/debug/SOURCE-SHA.txt
       - name: Record artifact SHA256 (not a release signature)
         working-directory: android-transfer/app/build/outputs/apk/debug
         run: sha256sum expository-ftp-developer-debug.apk > SHA256SUMS.txt
@@ -314,6 +329,7 @@ jobs:
           path: |
             android-transfer/app/build/outputs/apk/debug/expository-ftp-developer-debug.apk
             android-transfer/app/build/outputs/apk/debug/SHA256SUMS.txt
+            android-transfer/app/build/outputs/apk/debug/SOURCE-SHA.txt
           retention-days: 5
 
   ftps-lab:
