@@ -2813,6 +2813,18 @@ private fun DeveloperPreview(
                                             modifier = Modifier.testTag(
                                                 "smart-merge-illustration-counts"),
                                             style = MaterialTheme.typography.bodySmall)
+                                        Text("Illustrative effort for the entire source set: " +
+                                            illustration.hypotheticalFileCopies +
+                                            " file copy operation(s), " +
+                                            illustration.hypotheticalDirectoryCreates +
+                                            " new directory creation(s) including the proposed " +
+                                            "Merge root. Reused directories are excluded. " +
+                                            "File byte sizes, temporary space, and free-space " +
+                                            "requirements are UNKNOWN; no source-size evidence " +
+                                            "was captured. This view executes nothing.",
+                                            modifier = Modifier.testTag(
+                                                "smart-merge-illustration-impact"),
+                                            style = MaterialTheme.typography.bodySmall)
                                         Text("Hypothetical differences " +
                                             (if (illustration.totalChanges == 0) "0"
                                                 else (illustration.changeOffset + 1).toString()) +
