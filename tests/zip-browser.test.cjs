@@ -159,7 +159,7 @@ test('ZIP local and central filenames must match in original bytes, not only aft
 test('ZIP local CRC and sizes agree with central records when no data descriptor is declared',async()=>{
  for(const field of [14,18,22]){
   const blob=await mutate(archive('stable.txt','verified bytes'),data=>{
-   data.writeUInt32LE(data.readUInt32LE(field)^1,field);
+   data.writeUInt32LE((data.readUInt32LE(field)^1)>>>0,field);
   });
   const manifest=await zipManifest(blob);
   assert.equal(manifest.entries.length,0,'local header disagreement at offset '+field+' must be refused');
