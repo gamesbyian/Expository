@@ -128,6 +128,45 @@ object SmartMergePreviewPlannerSuite {
         }.isFailure)
         check(!page3.toString().contains("item25.txt"))
         check(!page3.entries.last().toString().contains("item25.txt"))
+        // In-memory path search never revisits a ContentProvider. Ignore
+        // the captured root prefix for descendants, so filtering its name
+        // cannot accidentally match every single child path.
+        val filtered = requireNotNull(SmartMergeInventoryPager.page(
+            a, pagedInventory, 0, "ITEM2"))
+        check(filtered.capturedEntries == 26 &&
+            filtered.totalEntries == 6 && filtered.entries.size == 6 &&
+            filtered.nextOffset == null)
+        check(filtered.entries.first().relativePath ==
+            listOf("A", "item20.txt"))
+        check(filtered.entries.last().relativePath ==
+            listOf("A", "item25.txt"))
+        check(SmartMergeInventoryPager.page(
+            a, pagedInventory, 12, "item2") == null)
+        val oneMatch = requireNotNull(SmartMergeInventoryPager.page(
+            a, pagedInventory, 0, "item02"))
+        check(oneMatch.totalEntries == 1 &&
+            oneMatch.entries.single().relativePath == listOf("A", "item02.txt"))
+        val rootOnly = requireNotNull(SmartMergeInventoryPager.page(
+            a, pagedInventory, 0, "A"))
+        check(rootOnly.totalEntries == 1 &&
+            rootOnly.entries.single().kind == ItemKind.DIRECTORY)
+        val none = requireNotNull(SmartMergeInventoryPager.page(
+            a, pagedInventory, 0, "no-such-file"))
+        check(none.capturedEntries == 26 && none.totalEntries == 0 &&
+            none.entries.isEmpty() && none.nextOffset == null)
+        check(SmartMergeInventoryPager.page(
+            a, pagedInventory, 0, "x".repeat(81)) == null)
+        check(SmartMergeInventoryPager.page(
+            a, pagedInventory, 0, "bad" + 0xD800.toChar()) == null)
+        // NFC-normalized, casefolded search can find a combining-mark name.
+        val accented = inventory(a, entry(a.source, listOf("E\\u0301te\\u0301.txt")))
+        val accents = requireNotNull(SmartMergeInventoryPager.page(
+            a, accented, 0, "été"))
+        check(accents.totalEntries == 1 &&
+            accents.entries.single().relativePath.last() == "E\\u0301te\\u0301.txt")
+        check(pagedInventory.manifest.digest == "a".repeat(64))
+        check(SmartMergeInventoryPager.page(a, pagedInventory, 0)!!.totalEntries == 26)
+
         check(page1.entries.size == 12 && page3.entries.size == 2)
 
         check(first.entries.none { it.sharedDirectory })
