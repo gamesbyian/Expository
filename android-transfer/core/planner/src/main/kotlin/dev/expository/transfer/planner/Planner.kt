@@ -24,6 +24,10 @@ data class CapabilityProof(
 ) {
     fun valid(nowMillis: Long): Boolean =
         support == Support.SUPPORTED && observationId.isNotBlank() && expiresAtMillis >= nowMillis
+
+    // Provider observation IDs can encode private session/account identity.
+    override fun toString(): String =
+        "CapabilityProof(support=$support,expiresAtMillis=$expiresAtMillis)"
 }
 
 data class LocationKey(
@@ -32,7 +36,9 @@ data class LocationKey(
     val rootId: String,
     val containerId: String,
     val grantId: String? = null
-)
+) {
+    override fun toString(): String = "LocationKey(kind=$kind,redacted)"
+}
 
 data class LocationRef(
     val key: LocationKey,
@@ -43,16 +49,23 @@ data class LocationRef(
     val verifiedNamespace: String? = null,
     val verifiedStorageDomain: String? = null,
     val casePolicy: CasePolicy = CasePolicy.UNKNOWN
-)
+) {
+    override fun toString(): String =
+        "LocationRef(kind=${key.kind},casePolicy=$casePolicy,redacted)"
+}
 
-data class ItemKey(val authorityId: String, val opaqueItemId: String, val version: String)
+data class ItemKey(val authorityId: String, val opaqueItemId: String, val version: String) {
+    override fun toString(): String = "ItemKey(redacted)"
+}
 data class ItemRef(
     val key: ItemKey,
     val location: LocationRef,
     val parent: List<String>,
     val name: String,
     val kind: ItemKind
-)
+) {
+    override fun toString(): String = "ItemRef(kind=$kind,redacted)"
+}
 
 enum class DestinationWitness { COMPLETE_PARENT_LISTING, SAF_NEW_DOCUMENT_PICKER }
 data class DestinationListing(
@@ -60,14 +73,21 @@ data class DestinationListing(
     val complete: Boolean,
     val siblings: List<String>, // user-visible names, never trust as stable identity
     val witness: DestinationWitness = DestinationWitness.COMPLETE_PARENT_LISTING
-)
+) {
+    override fun toString(): String =
+        "DestinationListing(complete=$complete,witness=$witness,count=${siblings.size})"
+}
 data class TransferRequest(
     val sources: List<ItemRef>,
     val destination: LocationRef,
     val operation: Operation = Operation.COPY,
     val deletionAuthorized: Boolean = false,
     val destinationListing: DestinationListing? = null // default unknown fails closed
-)
+) {
+    override fun toString(): String =
+        "TransferRequest(sources=${sources.size},operation=$operation," +
+            "deletionAuthorized=$deletionAuthorized)"
+}
 
 data class TransferPlan(
     val digest: String,

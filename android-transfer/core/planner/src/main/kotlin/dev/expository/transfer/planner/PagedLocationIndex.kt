@@ -22,7 +22,9 @@ data class ObservedLocationChild(
     val key: ItemKey,
     val name: String,
     val kind: ItemKind
-)
+) {
+    override fun toString(): String = "ObservedLocationChild(kind=$kind,redacted)"
+}
 
 data class LocationPage(
     val location: LocationRef,
@@ -32,7 +34,10 @@ data class LocationPage(
     val children: List<ObservedLocationChild>,
     /** The backend explicitly attests to an unfiltered, bounded page. */
     val authoritative: Boolean
-)
+) {
+    override fun toString(): String =
+        "LocationPage(children=${children.size},authoritative=$authoritative,redacted)"
+}
 
 /** Adapter implementations must perform I/O off the UI thread. */
 interface LocationListingAdapter {
