@@ -254,9 +254,11 @@ Draft [PR #33](https://github.com/gamesbyian/Expository/pull/33) is stacked on G
 - [#27 · G8 real Drive/Docs provider and OAuth proof](https://github.com/gamesbyian/Expository/issues/27)
 - [#28 · G2/G6 Compose picker-first adaptive workspace](https://github.com/gamesbyian/Expository/issues/28)
 
-Implementation began in draft PR #32. The issue descriptions remain acceptance contracts, **not proof that either G0 or G1 has passed**. A separate native repository remains the target: the temporary self-contained `android-transfer/` Gradle root can be relocated without importing writer functionality into the read-only web application.
+Implementation originally began in draft PR #32 (historical). Issue descriptions remain acceptance contracts, not evidence of passed G0/G1 release gates. The self-contained `android-transfer/` Gradle root remains the native app's working home; repository relocation is an optional, separately approved migration and **not** a prerequisite for continuing development. The public Pages explorer remains read-only.
 
-## Immediate next agent tasks (ordered)
+## Historical bootstrap task list (24 October 2026, superseded)
+
+The five steps below are preserved as the original October bootstrap sequence, **not** current instructions or release priorities. The native project, its agent guide, fixture suites and CI now exist. Use the [current native work queue](../../android-transfer/WORK-QUEUE.md), [shared workstream crosswalk](RELEASE-BLOCKER-CONSOLIDATION-2026-11-03.md) and the gate board above to select new work; preserve all still-open G0–G9 acceptance requirements.
 
 1. Establish **separate native app source** and a concise Android-specific `AGENTS.md`, security ownership and CI, with a fake server and fake SAF provider for safe automation.
 2. Implement **pure Kotlin operation planner first**: immutable references/plan digest, capability unknown/unsupported logic, collision DAG and temp names, version/fingerprint revalidation. Do not let Compose code directly issue destructive mutations.
