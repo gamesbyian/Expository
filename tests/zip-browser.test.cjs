@@ -47,7 +47,7 @@ test('ZIP manifest does not expose NFC-equivalent paths as separate extractable 
   {name:'DIR/e'+String.fromCharCode(0x0301)+'.TXT',flags:0x0800,body:'collision payload'},
   {name:'other/independent.txt',flags:0x0800,body:'independent payload'}
  ]));
- assert.deepEqual(manifest.entries.map(x=>x.name),['dir/é.txt','other/independent.txt']);
+ assert.deepEqual([...manifest.entries].map(x=>x.name),['dir/é.txt','other/independent.txt']);
  assert.equal(manifest.skipped,1,'canonical alias is excluded at source review');
  assert.equal(await (await unzipMember(manifest,manifest.entries[0])).text(),'legacy payload');
  assert.equal(await (await unzipMember(manifest,manifest.entries[1])).text(),'independent payload');
