@@ -163,6 +163,16 @@ async function main(){
   await evaluate("document.querySelector('#sizeToggle').click()");
   await evaluate("document.querySelector('#back').click()");
   await until("document.querySelector('#breadcrumbs')?.textContent?.includes('Glimpse')",'treemap browsing returns to root');
+  assert.equal(await evaluate("document.querySelector('#recentFolders').hidden"),false,'previously opened folder offered as recent');
+  await evaluate("document.querySelector('#recentFolders').open=true");
+  assert.equal(await evaluate("document.querySelector('#recentFolderLinks button')?.textContent"),'design','history shows a real previously opened folder');
+  assert.equal(await evaluate("document.querySelector('#recentFolderLinks button').getBoundingClientRect().height>=44"),true,'recent folder tap target is accessible on mobile');
+  await evaluate("document.querySelector('#recentFolderLinks button').click()");
+  await until("document.querySelector('#breadcrumbs')?.textContent?.includes('design')",'recent folder chip navigates');
+  await evaluate("document.querySelector('#back').click()");
+  await until("document.querySelector('#breadcrumbs')?.textContent?.includes('Glimpse')",'recent history returns to root');
+  assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'recent folder section does not overflow 393px');
+  if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-recent-folders-393.png');
 
   assert.equal(await evaluate("document.querySelector('#refineControls').hidden"),true,'phone opens with filters collapsed');
   if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-start-393.png');
@@ -375,8 +385,19 @@ async function main(){
   await until("document.querySelector('#status')?.textContent?.includes('items')",'private fixture loaded');
   assert.equal(await evaluate("location.hash"),'','private repo does not leak into fragment');
   assert.equal(await evaluate("document.querySelector('#bookmark').disabled"),true,'private repo cannot be bookmarked');
+  assert.equal(await evaluate("document.querySelector('#recentFolders').hidden"),true,'switching repositories clears public folder history');
+  await evaluate("document.querySelector('#scope').value='folder';document.querySelector('#scope').dispatchEvent(new Event('change'))");
+  await until("Array.from(document.querySelectorAll('#items .tile')).some(x=>x.textContent.includes('docs'))",'private fixture folder tile');
+  await evaluate("Array.from(document.querySelectorAll('#items .tile')).find(x=>x.textContent.includes('docs')).click()");
+  await until("document.querySelector('#breadcrumbs').textContent.includes('docs')",'private folder viewed');
+  assert.equal(await evaluate("location.hash"),'','private folder visit never creates Expository fragment');
+  await evaluate("document.querySelector('#back').click()");
+  await until("document.querySelector('#recentFolders').hidden===false",'private folder exists in current tab history');
+  assert.equal(await evaluate("document.querySelector('#recentFolderLinks button')?.textContent"),'docs','private history works in current repo only');
   await evaluate("document.querySelector('#repo').value='gamesbyian/Glimpse';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
   await until("document.querySelector('#status')?.textContent?.includes('items')",'public fixture restored');
+  assert.equal(await evaluate("document.querySelector('#recentFolders').hidden"),true,'private folder history scrubbed on repository change');
+  assert.equal(await evaluate("document.querySelector('#recentFolderLinks').textContent"),'','private folder names removed from DOM');
   assert.equal(await evaluate("location.hash.includes('gamesbyian/Glimpse')"),true,'public deep links still work');
   await evaluate("document.querySelector('#repo').value='gamesbyian/LargeFixture';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
   await until("document.querySelector('#status')?.textContent?.includes('1012 items')",'large directory repaired from Git tree');
