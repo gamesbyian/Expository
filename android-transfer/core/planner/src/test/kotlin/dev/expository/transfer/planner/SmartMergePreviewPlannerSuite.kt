@@ -159,11 +159,11 @@ object SmartMergePreviewPlannerSuite {
         check(SmartMergeInventoryPager.page(
             a, pagedInventory, 0, "bad" + 0xD800.toChar()) == null)
         // NFC-normalized, casefolded search can find a combining-mark name.
-        val accented = inventory(a, entry(a.source, listOf("E\\u0301te\\u0301.txt")))
+        val accented = inventory(a, entry(a.source, listOf("E\u0301te\u0301.txt")))
         val accents = requireNotNull(SmartMergeInventoryPager.page(
             a, accented, 0, "été"))
         check(accents.totalEntries == 1 &&
-            accents.entries.single().relativePath.last() == "E\\u0301te\\u0301.txt")
+            accents.entries.single().relativePath.last() == "E\u0301te\u0301.txt")
         check(pagedInventory.manifest.digest == "a".repeat(64))
         check(SmartMergeInventoryPager.page(a, pagedInventory, 0)!!.totalEntries == 26)
 
