@@ -22,7 +22,11 @@ class SmartMergeCasefoldIllustration internal constructor(
     val changeOffset: Int,
     /** Null at the final page. No server cursor or persisted token. */
     val nextChangeOffset: Int?,
-    val changes: List<SmartMergeIllustratedChange>
+    val changes: List<SmartMergeIllustratedChange>,
+    /** Offset into ALL future child entries, not just changed names. */
+    val layoutOffset: Int,
+    val nextLayoutOffset: Int?,
+    val layoutEntries: List<SmartMergeIllustratedLayoutEntry>
 ) {
     val executable: Boolean get() = false
     override fun toString(): String = "SmartMergeCasefoldIllustration(redacted)"
@@ -35,6 +39,21 @@ class SmartMergeIllustratedChange internal constructor(
     val directoryReused: Boolean
 ) {
     override fun toString(): String = "SmartMergeIllustratedChange(redacted)"
+}
+
+/**
+ * A bounded, display-only projection of a future child under the user-named
+ * new root. No source ItemRef, grant, contents, plan digest, or write command
+ * crosses into this view. A shared folder is shown as a logical reuse only.
+ */
+class SmartMergeIllustratedLayoutEntry internal constructor(
+    val sourceNumber: Int,
+    val targetPath: List<String>,
+    val kind: ItemKind,
+    val sharedDirectory: Boolean,
+    val renamedForCollision: Boolean
+) {
+    override fun toString(): String = "SmartMergeIllustratedLayoutEntry(redacted)"
 }
 
 /**
@@ -52,6 +71,7 @@ class SmartMergeIllustratedChange internal constructor(
  */
 object SmartMergeCasefoldIllustrator {
     const val MAX_DISPLAY_CHANGES = 12
+    const val MAX_DISPLAY_LAYOUT = 12
 
     fun inspect(
         basket: SmartMergeBasket,
@@ -61,14 +81,15 @@ object SmartMergeCasefoldIllustrator {
         rootName: String,
         structure: SmartMergeStructure,
         nowMillis: Long,
-        changeOffset: Int = 0
+        changeOffset: Int = 0,
+        layoutOffset: Int = 0
     ): SmartMergeCasefoldIllustration {
         val actual = SmartMergePreviewPlanner.preview(
             basket, inventories, destination, destinationParentIndex,
             rootName, structure, nowMillis)
         fun refused(reasons: List<String>) = SmartMergeCasefoldIllustration(
             Collections.unmodifiableList(reasons.distinct()), false, 0, 0, 0,
-            0, 0, null, emptyList())
+            0, 0, null, emptyList(), 0, null, emptyList())
         if (destination.key.kind != LocationKind.LOCAL_SAF ||
             destination.casePolicy != CasePolicy.UNKNOWN) {
             return refused(actual.blockers + "ILLUSTRATION_REQUIRES_UNKNOWN_SAF_CASE_POLICY")
@@ -83,6 +104,9 @@ object SmartMergeCasefoldIllustrator {
         if (changeOffset < 0 || changeOffset % MAX_DISPLAY_CHANGES != 0 ||
             changeOffset >= SmartMergePreviewPlanner.MAX_PREVIEW_ENTRIES)
             return refused(actual.blockers + "ILLUSTRATION_PAGE_INVALID")
+        if (layoutOffset < 0 || layoutOffset % MAX_DISPLAY_LAYOUT != 0 ||
+            layoutOffset >= SmartMergePreviewPlanner.MAX_PREVIEW_ENTRIES)
+            return refused(actual.blockers + "ILLUSTRATION_LAYOUT_PAGE_INVALID")
         val existing = destinationParentIndex ?: return refused(actual.blockers)
         if (existing.state != LocationIndexState.COMPLETE ||
             existing.location != destination || existing.snapshotId.isNullOrBlank())
@@ -122,6 +146,8 @@ object SmartMergeCasefoldIllustrator {
         }
         if (changeOffset > 0 && changeOffset >= total)
             return refused(actual.blockers + "ILLUSTRATION_PAGE_OUT_OF_RANGE")
+        if (layoutOffset > 0 && layoutOffset >= forecast.entries.size)
+            return refused(actual.blockers + "ILLUSTRATION_LAYOUT_OUT_OF_RANGE")
         val samples = forecast.entries.asSequence()
             .filter { it.renamedForCollision || it.sharedDirectory }
             .drop(changeOffset).take(MAX_DISPLAY_CHANGES)
@@ -133,10 +159,24 @@ object SmartMergeCasefoldIllustrator {
                     it.sharedDirectory)
             }.toList()
         val following = (changeOffset + samples.size).takeIf { it < total }
+        // The full what-if is still paged: never publish or log a 10k-child
+        // private path list. Use the same verified hypothetical planner run
+        // used by collision differences; do not invent a second map authority.
+        val layoutRows = forecast.entries.asSequence()
+            .drop(layoutOffset).take(MAX_DISPLAY_LAYOUT).map { entry ->
+                SmartMergeIllustratedLayoutEntry(
+                    entry.sourceIndex + 1,
+                    Collections.unmodifiableList(entry.targetPath.toList()),
+                    entry.source.kind, entry.sharedDirectory,
+                    entry.renamedForCollision)
+            }.toList()
+        val nextLayout = (layoutOffset + layoutRows.size)
+            .takeIf { it < forecast.entries.size }
         return SmartMergeCasefoldIllustration(
             Collections.unmodifiableList(actual.blockers.toList()), true,
             forecast.entries.size, forecast.collisionRenames,
             forecast.sharedDirectories, total, changeOffset, following,
-            Collections.unmodifiableList(samples))
+            Collections.unmodifiableList(samples), layoutOffset, nextLayout,
+            Collections.unmodifiableList(layoutRows))
     }
 }
