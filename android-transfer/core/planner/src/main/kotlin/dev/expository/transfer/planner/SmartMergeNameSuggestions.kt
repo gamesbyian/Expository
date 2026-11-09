@@ -20,7 +20,7 @@ object SmartMergeNameSuggestions {
     // descriptive stem and CONTIGUOUS ordinal values to avoid implying that
     // missing volumes or folders have actually been selected.
     private val SUFFIX_ORDINAL = Regex("^(.+?)[ ._-]+([0-9]{1,3})$")
-    private val PAREN_ORDINAL = Regex("^(.+?)[ ._-]+\\\\(([0-9]{1,3})\\\\)$")
+    private val PAREN_ORDINAL = Regex("^(.+?)[ ._-]+\\(([0-9]{1,3})\\)$")
 
     fun suggestFromSourceNames(names: List<String>): String {
         if (names.size !in 2..MAX_SOURCES ||
