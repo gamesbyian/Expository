@@ -134,10 +134,21 @@ function zipManifest(blob){
  if(blob.size>ZIP_MAX_BYTES)fail('archive exceeds the 24 MB browser-inspection limit');
  return blob.arrayBuffer().then(buffer=>{
   const bytes=new Uint8Array(buffer),v=new DataView(buffer);let eocd=-1;
-  for(let i=bytes.length-22;i>=Math.max(0,bytes.length-65557);i--)if(v.getUint32(i,true)===0x06054b50){eocd=i;break}
-  if(eocd<0)fail('end directory not found');
-  if(eocd+22+v.getUint16(eocd+20,true)>bytes.length)fail('truncated end directory');
-  const count=v.getUint16(eocd+10,true),size=v.getUint32(eocd+12,true),offset=v.getUint32(eocd+16,true);
+  // PK\\x05\\x06 can appear inside the legal ZIP comment. A signature alone is
+  // not an EOCD: require the declared comment and central directory to end
+  // at their respective boundaries before trusting its entry counts.
+  let foundSignature=false;
+  for(let i=bytes.length-22;i>=Math.max(0,bytes.length-65557);i--){
+   if(v.getUint32(i,true)!==0x06054b50)continue;
+   foundSignature=true;
+   const comment=v.getUint16(i+20,true),size=v.getUint32(i+12,true),offset=v.getUint32(i+16,true);
+   if(i+22+comment===bytes.length&&offset+size===i){eocd=i;break}
+  }
+  if(eocd<0)fail(foundSignature?'invalid central directory layout or ZIP comment':'end directory not found');
+  const disks=v.getUint16(eocd+4,true),centralDisk=v.getUint16(eocd+6,true),
+   onDisk=v.getUint16(eocd+8,true),count=v.getUint16(eocd+10,true),
+   size=v.getUint32(eocd+12,true),offset=v.getUint32(eocd+16,true);
+  if(disks||centralDisk||onDisk!==count)fail('multi-disk ZIP is unsupported');
   if(count===65535||size===0xffffffff||offset===0xffffffff)fail('ZIP64 requires another reader');
   if(count>ZIP_MAX_FILES)fail('too many files');
   if(offset+size>eocd)fail('invalid central directory');
