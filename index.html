@@ -318,13 +318,16 @@ async function zipExtractFolder(manifest,entries,button,progress){
    const entry=entries[i];progress.textContent='Extracting '+(i+1)+'/'+entries.length+' · '+entry.name;
    if(!zipSafeForDevice(entry.name)){failed++;continue}
    try{
+    // Verify the member before touching the chosen folder. A corrupt CRC,
+    // unsupported compression stream or Stop must not create empty nested
+    // directories as a failed extraction side effect.
+    const payload=await unzipMember(manifest,entry);
+    if(cancelled)break;
     let dest=directory;const parts=entry.name.split('/');
     for(const name of parts.slice(0,-1))dest=await dest.getDirectoryHandle(name,{create:true});
     let exists=false;
     try{await dest.getFileHandle(parts.at(-1));exists=true}catch(e){if(e.name!=='NotFoundError')throw e}
     if(exists){collisions++;continue}
-    const payload=await unzipMember(manifest,entry);
-    if(cancelled)break;
     const file=await dest.getFileHandle(parts.at(-1),{create:true});
     const writer=await file.createWritable();
     try{await writer.write(payload);await writer.close();saved++}catch(e){try{await writer.abort()}catch{}throw e}
