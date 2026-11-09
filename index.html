@@ -180,11 +180,16 @@ function zipManifest(blob){
    if(method===0&&compressed!==uncompressed)continue;
    const nameKey=name.normalize('NFC').toLowerCase();
    if(seen.has(nameKey))continue;
-   total+=uncompressed;if(total>ZIP_TOTAL_MAX)fail('uncompressed total exceeds 128 MB');
    if(local+30>bytes.length||v.getUint32(local,true)!==0x04034b50)continue;
    const localLen=v.getUint16(local+26,true),localExtra=v.getUint16(local+28,true),start=local+30+localLen+localExtra;
-   if(start+compressed>bytes.length||start>offset||v.getUint16(local+8,true)!==method||v.getUint16(local+6,true)!==flags)continue;
+   // Member compressed bytes must end before the central directory. A
+   // purported payload spanning central records is not a complete file.
+   if(start>offset||compressed>offset-start||v.getUint16(local+8,true)!==method||v.getUint16(local+6,true)!==flags)continue;
    if(zipDecodeName(bytes.subarray(local+30,local+30+localLen),flags)?.replace(/\\/g,'/')!==name)continue;
+   // Count only fully validated, retained entries. Malformed local headers
+   // must not exhaust the aggregate budget for otherwise valid members.
+   if(uncompressed>ZIP_TOTAL_MAX-total)fail('uncompressed total exceeds 128 MB');
+   total+=uncompressed;
    seen.add(nameKey);entries.push({name,path:name,size:uncompressed,compressed,method,flags,crc,start,type:'file'});
   }
   if(pos!==offset+size)fail('central directory size mismatch');
