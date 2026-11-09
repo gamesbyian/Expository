@@ -1,6 +1,7 @@
 package dev.expository.transfer.planner
 
 import java.nio.charset.StandardCharsets
+import java.util.Collections
 import java.text.Normalizer
 import java.util.Locale
 
@@ -61,8 +62,9 @@ class PagedLocationIndex private constructor(
 
         fun begin(location: LocationRef): PagedLocationIndex =
             PagedLocationIndex(
-                location.copy(folder = location.folder.toList(),
-                    capabilities = location.capabilities.toMap()),
+                location.copy(
+                    folder = Collections.unmodifiableList(location.folder.toList()),
+                    capabilities = Collections.unmodifiableMap(location.capabilities.toMap())), 
                 LocationIndexState.OPEN, null, null, emptyList(), emptySet(), null
             )
     }
@@ -76,8 +78,9 @@ class PagedLocationIndex private constructor(
         children: List<ObservedLocationChild> = this.children,
         seenTokens: Set<String> = this.seenTokens,
         errorCode: String? = this.errorCode
-    ) = PagedLocationIndex(location, state, snapshotId, nextToken, children,
-        seenTokens, errorCode)
+    ) = PagedLocationIndex(location, state, snapshotId, nextToken,
+        Collections.unmodifiableList(children.toList()),
+        Collections.unmodifiableSet(seenTokens.toSet()), errorCode)
 
     private fun invalid(reason: String) = rebuilt(
         state = LocationIndexState.INVALID, children = emptyList(),
@@ -152,12 +155,14 @@ class PagedLocationIndex private constructor(
     fun destinationListing(): DestinationListing? =
         if (state == LocationIndexState.COMPLETE && snapshotId != null)
             DestinationListing(snapshotId, complete = true,
-                siblings = children.map { it.name })
+                siblings = Collections.unmodifiableList(children.map { it.name }))
         else null
 
     /** Opaque direct-child references; operation-specific READ proof still needed. */
     fun itemRefs(): List<ItemRef>? =
         if (state == LocationIndexState.COMPLETE)
-            children.map { ItemRef(it.key, location, location.folder, it.name, it.kind) }
+            Collections.unmodifiableList(children.map {
+                ItemRef(it.key, location, location.folder, it.name, it.kind)
+            })
         else null
 }
