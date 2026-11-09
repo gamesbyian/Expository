@@ -163,14 +163,16 @@ async function main(){
   await evaluate("document.querySelector('#sizeToggle').click()");
   await evaluate("document.querySelector('#back').click()");
   await until("document.querySelector('#breadcrumbs')?.textContent?.includes('Glimpse')",'treemap browsing returns to root');
+  await until("document.querySelector('#status')?.textContent?.includes('items · /')",'recent-jump root listing actually completed');
   assert.equal(await evaluate("document.querySelector('#recentJump').hidden"),false,'recent folder jump appears directly in mobile workspace');
   await evaluate("document.querySelector('#recentJump').open=true");
   assert.equal(await evaluate("document.querySelector('#recentJumpLinks button')?.textContent"),'design','mobile jump reuses a previously visited folder');
   assert.equal(await evaluate("document.querySelector('#recentJumpLinks button').getBoundingClientRect().height>=44"),true,'quick jump has 44px phone target');
-  await evaluate("document.querySelector('#recentJumpLinks button').click()");
-  await until("document.querySelector('#breadcrumbs')?.textContent?.includes('design')",'mobile recent jump navigates');
+  await evaluate("document.querySelector('#recentJumpLinks button').focus();document.querySelector('#recentJumpLinks button').click()");
+  await until("document.querySelector('#status')?.textContent?.includes('items · design')",'mobile recent jump navigates');
+  assert.equal(await evaluate("document.activeElement?.id"),'recentJumpSummary','keyboard focus returns to stable disclosure after a jump');
   await evaluate("document.querySelector('#back').click()");
-  await until("document.querySelector('#breadcrumbs')?.textContent?.includes('Glimpse')",'quick jump returns to root');
+  await until("document.querySelector('#status')?.textContent?.includes('items · /')",'quick jump returns to loaded root');
   assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'recent jump does not overflow 393px');
   if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-mobile-recent-jump-393.png');
 
@@ -389,10 +391,10 @@ async function main(){
   await evaluate("document.querySelector('#scope').value='folder';document.querySelector('#scope').dispatchEvent(new Event('change'))");
   await until("Array.from(document.querySelectorAll('#items .tile')).some(x=>x.textContent.includes('docs'))",'private root folder');
   await evaluate("Array.from(document.querySelectorAll('#items .tile')).find(x=>x.textContent.includes('docs')).click()");
-  await until("document.querySelector('#breadcrumbs').textContent.includes('docs')",'private folder navigated');
+  await until("document.querySelector('#status')?.textContent?.includes('items · docs')",'private folder actually loaded');
   assert.equal(await evaluate("location.hash"),'','private folder does not enter Expository URL');
   await evaluate("document.querySelector('#back').click()");
-  await until("document.querySelector('#recentJump').hidden===false",'private folder shortcut visible only in current session');
+  await until("document.querySelector('#status')?.textContent?.includes('items · /') && document.querySelector('#recentJump').hidden===false",'private folder shortcut visible after returning to loaded root');
   await evaluate("document.querySelector('#recentJump').open=true");
   assert.equal(await evaluate("document.querySelector('#recentJumpLinks button')?.textContent"),'docs','private shortcut uses current history');
   await evaluate("document.querySelector('#repo').value='gamesbyian/Glimpse';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
