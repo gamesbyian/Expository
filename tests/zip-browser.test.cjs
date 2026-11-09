@@ -17,6 +17,41 @@ function archive(name='pictures/hello.txt',body='Hello from ZIP',crcOverride,fla
  const end=Buffer.alloc(22);end.writeUInt32LE(0x06054b50,0);end.writeUInt16LE(1,8);end.writeUInt16LE(1,10);end.writeUInt32LE(center.length+filename.length,12);end.writeUInt32LE(local.length+filename.length+data.length,16);
  return new Blob([local,filename,data,center,filename,end]);
 }
+function archiveMany(members){
+ const locals=[],centers=[];let localOffset=0,centralSize=0;
+ for(const member of members){
+  const filename=Buffer.isBuffer(member.name)?member.name:Buffer.from(member.name),
+   data=Buffer.from(member.body||'payload'),crc=zipCRC(data),flags=member.flags||0;
+  const local=Buffer.alloc(30),center=Buffer.alloc(46);
+  local.writeUInt32LE(0x04034b50,0);local.writeUInt16LE(flags,6);
+  local.writeUInt32LE(crc,14);local.writeUInt32LE(data.length,18);
+  local.writeUInt32LE(data.length,22);local.writeUInt16LE(filename.length,26);
+  center.writeUInt32LE(0x02014b50,0);center.writeUInt16LE(flags,8);
+  center.writeUInt32LE(crc,16);center.writeUInt32LE(data.length,20);
+  center.writeUInt32LE(data.length,24);center.writeUInt16LE(filename.length,28);
+  center.writeUInt32LE(localOffset,42);
+  locals.push(local,filename,data);centers.push(center,filename);
+  localOffset+=local.length+filename.length+data.length;
+  centralSize+=center.length+filename.length;
+ }
+ const end=Buffer.alloc(22);
+ end.writeUInt32LE(0x06054b50,0);
+ end.writeUInt16LE(members.length,8);end.writeUInt16LE(members.length,10);
+ end.writeUInt32LE(centralSize,12);end.writeUInt32LE(localOffset,16);
+ return new Blob([...locals,...centers,end]);
+}
+test('ZIP manifest does not expose NFC-equivalent paths as separate extractable files',async()=>{
+ const legacy=Buffer.from([0x64,0x69,0x72,0x2f,0x82,0x2e,0x74,0x78,0x74]);
+ const manifest=await zipManifest(archiveMany([
+  {name:legacy,flags:0,body:'legacy payload'},
+  {name:'DIR/e'+String.fromCharCode(0x0301)+'.TXT',flags:0x0800,body:'collision payload'},
+  {name:'other/independent.txt',flags:0x0800,body:'independent payload'}
+ ]));
+ assert.deepEqual([...manifest.entries].map(x=>x.name),['dir/é.txt','other/independent.txt']);
+ assert.equal(manifest.skipped,1,'canonical alias is excluded at source review');
+ assert.equal(await (await unzipMember(manifest,manifest.entries[0])).text(),'legacy payload');
+ assert.equal(await (await unzipMember(manifest,manifest.entries[1])).text(),'independent payload');
+});
 test('ZIP manifest includes navigable member paths and extracts verified bytes',async()=>{
  const manifest=await zipManifest(archive());
  assert.equal(manifest.entries.length,1);

@@ -13,14 +13,14 @@ Ratings describe *general Expository relevance* (10 is highest) rather than impl
 | Relevance | Feature | Primary inspiration | Implementation slice | Delivery |
 |---:|---|---|---|---|
 | 10 | Repo-wide content search | Sourcegraph, TooToo | Opt-in bounded client scan; clear file/byte caps, cancellation, line snippets | Wave 1 |
-| 10 | Syntax highlighting, line numbers, code outline | Gitako, GitHub | Safe 500-line windowed source with search/jumps across the 500k-character loaded preview, plus a heuristic symbol outline; full language accuracy and beyond-cap source fetching remain | Wave 1 + E04 initial |
+| 10 | Syntax highlighting, line numbers, code outline | Gitako, GitHub | Safe 500-line DOM windows within successive on-demand 500k-character sections of an already downloaded bounded source file; original line numbers and deep content-search jumps, plus heuristic symbols; accurate parsers and fetching files above the existing 20 MB response cap remain | Wave 1 + E04 initial |
 | 10 | Raw downloads/copy | Gitako, TooToo | Fetch through read-only API, copy text and save using local Blob | Wave 1 |
 | 10 | File type/size sort and filters | FolderFrame | Folder-first and recursive galleries, name/size/extension/path order, ascending/descending, HTML/previewable and exact-extension filters, optional directory separators and containing-folder jumps; date sorting requires source-backed commit enrichment | Wave 1 + recursive gallery |
 | 10 | Adjustable gallery density | FolderFrame | Touch-sized sizing control, bounded thumbnail sizes, opt-in all-repository image grid and inert HTML/text-card thumbnails | Wave 1 + recursive gallery |
 | 10 | Huge repository resilience | Gitako, FolderFrame | Reuse complete recursive tree; for truncated trees, recover capped current folders via bounded nonrecursive tree traversal (max 9 requests, 5,000 entries). Deep paths beyond eight levels can recover from a validated parent-listed tree SHA (cached or one fresh read); parent caps, live giant-repo validation and real-world coverage remain pending | Wave 1/E03 partial |
 | 9 | Zoom, pan, fullscreen, rotate | FolderFrame | 1×–4× bounded zoom, two-finger pinch and drag-to-pan, buttons and reset; browser-native fullscreen with explicit fallback added; display-only 90° quarter-turn rotation and browser-native fullscreen delivered; real-device fullscreen/touch validation outstanding | Wave 2 partial |
 | 9 | Rendered/raw Markdown, safe structured data | TooToo | Safe Markdown links to repo paths, expandable JSON, CSV/TSV tables delivered; richer GFM rendering and universal raw toggle pending | Wave 2 partial |
-| 9 | Public-only favorites and recent folders | Gitako | Public bookmarks plus on-demand branch switching without persisting private repo or branch names; recent folders pending | Wave 1 + branch discovery |
+| 9 | Public-only favorites and recent folders | Gitako | Public bookmarks and on-demand branch switching; up to eight successful, deduplicated folder visits are kept in current repo/branch tab RAM only, with touch-accessible sidebar jumps and private-session cleanup; actual mobile visual approval pending | Wave 1 + branch discovery |
 | 9 | Code symbol navigation | Sourcegraph | Heuristic, bounded in-file JS/TS/Python/Rust/Go/Java/Kotlin symbol outline with line jumps; full language parser and repo-wide symbols pending | Wave 3 initial |
 | 9 | File revision timeline | GitLens, GitHub | Path-scoped last 20 commits with dates and GitHub provenance links implemented | Wave 2 initial |
 | 9 | Pixel diffs | Image compare tools | Local magenta diff heatmap, exact intrinsic-dimension gate, 1024×1024 bounded sampling, explicit percent changed | Wave 2 initial |
@@ -29,7 +29,7 @@ Ratings describe *general Expository relevance* (10 is highest) rather than impl
 | 8 | JSON/CSV/YAML/Mermaid viewer | Structured data viewers | Bounded JSON tree and CSV/TSV safe tables delivered; YAML/Mermaid pending | Wave 2 partial |
 | 8 | Activity dashboard | GitHub, GitLens | Public/restricted commit and PR APIs, bounded counts | Wave 3 |
 | 8 | Story Mode: project evolution | GitLens, GitHub | Dated commits/release/merged-PR milestones, 50 commits per manual page to 200, undated tags; on-demand closed-PR paging (20/page, max 80) and no exhaustive history | Wave 3 partial |
-| 7 | Slideshow | FolderFrame | Browser-local selected collection, accessible pause and interval | Wave 3 |
+| 7 | Slideshow | FolderFrame | Delivered [#670](https://github.com/gamesbyian/Expository/pull/670): contact-sheet selected collection (up to 12 previously fetched images), no new network reads, user-initiated Play/Pause, Previous/Next, 3/5/10-second intervals, keyboard arrow controls and cleanup on all exits. Synthetic E1 qualified; physical/mobile accessibility and visual acceptance outstanding | Wave 3 initial |
 | 7 | File-size treemap | GitLens | Opt-in treemap groups indexed blob sizes by immediate file/folder; largest 23 + Other, drill-down, accessible list and explicit truncated-index disclosure | Wave 3 initial |
 | 7 | Change-activity heatmap | GitLens | Git-backed per-path history, clear sampling limitations | Wave 3 |
 

@@ -10,8 +10,8 @@ const html = fs.readFileSync(path.join(__dirname,'..','index.html'),'utf8');
 const source = html.match(/<script>([\s\S]+?)<\/script>/)?.[1];
 function fakeNode(tag='DIV') {
   return {
-    tagName:tag.toUpperCase(),dataset:{},children:[],value:'',textContent:'',style:{setProperty(name,value){this[name]=value}},classList:{add(){},remove(){},contains(){return false}},
-    append(...nodes){this.children.push(...nodes)},replaceChildren(...nodes){this.children=nodes},
+    tagName:tag.toUpperCase(),dataset:{},children:[],get lastChild(){return this.children.at(-1)||null},value:'',textContent:'',style:{setProperty(name,value){this[name]=value}},classList:{add(){},remove(){},contains(){return false}},
+    append(...nodes){this.children.push(...nodes)},replaceChildren(...nodes){this.children=nodes},replaceChild(replacement,old){const i=this.children.indexOf(old);if(i<0)throw Error('Child absent');this.children[i]=replacement;return old},
     remove(){},querySelector(){return null},querySelectorAll(){return []},contains(){return false},getClientRects(){return [1]},setAttribute(name,value){this[name]=value},getAttribute(name){return this[name]||null},
     addEventListener(){},focus(){},click(){},get isConnected(){return true}
   };
@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch,BlobImpl=globalThis.Blob) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,sourceSections,boundedSourceViewer,navigate,recordRecentFolder,paintRecentFolders,clearRecentFolders,openSearchHit,documentThumbnail,loadThumb,openContainingFolder};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,boundedGithubJson,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,sourceSections,boundedSourceViewer,navigate,recordRecentFolder,paintRecentFolders,clearRecentFolders,openSearchHit,openContactSheet,presentSelectedSlideshow,stopSlideshow,documentThumbnail,loadThumb,openContainingFolder};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch','Blob',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl,BlobImpl
  );
@@ -555,6 +555,68 @@ test('image contact sheet selections are bounded, reversible and cleared',()=>{
  assert.equal(get('contactSheet').disabled,true);
 });
 
+test('contact-sheet slideshow uses already loaded images with no new fetch and clean teardown',async()=>{
+ let calls=0;
+ const fetcher=async()=>{calls++;return new Response(new Uint8Array([1,2,3]),{status:200})};
+ const {app,get}=boot(fetcher);
+ app.state.repo='example/private';app.state.branch='main';app.state.repoIsPrivate=true;
+ const items=[{name:'one.png',path:'private/one.png',type:'file',size:3},
+  {name:'two.png',path:'private/two.png',type:'file',size:3}];
+ app.state.selected=new Map(items.map(x=>[x.path,x]));
+ await app.openContactSheet();
+ assert.equal(calls,2,'the sheet loads each source once');
+ const sheet=get('previewBody').children[0],actions=sheet.children[0];
+ const slide=actions.children[1];
+ assert.equal(slide.textContent,'Slideshow');
+ assert.equal(slide.disabled,false);
+ assert.equal(slide.onclick(),true);
+ assert.equal(calls,2,'slideshow must reuse downloaded images without new calls');
+ const view=get('previewBody').children[0];
+ assert.equal(view.className,'slide-view');
+ const buttons=view.children[0].children,stage=view.children[1],caption=view.children[2];
+ assert.equal(buttons[5].textContent,'1 of 2');
+ assert.equal(stage.children[0].alt,'private/one.png');
+ buttons[3].onclick();
+ assert.equal(stage.children[0].alt,'private/two.png');
+ assert.equal(buttons[5].textContent,'2 of 2');
+ assert.equal(caption.textContent,'private/two.png');
+ buttons[1].onclick();
+ assert.equal(stage.children[0].alt,'private/one.png');
+ buttons[2].onclick();
+ assert.ok(app.state.slideshowTimer!==null,'Play starts the timer by explicit user action');
+ assert.equal(buttons[2].textContent,'Pause');
+ buttons[4].value='3000';buttons[4].onchange();
+ assert.ok(app.state.slideshowTimer!==null,'interval change remains actively scheduled');
+ buttons[2].onclick();
+ assert.equal(app.state.slideshowTimer,null);
+ assert.equal(buttons[2].textContent,'Play');
+ buttons[0].onclick();
+ assert.equal(app.state.slideshowActive,false);
+ assert.equal(get('previewBody').children[0],sheet,'Back restores original contact sheet');
+ assert.equal(get('previewTitle').textContent,'Contact sheet · 2 images');
+ assert.equal(calls,2);
+ app.clearPreview();
+ assert.equal(app.state.slideshowTimer,null);
+ assert.equal(app.state.slideStep,null);
+ assert.equal(get('previewBody').children.length,0);
+});
+
+test('stale slideshows cannot start, and session teardown stops active playback',()=>{
+ const {app,get}=boot();
+ const loaded=[{item:{name:'secret.png',path:'secret/secret.png'},image:{src:'blob:synthetic'}}];
+ const body=fakeNode('div');
+ app.state.sheetOpen=true;app.state.sheetSeq=4;app.state.preview={name:'Contact sheet'};
+ assert.equal(app.presentSelectedSlideshow(loaded,body,3),false,'stale sheet generation rejected');
+ assert.equal(get('previewBody').children.length,0);
+ assert.equal(app.presentSelectedSlideshow(loaded,body,4),true);
+ const controls=get('previewBody').children[0].children[0].children;
+ controls[2].onclick();
+ assert.ok(app.state.slideshowTimer!==null);
+ app.resetSession();
+ assert.equal(app.state.slideshowActive,false);
+ assert.equal(app.state.slideshowTimer,null);
+ assert.equal(app.state.slideStep,null,'private selected paths cannot remain in timer callbacks');
+});
 test('private repository browsing never leaves identifiers in Expository URL fragments',()=>{
  const {app,urls}=boot();
  app.state.repo='gamesbyian/secret-project';app.state.branch='main';app.state.path='assets/private';app.state.repoIsPrivate=true;
@@ -608,21 +670,25 @@ test('repo switches abort outstanding authenticated API requests',async()=>{
 });
 
 
-test('repo switch cancels an authenticated JSON body after response headers',async()=>{
- let finishBody,signal;
+test('repo switch cancels an authenticated JSON stream after response headers',async()=>{
+ let finishRead,signal,reads=0;
  const apiFetch=async(_url,opts)=>{
   signal=opts.signal;
-  return {ok:true,json:()=>new Promise(resolve=>{finishBody=resolve})};
+  return {ok:true,headers:{get:()=>null},body:{getReader:()=>({
+   read:()=>reads++?Promise.resolve({done:true}):new Promise(resolve=>{
+    finishRead=()=>resolve({done:false,value:new TextEncoder().encode('{"private":true}')})
+   }),releaseLock(){}
+  })}};
  };
  const {app}=boot(apiFetch);app.state.token='ghp_private_test_only';
  const pending=app.json('/repos/old/private');
  await new Promise(resolve=>setImmediate(resolve));
- assert.equal(typeof finishBody,'function','response headers arrived and parsing began');
- assert.equal(app.state.activeRequests.size,1,'body read still holds its abort controller');
+ assert.equal(typeof finishRead,'function','stream consumption must remain active after headers');
+ assert.equal(app.state.activeRequests.size,1,'JSON stream owns the abort controller');
  app.abortRequests();
  assert.equal(signal.aborted,true);
- finishBody({private:true});
- await assert.rejects(pending,/cancelled/,'late body must not be accepted after disconnect');
+ finishRead();
+ await assert.rejects(pending,/cancelled/,'late JSON must not survive disconnect');
  assert.equal(app.state.activeRequests.size,0);
 });
 
@@ -691,28 +757,69 @@ test('GitHub blob read refuses browsers without enforceable streaming',async()=>
  assert.equal(app.state.activeRequests.size,0);
 });
 
-test('a late denied old-session response cannot impose its rate limit on the new session',async()=>{
- let finishErrorBody,signal;
+test('a late denied old-session streamed error cannot throttle the next session',async()=>{
+ let finishError,signal,reads=0;
  const apiFetch=async(_url,opts)=>{
   signal=opts.signal;
-  return {
-   ok:false,status:403,
+  return {ok:false,status:403,
    headers:{get:key=>key==='x-ratelimit-remaining'?'35':null},
-   json:()=>new Promise(resolve=>{finishErrorBody=resolve})
+   body:{getReader:()=>({
+    read:()=>reads++?Promise.resolve({done:true}):new Promise(resolve=>{
+     finishError=()=>resolve({done:false,value:new TextEncoder().encode(
+      '{"message":"secondary rate limit exceeded for prior token"}')})
+    }),releaseLock(){}
+   })}
   };
  };
  const {app}=boot(apiFetch);
  const pending=app.json('/repos/old/private');
  await new Promise(resolve=>setImmediate(resolve));
- assert.equal(typeof finishErrorBody,'function');
+ assert.equal(typeof finishError,'function');
  app.abortRequests();
  assert.equal(signal.aborted,true);
- finishErrorBody({message:'secondary rate limit exceeded for prior token'});
+ finishError();
  await assert.rejects(pending,/cancelled/);
- assert.equal(app.state.rateLimitedUntil,0,'stale token must not throttle successor');
+ assert.equal(app.state.rateLimitedUntil,0,'stale error cannot throttle successor');
  assert.equal(app.state.activeRequests.size,0);
 });
 
+test('GitHub metadata reader rejects streamed JSON exceeding its actual byte cap',async()=>{
+ let cancelled=false;
+ const {app}=boot();
+ const response=new Response(new ReadableStream({
+  start(controller){controller.enqueue(new TextEncoder().encode('{"secret":true}'))},
+  cancel(){cancelled=true}
+ }),{status:200});
+ await assert.rejects(app.boundedGithubJson(response,9),/9-byte browser read limit/);
+ assert.equal(cancelled,true,'oversized response stream must be cancelled');
+});
+test('GitHub JSON rejects invalid UTF-8 instead of silently changing metadata',async()=>{
+ const {app}=boot();
+ await assert.rejects(
+  app.boundedGithubJson(new Response(new Uint8Array([0xc0,0x80]),{status:200}),100),
+  /invalid UTF-8 JSON/
+ );
+ await assert.rejects(
+  app.boundedGithubJson(new Response('{"incomplete":',{status:200}),100),
+  /malformed JSON/
+ );
+});
+test('recursive GitHub trees have a larger explicit cap than ordinary API responses',async()=>{
+ const fetcher=async()=>new Response('{"tree":[]}',{
+  status:200,headers:{'Content-Length':'6000000'}
+ });
+ const {app}=boot(fetcher);
+ await assert.rejects(app.json('/repos/public/test'),/GitHub JSON exceeds the 4194304-byte browser read limit/);
+ const tree=await app.json('/repos/public/test/git/trees/abc?recursive=1');
+ assert.deepEqual(tree.tree,[]);
+ assert.equal(app.state.activeRequests.size,0);
+});
+test('GitHub metadata refuses unbounded parsing on unsupported response streams',async()=>{
+ const fetcher=async()=>({ok:true,headers:{get:()=>null},body:null,json:async()=>({private:true})});
+ const {app}=boot(fetcher);
+ await assert.rejects(app.json('/repos/old/private'),/cannot enforce a streaming/);
+ assert.equal(app.state.activeRequests.size,0);
+});
 
 test('a closed ZIP preview cannot republish a pending parsed archive',async()=>{
  let finishArchive;

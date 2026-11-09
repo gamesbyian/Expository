@@ -102,9 +102,11 @@ internal class SafRecursiveSourceScanner(
         return attributes
     }
 
-    private fun completeEntries(tree: Uri, container: String): List<TreeEntry> {
-        val observed = LocalTreeReader.list(
-            resolver, tree, container, LocalTreeReader.MAX_BROWSE)
+    private fun completeEntries(
+        tree: Uri, container: String,
+        maxVisible: Int = LocalTreeReader.MAX_BROWSE
+    ): List<TreeEntry> {
+        val observed = LocalTreeReader.list(resolver, tree, container, maxVisible)
         require(observed.complete && !observed.hasMore) {
             "PROVIDER_FOLDER_LISTING_INCOMPLETE"
         }
@@ -118,11 +120,12 @@ internal class SafRecursiveSourceScanner(
      */
     private fun index(
         tree: Uri, root: String, container: String,
-        path: List<String>, proof: CapabilityProof
+        path: List<String>, proof: CapabilityProof,
+        maxVisible: Int = LocalTreeReader.MAX_BROWSE
     ): PagedLocationIndex {
         val folder = meta(tree, container)
         require(folder.directory) { "NOT_A_DIRECTORY" }
-        val rows = completeEntries(tree, container)
+        val rows = completeEntries(tree, container, maxVisible)
         val authority = requireNotNull(tree.authority)
         val scopedLocation = LocationRef(
             LocationKey(LocationKind.LOCAL_SAF, authority, root,
@@ -164,6 +167,21 @@ internal class SafRecursiveSourceScanner(
         }
         require(acc.state == LocationIndexState.COMPLETE)
         return acc
+    }
+
+    /**
+     * Round the remaining child slot allowance up to the smallest supported
+     * LocalTreeReader browse increment. Even when zero child slots remain,
+     * scan a bounded first page to prove that the folder is actually empty.
+     * A truncated provider listing always REFUSES rather than pretending that
+     * the undiscovered children did not exist. This is a cursor-work ceiling,
+     * not a provider query limit or an executable permission.
+     */
+    internal fun mergeBrowseWindow(childSlots: Int): Int {
+        require(childSlots in 0..RecursiveFolderCopyPlanner.MAX_ITEMS)
+        val page = LocalTreeReader.MAX_VISIBLE
+        val rounded = ((childSlots + page - 1) / page) * page
+        return rounded.coerceIn(page, LocalTreeReader.MAX_BROWSE)
     }
 
     /**
@@ -285,8 +303,14 @@ internal class SafRecursiveSourceScanner(
             require(directories <= RecursiveFolderCopyPlanner.MAX_DIRECTORIES) {
                 "MERGE_SOURCE_DIRECTORY_BOUND"
             }
+            // The accepted root plus still-pending descendants already
+            // consume quota. Decode no more direct-child rows than could
+            // possibly fit into this source's remaining review budget.
+            val childSlots = maxEntries - entries.size - pending.size
+            require(childSlots >= 0) { "MERGE_SOURCE_ITEM_BOUND" }
             val observed = index(tree, loc.key.rootId,
-                item.key.opaqueItemId, path, proof)
+                item.key.opaqueItemId, path, proof,
+                maxVisible = mergeBrowseWindow(childSlots))
             require(observed.state == LocationIndexState.COMPLETE &&
                 !observed.snapshotId.isNullOrBlank() &&
                 observed.location.folder == path &&
@@ -311,8 +335,12 @@ internal class SafRecursiveSourceScanner(
             require(continueRequested() && proof.valid(clockMillis())) {
                 "MERGE_INVENTORY_STOPPED_OR_EXPIRED"
             }
+            // Re-observe with enough room for exactly the originally
+            // accepted child count. A newly inserted row beyond this window
+            // makes the repeat incomplete and cannot pass as unchanged.
             val latest = index(tree, loc.key.rootId,
-                directory.key.opaqueItemId, path, proof)
+                directory.key.opaqueItemId, path, proof,
+                maxVisible = mergeBrowseWindow(original.children.size))
             require(latest.state == LocationIndexState.COMPLETE &&
                 latest.snapshotId == original.snapshotId &&
                 latest.location == original.location &&

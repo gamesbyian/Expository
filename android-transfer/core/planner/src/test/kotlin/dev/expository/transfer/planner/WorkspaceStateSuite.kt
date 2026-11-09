@@ -80,6 +80,51 @@ object WorkspaceStateSuite {
             "observed-source-v1", 7L, listOf("file-a", "file-a")) == null)
         check(CopyCommandScope.freeze(BrowseEndpoint.LOCAL, sourceKey,
             "", 7L, listOf("file-a")) == null)
+        // Malformed UTF-16 identifiers are NOT distinct under the Java
+        // UTF-8 encoder: each lone surrogate becomes a replacement byte.
+        // Never issue a one-shot COPY selection scope for lossy identities,
+        // even when a literal question-mark ID would be accepted.
+        val literalReplacement = CopyCommandScope.freeze(
+            BrowseEndpoint.LOCAL, sourceKey, "observed-source-v1", 7L,
+            listOf("opaque-?"))
+        check(literalReplacement != null)
+        for (bad in listOf(
+                charArrayOf(0xD800.toChar()).concatToString(),
+                charArrayOf(0xDC00.toChar()).concatToString(),
+                charArrayOf(0xD800.toChar(), 'x', 0xDC00.toChar()).concatToString())) {
+            val invalidScopes = listOf(
+                CopyCommandScope.freeze(BrowseEndpoint.LOCAL,
+                    sourceKey, "observed-source-v1", 7L, listOf("opaque-" + bad)),
+                CopyCommandScope.freeze(BrowseEndpoint.LOCAL,
+                    sourceKey.copy(authorityId = "authority-" + bad),
+                    "observed-source-v1", 7L, listOf("file-a")),
+                CopyCommandScope.freeze(BrowseEndpoint.LOCAL,
+                    sourceKey.copy(rootId = "root-" + bad),
+                    "observed-source-v1", 7L, listOf("file-a")),
+                CopyCommandScope.freeze(BrowseEndpoint.LOCAL,
+                    sourceKey.copy(containerId = "container-" + bad),
+                    "observed-source-v1", 7L, listOf("file-a")),
+                CopyCommandScope.freeze(BrowseEndpoint.LOCAL,
+                    sourceKey.copy(grantId = "grant-" + bad),
+                    "observed-source-v1", 7L, listOf("file-a")),
+                CopyCommandScope.freeze(BrowseEndpoint.LOCAL,
+                    sourceKey, "revision-" + bad, 7L, listOf("file-a"))
+            )
+            check(invalidScopes.all { it == null })
+        }
+        val supplementary = charArrayOf(0xD83D.toChar(),
+            0xDCC1.toChar()).concatToString()
+        val validUnicode = CopyCommandScope.freeze(BrowseEndpoint.LOCAL,
+            sourceKey.copy(grantId = "grant-" + supplementary),
+            "revision-" + supplementary, 7L,
+            listOf("file-" + supplementary))
+        check(validUnicode != null)
+        check(validUnicode == CopyCommandScope.freeze(BrowseEndpoint.LOCAL,
+            sourceKey.copy(grantId = "grant-" + supplementary),
+            "revision-" + supplementary, 7L,
+            listOf("file-" + supplementary)))
+        check(validUnicode != literalReplacement)
+
         check(FrozenCopyCommand.capture(frozenSource, null, 14L)
             ?.stillMatches(reorderedSource, null, 14L) == true)
         check(FrozenCopyCommand.capture(null, frozenTarget, 14L) == null)
