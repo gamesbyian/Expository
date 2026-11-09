@@ -1503,8 +1503,8 @@ function boundedSourceViewer(text,name){
  previous.disabled=index===0;next.disabled=index===sections.length-1;
  previous.setAttribute('aria-label','Show previous source section');
  next.setAttribute('aria-label','Show next source section');
- previous.onclick=()=>{if(index>0&&state.previewText===text){state.sourceSegment=index-1;renderCurrentFile()}};
- next.onclick=()=>{if(index<sections.length-1&&state.previewText===text){state.sourceSegment=index+1;renderCurrentFile()}};
+ previous.onclick=()=>{if(index>0&&state.previewText===text){state.sourceSegment=index-1;return renderCurrentFile()}};
+ next.onclick=()=>{if(index<sections.length-1&&state.previewText===text){state.sourceSegment=index+1;return renderCurrentFile()}};
  const description='Section '+(index+1)+' of '+sections.length+
   ' · characters '+(section.start+1)+'–'+section.end+' of '+text.length+
   ' · original line numbers'+(section.partialStart?' · starts mid-line':'')+
