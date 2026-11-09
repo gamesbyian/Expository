@@ -379,6 +379,75 @@ test('publisher refuses a base branch that moves during blob upload, before new 
  assert.equal(calls.some(x=>x.url.endsWith('/git/blobs')&&x.options.method==='POST'),true,'the upload began');
  assert.equal(calls.some(x=>x.url.endsWith('/git/refs')&&x.options.method==='POST'),false,'branch reference was never created');
 });
+
+function setupReviewUi(responder){
+ const elements=new Map(),calls=[];
+ const node=()=>({
+  textContent:'',value:'',disabled:false,children:[],
+  append(...items){this.children.push(...items)},
+  replaceChildren(...items){this.children=items}
+ });
+ const get=id=>{if(!elements.has(id))elements.set(id,node());return elements.get(id)};
+ const ctx=vm.createContext({
+  Blob,URL,TextEncoder,TextDecoder,Uint8Array,AbortController,
+  crypto:require('node:crypto').webcrypto,
+  document:{getElementById:get,createElement:()=>node()},
+  fetch:async(url,options)=>{
+   calls.push({url,options});
+   const answer=await responder(url,options);
+   return new Response(JSON.stringify(answer??mock(url,options,calls)),
+    {status:200,headers:{'content-type':'application/json'}})
+  }
+ });
+ const endUi=source.indexOf('const nonce=location.hash.slice(1);');
+ assert.ok(endUi>end,'Publisher UI boundary exists');
+ vm.runInContext(source.slice(start,endUi)+
+  '\nglobalThis.reviewUi={startReview,getReview:()=>review,setIncoming:x=>{incoming=x},getBusy:()=>busy};',ctx);
+ get('repo').value='owner/repo';
+ get('base').value='main';
+ get('prefix').value='assets';
+ get('token').value='synthetic-only-token';
+ ctx.reviewUi.setIncoming({entries:[file('safe.txt')]});
+ return {ui:ctx.reviewUi,get,calls}
+}
+test('in-flight destination review cannot revive after token edit, even if GitHub ignores abort',async()=>{
+ let release,signal;
+ const {ui,get,calls}=setupReviewUi(async(url,options)=>{
+  if(url.includes('/git/ref/heads/main')){
+   signal=options.signal;
+   await new Promise(resolve=>{release=resolve});
+   return {object:{sha:SHA.head}}
+  }
+ });
+ const pending=ui.startReview();
+ for(let n=0;n<5&&!release;n++)await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(typeof release,'function','read-only GitHub branch request is suspended');
+ assert.equal(get('review').disabled,true);
+ get('token').value='different-token';
+ get('token').oninput();
+ assert.equal(signal.aborted,true,'editing the token aborts the old review request');
+ get('token').value='synthetic-only-token'; // Reverting text cannot resurrect old authority.
+ release();await pending;
+ assert.equal(ui.getReview(),null,'stale response must not reauthorize publication');
+ assert.equal(get('publish').disabled,true);
+ assert.equal(get('destinations').children.length,0);
+ assert.equal(ui.getBusy(),false);
+ assert.ok(calls.every(x=>x.options.method==='GET'),'review never performs writes');
+});
+test('unchanged destination review enables confirmation, later edits revoke it',async()=>{
+ const {ui,get,calls}=setupReviewUi(async()=>undefined);
+ await ui.startReview();
+ assert.equal(get('publish').disabled,false);
+ assert.ok(ui.getReview());
+ assert.equal(get('destinations').children.length,2,'summary and reviewed file shown');
+ get('prefix').value='other-folder';
+ get('prefix').oninput();
+ assert.equal(get('publish').disabled,true);
+ assert.equal(ui.getReview(),null);
+ assert.equal(get('destinations').children.length,0);
+ assert.ok(calls.length===3&&calls.every(x=>x.options.method==='GET'));
+});
+
 test('publishing token entry is frame-guarded',()=>{
  assert.match(html,/window\.self!==window\.top/);
  assert.match(html,/window\.open|window\.top/);
