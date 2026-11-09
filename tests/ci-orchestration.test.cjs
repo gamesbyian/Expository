@@ -9,6 +9,22 @@ const workflows = path.resolve(__dirname, '..', '.github', 'workflows');
 const read = (name) => fs.readFileSync(path.join(workflows, name), 'utf8');
 const names = fs.readdirSync(workflows).filter((name) => /\.ya?ml$/.test(name));
 
+test('routine web PR check runs every deterministic Node suite and reproduces its exact command', () => {
+ const workflow=read('validate.yml');
+ const command='node --test tests/*.test.cjs';
+ assert.equal(workflow.split(command).length-1,2,
+  'the executor and failure digest must use the identical unfiltered Node test glob');
+ assert.match(workflow, /set -o pipefail/);
+ assert.match(workflow, /\| tee "\$RUNNER_TEMP\/expository-node-tests\.log"/);
+ const files=fs.readdirSync(path.resolve(__dirname)).filter(name=>name.endsWith('.test.cjs'));
+ for(const required of ['zip-browser.test.cjs','zip-publisher.test.cjs',
+  'gradle-wrapper-integrity.test.cjs','expository.test.cjs']){
+  assert.ok(files.includes(required),required+' must exist and be picked up by the glob');
+ }
+ assert.ok(!files.includes('browser-smoke.cjs'),
+  'manual real-Chromium smoke remains separate from cheap routine Node tests');
+});
+
 test('exactly one issue_comment dispatch, preserving opt-in command entry point', () => {
   const listeners = names.filter((name) => /^  issue_comment:\s*$/m.test(read(name)));
   assert.deepEqual(listeners, ['transfer-comment-commands.yml']);

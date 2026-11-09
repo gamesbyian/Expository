@@ -733,6 +733,38 @@ test('GitHub blob read rejects actual streamed bytes beyond limit without Conten
  assert.equal(app.state.activeRequests.size,0);
 });
 
+test('streaming byte budget also rejects endless zero-byte chunks before memory grows',async()=>{
+ let reads=0,cancelled=false;
+ const fetcher=async()=>({ok:true,headers:{get:()=>null},body:{getReader:()=>({
+  read:()=>{reads++;return Promise.resolve({done:false,value:new Uint8Array(0)})},
+  cancel:()=>{cancelled=true;return Promise.resolve()},
+  releaseLock(){}
+ })}});
+ const {app}=boot(fetcher);
+ app.state.repo='example/private';app.state.branch='main';
+ await assert.rejects(app.fetchBlob({name:'empty-stream.txt',path:'empty-stream.txt'},1024),
+  /32768-chunk browser read limit/);
+ assert.equal(reads,32769,'must stop after the first over-limit read');
+ assert.equal(cancelled,true,'the unread response is cancelled');
+ assert.equal(app.state.activeRequests.size,0);
+});
+
+test('ordinary fragmentation below the chunk ceiling preserves every byte',async()=>{
+ let emitted=0;
+ const fetcher=async()=>new Response(new ReadableStream({
+  pull(controller){
+   if(emitted<150){controller.enqueue(new Uint8Array([65+emitted%26]));emitted++}
+   else controller.close()
+  }
+ }),{status:200});
+ const {app}=boot(fetcher);
+ app.state.repo='example/public';app.state.branch='main';
+ const blob=await app.fetchBlob({name:'fragmented.txt',path:'fragmented.txt'},150);
+ assert.equal(blob.size,150);
+ const bytes=new Uint8Array(await blob.arrayBuffer());
+ assert.deepEqual(Array.from(bytes),Array.from({length:150},(_,i)=>65+i%26));
+ assert.equal(app.state.activeRequests.size,0);
+});
 test('GitHub blob read rejects oversized advertised length before streaming',async()=>{
  const apiFetch=async()=>new Response('small',{status:200,headers:{'Content-Length':'999'}});
  const {app}=boot(apiFetch);app.state.repo='example/public';app.state.branch='main';

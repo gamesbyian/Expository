@@ -515,11 +515,18 @@ async function boundedResponseBlob(response,maxBytes,kind='File'){
  // the browser buffer an arbitrarily large private file before validation.
  if(!response.body||typeof response.body.getReader!=='function')
   throw Error('This browser cannot enforce a streaming file-size limit.');
- const reader=response.body.getReader(),chunks=[];let total=0;
+ // Byte caps alone cannot bound memory or CPU if a server keeps emitting
+ // zero-length or single-byte chunks. Bound the per-request read count too.
+ const MAX_STREAM_CHUNKS=32768;
+ const reader=response.body.getReader(),chunks=[];let total=0,chunkCount=0;
  try{
   while(true){
    const {done,value}=await reader.read();
    if(done)break;
+   if(++chunkCount>MAX_STREAM_CHUNKS){
+    reader.cancel().catch(()=>{});
+    throw Error(kind+' exceeds the '+MAX_STREAM_CHUNKS+'-chunk browser read limit.');
+   }
    if(!(value instanceof Uint8Array))throw Error('Invalid GitHub response chunk.');
    total+=value.byteLength;
    if(total>maxBytes){
