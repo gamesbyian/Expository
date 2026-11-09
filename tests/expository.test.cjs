@@ -16,7 +16,7 @@ function fakeNode(tag='DIV') {
     addEventListener(){},focus(){},click(){},get isConnected(){return true}
   };
 }
-function boot(fetchImpl=globalThis.fetch) {
+function boot(fetchImpl=globalThis.fetch,BlobImpl=globalThis.Blob) {
  const elements = new Map(),urls=[];
  const get = id => {
   if (!elements.has(id)) elements.set(id,fakeNode());
@@ -31,9 +31,9 @@ function boot(fetchImpl=globalThis.fetch) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,documentThumbnail,loadThumb,openContainingFolder};\n})();';
- const app=new Function('document','history','location','localStorage','Option','fetch',isolated)(
-   document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,documentThumbnail,loadThumb,openContainingFolder};\n})();';
+ const app=new Function('document','history','location','localStorage','Option','fetch','Blob',isolated)(
+   document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl,BlobImpl
  );
  return {app,get,urls,document,location};
 }
@@ -202,16 +202,31 @@ test('folder grouping stays stable across show-more pagination boundaries',()=>{
 });
 
 
+// Exercise the real bounded streaming reader, rather than a removed
+// response.blob() shortcut. Deferred text decoding still tests the exact
+// post-download epoch transition which previously leaked stale previews.
+async function waitForThumbnailCondition(predicate,message){
+ for(let attempt=0;attempt<60;attempt++){
+  if(predicate())return;
+  await new Promise(resolve=>setImmediate(resolve));
+ }
+ assert.ok(predicate(),message);
+}
+
 test('stale document thumbnail text cannot repopulate a repainted tile',async()=>{
  let finishDecode;
- const oldBlob={size:45,type:'text/html',text:()=>new Promise(resolve=>{finishDecode=resolve})};
- const fetcher=async()=>({ok:true,blob:async()=>oldBlob});
- const {app,get}=boot(fetcher);
+ class DeferredTextBlob extends Blob {
+  text(){return new Promise(resolve=>{finishDecode=resolve})}
+ }
+ const fetcher=async()=>new Response(
+  '<title>Old private name</title><h1>Old text</h1>',
+  {status:200,headers:{'content-type':'text/html'}});
+ const {app,get}=boot(fetcher,DeferredTextBlob);
  app.state.repo='example/private';app.state.branch='main';
  const thumb=get('delayedThumb');
  app.loadThumb({name:'old.html',path:'docs/old.html',size:45,type:'file'},thumb,null,app.state.renderEpoch);
- await new Promise(resolve=>setImmediate(resolve));
- assert.equal(typeof finishDecode,'function','text decoding is pending on prior render');
+ await waitForThumbnailCondition(()=>typeof finishDecode==='function',
+  'text decoding is pending after the streaming body completed');
  app.state.renderEpoch++;
  finishDecode('<title>Old private name</title><h1>Old text</h1>');
  await new Promise(resolve=>setImmediate(resolve));
@@ -219,13 +234,15 @@ test('stale document thumbnail text cannot repopulate a repainted tile',async()=
 });
 
 test('current document thumbnail still renders when its epoch remains unchanged',async()=>{
- const fetcher=async()=>({ok:true,blob:async()=>new Blob(['<title>Current title</title><h1>Current contents</h1>'],{type:'text/html'})});
+ const fetcher=async()=>new Response(
+  '<title>Current title</title><h1>Current contents</h1>',
+  {status:200,headers:{'content-type':'text/html'}});
  const {app,get}=boot(fetcher);
  app.state.repo='example/public';app.state.branch='main';
  const thumb=get('currentThumb');
  app.loadThumb({name:'now.html',path:'docs/now.html',size:55,type:'file'},thumb,null,app.state.renderEpoch);
- await new Promise(resolve=>setImmediate(resolve));
- assert.equal(thumb.children.length,1);
+ await waitForThumbnailCondition(()=>thumb.children.length===1,
+  'current streamed document thumbnail was not rendered');
  assert.equal(thumb.children[0].children[1].textContent,'Current title');
 });
 
@@ -629,6 +646,41 @@ test('reopening the same file discards stale text from the previous Blob',async(
  await pending;
  assert.equal(app.state.previewText,null,'old response cannot become new file text');
  assert.equal(get('previewBody').children.length,0);
+});
+
+test('cancelled content search cannot publish hits after asynchronous text decoding',async()=>{
+ const fetcher=async()=>new Response('needle in old private data',{status:200});
+ const {app,get}=boot(fetcher);
+ Object.assign(app.state,{repo:'example/private',branch:'main',indexReady:true});
+ app.state.indexEntries=[{name:'old.txt',path:'secret/old.txt',type:'file',size:26}];
+ get('filter').value='needle';
+ const original=Blob.prototype.text;
+ let finishDecode;
+ Blob.prototype.text=function(){return new Promise(resolve=>{finishDecode=resolve})};
+ try{
+  const pending=app.scanContents();
+  for(let i=0;i<12&&!finishDecode;i++)await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(typeof finishDecode,'function','download completed and text decoding is suspended');
+  app.cancelContentScan();
+  assert.equal(get('searchResults').children.length,0,'cancellation clears existing hits');
+  finishDecode('needle from previous repository');
+  await pending;
+  assert.equal(get('searchResults').children.length,0,'late decode cannot resurrect private search results');
+  assert.equal(app.state.scanning,false);
+ }finally{Blob.prototype.text=original}
+});
+
+test('current content search still returns bounded text matches',async()=>{
+ const fetcher=async()=>new Response('first line\nneedle in second line',{status:200});
+ const {app,get}=boot(fetcher);
+ Object.assign(app.state,{repo:'example/public',branch:'main',indexReady:true});
+ app.state.indexEntries=[{name:'notes.txt',path:'notes.txt',type:'file',size:32}];
+ get('filter').value='needle';
+ await app.scanContents();
+ const hits=get('searchResults').children.filter(x=>x.className==='search-hit');
+ assert.equal(hits.length,1);
+ assert.equal(hits[0].children[0].textContent,'notes.txt:2');
+ assert.equal(app.state.scanning,false);
 });
 
 test('code inspector searches displayed lines without treating source as markup',()=>{
