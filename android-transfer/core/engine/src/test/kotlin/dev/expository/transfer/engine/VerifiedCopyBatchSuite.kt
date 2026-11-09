@@ -88,6 +88,18 @@ object VerifiedCopyBatchSuite {
             check(report.stop == VerifiedBatchStop.ALL_VERIFIED)
             check(report.verifiedItems == 3 && report.nextUnstartedIndex == null)
             check(report.items.map { it.proof } == List(3) { CopyProof.BYTES_VERIFIED })
+            val original = report.items.toList()
+            check(runCatching {
+                (report.items as MutableList<CopyReceipt>).clear()
+            }.isFailure)
+            check(runCatching {
+                (report.items as MutableList<CopyReceipt>)[0] =
+                    CopyReceipt("z".repeat(64), CopyProof.UNCERTAIN, 0L,
+                        "FABRICATED_CALLBACK")
+            }.isFailure)
+            check(report.items == original && report.verifiedItems == 3)
+            check(!report.toString().contains(original.first().planDigest))
+            check(!report.toString().contains(original.first().reason))
             check(progress.map { it.first } == listOf(0, 1, 2))
             check(streams.all { it.openedDestination == 1 })
             check(disks.all { DurableAttemptJournal(it).current()?.state == JournalState.VERIFIED })
@@ -202,6 +214,13 @@ object VerifiedCopyBatchSuite {
             ))
             check(report.items.map { it.proof } ==
                 listOf(CopyProof.BYTES_VERIFIED, CopyProof.BLOCKED))
+            val frozenPartial = report.items.toList()
+            check(runCatching {
+                (report.items as MutableList<CopyReceipt>).add(
+                    CopyReceipt("c".repeat(64), CopyProof.BYTES_VERIFIED,
+                        999L, "FAKE_THIRD_ITEM"))
+            }.isFailure)
+            check(report.items == frozenPartial && report.verifiedItems == 1)
             check(report.verifiedItems == 1)
             check(report.stop == VerifiedBatchStop.ITEM_REQUIRES_REVIEW)
             check(second.openedDestination == 0 && third.openedSource == 0)

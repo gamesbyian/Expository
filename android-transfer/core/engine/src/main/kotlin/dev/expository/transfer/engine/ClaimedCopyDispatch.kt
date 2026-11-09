@@ -1,5 +1,6 @@
 package dev.expository.transfer.engine
 
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -40,7 +41,11 @@ class ClaimedCopyDispatch private constructor() {
         val outcome: CopyOutcomeLedger,
         /** Returned receipts are observations, never new operation authority. */
         val receipts: List<CopyReceipt>
-    )
+    ) {
+        // Avoid copying private adapter-controlled reason strings into logs.
+        override fun toString(): String =
+            "ClaimedCopyDispatch.Result(state=${outcome.state},receipts=${receipts.size})"
+    }
 
     /**
      * Runs synchronously in the caller's foreground IO context. The worker
@@ -85,6 +90,8 @@ class ClaimedCopyDispatch private constructor() {
             outcome = outcome.accept(receipt, next.expectedPlanDigest)
             if (outcome.state != CopyOutcomeState.ACTIVE) break
         }
-        return Result(outcome, observations.toList())
+        // Detach AND prevent downcast mutation of multi-receipt UI evidence.
+        // A Kotlin .toList() alone may still be backed by a mutable ArrayList.
+        return Result(outcome, Collections.unmodifiableList(ArrayList(observations)))
     }
 }

@@ -3,6 +3,7 @@ package dev.expository.transfer.engine
 import dev.expository.transfer.planner.Operation
 import dev.expository.transfer.planner.TransferPlan
 import dev.expository.transfer.planner.TransferRoute
+import java.util.Collections
 
 /**
  * A bounded FOREGROUND batch of independently approved file Copies.
@@ -35,6 +36,10 @@ data class VerifiedBatchReceipt(
     val nextUnstartedIndex: Int?
 ) {
     val verifiedItems: Int get() = items.count { it.proof == CopyProof.BYTES_VERIFIED }
+
+    // UI/logging must not dump raw receipts from an untrusted adapter.
+    override fun toString(): String =
+        "VerifiedBatchReceipt(items=${items.size},stop=$stop,nextUnstartedIndex=$nextUnstartedIndex)"
 }
 
 object VerifiedCopyBatchQueue {
@@ -75,9 +80,14 @@ object VerifiedCopyBatchQueue {
         }
 
         val results = ArrayList<CopyReceipt>(frozenJobs.size)
+        // Kotlin List is only a read-only INTERFACE. ArrayList.toList() can
+        // still be downcast and changed once there are two or more receipts.
+        // Freeze every published snapshot, including partial/stopped batches.
+        fun snapshot(): List<CopyReceipt> =
+            Collections.unmodifiableList(ArrayList(results))
         frozenJobs.forEachIndexed { index, job ->
             if (!runCatching { continueRequested() }.getOrDefault(false)) {
-                return VerifiedBatchReceipt(results.toList(),
+                return VerifiedBatchReceipt(snapshot(),
                     VerifiedBatchStop.OPERATOR_STOPPED, index)
             }
             val receipt = JournaledCopyEngine.copy(
@@ -104,12 +114,12 @@ object VerifiedCopyBatchQueue {
             // Output closed or 100% sent does not prove content equality.
             // A later job may depend on a previous destination being final.
             if (receipt.proof != CopyProof.BYTES_VERIFIED) {
-                return VerifiedBatchReceipt(results.toList(),
+                return VerifiedBatchReceipt(snapshot(),
                     VerifiedBatchStop.ITEM_REQUIRES_REVIEW,
                     (index + 1).takeIf { it < frozenJobs.size })
             }
         }
-        return VerifiedBatchReceipt(results.toList(),
+        return VerifiedBatchReceipt(snapshot(),
             VerifiedBatchStop.ALL_VERIFIED, null)
     }
 }

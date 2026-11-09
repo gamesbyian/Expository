@@ -80,6 +80,18 @@ object ClaimedCopyDispatchSuite {
         check(batch.outcome.complete && batch.outcome.verifiedItems == 2)
         check(batch.outcome.verifiedBytes == 300L)
         check(planned == listOf(0, 1) && completed == listOf(0, 1))
+        val batchReceipts = batch.receipts.toList()
+        check(runCatching {
+            (batch.receipts as MutableList<CopyReceipt>).clear()
+        }.isFailure)
+        check(runCatching {
+            (batch.receipts as MutableList<CopyReceipt>)[1] =
+                CopyReceipt(c, CopyProof.UNCERTAIN, 0L, "FABRICATED_FAILURE")
+        }.isFailure)
+        check(batch.receipts == batchReceipts)
+        check(batch.outcome.complete && batch.outcome.verifiedBytes == 300L)
+        check(!batch.toString().contains(batchReceipts.first().planDigest))
+        check(!batch.toString().contains(batchReceipts.first().reason))
 
         // A remote batch re-prepares every selected file only after the
         // preceding journaled item has supplied independent byte proof.
@@ -108,6 +120,13 @@ object ClaimedCopyDispatchSuite {
             afterOneAck.outcome.state == CopyOutcomeState.REVIEW_REQUIRED &&
             afterOneAck.outcome.verifiedItems == 1 &&
             afterOneAck.outcome.verifiedBytes == 64L)
+        val partialReceipts = afterOneAck.receipts.toList()
+        check(runCatching {
+            (afterOneAck.receipts as MutableList<CopyReceipt>).add(
+                CopyReceipt(c, CopyProof.BYTES_VERIFIED, 0L, "FAKE_RECOVERY"))
+        }.isFailure)
+        check(afterOneAck.receipts == partialReceipts &&
+            afterOneAck.outcome.state == CopyOutcomeState.REVIEW_REQUIRED)
 
         // A second pinned SFTP server returning a receipt for a different
         // plan cannot advance the reviewed relay or launch item three.
