@@ -214,6 +214,7 @@ object SmartMergePreviewPlanner {
                 item.key.opaqueItemId.isNotBlank() &&
                 item.key.version.isNotBlank() &&
                 item.location.revision.isNotBlank() &&
+                wellFormedSourceStamp(item) &&
                 // A complete folder listing alone does not imply that each
                 // returned file can still be read. In particular an old
                 // manifest may carry child-specific expired/unsupported READ
@@ -221,6 +222,29 @@ object SmartMergePreviewPlanner {
                 // seemingly actionable preview rather than hiding this gap.
                 item.location.capabilities[Capability.READ]?.valid(nowMillis) == true
         }
+    }
+
+    /**
+     * E1 manifests are public review values, even when production SAF scanners
+     * usually provide them. Java UTF-8 serialization substitutes '?' for an
+     * unpaired surrogate; refuse ambiguous child identity, revision and
+     * permission-witness bytes before accepting a manifest as complete.
+     * Visible names are separately checked by validName().
+     */
+    private fun wellFormedSourceStamp(item: ItemRef): Boolean {
+        val location = item.location
+        val identity = listOf(item.key.authorityId, item.key.opaqueItemId,
+            item.key.version, location.key.authorityId,
+            location.key.rootId, location.key.containerId,
+            location.key.grantId.orEmpty(), location.revision,
+            location.verifiedNamespace.orEmpty(),
+            location.verifiedStorageDomain.orEmpty())
+        return identity.all(SmartMergeNameRules::wellFormedUtf16) &&
+            item.parent.all(SmartMergeNameRules::wellFormedUtf16) &&
+            location.folder.all(SmartMergeNameRules::wellFormedUtf16) &&
+            location.capabilities.values.all {
+                SmartMergeNameRules.wellFormedUtf16(it.observationId)
+            }
     }
 
     /**
