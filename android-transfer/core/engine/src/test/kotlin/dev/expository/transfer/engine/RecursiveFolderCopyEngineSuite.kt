@@ -379,7 +379,9 @@ object RecursiveFolderCopyEngineSuite {
                     "DIRECTORY_SOURCE_OR_PARENT_CHANGED_AFTER_DURABLE_ATTEMPT")
             check(result.verifiedDirectories == 0 && result.verifiedFiles == 0 &&
                 result.verifiedBytes == 0L)
-            check(f.firstStepCommits == 2 && f.journals.size == 1)
+            // confirm + beginAttempt + markUncertain are three atomic
+            // records. The third is essential: it is NOT a second create.
+            check(f.firstStepCommits == 3 && f.journals.size == 1)
             check(f.created.isEmpty() && f.copied == null &&
                 "mkdir" !in f.trace && "open-dest" !in f.trace)
             val journal = DurableAttemptJournal(f.journals.getValue(0))
@@ -400,7 +402,9 @@ object RecursiveFolderCopyEngineSuite {
                     "DIRECTORY_SOURCE_OR_PARENT_CHANGED_AFTER_DURABLE_ATTEMPT")
             check(result.verifiedDirectories == 0 && result.verifiedFiles == 0 &&
                 result.verifiedBytes == 0L)
-            check(f.firstStepCommits == 2 && f.journals.size == 1)
+            // confirm + beginAttempt + markUncertain are three atomic
+            // records. The third is essential: it is NOT a second create.
+            check(f.firstStepCommits == 3 && f.journals.size == 1)
             check(f.created.isEmpty() && f.copied == null &&
                 "mkdir" !in f.trace && "open-dest" !in f.trace)
             val journal = DurableAttemptJournal(f.journals.getValue(0))
