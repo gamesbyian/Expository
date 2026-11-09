@@ -1168,7 +1168,7 @@ async function scanContents(){
    for(let line=0;line<lines.length&&perFile<2&&matches<80;line++){
     if(!lines[line].toLowerCase().includes(needle))continue;perFile++;matches++;
     const result=elem('button','search-hit'),title=elem('strong','',file.path+':'+(line+1)),sample=elem('small','',lines[line].trim().slice(0,190));
-    result.append(title,sample);result.onclick=async()=>{await openPreview(file);if(state.preview!==file||repo!==state.repo||branch!==state.branch)return;const el=$('previewBody').querySelectorAll('.code-line')[line];el?.scrollIntoView({block:'center'});if(el)el.style.outline='1px solid var(--accent)'};
+    result.append(title,sample);result.onclick=()=>openSearchHit(file,line,repo,branch);
     host.append(result)
    }
   }catch{errors++}finally{complete++;if(seq===state.searchSeq&&(complete%10===0||complete===candidates.length))status('Content scan '+complete+'/'+candidates.length+' files · '+matches+' matching lines'+(errors?' · '+errors+' inaccessible':''))}
@@ -1177,6 +1177,22 @@ async function scanContents(){
  state.scanning=false;$('contentSearch').textContent='Search contents';
  if(!matches)host.append(elem('p','hint','No text matches in scanned files.'));
  host.append(elem('p','hint','Finished: '+complete+' files; up to 2 matches per file and 80 matches total. '+(limited?'Only the first 120 eligible files were scanned.':'All eligible indexed files were scanned.')+(errors?' '+errors+' files could not be fetched.':'')));
+}
+// A search hit refers to a GLOBAL source line, not an index into the
+// currently mounted 500-line DOM window. Reuse the source viewer's own
+// bounded line-navigation method and never search stale preview DOM.
+async function openSearchHit(file,line,repo,branch){
+ await openPreview(file);
+ if(state.preview!==file||repo!==state.repo||branch!==state.branch)return false;
+ if(/\.(md|markdown|svg)$/i.test(file.name)&&!state.structuredOpen){
+  // The default Markdown/SVG renderer has no source-line mapping. Switch to
+  // the existing inert raw source view for the requested line.
+  state.structuredOpen=true;
+  await renderCurrentFile();
+ }
+ if(state.preview!==file||repo!==state.repo||branch!==state.branch)return false;
+ const viewer=$('previewBody').firstElementChild||$('previewBody').children[0];
+ return viewer?.jumpToLine?.(line+1)===true
 }
 function showContent(node){$('previewBody').replaceChildren(node)}
 async function saveContactSheet(images){
@@ -1343,7 +1359,10 @@ async function renderCurrentFile(){
  const item=state.preview,blob=state.currentBlob;if(!item||!blob)return;
  closeImageFullscreen();cancelZipThumbs();clearUrls('preview');const lower=item.name.toLowerCase();let node;
  if(/\.zip$/i.test(lower)&&!item.zipMember){const manifest=zipManifests.get(item.path)||await zipManifest(blob);if(state.preview!==item||state.currentBlob!==blob)return;zipContext=manifest;const start=zipStartFolder;zipStartFolder='';node=zipViewer(zipContext,item,start)}
- else if(imageRx.test(lower))node=imageViewer(blob,item);
+ else if(imageRx.test(lower)&&(!/\.svg$/i.test(lower)||!state.structuredOpen)){
+  node=imageViewer(blob,item);
+  if(/\.svg$/i.test(lower)){$('structuredToggle').hidden=false;$('structuredToggle').textContent='SVG source'}
+ }
  else if(/\.pdf$/i.test(lower)){node=elem('iframe');node.title=item.name;node.src=blobUrl(new Blob([blob],{type:'application/pdf'}))}
  else if(/\.(mp4|webm|ogg)$/i.test(lower)){node=elem('video');node.controls=true;node.src=blobUrl(blob)}
  else if(/\.(mp3|wav|m4a|flac)$/i.test(lower)){node=elem('audio');node.controls=true;node.src=blobUrl(blob)}
@@ -1356,13 +1375,21 @@ async function renderCurrentFile(){
    node=state.structuredOpen&&value!==undefined?jsonViewer(value):sourceViewer(text.slice(0,500000),item.name,text.length>500000)
   }else if(/\.(csv|tsv)$/i.test(lower)){$('structuredToggle').hidden=false;$('structuredToggle').textContent=state.structuredOpen?'Raw source':'Table';
    node=state.structuredOpen?tableViewer(text.slice(0,500000),/\.tsv$/i.test(lower)?'\t':','):sourceViewer(text.slice(0,500000),item.name,text.length>500000);
-  }else node=/\.(md|markdown)$/i.test(lower)?simpleMarkdown(text.slice(0,500000),item):sourceViewer(text.slice(0,500000),item.name,text.length>500000);
+  }else if(/\.(md|markdown)$/i.test(lower)){
+   $('structuredToggle').hidden=false;
+   $('structuredToggle').textContent=state.structuredOpen?'Rendered Markdown':'Raw source';
+   node=state.structuredOpen?sourceViewer(text.slice(0,500000),item.name,text.length>500000):
+    simpleMarkdown(text.slice(0,500000),item)
+  }else{
+   if(/\.svg$/i.test(lower)){$('structuredToggle').hidden=false;$('structuredToggle').textContent='Image'}
+   node=sourceViewer(text.slice(0,500000),item.name,text.length>500000)
+  }
  }else node=elem('div','message','No inline preview for this format. Use the GitHub link.');
  // A close, file switch or reopened same file invalidates any suspended parse.
  if(state.preview!==item||state.currentBlob!==blob)return;
  showContent(node);if(item.zipMember&&zipContext){const back=elem('button','pill','← Back to ZIP');back.onclick=()=>{zipStartFolder=fileFolder(item.zipMember.name);openPreview(item.zipParent)};$('previewBody').prepend(back)}updateCompareAction()
 }
-async function toggleStructured(){if(!state.preview||!state.previewText)return;state.structuredOpen=!state.structuredOpen;await renderCurrentFile()}
+async function toggleStructured(){if(!state.preview||!state.currentBlob)return;if(!state.previewText&&!/\.svg$/i.test(state.preview.name))return;state.structuredOpen=!state.structuredOpen;await renderCurrentFile()}
 async function toggleHistory(){
  if(!state.preview)return;
  if(state.historyOpen){state.historyOpen=false;$('fileHistory').textContent='History';$('structuredToggle').hidden=!/\.(json|csv|tsv)$/i.test(state.preview.name);await renderCurrentFile();return}
@@ -1486,7 +1513,15 @@ function sourceViewer(text,name,previewTruncated=false){
  search.oninput=find;
  search.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();nextMatch(e.shiftKey?-1:1)}};
  next.onclick=()=>nextMatch(1);prev.onclick=()=>nextMatch(-1);
- goButton.onclick=()=>{const number=Number(go.value);if(Number.isInteger(number)&&number>=1&&number<=allLines.length){position=-1;jump(number-1);info.textContent='Line '+number+' of '+allLines.length+(previewTruncated?' loaded':'')}else info.textContent='Enter a line from 1 to '+allLines.length};
+ // Shared by Go to line AND repository-wide content-search results. Only
+ // the loaded, bounded preview can be addressed; never synthesize missing rows.
+ container.jumpToLine=number=>{
+  if(!Number.isInteger(number)||number<1||number>allLines.length)return false;
+  position=-1;go.value=String(number);jump(number-1);
+  info.textContent='Line '+number+' of '+allLines.length+(previewTruncated?' loaded':'');
+  return true
+ };
+ goButton.onclick=()=>{if(!container.jumpToLine(Number(go.value)))info.textContent='Enter a line from 1 to '+allLines.length};
  go.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();goButton.click()}};
  back.onclick=()=>{selectedLine=-1;showWindow(Math.max(0,start-PAGE))};
  forward.onclick=()=>{selectedLine=-1;showWindow(Math.min(allLines.length-1,start+PAGE))};
