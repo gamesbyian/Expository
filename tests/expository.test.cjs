@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch,BlobImpl=globalThis.Blob) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,boundedGithubJson,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,sourceSections,boundedSourceViewer,navigate,recordRecentFolder,paintRecentFolders,clearRecentFolders,openSearchHit,openContactSheet,presentSelectedSlideshow,stopSlideshow,documentThumbnail,loadThumb,openContainingFolder};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,boundedGithubJson,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,indexTree,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,sourceSections,boundedSourceViewer,navigate,recordRecentFolder,paintRecentFolders,clearRecentFolders,openSearchHit,openContactSheet,presentSelectedSlideshow,stopSlideshow,documentThumbnail,loadThumb,openContainingFolder};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch','Blob',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl,BlobImpl
  );
@@ -1231,6 +1231,98 @@ test('truncated recursive index recovers a capped child folder through two nonre
  assert.equal(added,2);assert.equal(app.state.items.length,1002);
  assert.equal(paths.length,2,'one root and one folder tree, no recursive refetch');
  assert.equal(get('status').textContent.includes('Folder verified'),true);
+});
+test('truncated recursive tree exact SHA anchors recover a capped folder beyond eight levels',async()=>{
+ const repo='example/large',branch='main',parts=Array.from({length:15},(_,i)=>'level'+i);
+ const folder=parts.join('/'),parent=parts.slice(0,-1).join('/');
+ const anchor=parts.slice(0,10).join('/'),shaFor=depth=>depth.toString(16).padStart(40,'a');
+ const indexSha=shaFor(10),paths=[],original=Array.from({length:1000},(_,i)=>({
+  type:'file',name:'file'+i+'.svg',path:folder+'/file'+i+'.svg',size:1
+ }));
+ const fetcher=async url=>{
+  paths.push(url);
+  let payload;
+  if(url.includes('?recursive=1')){
+   payload={truncated:true,tree:[{type:'tree',path:anchor,sha:indexSha}]}
+  }else if(url.includes('/contents/')){
+   payload=Array.from({length:1000},(_,i)=>({
+    type:'file',path:parent+'/other'+i+'.txt',sha:'f'.repeat(40)
+   }));
+  }else{
+   const received=url.split('/git/trees/')[1];
+   const depth=Array.from({length:6},(_,i)=>i+10).find(i=>shaFor(i)===received);
+   assert.ok(depth!==undefined,'no unrelated tree may be fetched');
+   payload=depth===15?{truncated:false,tree:[
+    ...original.map(item=>({type:'blob',path:item.name,size:1})),
+    {type:'blob',path:'extra.svg',size:1}
+   ]}:{truncated:false,tree:[{type:'tree',path:parts[depth],sha:shaFor(depth+1)}]}
+  }
+  return new Response(JSON.stringify(payload),{status:200});
+ };
+ const {app,get}=boot(fetcher);
+ Object.assign(app.state,{repo,branch,path:folder,repoRequest:2,seq:5,mode:'list'});
+ await app.indexTree(repo,branch,2);
+ assert.equal(app.state.indexTruncated,true);
+ assert.equal(app.state.indexTreeShas.get(anchor),indexSha);
+ app.state.items=[...original];
+ const added=await app.recoverTargetedFolder();
+ assert.equal(added,1);
+ assert.equal(app.state.items.length,1001);
+ assert.equal(paths.length,8,'one recursive index, one capped Contents parent, six direct trees');
+ assert.equal(paths.filter(x=>x.includes('/git/trees/')&&!x.includes('?recursive=1')).length,6);
+ assert.equal(paths[2],'https://api.github.com/repos/'+repo+'/git/trees/'+indexSha);
+ assert.ok(paths.every(x=>!x.includes('/git/trees/main')||x.includes('?recursive=1')),
+  'bounded fallback never starts an unbounded root walk');
+ assert.match(get('status').textContent,/Folder verified/);
+ app.resetSession();
+ assert.equal(app.state.indexTreeShas.size,0,'disconnect scrubs private recursive-index SHAs');
+});
+
+test('duplicate and out-of-budget tree SHAs cannot authorize deep recovery',async()=>{
+ const repo='example/private',branch='main',parts=Array.from({length:17},(_,i)=>'level'+i);
+ const folder=parts.join('/'),anchor=parts.slice(0,13).join('/'),far=parts.slice(0,4).join('/');
+ let requests=[];
+ const fetcher=async url=>{
+  requests.push(url);
+  if(url.includes('?recursive=1'))return new Response(JSON.stringify({truncated:true,tree:[
+   {type:'tree',path:anchor,sha:'a'.repeat(40)},
+   {type:'tree',path:anchor,sha:'b'.repeat(40)},
+   {type:'tree',path:far,sha:'c'.repeat(40)},
+   {type:'tree',path:'../../unsafe',sha:'d'.repeat(40)},
+   {type:'tree',path:'invalid-sha',sha:'bad'}
+  ]}),{status:200});
+  if(url.includes('/contents/'))return new Response(JSON.stringify([]),{status:200});
+  throw Error('No direct tree may be fetched from ambiguous/too-distant SHA');
+ };
+ const {app,get}=boot(fetcher);
+ Object.assign(app.state,{repo,branch,path:folder,repoRequest:1,seq:1,indexReady:true});
+ await app.indexTree(repo,branch,1);
+ assert.equal(app.state.indexTreeShas.get(anchor),null);
+ assert.equal(app.state.indexTreeShas.get(far),'c'.repeat(40));
+ assert.equal(app.state.indexTreeShas.has('../../unsafe'),false);
+ assert.equal(app.state.indexTreeShas.has('invalid-sha'),false);
+ app.state.items=Array.from({length:1000},(_,i)=>({
+  type:'file',name:'file'+i,path:folder+'/file'+i
+ }));
+ assert.equal(await app.recoverTargetedFolder(),0);
+ assert.equal(requests.length,2,'index plus one capped parent probe only');
+ assert.match(get('status').textContent,/Listing may be incomplete/);
+});
+
+test('index tree SHA from a cancelled repository cannot enter the successor session',async()=>{
+ let finish;
+ const fetcher=()=>new Promise(resolve=>{
+  finish=()=>resolve(new Response(JSON.stringify({
+   truncated:true,tree:[{type:'tree',path:'private/folder',sha:'a'.repeat(40)}]
+  }),{status:200}))
+ });
+ const {app}=boot(fetcher);
+ Object.assign(app.state,{repo:'private/first',branch:'main',repoRequest:1});
+ const pending=app.indexTree('private/first','main',1);
+ await new Promise(resolve=>setImmediate(resolve));
+ app.state.repo='public/second';app.state.repoRequest=2;app.state.indexTreeShas.clear();
+ finish();await pending;
+ assert.equal(app.state.indexTreeShas.size,0);
 });
 test('deep capped folder recovery uses a cached parent SHA without walking nine ancestors',async()=>{
  const repo='test/large',branch='main',sha='c'.repeat(40);

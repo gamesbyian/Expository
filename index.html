@@ -428,7 +428,7 @@ function zipViewer(manifest,parent,folder='',visible=120){
  root.append(listing);zipPrepareShare(manifest,parent,share,progress);return root
 }
 
-const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0,selectionMode:false,selected:new Map(),sheetSeq:0,sheetOpen:false,activeRequests:new Set(),rateLimitedUntil:0,folderRecoveryKey:'',sizeOpen:false,imageFullscreenCleanup:null,fileDates:new Map(),dateSeq:0,dateBusy:false,recentFolders:[],sourceSegment:0,sourceRanges:null,slideshowTimer:null,slideshowActive:false,slideStep:null};
+const $=id=>document.getElementById(id),state={repo:'',branch:'',path:'',items:[],mode:'grid',token:'',cache:new Map(),thumbUrls:new Set(),previewUrls:new Set(),preview:null,seq:0,repoRequest:0,tree:new Set(),expanded:new Set(),indexEntries:[],indexReady:false,indexTruncated:false,indexError:false,indexTreeShas:new Map(),visibleItems:[],renderEpoch:0,limit:80,thumbObserver:null,returnFocus:null,pinned:null,currentBlob:null,compareMode:false,compareDisplay:'wipe',compareWipe:50,repoIsPrivate:true,bookmarks:new Set(),previewText:null,searchSeq:0,scanning:false,historyOpen:false,structuredOpen:false,zoom:1,storyOpen:false,storySeq:0,storyData:null,compareSeq:0,selectionMode:false,selected:new Map(),sheetSeq:0,sheetOpen:false,activeRequests:new Set(),rateLimitedUntil:0,folderRecoveryKey:'',sizeOpen:false,imageFullscreenCleanup:null,fileDates:new Map(),dateSeq:0,dateBusy:false,recentFolders:[],sourceSegment:0,sourceRanges:null,slideshowTimer:null,slideshowActive:false,slideStep:null};
 const codeRx=/\.(?:js|jsx|mjs|ts|tsx|py|rs|go|java|kt|c|cpp|h|hpp|sh|css|scss|html|sql|gradle)$/i,docsRx=/\.(?:md|markdown|txt|pdf|rst)$/i,dataRx=/\.(?:json|csv|tsv|yaml|yml|xml|toml|ini|properties)$/i;
 const docThumbRx=/\.(?:html?|md|markdown|txt|json|csv|tsv|ya?ml|xml|pdf|css)$/i,previewableRx=/\.(?:png|jpe?g|webp|gif|svg|avif|bmp|html?|md|markdown|txt|json|csv|tsv|ya?ml|xml|pdf|css)$/i;
 const imageRx=/\.(png|jpe?g|webp|gif|svg|avif|bmp)$/i,textRx=/\.(md|markdown|txt|json|ya?ml|xml|csv|tsv|js|jsx|ts|tsx|css|scss|html|py|kt|java|rs|go|sh|toml|ini|svg|sql|log|gradle|properties)$/i;
@@ -730,24 +730,31 @@ async function recoverTargetedFolder(){
     ref=candidates[0].sha;
     startDepth=parts.length;
    }else{
-    // A capped parent Contents response can omit the chosen child. Reuse
-    // the NEAREST already cached ancestor's exact child tree SHA instead.
-    // At most eight nonrecursive tree reads follow; never walk an arbitrary
-    // number of ancestors or guess from a visible folder name alone.
-    let found=false;
+    // The capped parent may omit the target. Pick the NEAREST exact SHA
+    // from already loaded parent Contents or partial recursive tree entries.
+    // A recursive response's SHA is a snapshot anchor, never proof that
+    // the branch has not changed since the response. Compare readbacks below.
+    // Even for a 40-level path, allow at most eight direct tree reads.
+    let bestDepth=-1,bestSha='',conflict=false;
+    const choose=(depth,sha)=>{
+     if(!/^[a-f0-9]{40}$/i.test(sha||''))return;
+     if(depth>bestDepth){bestDepth=depth;bestSha=sha;conflict=false}
+     else if(depth===bestDepth&&bestSha.toLowerCase()!==sha.toLowerCase())conflict=true
+    };
     for(let depth=parts.length-2;depth>=Math.max(0,parts.length-8);depth--){
      const ancestor=parts.slice(0,depth).join('/');
      const cached=state.cache.get(repo+'@'+branch+'/'+ancestor);
      if(!Array.isArray(cached))continue;
      const childPath=parts.slice(0,depth+1).join('/');
      const anchors=cached.filter(x=>x.type==='dir'&&x.path===childPath&&/^[a-f0-9]{40}$/i.test(x.sha||''));
-     if(anchors.length!==1)continue;
-     ref=anchors[0].sha;
-     startDepth=depth+1;
-     found=true;
-     break;
+     if(anchors.length===1)choose(depth+1,anchors[0].sha);
     }
-    if(!found)throw Error('Exact folder tree SHA unavailable from bounded cached ancestors.');
+    for(let depth=parts.length;depth>=Math.max(1,parts.length-7);depth--){
+     choose(depth,state.indexTreeShas.get(parts.slice(0,depth).join('/')));
+    }
+    if(conflict)throw Error('Conflicting cached and indexed folder tree snapshots.');
+    if(bestDepth<0)throw Error('Exact tree SHA unavailable from bounded cached or indexed ancestors.');
+    ref=bestSha;startDepth=bestDepth;
    }
   }
   for(let depth=startDepth;depth<=parts.length;depth++){
@@ -805,7 +812,17 @@ async function indexTree(repo,branch,request){
   if(request!==state.repoRequest||repo!==state.repo||branch!==state.branch)return;
   state.indexEntries=(result.tree||[]).filter(x=>x.type==='blob').map(x=>({type:'file',path:x.path,name:x.path.split('/').at(-1),size:x.size}));
   state.indexTruncated=Boolean(result.truncated);state.indexReady=true;state.indexError=false;
-  for(const entry of result.tree||[])if(entry.type==='tree')treeAdd(entry.path);
+  state.indexTreeShas.clear();
+  // Retain only bounded, unambiguous exact tree SHAs already received.
+  // A truncated recursive index can still contain useful deep path anchors,
+  // but absent paths remain unknown and duplicate records are unusable.
+  for(const entry of result.tree||[])if(entry.type==='tree'){
+   treeAdd(entry.path);
+   if(!safeRepoPath(entry.path)||!entry.path||!/^[a-f0-9]{40}$/i.test(entry.sha||''))continue;
+   if(!state.indexTreeShas.has(entry.path)&&state.indexTreeShas.size>=10000)continue;
+   if(state.indexTreeShas.has(entry.path))state.indexTreeShas.set(entry.path,null);
+   else state.indexTreeShas.set(entry.path,entry.sha)
+  }
   const recovered=recoverLargeFolderFromIndex();
   paintTree();if(recovered||$('scope').value!=='folder')paint();if(state.sizeOpen)renderSizeMap();if($('includeZip').checked)scanZipGallery();
   if(result.truncated){status('Repository tree index truncated by GitHub; search and very large directory listings may be incomplete.');if(state.items.length>=1000)recoverTargetedFolder()}
@@ -1854,7 +1871,7 @@ async function openRepo(targetPath=''){
  $('branchPicker').hidden=true;$('branchPicker').replaceChildren(new Option('Choose a branch…',''));$('loadBranches').disabled=true;
  abortRequests();
  cancelContentScan();stopStory();hideSizeMap();state.storyData=null;const request=++state.repoRequest;state.repo=repo;state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;
- state.folderRecoveryKey='';++state.dateSeq;state.dateBusy=false;state.fileDates.clear();state.recentFolders=[];paintRecentFolders();state.sourceRanges=null;state.sourceSegment=0;++zipScanSeq;++zipPrepSeq;zipGalleryEntries=[];zipManifests.clear();zipSelections.clear();zipContext=null;zipStartFolder='';clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
+ state.folderRecoveryKey='';++state.dateSeq;state.dateBusy=false;state.fileDates.clear();state.recentFolders=[];paintRecentFolders();state.sourceRanges=null;state.sourceSegment=0;++zipScanSeq;++zipPrepSeq;zipGalleryEntries=[];zipManifests.clear();zipSelections.clear();zipContext=null;zipStartFolder='';clearSelection();state.cache.clear();state.tree.clear();state.expanded.clear();state.indexTreeShas.clear();state.repoIsPrivate=true;paintBookmarks();state.indexEntries=[];state.indexReady=false;state.indexTruncated=false;state.indexError=false;state.limit=80;state.items=[];state.visibleItems=[];$('items').replaceChildren();
  clearObjects();clearPreview();++state.seq;status('Connecting to '+repo+'…');
  try{
   const info=await json('/repos/'+repo);if(request!==state.repoRequest)return;
@@ -1865,7 +1882,7 @@ async function openRepo(targetPath=''){
 }
 function resetSession(){
  abortRequests();state.rateLimitedUntil=0;state.folderRecoveryKey='';++state.dateSeq;state.dateBusy=false;state.fileDates.clear();state.recentFolders=[];paintRecentFolders();state.sourceRanges=null;state.sourceSegment=0;++zipScanSeq;++zipPrepSeq;zipGalleryEntries=[];zipManifests.clear();zipSelections.clear();zipContext=null;zipStartFolder='';cancelContentScan();stopStory();hideSizeMap();state.storyData=null;++state.repoRequest;++state.seq;state.token='';state.repo='';state.branch='';state.path='';state.pinned=null;state.currentBlob=null;state.compareMode=false;state.cache.clear();state.items=[];state.visibleItems=[];
- state.tree.clear();state.expanded.clear();state.indexEntries=[];state.indexReady=false;state.indexError=false;state.indexTruncated=false;state.repoIsPrivate=true;
+ state.tree.clear();state.expanded.clear();state.indexTreeShas.clear();state.indexEntries=[];state.indexReady=false;state.indexError=false;state.indexTruncated=false;state.repoIsPrivate=true;
  clearSelection();state.renderEpoch++;if(state.thumbObserver){state.thumbObserver.disconnect();state.thumbObserver=null}thumbQueue.length=0;
  clearPreview();clearObjects();paintBookmarks();$('token').value='';$('branch').value='';$('loadBranches').disabled=true;$('loadBranches').textContent='Browse branches';$('branchPicker').hidden=true;$('branchPicker').replaceChildren(new Option('Choose a branch…',''));
  $('repoSelect').replaceChildren(new Option('Enter a repo below',''));$('tree').replaceChildren();$('items').replaceChildren();
