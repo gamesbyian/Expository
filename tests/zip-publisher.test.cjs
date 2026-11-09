@@ -215,7 +215,7 @@ test('a mismatched branch, parent, tree or file readback remains unverified, wit
    error=>error.publishedButUnverified===true&&
     /could not be independently confirmed/.test(error.message)&&
     !error.message.includes('private-token'),name);
-  assert.equal(calls.filter(x=>x.options.method==='POST').length,5,
+  assert.equal(calls.filter(x=>x.options.method==='POST').length,4,
    name+' may not generate a second write after branch creation');
  }
 });
@@ -230,7 +230,7 @@ test('an unavailable post-creation GitHub read remains uncertain, never auto-ret
  await assert.rejects(api.writeNewBranch(plan,'synthetic-token',
   'expository/zip-demo',()=>{}),
   error=>error.publishedButUnverified===true);
- assert.equal(calls.filter(x=>x.options.method==='POST').length,5);
+ assert.equal(calls.filter(x=>x.options.method==='POST').length,4);
  assert.equal(calls.filter(x=>x.url.includes('/git/ref/heads/expository/')).length,1,
   'the post-ref read must never be automatically replayed');
 });
