@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch,BlobImpl=globalThis.Blob) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,navigate,recordRecentFolder,paintRecentFolders,clearRecentFolders,documentThumbnail,loadThumb,openContainingFolder};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,navigate,recordRecentFolder,paintRecentFolders,clearRecentFolders,openSearchHit,documentThumbnail,loadThumb,openContainingFolder};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch','Blob',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl,BlobImpl
  );
@@ -754,6 +754,51 @@ test('current content search still returns bounded text matches',async()=>{
  assert.equal(app.state.scanning,false);
 });
 
+test('source viewer jumps to global lines beyond its current 500-line window',()=>{
+ const {app}=boot();
+ const view=app.sourceViewer(Array.from({length:1307},(_,i)=>'source '+(i+1)).join('\n'),'long.ts');
+ const pager=view.children.find(node=>node.className==='code-pages');
+ const pre=view.children.at(-1);
+ assert.equal(pager.children[1].textContent,'1–500 / 1307 lines');
+ assert.equal(view.jumpToLine(1207),true);
+ assert.equal(pager.children[1].textContent,'1001–1307 / 1307 lines');
+ assert.equal(pre.children[206].className,'code-line code-find-current');
+ assert.equal(view.children[0].children[4].value,'1207');
+ assert.equal(view.children[0].children[6].textContent,'Line 1207 of 1307');
+ assert.equal(view.jumpToLine(1308),false);
+ assert.equal(pager.children[1].textContent,'1001–1307 / 1307 lines','out-of-range jump cannot change window');
+});
+
+test('content search opens a deep Markdown match in raw windowed source and allows rendered toggle',async()=>{
+ const markdown=Array.from({length:705},(_,i)=>i===650?'needle in line 651':'content '+i).join('\n');
+ const fetcher=async()=>new Response(markdown,{status:200});
+ const {app,get}=boot(fetcher);
+ Object.assign(app.state,{repo:'example/public',branch:'main',repoRequest:1,indexReady:true});
+ const file={name:'notes.md',path:'docs/notes.md',size:markdown.length,type:'file'};
+ app.state.indexEntries=[file];app.state.visibleItems=[file];
+ get('filter').value='needle';
+ await app.scanContents();
+ const hit=get('searchResults').children.find(node=>node.className==='search-hit');
+ assert.ok(hit,'bounded scan produced the deep source-line result');
+ assert.match(hit.children[0].textContent,/notes.md:651/);
+ assert.equal(await hit.onclick(),true,'search hit must jump to its actual loaded line');
+ const viewer=get('previewBody').children[0],pager=viewer.children.find(node=>node.className==='code-pages');
+ assert.equal(pager.children[1].textContent,'501–705 / 705 lines');
+ assert.equal(viewer.children.at(-1).children[150].className,'code-line code-find-current');
+ assert.equal(get('structuredToggle').hidden,false);
+ assert.equal(get('structuredToggle').textContent,'Rendered Markdown');
+ await get('structuredToggle').onclick();
+ assert.equal(get('structuredToggle').textContent,'Raw source');
+ assert.notEqual(get('previewBody').children[0].className,'code-view','Markdown is rendered again');
+});
+
+test('content-search jump refuses a file from a disconnected repository',async()=>{
+ const {app,get}=boot(async()=>new Response('needle',{status:200}));
+ Object.assign(app.state,{repo:'new/repository',branch:'main',repoRequest:2});
+ const file={name:'stale.js',path:'secret/stale.js',size:6,type:'file'};
+ assert.equal(await app.openSearchHit(file,0,'old/repository','main'),false);
+ assert.equal(get('previewBody').children.length,0,'no stale source preview mounted');
+});
 test('code inspector searches displayed lines without treating source as markup',()=>{
  const {app}=boot();
  const view=app.sourceViewer('const target = 1;\nconst other = 2;\n// target again','example.js');
