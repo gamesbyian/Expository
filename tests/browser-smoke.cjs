@@ -163,6 +163,16 @@ async function main(){
   await evaluate("document.querySelector('#sizeToggle').click()");
   await evaluate("document.querySelector('#back').click()");
   await until("document.querySelector('#breadcrumbs')?.textContent?.includes('Glimpse')",'treemap browsing returns to root');
+  assert.equal(await evaluate("document.querySelector('#recentJump').hidden"),false,'recent folder jump appears directly in mobile workspace');
+  await evaluate("document.querySelector('#recentJump').open=true");
+  assert.equal(await evaluate("document.querySelector('#recentJumpLinks button')?.textContent"),'design','mobile jump reuses a previously visited folder');
+  assert.equal(await evaluate("document.querySelector('#recentJumpLinks button').getBoundingClientRect().height>=44"),true,'quick jump has 44px phone target');
+  await evaluate("document.querySelector('#recentJumpLinks button').click()");
+  await until("document.querySelector('#breadcrumbs')?.textContent?.includes('design')",'mobile recent jump navigates');
+  await evaluate("document.querySelector('#back').click()");
+  await until("document.querySelector('#breadcrumbs')?.textContent?.includes('Glimpse')",'quick jump returns to root');
+  assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'recent jump does not overflow 393px');
+  if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-mobile-recent-jump-393.png');
 
   assert.equal(await evaluate("document.querySelector('#refineControls').hidden"),true,'phone opens with filters collapsed');
   if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-start-393.png');
@@ -375,8 +385,20 @@ async function main(){
   await until("document.querySelector('#status')?.textContent?.includes('items')",'private fixture loaded');
   assert.equal(await evaluate("location.hash"),'','private repo does not leak into fragment');
   assert.equal(await evaluate("document.querySelector('#bookmark').disabled"),true,'private repo cannot be bookmarked');
+  assert.equal(await evaluate("document.querySelector('#recentJump').hidden"),true,'public jump paths cleared before private repository opens');
+  await evaluate("document.querySelector('#scope').value='folder';document.querySelector('#scope').dispatchEvent(new Event('change'))");
+  await until("Array.from(document.querySelectorAll('#items .tile')).some(x=>x.textContent.includes('docs'))",'private root folder');
+  await evaluate("Array.from(document.querySelectorAll('#items .tile')).find(x=>x.textContent.includes('docs')).click()");
+  await until("document.querySelector('#breadcrumbs').textContent.includes('docs')",'private folder navigated');
+  assert.equal(await evaluate("location.hash"),'','private folder does not enter Expository URL');
+  await evaluate("document.querySelector('#back').click()");
+  await until("document.querySelector('#recentJump').hidden===false",'private folder shortcut visible only in current session');
+  await evaluate("document.querySelector('#recentJump').open=true");
+  assert.equal(await evaluate("document.querySelector('#recentJumpLinks button')?.textContent"),'docs','private shortcut uses current history');
   await evaluate("document.querySelector('#repo').value='gamesbyian/Glimpse';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
   await until("document.querySelector('#status')?.textContent?.includes('items')",'public fixture restored');
+  assert.equal(await evaluate("document.querySelector('#recentJump').hidden"),true,'private folder history cleared on repository switch');
+  assert.equal(await evaluate("document.querySelector('#recentJumpLinks').textContent"),'','previous private folder paths removed from mobile DOM');
   assert.equal(await evaluate("location.hash.includes('gamesbyian/Glimpse')"),true,'public deep links still work');
   await evaluate("document.querySelector('#repo').value='gamesbyian/LargeFixture';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
   await until("document.querySelector('#status')?.textContent?.includes('1012 items')",'large directory repaired from Git tree');
