@@ -31,7 +31,7 @@ function boot(fetchImpl=globalThis.fetch,BlobImpl=globalThis.Blob) {
  const pos=source.indexOf('const match=location.hash.slice(1)');
  assert.ok(pos>0, 'page-load bootstrap located');
  const isolated='return '+source.slice(0,pos).trimStart()+
-  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,documentThumbnail,loadThumb,openContainingFolder};\n})();';
+  'return {state,treeAdd,expandAncestors,paintTree,currentMatches,updateHash,withMediaType,resetSession,compareReady,drawComparison,trapPreviewFocus,filterSort,typeOf,sourceViewer,toggleBookmark,cancelContentScan,scanContents,jsonViewer,imageViewer,storyEvent,renderStory,stopStory,calculatePixelDiff,resolveMarkdownPath,parseDelimited,tableViewer,simpleMarkdown,selectImage,clearSelection,githubFailure,api,json,fetchBlob,abortRequests,safeRepoPath,renderCurrentFile,clearPreview,currentShareUrl,openRepo,indexedDirectChildren,recoverLargeFolderFromIndex,loadOlderStory,recoverTargetedFolder,extractSourceSymbols,boundedZoom,loadBranches,sizeGroups,sizeRects,renderSizeMap,toggleSizeMap,hideSizeMap,loadOlderPulls,closeImageFullscreen,rotationMetrics,fileFolder,gallerySort,paint,loadFileDates,navigate,recordRecentFolder,paintRecentFolders,clearRecentFolders,documentThumbnail,loadThumb,openContainingFolder};\n})();';
  const app=new Function('document','history','location','localStorage','Option','fetch','Blob',isolated)(
    document,history,location,localStorage,function Option(name,value){return {name,value}},fetchImpl,BlobImpl
  );
@@ -42,6 +42,73 @@ test('browser source parses and controls have matching elements',()=>{
  assert.doesNotThrow(()=>new vm.Script(source));
  for(const id of ['tree','scope','filter','copyFolder','copyFile','disconnect','preview','prevPreview','nextPreview'])
    assert.ok(html.includes('id="'+id+'"'), id+' exists');
+});
+test('recent folders stay ordered, bounded, accessible, and in tab memory only',()=>{
+ const {app,get}=boot();
+ app.state.repo='example/private';app.state.branch='main';app.state.repoIsPrivate=true;
+ app.recordRecentFolder('secret/2026/contracts');app.recordRecentFolder('src');
+ app.recordRecentFolder('secret/2026/contracts');
+ assert.deepEqual(app.state.recentFolders,['secret/2026/contracts','src']);
+ const nav=get('recentFolders');
+ assert.equal(nav.children.length,2);
+ assert.equal(nav.children[0].textContent,'↶ contracts');
+ assert.equal(nav.children[0].title,'secret/2026/contracts');
+ assert.match(nav.children[0].getAttribute('aria-label'),/Open recent folder/);
+ assert.equal(get('clearRecents').hidden,false);
+ app.recordRecentFolder('secret/../up');
+ assert.equal(app.state.recentFolders.length,2,'reject unsafe paths');
+ for(let i=0;i<16;i++)app.recordRecentFolder('folder/'+i);
+ assert.equal(app.state.recentFolders.length,8,'bound recent folder paths');
+ assert.equal(app.state.recentFolders[0],'folder/15');
+ assert.equal(app.state.recentFolders.at(-1),'folder/8');
+ app.clearRecentFolders();
+ assert.deepEqual(app.state.recentFolders,[]);
+ assert.equal(get('clearRecents').hidden,true);
+ assert.equal(nav.children.length,1,'empty state without private paths');
+ app.recordRecentFolder('secret/very-private');
+ app.resetSession();
+ assert.deepEqual(app.state.recentFolders,[]);
+ assert.equal(get('recentFolders').children.length,1);
+ assert.ok(!get('recentFolders').children[0].textContent.includes('very-private'),
+  'disconnect must scrub private recent navigation');
+ assert.equal(get('clearRecents').hidden,true);
+});
+
+test('only successful, current-generation folder reads enter recent history',async()=>{
+ const requests=[];
+ const fetcher=async url=>{
+  requests.push(url);
+  if(url.includes('/contents/bad?'))return new Response('not found',{status:404});
+  return new Response(JSON.stringify([]),{status:200});
+ };
+ const {app,get}=boot(fetcher);
+ app.state.repo='example/public';app.state.branch='main';app.state.repoIsPrivate=false;
+ assert.equal(await app.navigate('docs'),true);
+ assert.deepEqual(app.state.recentFolders,['docs']);
+ assert.equal(await app.navigate('bad'),false);
+ assert.deepEqual(app.state.recentFolders,['docs'],'missing folders must not enter recents');
+ assert.equal(await app.navigate('src'),true);
+ assert.deepEqual(app.state.recentFolders,['src','docs']);
+ assert.equal(get('recentFolders').children[0].textContent,'↶ src');
+ assert.equal(requests.length,3);
+});
+
+test('delayed superseded navigation cannot reinsert a stale private path',async()=>{
+ let release;
+ const fetcher=url=>{
+  if(url.includes('/contents/old?'))return new Promise(resolve=>{
+   release=()=>resolve(new Response(JSON.stringify([]),{status:200}))
+  });
+  return Promise.resolve(new Response(JSON.stringify([]),{status:200}));
+ };
+ const {app}=boot(fetcher);
+ app.state.repo='example/private';app.state.branch='main';
+ const stale=app.navigate('old');
+ await new Promise(resolve=>setImmediate(resolve));
+ const current=app.navigate('current');
+ assert.equal(await current,true);
+ release();assert.equal(await stale,false);
+ assert.deepEqual(app.state.recentFolders,['current']);
 });
 test('folder index produces ancestry; collapsible tree limits DOM rows',()=>{
  const {app,get}=boot();
