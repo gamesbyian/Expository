@@ -122,7 +122,9 @@ test('verified new-branch result offers a safe, separate GitHub PR comparison UR
   ['owner/repo','../../main','expository/new'],
   ['owner/repo','main','feature/#token']
  ])assert.throws(()=>api.githubCompareUrl(repo,base,branch),/Invalid GitHub branch comparison/);
- assert.match(source,/const result=await writeNewBranch[\\s\\S]*compare.href=githubCompareUrl/);
+ assert.ok(source.indexOf('compare.href=githubCompareUrl') >
+  source.indexOf('const result=await writeNewBranch'),
+  'PR review link is rendered only after confirmed publication');
  assert.match(source,/compare.target='_blank';compare.rel='noopener noreferrer'/);
 });
 
