@@ -294,6 +294,8 @@ private fun DeveloperPreview(
     var mergeIllustration by remember {
         mutableStateOf<SmartMergeCasefoldIllustration?>(null)
     }
+    // Optional full resulting-layout what-if: never a create/copy plan.
+    var showFullMergeLayout by remember { mutableStateOf(false) }
     var mergeIllustrationBusy by remember { mutableStateOf(false) }
     var mergeIllustrationJob by remember { mutableStateOf<Job?>(null) }
     val mergeIllustrationSerial = remember { AtomicLong(0L) }
@@ -326,6 +328,7 @@ private fun DeveloperPreview(
         mergeIllustrationJob = null
         mergeIllustrationBusy = false
         mergeIllustration = null
+        showFullMergeLayout = false
     }
 
     fun clearMergeSourceInventories() {
@@ -935,7 +938,7 @@ private fun DeveloperPreview(
      * planner must block on missing SAF case-policy evidence and NOTHING else.
      * No picker grant renewal, provider write, stored path or copied content.
      */
-    fun illustrateMergeCollisions(changeOffset: Int = 0) {
+    fun illustrateMergeCollisions(changeOffset: Int = 0, layoutOffset: Int = 0) {
         if (!mergeSources.hasMinimumSources || mergeIllustrationBusy ||
             mergeInventoryReading != null || mergeReading ||
             mergeInspecting != null || pendingMergePicker != null ||
@@ -976,7 +979,7 @@ private fun DeveloperPreview(
                     SmartMergeCasefoldIllustrator.inspect(
                         selected, collected, picked.location, picked.parentIndex,
                         name, structure, System.currentTimeMillis(),
-                        changeOffset = changeOffset)
+                        changeOffset = changeOffset, layoutOffset = layoutOffset)
                 }
                 val checkedAt = System.currentTimeMillis()
                 if (!isActive || serial != mergeIllustrationSerial.get()) return@launch
@@ -2864,7 +2867,8 @@ private fun DeveloperPreview(
                                                         illustrateMergeCollisions(
                                                             illustration.changeOffset -
                                                                 SmartMergeCasefoldIllustrator
-                                                                    .MAX_DISPLAY_CHANGES)
+                                                                    .MAX_DISPLAY_CHANGES,
+                                                            illustration.layoutOffset)
                                                     }
                                                 )
                                                 FolderActionControl(
@@ -2876,7 +2880,8 @@ private fun DeveloperPreview(
                                                         "smart-merge-illustration-next"),
                                                     onClick = {
                                                         illustration.nextChangeOffset?.let {
-                                                            illustrateMergeCollisions(it)
+                                                            illustrateMergeCollisions(
+                                                                it, illustration.layoutOffset)
                                                         }
                                                     }
                                                 )
@@ -2885,6 +2890,94 @@ private fun DeveloperPreview(
                                                 "read-only example from currently observed " +
                                                 "source and destination permissions.",
                                                 style = MaterialTheme.typography.bodySmall)
+                                        }
+                                        FolderActionControl(
+                                            label = if (showFullMergeLayout)
+                                                "Hide hypothetical merged contents"
+                                            else "Show all hypothetical merged contents",
+                                            enabled = !mergeIllustrationBusy,
+                                            modifier = Modifier.testTag(
+                                                "smart-merge-layout-toggle"),
+                                            onClick = {
+                                                showFullMergeLayout = !showFullMergeLayout
+                                            }
+                                        )
+                                        if (showFullMergeLayout) {
+                                            Text("Hypothetical layout " +
+                                                (if (illustration.mappedChildren == 0)
+                                                    "0" else
+                                                    (illustration.layoutOffset + 1).toString()) +
+                                                "–" + (illustration.layoutOffset +
+                                                    illustration.layoutEntries.size) +
+                                                " of " + illustration.mappedChildren +
+                                                ". Only a conservative case-folded " +
+                                                "example, NEVER a Merge operation.",
+                                                modifier = Modifier.testTag(
+                                                    "smart-merge-layout-page-status"),
+                                                style = MaterialTheme.typography.bodySmall)
+                                            illustration.layoutEntries.forEachIndexed { row, item ->
+                                                val description =
+                                                    "Source " + item.sourceNumber + " " +
+                                                        (if (item.kind == ItemKind.DIRECTORY)
+                                                            "folder" else "file") + ": " +
+                                                        mergeIllustrationName + "/" +
+                                                        item.targetPath.joinToString("/") +
+                                                        (if (item.sharedDirectory)
+                                                            " (hypothetical shared folder)"
+                                                        else if (item.renamedForCollision)
+                                                            " (hypothetical keep-both)"
+                                                        else "")
+                                                Text(description,
+                                                    modifier = Modifier.testTag(
+                                                        "smart-merge-layout-row-" + row)
+                                                        .semantics {
+                                                            contentDescription = description
+                                                        },
+                                                    maxLines = 3,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    style = MaterialTheme.typography.bodySmall)
+                                            }
+                                            if (illustration.mappedChildren >
+                                                SmartMergeCasefoldIllustrator.MAX_DISPLAY_LAYOUT) {
+                                                FlowRow(
+                                                    horizontalArrangement =
+                                                        Arrangement.spacedBy(8.dp),
+                                                    verticalArrangement =
+                                                        Arrangement.spacedBy(4.dp)) {
+                                                    FolderActionControl(
+                                                        label = "Previous layout entries",
+                                                        enabled = illustration.layoutOffset > 0 &&
+                                                            !mergeIllustrationBusy,
+                                                        modifier = Modifier.testTag(
+                                                            "smart-merge-layout-previous"),
+                                                        onClick = {
+                                                            illustrateMergeCollisions(
+                                                                illustration.changeOffset,
+                                                                illustration.layoutOffset -
+                                                                    SmartMergeCasefoldIllustrator
+                                                                        .MAX_DISPLAY_LAYOUT)
+                                                        }
+                                                    )
+                                                    FolderActionControl(
+                                                        label = "Next layout entries",
+                                                        enabled =
+                                                            illustration.nextLayoutOffset != null &&
+                                                                !mergeIllustrationBusy,
+                                                        modifier = Modifier.testTag(
+                                                            "smart-merge-layout-next"),
+                                                        onClick = {
+                                                            illustration.nextLayoutOffset?.let {
+                                                                illustrateMergeCollisions(
+                                                                    illustration.changeOffset, it)
+                                                            }
+                                                        }
+                                                    )
+                                                }
+                                                Text("Every page recomputes the same read-only " +
+                                                    "projection from current source and destination " +
+                                                    "observations; no child is created.",
+                                                    style = MaterialTheme.typography.bodySmall)
+                                            }
                                         }
                                     } else {
                                         Text("No mapping shown while real planner " +
