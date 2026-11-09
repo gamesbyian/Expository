@@ -29,7 +29,7 @@ Ratings describe *general Expository relevance* (10 is highest) rather than impl
 | 8 | JSON/CSV/YAML/Mermaid viewer | Structured data viewers | Bounded JSON tree and CSV/TSV safe tables delivered; YAML/Mermaid pending | Wave 2 partial |
 | 8 | Activity dashboard | GitHub, GitLens | Public/restricted commit and PR APIs, bounded counts | Wave 3 |
 | 8 | Story Mode: project evolution | GitLens, GitHub | Dated commits/release/merged-PR milestones, 50 commits per manual page to 200, undated tags; on-demand closed-PR paging (20/page, max 80) and no exhaustive history | Wave 3 partial |
-| 7 | Slideshow | FolderFrame | Browser-local selected collection, accessible pause and interval | Wave 3 |
+| 7 | Slideshow | FolderFrame | Delivered [#670](https://github.com/gamesbyian/Expository/pull/670): contact-sheet selected collection (up to 12 previously fetched images), no new network reads, user-initiated Play/Pause, Previous/Next, 3/5/10-second intervals, keyboard arrow controls and cleanup on all exits. Synthetic E1 qualified; physical/mobile accessibility and visual acceptance outstanding | Wave 3 initial |
 | 7 | File-size treemap | GitLens | Opt-in treemap groups indexed blob sizes by immediate file/folder; largest 23 + Other, drill-down, accessible list and explicit truncated-index disclosure | Wave 3 initial |
 | 7 | Change-activity heatmap | GitLens | Git-backed per-path history, clear sampling limitations | Wave 3 |
 
