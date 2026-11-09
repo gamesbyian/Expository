@@ -115,12 +115,15 @@ test('verified new-branch result offers a safe, separate GitHub PR comparison UR
  assert.equal(api.githubCompareUrl('owner/repo','release/v2',
   'feature/photos'),
   'https://github.com/owner/repo/compare/release/v2...feature/photos?expand=1');
+ assert.equal(api.githubCompareUrl('owner/repo','main','feature/#token'),
+  'https://github.com/owner/repo/compare/main...feature/%23token?expand=1',
+  'valid special characters in a Git ref are URL-encoded, not rejected');
  for(const [repo,base,branch] of [
   ['wrong/../repo','main','feature/new'],
   ['owner/repo','main','main'],
   ['owner/repo','main','topic?write=true'],
   ['owner/repo','../../main','expository/new'],
-  ['owner/repo','main','feature/#token']
+  ['owner/repo','main','feature/@{token}']
  ])assert.throws(()=>api.githubCompareUrl(repo,base,branch),/Invalid GitHub branch comparison/);
  assert.ok(source.indexOf('compare.href=githubCompareUrl') >
   source.indexOf('const result=await writeNewBranch'),
