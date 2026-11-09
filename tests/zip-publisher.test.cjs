@@ -8,16 +8,18 @@ assert.ok(start>=0&&end>start,'Publisher pure logic boundary present');
 const SHA={head:'a'.repeat(40),tree:'b'.repeat(40),blob:'c'.repeat(40),newTree:'d'.repeat(40),commit:'e'.repeat(40)};
 function setup(respond){
  const calls=[];
- const context=vm.createContext({Blob,URL,TextEncoder,FileReader:class{
+ const context=vm.createContext({Blob,URL,TextEncoder,TextDecoder,Uint8Array,FileReader:class{
   readAsDataURL(blob){blob.arrayBuffer().then(bytes=>{this.result='data:application/octet-stream;base64,'+Buffer.from(bytes).toString('base64');this.onload()}).catch(e=>this.onerror?.(e))}
  },fetch:async(url,options)=>{
   calls.push({url,options,body:options.body?JSON.parse(options.body):undefined});
   const answer=respond?respond(url,options,calls):undefined;
-  // Synthetic response codes, never a real account/token/network endpoint.
-  if(answer?.__httpStatus)return {ok:false,status:answer.__httpStatus};
-  return {ok:true,json:async()=>answer??mock(url,options)};
+  // Synthetic response codes and real streamed JSON bodies, never real API access.
+  if(answer?.__httpStatus)return new Response('{}',{status:answer.__httpStatus});
+  if(answer?.__response)return answer.__response;
+  return new Response(JSON.stringify(answer??mock(url,options)),
+   {status:200,headers:{'content-type':'application/json'}});
  }});
- vm.runInContext(source.slice(start,end)+'\nglobalThis.published={wellFormedUtf16,cleanPath,repoPath,branchPath,resolveEntries,findCollisions,inspectDestination,writeNewBranch};',context);
+ vm.runInContext(source.slice(start,end)+'\nglobalThis.published={wellFormedUtf16,cleanPath,repoPath,branchPath,resolveEntries,findCollisions,inspectDestination,writeNewBranch,boundedGithubJson};',context);
  return {api:context.published,calls};
 }
 function mock(url,options){
@@ -109,6 +111,46 @@ test('tree collision check catches files, directories and case folding',()=>{
  assert.throws(()=>api.findCollisions(files,{truncated:false,
   tree:[{path:'mystery',type:'unknown'}]}),/unrecognized/);
 });
+test('publisher streaming JSON caps actual bytes even when GitHub omits Content-Length',async()=>{
+ const {api}=setup();
+ let cancelled=false;
+ const response=new Response(new ReadableStream({
+  start(controller){controller.enqueue(new TextEncoder().encode('{"tree":[1,2,3]}'))},
+  cancel(){cancelled=true}
+ }),{status:200});
+ await assert.rejects(api.boundedGithubJson(response,7),/7-byte publisher limit/);
+ assert.equal(cancelled,true,'oversized body reader must be cancelled');
+});
+
+test('publisher JSON accepts exact caps and refuses malformed or oversized responses',async()=>{
+ const {api}=setup();
+ const precise=new Response('{"x":1}',{status:200});
+ const value=await api.boundedGithubJson(precise,7);
+ assert.equal(value.x,1);
+ const early=new Response('{}',{status:200,
+  headers:{'Content-Length':'999'}});
+ await assert.rejects(api.boundedGithubJson(early,2),/2-byte publisher limit/);
+ const malformed=new Response('{"x":',{status:200});
+ await assert.rejects(api.boundedGithubJson(malformed,10),/malformed JSON/);
+ const invalidUtf8=new Response(Uint8Array.from([0xc0,0x80]),{status:200});
+ await assert.rejects(api.boundedGithubJson(invalidUtf8,10));
+ const noStream={headers:{get:()=>null},body:null,json:async()=>({x:1})};
+ await assert.rejects(api.boundedGithubJson(noStream,10),
+  /cannot enforce the GitHub response-size limit/);
+});
+
+test('oversized GitHub preflight tree refuses publishing before any POST',async()=>{
+ const {api,calls}=setup((url)=>{
+  if(url.includes('/git/trees/')&&url.includes('?recursive=1'))
+   return {__response:new Response('{}',{status:200,
+    headers:{'Content-Length':String(25*1024*1024)}})};
+ });
+ await assert.rejects(api.inspectDestination(
+  'synthetic-sensitive-token','owner/repo','main','',[file('new.txt')]),
+  /publisher limit/);
+ assert.ok(calls.length>=3&&calls.every(x=>x.options.method==='GET'));
+});
+
 test('destination inspection performs only reads before explicit confirmation',async()=>{
  const {api,calls}=setup();
  const plan=await api.inspectDestination('sensitive-token','owner/repo','main','folder',[file('new.txt')]);
