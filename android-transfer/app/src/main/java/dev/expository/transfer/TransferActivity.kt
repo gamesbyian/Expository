@@ -833,6 +833,16 @@ private fun DeveloperPreview(
                             "No partial Merge inventory was accepted."
                         return@launch
                     }
+                    // A full basket cannot fit even the next picked root.
+                    // Refuse BEFORE the next provider query instead of
+                    // spending time scanning an already-impossible review.
+                    val remaining = SmartMergeSourceReviewBudget.remaining(aggregateEntries)
+                    if (remaining == null || remaining == 0) {
+                        mergeMessage = "The selected sources exceed the " +
+                            SmartMergeSourceReviewBudget.MAX_ITEMS +
+                            "-entry Merge review limit. No partial inventory was accepted."
+                        return@launch
+                    }
                     mergeInventoryReading = item
                     mergeMessage = "Inspecting " + (index + 1) + " of " +
                         selected.size + " source folders, read-only…"
@@ -840,6 +850,7 @@ private fun DeveloperPreview(
                     val inventory = withContext(Dispatchers.IO) {
                         SafRecursiveSourceScanner(context.contentResolver)
                             .inspectMergeRootInventory(item, generation,
+                                maxEntries = remaining,
                                 continueRequested = {
                                     isActive && mergeInventorySerial.get() == serial &&
                                         currentShareEpoch() == shareEpoch &&
@@ -854,8 +865,9 @@ private fun DeveloperPreview(
                         inventory?.manifest?.reviewable != true ||
                         inventory.collected !== item) {
                         mergeMessage = "Source " + (index + 1) +
-                            " was incomplete, changed, canceled or expired. " +
-                            "No partial Merge inventory was accepted."
+                            " could not be fully inspected within the remaining " +
+                            remaining + "-entry budget, or was changed, canceled " +
+                            "or expired. No partial Merge inventory was accepted."
                         return@launch
                     }
                     // Keep the SAME aggregate bound used by the immutable
