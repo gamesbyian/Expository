@@ -401,6 +401,7 @@ async function main(){
    assert.equal(await evaluate("Boolean(document.querySelector('#previewBody .code-toolbar'))"),true,'HTML source shown without running scripts');
    await evaluate("document.querySelector('#structuredToggle').click()");
    await until("Boolean(document.querySelector('.html-static-preview iframe'))",'static HTML sandbox displayed');
+   await until("document.querySelector('.html-static-preview iframe')?.contentDocument===null",'HTML sandbox has opaque origin');
    assert.equal(await evaluate("(()=>{const f=document.querySelector('.html-static-preview iframe');return f.getAttribute('sandbox')===''&&f.contentDocument===null&&f.getAttribute('referrerpolicy')==='no-referrer'})()"),true,'preview uses opaque sandbox, not parent origin');
    assert.equal(await evaluate("(()=>{const f=document.querySelector('.html-static-preview iframe'),s=f.srcdoc;return s.includes('Safe HTML heading')&&s.includes(\"script-src 'none'\")&&s.includes(\"connect-src 'none'\")&&!s.includes('<script')&&!s.includes('onerror=')&&!s.includes('http-equiv=\"refresh\"')&&!s.includes('href=\"https:')})()"),true,'sanitized static document excludes scripts, active attributes, metadata refresh, and external links');
    assert.equal(await evaluate("window.__unsafeHtmlExecuted"),false,'untrusted HTML never executes');
