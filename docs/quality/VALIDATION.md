@@ -2,7 +2,7 @@
 
 Expository has one routine PR validation check: Node's built-in test runner and static checks. It uses no package install, auth token, build server or external scripts. Root `index.html` is the shipped artifact.
 
-- **Quick default:** `node --test tests/expository.test.cjs`, plus static JS syntax and verification that only expected workflow triggers exist. Run for PRs touching the app/tests/CI. Aim for a short, single Linux job.
+- **Quick default:** `node --test tests/*.test.cjs` in one short Linux job, plus static script syntax and workflow/source boundary checks. The glob intentionally includes the ZIP reader, isolated ZIP publisher, Gradle wrapper integrity and all existing web/CI policy regressions. Tests that require installed Chromium remain opt-in manual browser evidence, not this fast check. The failure digest repeats the same Node command.
 - **Targeted browser:** `node tests/browser-smoke.cjs` when changing navigation, fetching, search, previews, modals or responsive UI. Uses synthetic public GitHub fixtures and local headless Chrome; neither live private data nor a production acceptance certificate.
 - **Optional visual review:** Actions → *Expository Visual Review* → Run workflow on chosen branch/commit, capture viewport screenshot evidence and offline gallery. Never add it as a required check for unrelated changes. Keep captures synthetic and provenance labeled.
 - **Manual physical inspection:** actual Pixel 6 Pro Chrome touch and layout, keyboard/screen reader checks, data-protection/network traces. Record owner observations separately. Even checked screenshot atlases do not substitute for handset/human acceptance.
