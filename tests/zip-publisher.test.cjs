@@ -16,20 +16,35 @@ function setup(respond){
   // Synthetic response codes and real streamed JSON bodies, never real API access.
   if(answer?.__httpStatus)return new Response('{}',{status:answer.__httpStatus});
   if(answer?.__response)return answer.__response;
-  return new Response(JSON.stringify(answer??mock(url,options)),
+  return new Response(JSON.stringify(answer??mock(url,options,calls)),
    {status:200,headers:{'content-type':'application/json'}});
  }});
- vm.runInContext(source.slice(start,end)+'\nglobalThis.published={wellFormedUtf16,cleanPath,repoPath,branchPath,resolveEntries,findCollisions,inspectDestination,writeNewBranch,boundedGithubJson};',context);
+ vm.runInContext(source.slice(start,end)+'\nglobalThis.published={wellFormedUtf16,cleanPath,repoPath,branchPath,resolveEntries,findCollisions,inspectDestination,writeNewBranch,verifyPublishedBranch,boundedGithubJson};',context);
  return {api:context.published,calls};
 }
-function mock(url,options){
- if(url.includes('/git/ref/heads/'))return {object:{sha:SHA.head}};
- if(url.includes('/git/commits/'+SHA.head))return {tree:{sha:SHA.tree}};
- if(url.includes('/git/trees/'+SHA.tree+'?recursive=1'))return {truncated:false,tree:[{path:'already.txt',type:'blob'}]};
+function mock(url,options,calls){
+ if(url.includes('/git/ref/heads/expository/')){
+  const branch=url.split('/git/ref/heads/')[1];
+  return {ref:'refs/heads/'+branch,object:{sha:SHA.commit}};
+ }
+ if(url.includes('/git/ref/heads/'))return {ref:'refs/heads/main',object:{sha:SHA.head}};
+ if(url.includes('/git/commits/'+SHA.head))return {sha:SHA.head,tree:{sha:SHA.tree}};
+ if(url.includes('/git/commits/'+SHA.commit))return {
+  sha:SHA.commit,tree:{sha:SHA.newTree},parents:[{sha:SHA.head}]
+ };
+ if(url.includes('/git/trees/'+SHA.tree+'?recursive=1'))
+  return {sha:SHA.tree,truncated:false,tree:[{path:'already.txt',type:'blob'}]};
+ if(url.includes('/git/trees/'+SHA.newTree+'?recursive=1')){
+  const treeWrite=calls.find(x=>x.options.method==='POST'&&x.url.endsWith('/git/trees'));
+  return {sha:SHA.newTree,truncated:false,tree:[
+   {path:'already.txt',type:'blob',mode:'100644',sha:'f'.repeat(40)},
+   ...(treeWrite?.body.tree||[])
+  ]};
+ }
  if(url.endsWith('/git/blobs'))return {sha:SHA.blob};
  if(url.endsWith('/git/trees'))return {sha:SHA.newTree};
  if(url.endsWith('/git/commits'))return {sha:SHA.commit};
- if(url.endsWith('/git/refs'))return {object:{sha:SHA.commit}};
+ if(url.endsWith('/git/refs'))return {ref:options.body?JSON.parse(options.body).ref:'',object:{sha:SHA.commit}};
  throw Error('Unexpected GitHub API endpoint: '+url)
 }
 const file=(path,text='one')=>({path,blob:new Blob([text])});
@@ -164,12 +179,62 @@ test('explicit commit builds blobs, tree and commit before creating only a new b
  const plan=await api.inspectDestination('secret','owner/repo','main','assets',[file('one.txt'),file('sub/two.txt')]);
  const result=await api.writeNewBranch(plan,'secret','expository/zip-demo',()=>{});
  assert.equal(result.commitSha,SHA.commit);
+ assert.equal(result.verifiedEntries,2,'both uploaded Git object IDs were read back');
+ const postRefReads=calls.filter(x=>x.options.method==='GET'&&
+  (x.url.includes('/git/ref/heads/expository/')||
+   x.url.includes('/git/commits/'+SHA.commit)||
+   x.url.includes('/git/trees/'+SHA.newTree)));
+ assert.equal(postRefReads.length,3,'read branch, commit and exact tree independently');
  const writes=calls.filter(x=>x.options.method==='POST');
  assert.deepEqual(writes.map(x=>x.url.split('/').at(-2)+'/'+x.url.split('/').at(-1)),['git/blobs','git/blobs','git/trees','git/commits','git/refs']);
  assert.equal(writes[3].body.parents[0],SHA.head);
  assert.equal(writes[4].body.ref,'refs/heads/expository/zip-demo');
  assert.ok(writes.every(x=>!x.url.includes('/git/refs/heads/main')),'no update to base branch');
 });
+test('a mismatched branch, parent, tree or file readback remains unverified, without replay',async()=>{
+ const scenarios=[
+  ['wrong branch identity',url=>url.includes('/git/ref/heads/expository/'),
+   ()=>({ref:'refs/heads/expository/other',object:{sha:SHA.commit}})],
+  ['wrong parent',url=>url.includes('/git/commits/'+SHA.commit),
+   ()=>({sha:SHA.commit,tree:{sha:SHA.newTree},parents:[{sha:'f'.repeat(40)}]})],
+  ['wrong tree identity',url=>url.includes('/git/trees/'+SHA.newTree+'?recursive=1'),
+   ()=>({sha:'f'.repeat(40),truncated:false,tree:[]})],
+  ['truncated tree',url=>url.includes('/git/trees/'+SHA.newTree+'?recursive=1'),
+   ()=>({sha:SHA.newTree,truncated:true,tree:[]})],
+  ['wrong uploaded object',url=>url.includes('/git/trees/'+SHA.newTree+'?recursive=1'),
+   ()=>({sha:SHA.newTree,truncated:false,tree:[
+    {path:'assets/one.txt',type:'blob',mode:'100644',sha:'f'.repeat(40)}
+   ]})]
+ ];
+ for(const [name,match,answer] of scenarios){
+  const {api,calls}=setup((url,options)=>options.method==='GET'&&match(url)?answer():undefined);
+  const plan=await api.inspectDestination('private-token','owner/repo',
+   'main','assets',[file('one.txt')]);
+  await assert.rejects(
+   api.writeNewBranch(plan,'private-token','expository/zip-demo',()=>{}),
+   error=>error.publishedButUnverified===true&&
+    /could not be independently confirmed/.test(error.message)&&
+    !error.message.includes('private-token'),name);
+  assert.equal(calls.filter(x=>x.options.method==='POST').length,5,
+   name+' may not generate a second write after branch creation');
+ }
+});
+
+test('an unavailable post-creation GitHub read remains uncertain, never auto-retried',async()=>{
+ const {api,calls}=setup((url,options)=>{
+  if(options.method==='GET'&&url.includes('/git/ref/heads/expository/'))
+   return {__httpStatus:403};
+ });
+ const plan=await api.inspectDestination('synthetic-token',
+  'owner/repo','main','',[file('new.txt')]);
+ await assert.rejects(api.writeNewBranch(plan,'synthetic-token',
+  'expository/zip-demo',()=>{}),
+  error=>error.publishedButUnverified===true);
+ assert.equal(calls.filter(x=>x.options.method==='POST').length,5);
+ assert.equal(calls.filter(x=>x.url.includes('/git/ref/heads/expository/')).length,1,
+  'the post-ref read must never be automatically replayed');
+});
+
 test('new branch writer refuses a moved base branch before mutating Git objects',async()=>{
  const {api,calls}=setup((url,options,requests)=>{
   if(url.includes('/git/ref/heads/')&&requests.length>3)return {object:{sha:'f'.repeat(40)}};
