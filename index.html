@@ -745,11 +745,18 @@ async function recoverTargetedFolder(){
    if(!siblings)siblings=await json('/repos/'+repo+'/contents/'+pathPart(parent)+'?ref='+enc(branch));
    if(!live())return 0;
    if(!Array.isArray(siblings))throw Error('Parent directory listing unavailable.');
-   const candidates=siblings.filter(x=>x.type==='dir'&&x.path===folder&&/^[a-f0-9]{40}$/i.test(x.sha||''));
-   if(candidates.length===1){
+   const observed=siblings.filter(x=>x.path===folder);
+   const candidates=observed.filter(x=>x.type==='dir'&&/^[a-f0-9]{40}$/i.test(x.sha||''));
+   if(observed.length===1&&candidates.length===1){
     ref=candidates[0].sha;
     startDepth=parts.length;
    }else{
+    // A complete parent Contents listing that omits this child is
+    // authoritative negative evidence. An indexed SHA from a prior branch
+    // snapshot must not resurrect a removed folder. Explicitly observed but
+    // malformed, duplicated or non-directory children also forbid fallback.
+    if(observed.length)throw Error('Parent listing contains an ambiguous or invalid child identity.');
+    if(siblings.length<1000)throw Error('Folder absent from complete parent directory listing.');
     // The capped parent may omit the target. Pick the NEAREST exact SHA
     // from already loaded parent Contents or partial recursive tree entries.
     // A recursive response's SHA is a snapshot anchor, never proof that
