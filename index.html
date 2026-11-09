@@ -1064,11 +1064,11 @@ async function scanContents(){
  async function worker(){while(next<candidates.length&&seq===state.searchSeq){
   const file=candidates[next++];try{
    const blob=await fetchBlob(file,128*1024);if(seq!==state.searchSeq||repo!==state.repo||branch!==state.branch)return;
-   const lines=(await blob.text()).split(/\r?\n/);let perFile=0;
+   const lines=(await blob.text()).split(/\r?\n/);if(seq!==state.searchSeq||repo!==state.repo||branch!==state.branch)return;let perFile=0;
    for(let line=0;line<lines.length&&perFile<2&&matches<80;line++){
     if(!lines[line].toLowerCase().includes(needle))continue;perFile++;matches++;
     const result=elem('button','search-hit'),title=elem('strong','',file.path+':'+(line+1)),sample=elem('small','',lines[line].trim().slice(0,190));
-    result.append(title,sample);result.onclick=async()=>{await openPreview(file);const el=$('previewBody').querySelectorAll('.code-line')[line];el?.scrollIntoView({block:'center'});if(el)el.style.outline='1px solid var(--accent)'};
+    result.append(title,sample);result.onclick=async()=>{await openPreview(file);if(state.preview!==file||repo!==state.repo||branch!==state.branch)return;const el=$('previewBody').querySelectorAll('.code-line')[line];el?.scrollIntoView({block:'center'});if(el)el.style.outline='1px solid var(--accent)'};
     host.append(result)
    }
   }catch{errors++}finally{complete++;if(seq===state.searchSeq&&(complete%10===0||complete===candidates.length))status('Content scan '+complete+'/'+candidates.length+' files · '+matches+' matching lines'+(errors?' · '+errors+' inaccessible':''))}
