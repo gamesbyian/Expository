@@ -75,6 +75,57 @@ object PagedLocationSuite {
             index.destinationListing()?.siblings?.size == 405)
         check(index.append(third).state == LocationIndexState.INVALID)
 
+        // A completed index is a review witness, not a live alias of a
+        // provider/browser collection. Kotlin .toMap() and .toList() alone
+        // are NOT immutable at runtime for multi-entry collections.
+        val mutableFolder = mutableListOf("folder", "nested")
+        val mutableCapabilities = mutableMapOf(
+            Capability.READ to CapabilityProof(
+                Support.SUPPORTED, "read-witness", NOW + 10_000L),
+            Capability.WRITE to CapabilityProof(
+                Support.SUPPORTED, "write-witness", NOW + 10_000L)
+        )
+        val borrowed = local.copy(
+            folder = mutableFolder, capabilities = mutableCapabilities)
+        val frozen = PagedLocationIndex.begin(borrowed)
+        mutableFolder[0] = "provider-renamed"
+        mutableCapabilities.clear()
+        check(frozen.location.folder == listOf("folder", "nested") &&
+            frozen.location.capabilities.size == 2)
+        check(runCatching {
+            (frozen.location.folder as MutableList<String>).clear()
+        }.isFailure)
+        check(runCatching {
+            (frozen.location.capabilities as
+                MutableMap<Capability, CapabilityProof>).clear()
+        }.isFailure)
+        val immutablePage = LocationPage(
+            frozen.location, "immutable-snapshot", null, "next-page",
+            listOf(child(frozen.location, 4001)), true)
+        val immOpen = frozen.append(immutablePage)
+        check(immOpen.state == LocationIndexState.OPEN)
+        check(runCatching {
+            (immOpen.seenTokens as MutableSet<String>).add("forged-cursor")
+        }.isFailure)
+        check(runCatching {
+            (immOpen.children as MutableList<ObservedLocationChild>).clear()
+        }.isFailure)
+        val immComplete = immOpen.append(immutablePage.copy(
+            requestedToken = "next-page", nextToken = null,
+            children = listOf(child(frozen.location, 4002))))
+        check(immComplete.state == LocationIndexState.COMPLETE &&
+            immComplete.children.size == 2 &&
+            immComplete.destinationListing()?.siblings?.size == 2)
+        check(runCatching {
+            (immComplete.destinationListing()!!.siblings as
+                MutableList<String>).add("injected.bin")
+        }.isFailure)
+        check(runCatching {
+            (immComplete.itemRefs()!! as MutableList<ItemRef>).clear()
+        }.isFailure)
+        check(immComplete.destinationListing()?.siblings ==
+            listOf("File4001.bin", "File4002.bin"))
+
         val fullLimit = scan(local, (1..2_000).map { child(local, it) })
         check(fullLimit.state == LocationIndexState.COMPLETE &&
             fullLimit.children.size == PagedLocationIndex.MAX_ITEMS)
