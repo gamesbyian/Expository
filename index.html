@@ -1182,6 +1182,9 @@ async function scanContents(){
 // currently mounted 500-line DOM window. Reuse the source viewer's own
 // bounded line-navigation method and never search stale preview DOM.
 async function openSearchHit(file,line,repo,branch){
+ // Results from an old account may remain clickable briefly while the UI
+ // changes. Refuse before fetching so an old path is never sent to a new repo.
+ if(repo!==state.repo||branch!==state.branch||!safeRepoPath(file?.path))return false;
  await openPreview(file);
  if(state.preview!==file||repo!==state.repo||branch!==state.branch)return false;
  if(/\.(md|markdown|svg)$/i.test(file.name)&&!state.structuredOpen){
