@@ -357,8 +357,8 @@ test('HTML rendering stays opt-in, sandboxed, opaque-origin and network-restrict
  await app.renderCurrentFile();
  assert.equal(get('structuredToggle').hidden,false);
  assert.equal(get('structuredToggle').textContent,'Rendered HTML');
- assert.equal(get('previewBody').children[0].className,'code-viewer',
-  'untrusted HTML opens as source by default');
+ assert.equal(get('previewBody').children[0].children[0].className,'code-toolbar',
+  'untrusted HTML opens as source with code controls by default');
  app.state.structuredOpen=true;
  await app.renderCurrentFile();
  const root=get('previewBody').children[0],frame=root.children.at(-1);
@@ -374,14 +374,16 @@ test('HTML rendering stays opt-in, sandboxed, opaque-origin and network-restrict
  assert.doesNotMatch(frame.sandbox,/allow-scripts|allow-same-origin/);
  assert.equal(get('structuredToggle').textContent,'HTML source');
 });
-test('HTML rendered preview rejects unsupported browsers rather than inserting untrusted markup',()=>{
+test('static HTML preview caps submitted markup before creating the frame',()=>{
  const {app}=boot();
- const original=globalThis.document;
- const preview=app.safeHtmlPreview('<script>secret()</script>',{name:'unsafe.html'});
- assert.equal(preview.className,'html-static-preview',
-  'supported template harness returns an isolated frame');
- assert.match(preview.children.at(-1).srcdoc,/referrer" content="no-referrer"/);
+ const long='<p>'+ 'x'.repeat(130000)+'UNTRUSTED_SENTINEL'+'</p>';
+ const view=app.safeHtmlPreview(long,{name:'large.html'});
+ const frame=view.children.at(-1);
+ assert.equal(frame.tagName,'IFRAME');
+ assert.equal(frame.srcdoc.includes('UNTRUSTED_SENTINEL'),false);
+ assert.match(frame.srcdoc,/referrer" content="no-referrer"/);
 });
+
 test('HTML thumbnail summaries are inert DOM text without loading or running scripts',()=>{
  const {app}=boot(),thumb=fakeNode();
  const file={name:'dashboard.html',path:'preview/dashboard.html'};
