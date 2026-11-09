@@ -122,6 +122,34 @@ object PagedLocationSuite {
         check(lastCursor.state == LocationIndexState.COMPLETE &&
             lastCursor.children.size == 3)
 
+        // A public itemRefs() result must be immutable even though it is a
+        // fresh projection of a COMPLETE provider listing. A downcast must
+        // never let callers rewrite a review they later pass to planners.
+        val exported = requireNotNull(lastCursor.itemRefs())
+        check(exported.size == 3)
+        check(runCatching {
+            (exported as MutableList<ItemRef>).clear()
+        }.isFailure)
+        check(runCatching {
+            (lastCursor.children as MutableList<ObservedLocationChild>).clear()
+        }.isFailure)
+        check(exported.map { it.name } ==
+            listOf("File0001.bin", "File0002.bin", "File0003.bin"))
+        check(lastCursor.itemRefs()?.size == 3)
+        // Even an INVALID successor must not accidentally expose a mutable
+        // child/token alias from an otherwise complete prior observation.
+        val invalidNext = lastCursor.append(LocationPage(local,
+            "cursor-snapshot", "cursor-two", null,
+            listOf(child(local, 4)), true))
+        check(invalidNext.state == LocationIndexState.INVALID &&
+            invalidNext.children.isEmpty())
+        check(runCatching {
+            (invalidNext.children as MutableList<ObservedLocationChild>).add(
+                child(local, 99))
+        }.isFailure)
+        check(lastCursor.children.size == 3 &&
+            lastCursor.seenTokens == setOf("cursor-one", "cursor-two"))
+
         val fullLimit = scan(local, (1..2_000).map { child(local, it) })
         check(fullLimit.state == LocationIndexState.COMPLETE &&
             fullLimit.children.size == PagedLocationIndex.MAX_ITEMS)
