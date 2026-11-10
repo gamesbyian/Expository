@@ -54,7 +54,7 @@ jobs:
           CI_TESTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           CI_CHECK_OUTCOME: ${{ steps.node-tests.outcome }}
           CI_LOG_PATH: ${{ steps.browser-security.outcome == 'failure' && format('{0}/expository-browser-smoke.log', runner.temp) || format('{0}/expository-node-tests.log', runner.temp) }}
-          CI_REPRO: node --test tests/*.test.cjs; when security-browser-review labeled: node tests/browser-smoke.cjs
+          CI_REPRO: 'node --test tests/*.test.cjs; if security-browser-review labeled: node tests/browser-smoke.cjs'
         run: node scripts/ci-failure-digest.cjs
       - name: Attach redacted failure digest
         if: failure()
