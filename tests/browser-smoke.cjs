@@ -20,7 +20,7 @@ const browser=spawn(CHROME,['--headless=new','--no-sandbox','--disable-gpu','--d
 let browserOutput='';for(const stream of [browser.stdout,browser.stderr])stream.on('data',chunk=>{browserOutput=(browserOutput+String(chunk)).slice(-5000)});
 browser.on('error',error=>{browserOutput+='\nSpawn error: '+error.message});
 let socket,sequence=0;
-const pending=new Map(),runtimeErrors=[];
+const pending=new Map(),runtimeErrors=[],blockedPreviewRequests=[];
 function fail(message){throw Error(message)}
 async function connect(){
  let port;
@@ -42,6 +42,7 @@ async function connect(){
  socket.addEventListener('message',evt=>{
   const m=JSON.parse(evt.data);
   if(m.method==='Runtime.exceptionThrown')runtimeErrors.push(m.params.exceptionDetails?.exception?.description||m.params.exceptionDetails?.text||'Runtime error');
+  if(m.method==='Network.requestWillBeSent'&&/expository-test\.invalid/.test(m.params.request?.url||''))blockedPreviewRequests.push(m.params.request.url);
   if(m.id&&pending.has(m.id)){const q=pending.get(m.id);pending.delete(m.id);m.error?q.reject(Error(m.error.message)):q.resolve(m.result)}
  });
 }
@@ -141,7 +142,7 @@ const fixtures=String.raw`
 `;
 async function main(){
  try{
-  await connect();await send('Page.enable');await send('Runtime.enable');await send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:2});
+  await connect();await send('Page.enable');await send('Runtime.enable');await send('Network.enable');await send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:2});
   await send('Page.addScriptToEvaluateOnNewDocument',{source:fixtures});
   await send('Emulation.setDeviceMetricsOverride',{width:393,height:852,deviceScaleFactor:1,mobile:true});
   const page=pathToFileURL(path.join(__dirname,'..','index.html')).href;
@@ -404,6 +405,8 @@ async function main(){
    assert.equal(await evaluate("(()=>{const f=document.querySelector('.html-static-preview iframe');return f.getAttribute('sandbox')===''&&f.contentDocument===null&&f.getAttribute('referrerpolicy')==='no-referrer'})()"),true,'preview uses opaque sandbox, not parent origin');
    assert.equal(await evaluate("(()=>{const f=document.querySelector('.html-static-preview iframe'),s=f.srcdoc;return s.includes('Safe HTML heading')&&s.includes(\"script-src 'none'\")&&s.includes(\"connect-src 'none'\")&&!s.includes('<script')&&!s.includes('onerror=')&&!s.includes('http-equiv=\"refresh\"')&&!s.includes('href=\"https:')})()"),true,'sanitized static document excludes scripts, active attributes, metadata refresh, and external links');
    assert.equal(await evaluate("window.__unsafeHtmlExecuted"),false,'untrusted HTML never executes');
+   await sleep(250);
+   assert.deepEqual(blockedPreviewRequests,[],'sandbox preview creates no external exfiltration network requests');
    assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'HTML preview fits phone viewport');
    if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-safe-html-360.png');
    await evaluate("document.querySelector('#structuredToggle').click()");
