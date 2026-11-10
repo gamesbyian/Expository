@@ -20,6 +20,7 @@ object SmartMergeNameSuggestions {
     // descriptive stem and CONTIGUOUS ordinal values to avoid implying that
     // missing volumes or folders have actually been selected.
     private val SUFFIX_ORDINAL = Regex("^(.+?)[ ._-]+([0-9]{1,3})$")
+    private val PAREN_ORDINAL = Regex("^(.+?)[ ._-]+\\(([0-9]{1,3})\\)$")
 
     fun suggestFromSourceNames(names: List<String>): String {
         if (names.size !in 2..MAX_SOURCES ||
@@ -65,24 +66,38 @@ object SmartMergeNameSuggestions {
         // when every selected label has the SAME stem, numeric width and a
         // complete contiguous range. A missing or repeated ordinal must not
         // be disguised by a misleading range suggestion.
+        // Parenthesized disc numbers are common in exported photo/music
+        // folders. Do not mix "Disc 1" and "Disc (2)": the formatting
+        // mismatch could indicate two unrelated naming conventions.
+        data class Ordinal(val stem: String, val digits: String,
+            val parenthesized: Boolean)
         val numbered = normalized.map { label ->
-            SUFFIX_ORDINAL.matchEntire(label)?.let {
-                it.groupValues[1].trimEnd() to it.groupValues[2]
+            val plain = SUFFIX_ORDINAL.matchEntire(label)
+            val paren = if (plain == null) PAREN_ORDINAL.matchEntire(label) else null
+            when {
+                plain != null -> Ordinal(plain.groupValues[1].trimEnd(),
+                    plain.groupValues[2], false)
+                paren != null -> Ordinal(paren.groupValues[1].trimEnd(),
+                    paren.groupValues[2], true)
+                else -> null
             }
         }
         if (numbered.any { it == null }) return FALLBACK
         val found = numbered.filterNotNull()
-        val prefix = found.first().first
-        val width = found.first().second.length
+        val prefix = found.first().stem
+        val width = found.first().digits.length
+        val parenthesized = found.first().parenthesized
         if (prefix.isBlank() ||
-            !found.all { it.first.equals(prefix, ignoreCase = true) &&
-                it.second.length == width }) return FALLBACK
-        val sequence = found.map { it.second.toInt() }
+            !found.all { it.stem.equals(prefix, ignoreCase = true) &&
+                it.digits.length == width &&
+                it.parenthesized == parenthesized }) return FALLBACK
+        val sequence = found.map { it.digits.toInt() }
         if (sequence.distinct().size != sequence.size ||
             sequence.max() - sequence.min() + 1 != sequence.size)
             return FALLBACK
         val left = sequence.min().toString().padStart(width, '0')
         val right = sequence.max().toString().padStart(width, '0')
-        return safe("$prefix $left–$right")
+        return safe(if (parenthesized) "$prefix ($left–$right)"
+            else "$prefix $left–$right")
     }
 }
