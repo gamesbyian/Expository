@@ -102,11 +102,11 @@ const fixtures=String.raw`
    {path:'design',type:'tree'},{path:'design/proposals',type:'tree'},
    {path:'design/proposals/a.svg',type:'blob',size:250},
    {path:'design/proposals/b.svg',type:'blob',size:250},
-   {path:'docs',type:'tree'},{path:'docs/README.md',type:'blob',size:48},{path:'docs/data.json',type:'blob',size:120},{path:'docs/data.csv',type:'blob',size:100},{path:'docs/example.ts',type:'blob',size:140},{path:'docs/huge.ts',type:'blob',size:hugeCode.length}
+   {path:'docs',type:'tree'},{path:'docs/README.md',type:'blob',size:48},{path:'docs/data.json',type:'blob',size:120},{path:'docs/data.csv',type:'blob',size:100},{path:'docs/example.ts',type:'blob',size:140},{path:'docs/huge.ts',type:'blob',size:hugeCode.length},{path:'docs/preview.html',type:'blob',size:420}
   ]});
   if(p.endsWith('/contents/'))return json(dirs(['design','design'],['docs','docs']));
   if(p.endsWith('/contents/design'))return json(dirs(['proposals','design/proposals']));
-  if(p.endsWith('/contents/docs'))return json(files(['README.md','docs/README.md'],['data.json','docs/data.json'],['data.csv','docs/data.csv'],['example.ts','docs/example.ts'],['huge.ts','docs/huge.ts']));
+  if(p.endsWith('/contents/docs'))return json(files(['README.md','docs/README.md'],['data.json','docs/data.json'],['data.csv','docs/data.csv'],['example.ts','docs/example.ts'],['huge.ts','docs/huge.ts'],['preview.html','docs/preview.html']));
   if(p.endsWith('/contents/design/proposals'))return json(files(['a.svg','design/proposals/a.svg'],['b.svg','design/proposals/b.svg']));
   if(p.endsWith('/contents/design/proposals/a.svg'))return new Response(dataA,{status:200,headers:{'content-type':'image/svg+xml'}});
   if(p.endsWith('/contents/design/proposals/b.svg'))return new Response(dataB,{status:200,headers:{'content-type':'image/svg+xml'}});
@@ -115,6 +115,15 @@ const fixtures=String.raw`
   if(p.endsWith('/contents/docs/data.csv'))return new Response('name,value\nAlpha,17\nBeta,23',{status:200,headers:{'content-type':'text/csv'}});
   if(p.endsWith('/contents/docs/example.ts'))return new Response('export function hello() {}\nclass MyTool {}',{status:200,headers:{'content-type':'text/plain'}});
   if(p.endsWith('/contents/docs/huge.ts'))return new Response(hugeCode,{status:200,headers:{'content-type':'text/plain'}});
+  if(p.endsWith('/contents/docs/preview.html'))return new Response(
+   '<h1>Safe HTML heading</h1><p>Static layout</p>'+
+   '<script>window.top.__unsafeHtmlExecuted=true</script>'+
+   '<img src="https://expository-test.invalid/leak" onerror="window.top.__unsafeHtmlExecuted=true">'+
+   '<a href="https://expository-test.invalid/track">External navigation</a>'+
+   '<form action="https://expository-test.invalid/form"><input name="secret"></form>'+
+   '<meta http-equiv="refresh" content="0;url=https://expository-test.invalid/refresh">',
+   {status:200,headers:{'content-type':'text/html'}});
+
   if(p.endsWith('/commits')){
    const fixtureCommit=n=>({sha:n.toString(16).padStart(40,'0'),commit:{message:'Fixture commit '+n,author:{date:'2026-10-22T12:00:00Z'}}});
    if(u.searchParams.get('path'))return json([{sha:'1111111111111111111111111111111111111111',commit:{message:'First fixture change',author:{date:'2026-10-22T12:00:00Z'}}}]);
@@ -190,7 +199,7 @@ async function main(){
   await until("document.querySelectorAll('#items .tile').length===2",'sorted gallery');
 
   await evaluate("(()=>{const scope=document.querySelector('#scope'),kind=document.querySelector('#fileKind'),group=document.querySelector('#groupFolders');scope.value='allFiles';kind.value='previewable';group.value='folder';scope.dispatchEvent(new Event('change'))})()");
-  await until("document.querySelectorAll('#items .gallery-card').length===5",'all-file recursive visual gallery');
+  await until("document.querySelectorAll('#items .gallery-card').length===6",'all-file recursive visual gallery');
   assert.equal(await evaluate("document.querySelectorAll('#items .gallery-divider').length"),2,'gallery groups nested folders');
   await until("document.querySelectorAll('#items .doc-thumbnail').length>=1",'lazy inert document thumbnail');
   assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'grouped gallery fits mobile viewport');
@@ -382,6 +391,25 @@ async function main(){
   assert.equal(await evaluate("document.querySelectorAll('.code-line.code-find-current').length"),1,'search across windows highlights distant line');
   if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-large-source-393.png');
   await evaluate("document.querySelector('#closePreview').click();document.querySelector('#filter').value='';document.querySelector('#filter').dispatchEvent(new Event('input'))");
+
+   await evaluate("document.querySelector('#filter').value='preview.html';document.querySelector('#filter').dispatchEvent(new Event('input'))");
+   await until("document.querySelectorAll('#items .tile').length===1",'safe HTML fixture listed');
+   await evaluate("window.__unsafeHtmlExecuted=false;document.querySelector('#items .tile').click()");
+   await until("document.querySelector('#structuredToggle')?.hidden===false",'HTML source mode loaded');
+   assert.equal(await evaluate("document.querySelector('#structuredToggle').textContent"),'Rendered HTML','HTML defaults to raw source');
+   assert.equal(await evaluate("Boolean(document.querySelector('#previewBody .code-toolbar'))"),true,'HTML source shown without running scripts');
+   await evaluate("document.querySelector('#structuredToggle').click()");
+   await until("Boolean(document.querySelector('.html-static-preview iframe'))",'static HTML sandbox displayed');
+   await until("document.querySelector('.html-static-preview iframe')?.contentDocument===null",'HTML sandbox has opaque origin');
+   assert.equal(await evaluate("(()=>{const f=document.querySelector('.html-static-preview iframe');return f.getAttribute('sandbox')===''&&f.contentDocument===null&&f.getAttribute('referrerpolicy')==='no-referrer'})()"),true,'preview uses opaque sandbox, not parent origin');
+   assert.equal(await evaluate("(()=>{const f=document.querySelector('.html-static-preview iframe'),s=f.srcdoc;return s.includes('Safe HTML heading')&&s.includes(\"script-src 'none'\")&&s.includes(\"connect-src 'none'\")&&!s.includes('<script')&&!s.includes('onerror=')&&!s.includes('http-equiv=\"refresh\"')&&!s.includes('href=\"https:')})()"),true,'sanitized static document excludes scripts, active attributes, metadata refresh, and external links');
+   assert.equal(await evaluate("window.__unsafeHtmlExecuted"),false,'untrusted HTML never executes');
+   assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true,'HTML preview fits phone viewport');
+   if(process.env.EXPOSITORY_ATLAS==='1')await screenshot('expository-safe-html-360.png');
+   await evaluate("document.querySelector('#structuredToggle').click()");
+   await until("Boolean(document.querySelector('#previewBody .code-toolbar'))",'return to raw source');
+   await evaluate("document.querySelector('#closePreview').click();document.querySelector('#filter').value='';document.querySelector('#filter').dispatchEvent(new Event('input'))");
+
 
   await evaluate("document.querySelector('#repo').value='gamesbyian/PrivateFixture';document.querySelector('#branch').value='';document.querySelector('#openRepo').click()");
   await until("document.querySelector('#status')?.textContent?.includes('items')",'private fixture loaded');

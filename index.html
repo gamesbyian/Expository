@@ -1571,6 +1571,40 @@ function jsonViewer(value){
  }
  root.append(visit(value,'Root',0));return root
 }
+function safeHtmlPreview(source,item){
+ const template=elem('template');
+ if(!template.content?.querySelectorAll)return elem('p','message','Safe HTML rendering unavailable. Use source view.');
+ template.innerHTML=source.slice(0,128000);
+ const nodes=template.content.querySelectorAll('*');
+ if(nodes.length>5000)return elem('p','message','HTML exceeds the 5,000-element static preview limit. Use source view.');
+ const blocked=new Set(['script','meta','base','link','iframe','frame','frameset',
+  'object','embed','applet','portal','form','input','button','select','option',
+  'optgroup','textarea','fieldset','template','noscript','svg','math','canvas','style',
+  'audio','video','source','track','picture']);
+ const urls=/^(src|srcset|href|action|formaction|poster|data|cite|background|ping|xlink:href|manifest)$/;
+ for(const element of nodes){
+  if(blocked.has(element.localName)){element.remove();continue}
+  for(const attribute of [...element.attributes]){
+   const name=attribute.name.toLowerCase();
+   const image=element.localName==='img'&&name==='src'&&
+    /^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=]{1,128000}$/i.test(attribute.value);
+   if(!image&&!new Set(['alt','title','width','height','colspan','rowspan','class','dir','lang','role','aria-label']).has(name))element.removeAttribute(attribute.name);
+  }
+ }
+ const csp="default-src 'none'; base-uri 'none'; form-action 'none'; "+
+  "script-src 'none'; frame-src 'none'; object-src 'none'; connect-src 'none'; "+
+  "font-src 'none'; media-src 'none'; img-src data:; style-src 'unsafe-inline'";
+ const root=elem('div','html-static-preview'),frame=elem('iframe');
+ frame.title='Static HTML preview: '+item.name;
+ frame.setAttribute('sandbox','');
+ frame.setAttribute('referrerpolicy','no-referrer');
+ frame.style.width='100%';
+ frame.srcdoc='<!doctype html><html><head><meta http-equiv="Content-Security-Policy" '+
+  'content="'+csp+'"><meta name="referrer" content="no-referrer"></head><body>'+
+  template.innerHTML+'</body></html>';
+ root.append(elem('p','hint','Static HTML · first 128,000 characters · scripts, links, forms and remote resources disabled.'),frame);
+ return root
+}
 async function renderCurrentFile(){
  const item=state.preview,blob=state.currentBlob;if(!item||!blob)return;
  closeImageFullscreen();cancelZipThumbs();clearUrls('preview');const lower=item.name.toLowerCase();let node;
@@ -1596,6 +1630,10 @@ async function renderCurrentFile(){
    $('structuredToggle').textContent=state.structuredOpen?'Rendered Markdown':'Raw source';
    node=state.structuredOpen?boundedSourceViewer(text,item.name):
     simpleMarkdown(text.slice(0,500000),item)
+  }else if(/\.html?$/i.test(lower)){
+   $('structuredToggle').hidden=false;
+   $('structuredToggle').textContent=state.structuredOpen?'HTML source':'Rendered HTML';
+   node=state.structuredOpen?safeHtmlPreview(text,item):boundedSourceViewer(text,item.name)
   }else{
    if(/\.svg$/i.test(lower)){$('structuredToggle').hidden=false;$('structuredToggle').textContent='Image'}
    node=boundedSourceViewer(text,item.name)
