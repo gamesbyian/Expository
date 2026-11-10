@@ -1,6 +1,6 @@
 # Website Preview: cross-environment HTML document rendering
 
-Status: **Proposed P1 capability, unimplemented, not a current Android beta P0 gate.**
+Status: **Full linked-resource Website Preview still proposed P1, not an Android beta P0 gate.** A **separate static precursor** shipped in web PR [#677](https://github.com/gamesbyian/Expository/pull/677): opt-in inert HTML iframe, raw source default, no relative asset/link resolution and no network requests. Do not count it as fulfilling the cross-environment user promise below.
 Scope: Expository read-only GitHub Pages explorer and separate Expository Transfer Android application. This specification adds requirements; it does not change existing permission, release or validation gates.
 
 ## User promise
