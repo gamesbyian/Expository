@@ -1,5 +1,7 @@
 # Expository live work queue
 
+**2026-11-10 live reconciliation:** [Checkpoint and issue/PR disposition](RECONCILIATION-2026-11-10.md). #692 is merged as `97d874e3` with exact-head JVM planner/Android compile and web checks; read-only parenthesized Smart Merge name suggestions are delivered, **not** M3 execution. #677 remains a conflicting draft awaiting exact-head Chromium security qualification. Current live open issue search returned ten umbrella issues; all retain outstanding acceptance. Historical red evidence must be kept, with unresolved failures tagged by exact SHA rather than inferred fixed from green unrelated lanes.
+
 **Source of truth for next work.** Reconcile live main/PRs before taking a task; update these rows only when delivery state changes. Keep completed implementation history in PRs, not in repeated status paragraphs.
 
 | Order | Status | Deliverable / acceptance |
